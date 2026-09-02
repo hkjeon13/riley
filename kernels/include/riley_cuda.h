@@ -213,6 +213,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)13)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_EMBEDDING_STATUS_D2H \
   ((RileyCudaGraphCaptureOperationKind)14)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)15)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1513,6 +1515,30 @@ RileyCudaStatus riley_cuda_graph_capture_begin_bf16_embedding_status_d2h(
 // capture created by riley_cuda_graph_capture_begin_bf16_embedding_status_d2h.
 // A partial node submission leaves the capture terminal and abort-only.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-21 capture containing exactly one cold-prepared canonical
+// cuBLASLt GEMM: row-major BF16 Y[M,N] = X[M,K] * W[N,K]^T with F32
+// accumulation, deterministic algorithm selection, no epilogue, and host
+// alpha=1/beta=0. `plan` and all four fixed device allocations remain leased
+// through capture, graph, and exec close. Each allocation must exactly match
+// the plan's prepared input/weight/output/workspace byte requirement and all
+// four handles must be distinct. `output` is the graph's primary fixed buffer;
+// a zero-workspace plan still requires a distinct zero-byte workspace handle.
+// This narrow API admits no spans, offsets, fresh addresses, descriptor work,
+// heuristic selection, command batches, node updates, or eager fallback.
+RileyCudaStatus riley_cuda_graph_capture_begin_canonical_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the one capture-only cublasLtMatmul node for a capture created by
+// riley_cuda_graph_capture_begin_canonical_gemm_bf16. A failed submission is
+// terminal and abort-only; ordinary graph end and close APIs perform recovery.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

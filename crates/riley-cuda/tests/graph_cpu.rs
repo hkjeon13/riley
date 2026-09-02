@@ -3869,6 +3869,143 @@ fn owned_bf16_embedding_status_d2h_graph_has_fixed_validation_receipt_lifecycle(
     }
 }
 
+#[test]
+fn owned_canonical_gemm_graph_has_by_value_plan_and_four_buffer_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let ffi = include_str!("../src/ffi.rs");
+    let gemm = include_str!("../src/gemm.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16",
+        "riley_cuda_graph_capture_begin_canonical_gemm_bf16",
+        "riley_cuda_graph_capture_enqueue_canonical_gemm_bf16",
+        "RileyCudaGemmPlan* plan",
+        "RileyCudaDeviceBuffer* input",
+        "RileyCudaDeviceBuffer* weight",
+        "RileyCudaDeviceBuffer* output",
+        "RileyCudaDeviceBuffer* workspace",
+    ] {
+        assert!(header.contains(required), "missing C05-21 ABI: {required}");
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_canonical_gemm_bf16",
+        "riley_cuda_graph_capture_enqueue_canonical_gemm_bf16",
+        "begin_graph_canonical_gemm_bf16_capture",
+        "enqueue_canonical_gemm_bf16",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-21 Rust FFI: {required}"
+        );
+    }
+    assert!(
+        abi_link.contains("CudaGraphCaptureOperation::CanonicalGemmBf16"),
+        "C05-21 capability must remain ABI-linked without device initialization"
+    );
+    assert!(graph.contains("CanonicalGemmBf16 = 15"));
+
+    for required in [
+        "pub struct OwnedGraphCanonicalGemmBf16Resources",
+        "pub struct OwnedGraphCanonicalGemmBf16CaptureBeginError",
+        "pub struct OwnedGraphCanonicalGemmBf16Capture",
+        "pub struct OwnedCapturedCanonicalGemmBf16Graph",
+        "pub struct OwnedGraphCanonicalGemmBf16Exec",
+        "pub struct OwnedGraphCanonicalGemmBf16Launch<'exec>",
+        "pub fn begin_owned_graph_canonical_gemm_bf16_capture",
+        "pub fn enqueue_canonical_gemm_bf16(&mut self)",
+        "pub fn finish(mut self) -> CudaResult<()>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-21 safe owner contract is missing: {required}"
+        );
+    }
+    for required in [
+        "fn validate_canonical_graph_capture",
+        "fn begin_canonical_graph_capture_native",
+        "CudaGemmReductionPolicy::StrictNoSplitV1",
+        "allocation must be exactly",
+        "must be distinct fixed device allocations",
+        "same_allocation",
+        "ensure_idle_for_operation",
+    ] {
+        assert!(
+            gemm.contains(required),
+            "C05-21 GEMM preflight/helper is missing: {required}"
+        );
+    }
+
+    let resources = graph
+        .split("impl OwnedGraphCanonicalGemmBf16Resources")
+        .nth(1)
+        .expect("C05-21 resource bundle must remain present")
+        .split("/// Error from beginning one by-value C05-21 canonical GEMM graph capture")
+        .next()
+        .expect("C05-21 resource bundle must end before its begin error");
+    for required in ["plan", "input", "weight", "output", "workspace"] {
+        assert!(
+            resources.contains(required),
+            "C05-21 fixed resource bundle is missing: {required}"
+        );
+    }
+    for (earlier, later) in [
+        ("plan.close()?", "workspace.close()?"),
+        ("workspace.close()?", "output.close()?"),
+        ("output.close()?", "weight.close()?"),
+        ("weight.close()?", "input.close()?"),
+        ("input.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-21 resource close order");
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_canonical_gemm_bf16_capture")
+        .nth(1)
+        .expect("C05-21 owned capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("C05-21 owned capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_canonical_graph_capture",
+        "begin_canonical_graph_capture_native",
+        "C05-21 Rust preflight",
+    );
+    for forbidden in ["CudaBufferSpan", "CudaBufferSpanMut", "alpha", "beta"] {
+        assert!(
+            !owned_begin.contains(forbidden),
+            "C05-21 public graph begin must not admit dynamic {forbidden}"
+        );
+    }
+
+    for owner in [
+        "pub struct OwnedGraphCanonicalGemmBf16Capture {",
+        "pub struct OwnedCapturedCanonicalGemmBf16Graph {",
+        "pub struct OwnedGraphCanonicalGemmBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphCanonicalGemmBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before plan and fixed allocations"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+}
+
 fn native_export_body<'a>(source: &'a str, symbol: &str) -> &'a str {
     source
         .split(symbol)

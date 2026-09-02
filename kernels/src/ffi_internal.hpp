@@ -179,6 +179,10 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   // d2h_gathered_logits=device error scratch, and d2h_pinned_results=report.
   // Operation-specific predicates keep these meanings disjoint.
   kBf16EmbeddingStatusD2H = 14,
+  // C05-21 captures one prepared canonical cuBLASLt BF16 GEMM with immutable
+  // plan and allocation addresses. The output remains in fill_buffer; the
+  // rest of its fixed-address ledger lives in canonical_gemm_bf16 below.
+  kCanonicalGemmBf16 = 15,
 };
 
 // C05-18's raw device metadata has no host-side lifetime. The primary key
@@ -247,6 +251,41 @@ struct RileyCudaRaggedPagedKvCacheWriteBf16State {
   bool valid_tokens_lease_held;
   bool row_sequence_slots_lease_held;
   bool row_positions_lease_held;
+};
+
+// C05-21 owns one opaque prepared cuBLASLt GEMM plan plus its exact input,
+// weight, output (the legacy fill_buffer), and workspace allocations. The
+// plan remains opaque outside gemm.cu; this state carries only its identity and
+// the immutable byte contract required to keep cublasLtMatmul graph-safe.
+struct RileyCudaCanonicalGemmBf16GraphState {
+  RileyCudaCanonicalGemmBf16GraphState() noexcept
+      : plan(nullptr),
+        input(nullptr),
+        weight(nullptr),
+        workspace(nullptr),
+        input_byte_len(0),
+        weight_byte_len(0),
+        output_byte_len(0),
+        workspace_byte_len(0),
+        enqueue_count(0),
+        plan_lease_held(false),
+        input_lease_held(false),
+        weight_lease_held(false),
+        workspace_lease_held(false) {}
+
+  RileyCudaGemmPlan* plan;
+  RileyCudaDeviceBuffer* input;
+  RileyCudaDeviceBuffer* weight;
+  RileyCudaDeviceBuffer* workspace;
+  uint64_t input_byte_len;
+  uint64_t weight_byte_len;
+  uint64_t output_byte_len;
+  uint64_t workspace_byte_len;
+  uint32_t enqueue_count;
+  bool plan_lease_held;
+  bool input_lease_held;
+  bool weight_lease_held;
+  bool workspace_lease_held;
 };
 
 struct RileyCudaGraphCapture {
@@ -463,6 +502,7 @@ struct RileyCudaGraphCapture {
   bool indexed_rope_bf16_cos_lease_held;
   bool indexed_rope_bf16_sin_lease_held;
   bool indexed_rope_bf16_positions_lease_held;
+  RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
@@ -687,6 +727,7 @@ struct RileyCudaGraph {
   uint64_t indexed_rope_bf16_head_size;
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
+  RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   cudaGraph_t graph;
@@ -877,6 +918,7 @@ struct RileyCudaGraphExec {
   uint64_t indexed_rope_bf16_head_size;
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
+  RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   uint64_t exec_id;
@@ -950,6 +992,31 @@ struct RileyCudaCopy {
 };
 
 namespace riley_cuda_internal {
+
+// These helpers retain RileyCudaGemmPlan's private cuBLASLt representation in
+// gemm.cu. graph.cu owns only the permanent graph lease and calls the narrow
+// capture-only matmul path after it has already entered the plan's context.
+RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+    RileyCudaGemmPlan* plan, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaCanonicalGemmBf16GraphState* out_state,
+    RileyCudaErrorInfo* error, const char* operation) noexcept;
+RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
+    RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
+    const char* operation) noexcept;
+bool release_canonical_gemm_bf16_graph_plan_lease(
+    RileyCudaGemmPlan* plan) noexcept;
+bool canonical_gemm_bf16_graph_state_is_valid(
+    const RileyCudaContext* owner, const RileyCudaStream* stream,
+    const RileyCudaDeviceBuffer* output,
+    const RileyCudaCanonicalGemmBf16GraphState& state,
+    bool leases_held) noexcept;
+RileyCudaStatus enqueue_canonical_gemm_bf16_graph_matmul(
+    const RileyCudaContext* owner, const RileyCudaStream* stream,
+    const RileyCudaDeviceBuffer* output,
+    const RileyCudaCanonicalGemmBf16GraphState& state,
+    RileyCudaErrorInfo* error, const char* operation) noexcept;
 
 class AllocationStatsGuard final {
  public:

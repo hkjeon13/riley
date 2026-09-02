@@ -19,7 +19,7 @@ use crate::batch::PackedBatchHostV1;
 use crate::runtime::{ContextInner, ensure_same_context};
 use crate::{
     CudaDeviceBuffer, CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
-    CudaPinnedHostBuffer, CudaResult, CudaStream,
+    CudaPinnedHostBuffer, CudaPreparedGemm, CudaResult, CudaStream,
 };
 
 // A native close deferred into a live capture still owns a RileyCudaContext
@@ -191,6 +191,13 @@ pub enum CudaGraphCaptureOperation {
     /// token H2D, table-residency policy, scheduler commit, C07 executor
     /// integration, or full decode execution authority.
     Bf16EmbeddingStatusD2H = 14,
+    /// One fixed-address canonical BF16/F32 cuBLASLt GEMM graph.
+    ///
+    /// This retains one cold-prepared strict-no-split plan and exact whole
+    /// input, weight, output, and workspace allocations. It does not admit
+    /// spans, offsets, alternate reduction/epilogue, executor wiring, or C07
+    /// projection/LM-head capability evidence.
+    CanonicalGemmBf16 = 15,
 }
 
 impl CudaGraphCaptureOperation {
@@ -9631,6 +9638,516 @@ fn take_owned_graph_bf16_embedding_status_d2h_resources(
     })
 }
 
+/// By-value resource bundle for one C05-21 canonical cuBLASLt graph.
+///
+/// The plan and all four whole allocations remain inaccessible from capture
+/// begin until native abort or graph close proves that every permanent lease
+/// was released. A zero-byte workspace is still represented by its own device
+/// buffer; it is never replaced with an output alias.
+pub struct OwnedGraphCanonicalGemmBf16Resources {
+    stream: CudaStream,
+    plan: CudaPreparedGemm,
+    input: CudaDeviceBuffer,
+    weight: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+    workspace: CudaDeviceBuffer,
+}
+
+impl OwnedGraphCanonicalGemmBf16Resources {
+    fn new(
+        stream: CudaStream,
+        plan: CudaPreparedGemm,
+        input: CudaDeviceBuffer,
+        weight: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        workspace: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            plan,
+            input,
+            weight,
+            output,
+            workspace,
+        }
+    }
+
+    /// Returns the original plan, stream, and allocations only after native
+    /// graph ownership is known to be released.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaPreparedGemm,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            plan,
+            input,
+            weight,
+            output,
+            workspace,
+        } = self;
+        (stream, plan, input, weight, output, workspace)
+    }
+
+    /// Explicitly closes recovered resources in the reverse ownership order.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, plan, input, weight, output, workspace) = self.into_parts();
+        plan.close()?;
+        workspace.close()?;
+        output.close()?;
+        weight.close()?;
+        input.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning one by-value C05-21 canonical GEMM graph capture.
+///
+/// Pure Rust preflight errors return the untouched resource bundle. Once the
+/// native begin function is entered, all raw plan/allocation addresses remain
+/// fail-closed because CUDA may have retained them during capture recovery.
+#[must_use]
+pub struct OwnedGraphCanonicalGemmBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphCanonicalGemmBf16Resources>,
+}
+
+impl OwnedGraphCanonicalGemmBf16CaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphCanonicalGemmBf16Resources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The rejected preflight or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns moved resources only when native capture was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphCanonicalGemmBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphCanonicalGemmBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphCanonicalGemmBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphCanonicalGemmBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph canonical BF16 cuBLASLt GEMM capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphCanonicalGemmBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active C05-21 single-matmul graph capture.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalGemmBf16Capture>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalGemmBf16Capture>();
+/// ```
+pub struct OwnedGraphCanonicalGemmBf16Capture {
+    // Native drops before child wrappers: ambiguity retains every raw plan and
+    // allocation address, so Rust resources must not drop independently.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphCanonicalGemmBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalGemmBf16Capture {
+    /// Records exactly one capture-only `cublasLtMatmul` for the cold plan.
+    /// It admits no dynamic spans, node updates, command batch, or eager
+    /// synchronization.
+    pub fn enqueue_canonical_gemm_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Capture::enqueue_canonical_gemm_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned canonical GEMM graph capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior canonical GEMM graph enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed canonical GEMM graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_canonical_gemm_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the plan/allocation bundle into a graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalGemmBf16Graph> {
+        const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned canonical GEMM graph capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior canonical GEMM graph enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed canonical GEMM enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources =
+                take_owned_graph_canonical_gemm_bf16_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedCanonicalGemmBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after known native release.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_canonical_gemm_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphCanonicalGemmBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalGemmBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphCanonicalGemmBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value captured canonical GEMM graph awaiting instantiate or close.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedCapturedCanonicalGemmBf16Graph>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedCapturedCanonicalGemmBf16Graph>();
+/// ```
+pub struct OwnedCapturedCanonicalGemmBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphCanonicalGemmBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedCanonicalGemmBf16Graph {
+    /// Instantiates while retaining the exact plan, stream, and allocations.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_canonical_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedCanonicalGemmBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphCanonicalGemmBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedCanonicalGemmBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Closes the captured graph and returns resources after known release.
+    pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_canonical_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedCanonicalGemmBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedCanonicalGemmBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value executable for one canonical capture-only cuBLASLt GEMM graph.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalGemmBf16Exec>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalGemmBf16Exec>();
+/// ```
+pub struct OwnedGraphCanonicalGemmBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphCanonicalGemmBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalGemmBf16Exec {
+    /// Launches the fixed one-node graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphCanonicalGemmBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier canonical GEMM graph transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned canonical GEMM graph exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphCanonicalGemmBf16Launch {
+                    native,
+                    exec: Some(self),
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns resources after known release.
+    pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphCanonicalGemmBf16Exec::close",
+                "an earlier canonical GEMM graph transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_canonical_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphCanonicalGemmBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalGemmBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// In-flight completion owner for one C05-21 graph replay.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalGemmBf16Launch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalGemmBf16Launch<'static>>();
+/// ```
+pub struct OwnedGraphCanonicalGemmBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: Option<&'exec mut OwnedGraphCanonicalGemmBf16Exec>,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalGemmBf16Launch<'_> {
+    /// Waits for known graph completion. The output allocation remains owned
+    /// by the executable until its later explicit close.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let Some(exec) = self.exec.as_deref_mut() else {
+            return if self.active {
+                Err(CudaError::invalid_state(
+                    "OwnedGraphCanonicalGemmBf16Launch::finish",
+                    "the graph launch completion owner lost its executable borrow",
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalGemmBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphCanonicalGemmBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_canonical_gemm_bf16_resources(
+    resources: &mut Option<OwnedGraphCanonicalGemmBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned canonical GEMM graph owner lost its captured resources",
+        )
+    })
+}
+
 #[cfg(feature = "cuda")]
 fn validate_graph_bf16_embedding_status_d2h_capture_preflight(
     stream: &CudaStream,
@@ -11178,6 +11695,86 @@ impl CudaStream {
                     resources,
                 ),
             )
+        }
+    }
+
+    /// Begins one C05-21 fixed-address canonical cuBLASLt GEMM graph capture.
+    ///
+    /// The caller moves a cold-prepared strict-no-split BF16/F32 plan and four
+    /// distinct whole allocations into the graph owner. The graph records one
+    /// fixed `cublasLtMatmul`; it does not accept spans, offsets, fresh input,
+    /// dynamic alpha/beta, alternate reduction, command batches, C07 executor
+    /// wiring, or an eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Pure Rust preflight failures return the untouched plan/stream/allocation
+    /// bundle. An error after native entry leaves no reusable bundle because
+    /// capture recovery may retain every raw address fail-closed.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_owned_graph_canonical_gemm_bf16_capture(
+        self,
+        plan: CudaPreparedGemm,
+        input: CudaDeviceBuffer,
+        weight: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        workspace: CudaDeviceBuffer,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphCanonicalGemmBf16Capture, OwnedGraphCanonicalGemmBf16CaptureBeginError>
+    {
+        #[cfg(feature = "cuda")]
+        let mut resources =
+            OwnedGraphCanonicalGemmBf16Resources::new(self, plan, input, weight, output, workspace);
+        #[cfg(not(feature = "cuda"))]
+        let resources =
+            OwnedGraphCanonicalGemmBf16Resources::new(self, plan, input, weight, output, workspace);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_canonical_gemm_bf16_capture";
+            if let Err(error) = resources.plan.validate_canonical_graph_capture(
+                &resources.stream,
+                &resources.input,
+                &resources.weight,
+                &resources.output,
+                &resources.workspace,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphCanonicalGemmBf16CaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources.plan.begin_canonical_graph_capture_native(
+                &mut resources.stream,
+                &resources.input,
+                &resources.weight,
+                &resources.output,
+                &resources.workspace,
+                mode as u32,
+            ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphCanonicalGemmBf16CaptureBeginError::terminal(
+                        error,
+                    ));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphCanonicalGemmBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = mode;
+            Err(OwnedGraphCanonicalGemmBf16CaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_canonical_gemm_bf16_capture"),
+                resources,
+            ))
         }
     }
 

@@ -552,6 +552,117 @@ impl CudaPreparedGemm {
         self.poisoned
     }
 
+    /// Validates the exact by-value resource bundle admitted by C05-21's
+    /// capture-only canonical cuBLASLt graph. This is deliberately separate
+    /// from eager [`Self::execute`]: graph capture retains the plan and all
+    /// four fixed allocations across replay and therefore admits neither
+    /// spans, offsets, workspace omission, non-strict reduction, nor a
+    /// poisoned plan.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn validate_canonical_graph_capture(
+        &self,
+        stream: &CudaStream,
+        input: &CudaDeviceBuffer,
+        weight: &CudaDeviceBuffer,
+        output: &CudaDeviceBuffer,
+        workspace: &CudaDeviceBuffer,
+        operation: &'static str,
+    ) -> CudaResult<()> {
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                operation,
+                "the canonical GEMM graph cannot retain a plan poisoned by a prior native execution failure",
+            ));
+        }
+        if self.config.reduction_policy != CudaGemmReductionPolicy::StrictNoSplitV1 {
+            return Err(CudaError::new(
+                CudaErrorKind::NotSupported,
+                CudaErrorDomain::Rust,
+                CudaErrorStage::Validation,
+                0,
+                operation,
+                "the canonical GEMM graph admits only the strict-no-split-v1 reduction policy",
+            ));
+        }
+        if self.algorithm.backend_id != NATIVE_CUBLASLT_BACKEND_ID
+            || !self.algorithm.deterministic
+            || self.algorithm.dimensions() != (self.config.m, self.config.n, self.config.k)
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Validation,
+                0,
+                operation,
+                "the prepared GEMM metadata does not describe one canonical deterministic cuBLASLt plan",
+            ));
+        }
+
+        ensure_same_context(&self.context, &stream.context, operation)?;
+        let buffers = [
+            ("input", input, self.config.input_bytes),
+            ("weight", weight, self.config.weight_bytes),
+            ("output", output, self.config.output_bytes),
+            ("workspace", workspace, self.algorithm.workspace_bytes),
+        ];
+        for (name, buffer, expected_byte_len) in buffers {
+            ensure_same_context(&self.context, buffer.context_owner(), operation)?;
+            buffer.ensure_idle_for_operation(operation)?;
+            if buffer.byte_len() != expected_byte_len {
+                return Err(CudaError::out_of_range(
+                    operation,
+                    format!(
+                        "canonical GEMM {name} allocation must be exactly {expected_byte_len} bytes, got {}",
+                        buffer.byte_len()
+                    ),
+                ));
+            }
+        }
+        let buffer_handles = [
+            ("input", input.native_handle()),
+            ("weight", weight.native_handle()),
+            ("output", output.native_handle()),
+            ("workspace", workspace.native_handle()),
+        ];
+        for (index, (left_name, left)) in buffer_handles.iter().enumerate() {
+            for (right_name, right) in buffer_handles.iter().skip(index + 1) {
+                if left.same_allocation(right) {
+                    return Err(CudaError::invalid_argument(
+                        operation,
+                        format!(
+                            "canonical GEMM {left_name} and {right_name} must be distinct fixed device allocations"
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Enters native C05-21 capture only after
+    /// [`Self::validate_canonical_graph_capture`] has completed. Native repeats
+    /// the immutable plan/allocation checks because raw callers can bypass the
+    /// Rust boundary; no eager synchronization or plan mutation occurs here.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn begin_canonical_graph_capture_native(
+        &self,
+        stream: &mut CudaStream,
+        input: &CudaDeviceBuffer,
+        weight: &CudaDeviceBuffer,
+        output: &CudaDeviceBuffer,
+        workspace: &CudaDeviceBuffer,
+        mode: u32,
+    ) -> CudaResult<ffi::GraphCaptureHandle> {
+        stream.native.begin_graph_canonical_gemm_bf16_capture(
+            &self.native,
+            input.native_handle(),
+            weight.native_handle(),
+            output.native_handle(),
+            workspace.native_handle(),
+            mode,
+        )
+    }
+
     /// Executes the prepared GEMM and synchronizes the same explicit stream.
     ///
     /// The successful repeated path performs no host or device allocation.

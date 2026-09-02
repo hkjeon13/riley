@@ -115,6 +115,10 @@ constexpr const char* kEnqueueBf16EmbeddingStatusD2HOperation =
     "enqueue CUDA Graph BF16 embedding validation-status D2H";
 constexpr const char* kReadBf16EmbeddingStatusD2HReportOperation =
     "read completed CUDA Graph BF16 embedding validation-status D2H report";
+constexpr const char* kBeginCanonicalGemmBf16Operation =
+    "begin CUDA Graph canonical cuBLASLt BF16 GEMM capture";
+constexpr const char* kEnqueueCanonicalGemmBf16Operation =
+    "enqueue CUDA Graph canonical cuBLASLt BF16 GEMM";
 // A failed node launch during a multi-node capture cannot safely be retried:
 // CUDA may have invalidated the capture after accepting a prefix. Keep this
 // terminal marker in the capture-only enqueue state so abort remains the sole
@@ -126,6 +130,7 @@ constexpr uint32_t kRaggedPagedKvCacheWriteBf16EnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kGroupedRaggedPagedAttentionBf16EnqueueTerminal =
     UINT32_MAX;
 constexpr uint32_t kBf16EmbeddingStatusD2HEnqueueTerminal = UINT32_MAX;
+constexpr uint32_t kCanonicalGemmBf16EnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kGraphBf16EmbeddingThreads = 256;
 constexpr uint32_t kMaximumGraphBf16EmbeddingBlocks = 65535;
 constexpr uint32_t kGraphRaggedAttentionWarpSize = 32;
@@ -147,6 +152,11 @@ constexpr uint64_t kGraphMaximumGridYOrZ = 65535;
 bool is_bf16_d2h_operation(RileyCudaGraphCaptureOperation operation) noexcept {
   return operation == RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H ||
          operation == RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H;
+}
+
+bool is_canonical_gemm_bf16_operation(
+    RileyCudaGraphCaptureOperation operation) noexcept {
+  return operation == RileyCudaGraphCaptureOperation::kCanonicalGemmBf16;
 }
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
@@ -1099,6 +1109,35 @@ bool indexed_rope_bf16_exec_fields_are_clear(
          exec->indexed_rope_bf16_head_size == 0 &&
          exec->indexed_rope_bf16_rotary_dimension == 0 &&
          exec->indexed_rope_bf16_table_position_count == 0;
+}
+
+bool canonical_gemm_bf16_state_is_clear(
+    const RileyCudaCanonicalGemmBf16GraphState& state) noexcept {
+  return state.plan == nullptr && state.input == nullptr &&
+         state.weight == nullptr && state.workspace == nullptr &&
+         state.input_byte_len == 0 && state.weight_byte_len == 0 &&
+         state.output_byte_len == 0 && state.workspace_byte_len == 0 &&
+         state.enqueue_count == 0 && !state.plan_lease_held &&
+         !state.input_lease_held && !state.weight_lease_held &&
+         !state.workspace_lease_held;
+}
+
+bool canonical_gemm_bf16_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         canonical_gemm_bf16_state_is_clear(capture->canonical_gemm_bf16);
+}
+
+bool canonical_gemm_bf16_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr &&
+         canonical_gemm_bf16_state_is_clear(graph->canonical_gemm_bf16);
+}
+
+bool canonical_gemm_bf16_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr &&
+         canonical_gemm_bf16_state_is_clear(exec->canonical_gemm_bf16);
 }
 
 bool ragged_paged_kv_cache_write_bf16_state_is_clear(
@@ -3210,6 +3249,115 @@ bool ragged_paged_kv_cache_write_bf16_exec_state_is_valid(
              exec->ragged_paged_kv_write_bf16, true);
 }
 
+bool canonical_gemm_bf16_state_matches(
+    const RileyCudaCanonicalGemmBf16GraphState& left,
+    const RileyCudaCanonicalGemmBf16GraphState& right) noexcept {
+  return left.plan == right.plan && left.input == right.input &&
+         left.weight == right.weight && left.workspace == right.workspace &&
+         left.input_byte_len == right.input_byte_len &&
+         left.weight_byte_len == right.weight_byte_len &&
+         left.output_byte_len == right.output_byte_len &&
+         left.workspace_byte_len == right.workspace_byte_len;
+}
+
+bool canonical_gemm_bf16_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         is_canonical_gemm_bf16_operation(capture->operation) &&
+         capture->fill_lease_held && capture->fill_element_count == 0 &&
+         capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 && !capture->h2d_source_lease_held &&
+         capture->silu_input == nullptr && capture->silu_element_count == 0 &&
+         capture->silu_enqueue_count == 0 && !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
+         bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) &&
+         indexed_rope_bf16_capture_fields_are_clear(capture) &&
+         ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) &&
+         riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+             capture->owner, capture->stream, capture->fill_buffer,
+             capture->canonical_gemm_bf16, true);
+}
+
+bool canonical_gemm_bf16_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && is_canonical_gemm_bf16_operation(graph->operation) &&
+         graph->canonical_gemm_bf16.enqueue_count == 1 &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph) &&
+         indexed_rope_bf16_graph_fields_are_clear(graph) &&
+         ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph) &&
+         riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+             graph->owner, graph->stream, graph->fill_buffer,
+             graph->canonical_gemm_bf16, true);
+}
+
+// The preallocated graph wrapper mirrors the immutable GEMM plan and buffer
+// identity, while capture remains the sole owner of all permanent leases.
+bool canonical_gemm_bf16_prepared_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && is_canonical_gemm_bf16_operation(graph->operation) &&
+         graph->canonical_gemm_bf16.enqueue_count == 0 &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph) &&
+         indexed_rope_bf16_graph_fields_are_clear(graph) &&
+         ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph) &&
+         riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+             graph->owner, graph->stream, graph->fill_buffer,
+             graph->canonical_gemm_bf16, false);
+}
+
+bool canonical_gemm_bf16_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && is_canonical_gemm_bf16_operation(exec->operation) &&
+         exec->canonical_gemm_bf16.enqueue_count == 1 &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
+         bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) &&
+         indexed_rope_bf16_exec_fields_are_clear(exec) &&
+         ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(exec) &&
+         riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+             exec->owner, exec->stream, exec->fill_buffer,
+             exec->canonical_gemm_bf16, true);
+}
+
 bool graph_error_is_compatible(const RileyCudaGraphErrorInfo* error) noexcept {
   return error == nullptr || error->struct_size >= sizeof(*error);
 }
@@ -3294,6 +3442,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
       !indexed_rope_bf16_capture_fields_are_clear(capture) ||
+      !canonical_gemm_bf16_capture_fields_are_clear(capture) ||
       !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
@@ -3341,6 +3490,7 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
       !indexed_rope_bf16_capture_fields_are_clear(capture) ||
+      !canonical_gemm_bf16_capture_fields_are_clear(capture) ||
       !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture)) {
     return false;
   }
@@ -3817,6 +3967,38 @@ bool release_capture_ragged_paged_kv_cache_write_bf16_leases(
   return true;
 }
 
+// C05-21 leases an opaque, already-prepared cuBLASLt GEMM plan plus three
+// non-output allocations. The legacy fill-buffer slot is the fixed output;
+// it retains the fourth device allocation without duplicating its counter in
+// the operation state. A failed cublasLt submission is abort-releasable only.
+bool release_capture_canonical_gemm_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (!canonical_gemm_bf16_capture_state_is_valid(capture)) {
+    return false;
+  }
+  RileyCudaCanonicalGemmBf16GraphState& state =
+      capture->canonical_gemm_bf16;
+  if (state.enqueue_count != 0 && state.enqueue_count != 1 &&
+      state.enqueue_count != kCanonicalGemmBf16EnqueueTerminal) {
+    return false;
+  }
+  if (!release_exclusive_use(state.workspace->active_uses) ||
+      !release_exclusive_use(state.weight->active_uses) ||
+      !release_exclusive_use(state.input->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses) ||
+      !riley_cuda_internal::release_canonical_gemm_bf16_graph_plan_lease(
+          state.plan)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  state = RileyCudaCanonicalGemmBf16GraphState{};
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -3861,6 +4043,11 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
       (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (!is_canonical_gemm_bf16_operation(capture->operation) &&
+      (!canonical_gemm_bf16_capture_fields_are_clear(capture) ||
+       !canonical_gemm_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (!is_ragged_paged_fixed_address_operation(capture->operation) &&
@@ -4023,6 +4210,13 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
+  } else if (is_canonical_gemm_bf16_operation(capture->operation)) {
+    if (!canonical_gemm_bf16_capture_state_is_valid(capture) ||
+        !canonical_gemm_bf16_prepared_graph_state_is_valid(graph) ||
+        !canonical_gemm_bf16_state_matches(capture->canonical_gemm_bf16,
+                                            graph->canonical_gemm_bf16)) {
+      return false;
+    }
   } else if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     if (!ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
         !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(graph) ||
@@ -4107,6 +4301,11 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
       (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (!is_canonical_gemm_bf16_operation(capture->operation) &&
+      (!canonical_gemm_bf16_capture_fields_are_clear(capture) ||
+       !canonical_gemm_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (!is_ragged_paged_fixed_address_operation(capture->operation) &&
@@ -4334,6 +4533,14 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
+  } else if (is_canonical_gemm_bf16_operation(capture->operation)) {
+    if (capture->canonical_gemm_bf16.enqueue_count != 1 ||
+        !canonical_gemm_bf16_capture_state_is_valid(capture) ||
+        !canonical_gemm_bf16_prepared_graph_state_is_valid(graph) ||
+        !canonical_gemm_bf16_state_matches(capture->canonical_gemm_bf16,
+                                            graph->canonical_gemm_bf16)) {
+      return false;
+    }
   } else if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     if (capture->ragged_paged_kv_write_bf16.enqueue_count != 1 ||
         !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
@@ -4351,6 +4558,10 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
     return false;
   }
   graph->owns_capture_leases = true;
+  if (is_canonical_gemm_bf16_operation(capture->operation)) {
+    graph->canonical_gemm_bf16 = capture->canonical_gemm_bf16;
+    capture->canonical_gemm_bf16 = RileyCudaCanonicalGemmBf16GraphState{};
+  }
   if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     graph->ragged_paged_kv_write_bf16 =
         capture->ragged_paged_kv_write_bf16;
@@ -4440,6 +4651,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->indexed_rope_bf16_cos_lease_held = false;
   capture->indexed_rope_bf16_sin_lease_held = false;
   capture->indexed_rope_bf16_positions_lease_held = false;
+  capture->canonical_gemm_bf16 = RileyCudaCanonicalGemmBf16GraphState{};
   capture->ragged_paged_kv_write_bf16 =
       RileyCudaRaggedPagedKvCacheWriteBf16State{};
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
@@ -4715,6 +4927,24 @@ bool release_graph_ragged_paged_kv_cache_write_bf16_leases(
          release_exclusive_use(state.value_source->active_uses) &&
          release_exclusive_use(state.key_source->active_uses) &&
          release_exclusive_use(key_pool->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_canonical_gemm_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* output,
+    const RileyCudaCanonicalGemmBf16GraphState& state) noexcept {
+  if (state.enqueue_count != 1 ||
+      !riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+          owner, stream, output, state, true)) {
+    return false;
+  }
+  return release_exclusive_use(state.workspace->active_uses) &&
+         release_exclusive_use(state.weight->active_uses) &&
+         release_exclusive_use(state.input->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
+         riley_cuda_internal::release_canonical_gemm_bf16_graph_plan_lease(
+             state.plan) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -9316,6 +9546,302 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
   return status;
 }
 
+// C05-21 records one real cuBLASLt matmul into a thread-local CUDA Graph.
+// The opaque GEMM plan remains owned by its public plan handle; this graph
+// holds only its exclusive-use lease alongside the four fixed allocations.
+RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalGemmBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || stream->owner == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalGemmBf16Operation,
+                            "stream or its owner is null");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalGemmBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+
+  RileyCudaCanonicalGemmBf16GraphState graph_state{};
+  RileyCudaStatus status =
+      riley_cuda_internal::preflight_canonical_gemm_bf16_graph_state(
+          plan, stream, input, weight, output, workspace, &graph_state,
+          error, kBeginCanonicalGemmBf16Operation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "a stream command batch blocks canonical cuBLASLt GEMM graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginCanonicalGemmBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  RileyCudaDeviceBuffer* const buffers[] = {input, weight, output, workspace};
+  constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
+  bool plan_lease_held = false;
+  bool resource_leases_held[kBufferCount] = {};
+  bool stream_lease_held = false;
+  const auto release_initial_leases = [&]() noexcept {
+    bool released = true;
+    if (stream_lease_held) {
+      released = release_exclusive_use(stream->active_uses) && released;
+      stream_lease_held = false;
+    }
+    for (size_t index = kBufferCount; index != 0; --index) {
+      const size_t resource_index = index - 1;
+      if (resource_leases_held[resource_index]) {
+        released = release_exclusive_use(
+                       buffers[resource_index]->active_uses) &&
+                   released;
+        resource_leases_held[resource_index] = false;
+      }
+    }
+    if (plan_lease_held) {
+      released =
+                     riley_cuda_internal::release_canonical_gemm_bf16_graph_plan_lease(
+                         plan) &&
+                 released;
+      plan_lease_held = false;
+    }
+    return released;
+  };
+  const auto reject_busy = [&](const char* message) noexcept {
+    if (!release_initial_leases()) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginCanonicalGemmBf16Operation,
+          "failed to release rejected canonical GEMM graph resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalGemmBf16Operation, message);
+  };
+
+  status = riley_cuda_internal::acquire_canonical_gemm_bf16_graph_plan_lease(
+      plan, error, kBeginCanonicalGemmBf16Operation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  plan_lease_held = true;
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
+      return reject_busy(
+          "a fixed canonical GEMM graph allocation has an active asynchronous use");
+    }
+    resource_leases_held[index] = true;
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return reject_busy("stream has an active asynchronous use or capture");
+  }
+  stream_lease_held = true;
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginCanonicalGemmBf16Operation,
+                            "failed to release exhausted graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginCanonicalGemmBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginCanonicalGemmBf16Operation,
+                            "failed to release rejected graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginCanonicalGemmBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginCanonicalGemmBf16Operation,
+                            "failed to release graph capture allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginCanonicalGemmBf16Operation,
+        "host allocation failed for canonical GEMM graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kCanonicalGemmBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginCanonicalGemmBf16Operation,
+                            "failed to release captured graph allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginCanonicalGemmBf16Operation,
+        "host allocation failed for captured canonical GEMM graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kCanonicalGemmBf16);
+  capture->prepared_graph->canonical_gemm_bf16 = graph_state;
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->canonical_gemm_bf16 = graph_state;
+  capture->canonical_gemm_bf16.plan_lease_held = true;
+  capture->canonical_gemm_bf16.input_lease_held = true;
+  capture->canonical_gemm_bf16.weight_lease_held = true;
+  capture->canonical_gemm_bf16.workspace_lease_held = true;
+  plan_lease_held = false;
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    resource_leases_held[index] = false;
+  }
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_canonical_gemm_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginCanonicalGemmBf16Operation,
+          "failed to release a blocked canonical GEMM graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_canonical_gemm_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginCanonicalGemmBf16Operation,
+          "failed to release a rejected canonical GEMM graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalGemmBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginCanonicalGemmBf16Operation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginCanonicalGemmBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginCanonicalGemmBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_canonical_gemm_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalGemmBf16Operation,
+        "failed to release an unstarted canonical GEMM graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -9352,6 +9878,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -9702,6 +10229,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           is_bf16_d2h_operation(owner->operation);
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+      const bool is_canonical_gemm_bf16 =
+          is_canonical_gemm_bf16_operation(owner->operation);
       const bool is_ragged_paged_kv_write_bf16 =
           is_ragged_paged_fixed_address_operation(owner->operation);
       const bool is_fill_or_generic =
@@ -9712,7 +10241,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
           is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
-          is_indexed_rope_bf16 || is_ragged_paged_kv_write_bf16;
+          is_indexed_rope_bf16 || is_canonical_gemm_bf16 ||
+          is_ragged_paged_kv_write_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -9741,6 +10271,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                                              owner)
                                  : is_indexed_rope_bf16
                                        ? release_capture_indexed_rope_bf16_leases(
+                                             owner)
+                                 : is_canonical_gemm_bf16
+                                       ? release_capture_canonical_gemm_bf16_leases(
                                              owner)
                                  : is_ragged_paged_kv_write_bf16
                                        ? release_capture_ragged_paged_kv_cache_write_bf16_leases(
@@ -9974,6 +10507,19 @@ riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16(
       sequence_count, block_count, active_row_count, physical_block_count,
       query_head_count, key_value_head_count, output_row_count, scale, mode,
       out_capture, out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_canonical_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_canonical_gemm_bf16_impl(
+      stream, plan, input, weight, output, workspace, mode, out_capture,
+      out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -11372,6 +11918,91 @@ riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
 }
 
 extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueCanonicalGemmBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueCanonicalGemmBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !canonical_gemm_bf16_capture_state_is_valid(owner) ||
+      !canonical_gemm_bf16_prepared_graph_state_is_valid(
+          owner->prepared_graph) ||
+      !canonical_gemm_bf16_state_matches(owner->canonical_gemm_bf16,
+                                          owner->prepared_graph
+                                              ->canonical_gemm_bf16) ||
+      owner->canonical_gemm_bf16.enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueCanonicalGemmBf16Operation,
+        "capture owner is not a live unqueued canonical cuBLASLt GEMM graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueCanonicalGemmBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      kEnqueueCanonicalGemmBf16Operation, owner);
+  bool node_submission_started = false;
+  bool node_accepted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    node_submission_started = true;
+    status = riley_cuda_internal::enqueue_canonical_gemm_bf16_graph_matmul(
+        owner->owner, owner->stream, owner->fill_buffer,
+        owner->canonical_gemm_bf16, error, kEnqueueCanonicalGemmBf16Operation);
+    node_accepted = status == RILEY_CUDA_STATUS_SUCCESS;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueCanonicalGemmBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  if (node_submission_started &&
+      (!node_accepted || status != RILEY_CUDA_STATUS_SUCCESS ||
+       !restoration_known)) {
+    owner->canonical_gemm_bf16.enqueue_count =
+        kCanonicalGemmBf16EnqueueTerminal;
+  } else if (node_accepted && status == RILEY_CUDA_STATUS_SUCCESS &&
+             restoration_known) {
+    owner->canonical_gemm_bf16.enqueue_count = 1;
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
+extern "C" RileyCudaStatus
 riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -11590,13 +12221,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_canonical_gemm_bf16 =
+      is_canonical_gemm_bf16_operation(owner->operation);
   const bool is_ragged_paged_kv_write_bf16 =
       is_ragged_paged_fixed_address_operation(owner->operation);
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
+       !is_indexed_rope_bf16 && !is_canonical_gemm_bf16 &&
+       !is_ragged_paged_kv_write_bf16) ||
       (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
       (!is_canonical_rms_norm_bf16 &&
        !canonical_rms_norm_capture_fields_are_clear(owner)) ||
@@ -11609,6 +12243,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        !bf16_row_gather_argmax_d2h_capture_fields_are_clear(owner)) ||
       (!is_indexed_rope_bf16 &&
        !indexed_rope_bf16_capture_fields_are_clear(owner)) ||
+      (!is_canonical_gemm_bf16 &&
+       !canonical_gemm_bf16_capture_fields_are_clear(owner)) ||
       (!is_ragged_paged_kv_write_bf16 &&
        !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
@@ -11695,6 +12331,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        !bf16_d2h_capture_state_is_valid(owner)) ||
       (is_indexed_rope_bf16 &&
        !indexed_rope_bf16_capture_state_is_valid(owner)) ||
+      (is_canonical_gemm_bf16 &&
+       !canonical_gemm_bf16_capture_state_is_valid(owner)) ||
       (is_ragged_paged_kv_write_bf16 &&
        !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -11724,6 +12362,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        owner->bf16_row_gather_argmax_d2h_enqueue_count != 1) ||
       (is_indexed_rope_bf16 &&
        owner->indexed_rope_bf16_enqueue_count != 1) ||
+      (is_canonical_gemm_bf16 &&
+       owner->canonical_gemm_bf16.enqueue_count != 1) ||
       (is_ragged_paged_kv_write_bf16 &&
        owner->ragged_paged_kv_write_bf16.enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -11782,7 +12422,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
         owner->indexed_rope_bf16_sin->active_uses.load(
             std::memory_order_acquire) != 1 ||
         owner->indexed_rope_bf16_positions->active_uses.load(
-            std::memory_order_acquire) != 1))) {
+            std::memory_order_acquire) != 1)) ||
+      (is_canonical_gemm_bf16 &&
+       !riley_cuda_internal::canonical_gemm_bf16_graph_state_is_valid(
+           owner->owner, owner->stream, owner->fill_buffer,
+           owner->canonical_gemm_bf16, true))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
                           "fixed graph capture resource lease was corrupted");
@@ -11907,6 +12551,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           is_bf16_d2h_operation(owner->operation);
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+      const bool is_canonical_gemm_bf16 =
+          is_canonical_gemm_bf16_operation(owner->operation);
       const bool is_ragged_paged_kv_write_bf16 =
           is_ragged_paged_fixed_address_operation(owner->operation);
       const bool is_fill =
@@ -11916,7 +12562,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
           is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
-          is_indexed_rope_bf16 || is_ragged_paged_kv_write_bf16;
+          is_indexed_rope_bf16 || is_canonical_gemm_bf16 ||
+          is_ragged_paged_kv_write_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -11945,6 +12592,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                                              owner)
                                  : is_indexed_rope_bf16
                                        ? release_capture_indexed_rope_bf16_leases(
+                                             owner)
+                                 : is_canonical_gemm_bf16
+                                       ? release_capture_canonical_gemm_bf16_leases(
                                              owner)
                                  : is_ragged_paged_kv_write_bf16
                                        ? release_capture_ragged_paged_kv_cache_write_bf16_leases(
@@ -12031,6 +12681,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_canonical_gemm_bf16 =
+      is_canonical_gemm_bf16_operation(owner->operation);
   const bool is_ragged_paged_kv_write_bf16 =
       is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
@@ -12124,6 +12776,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
                             "captured graph mixes BF16 indexed-RoPE state with another operation");
   }
+  if (is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured canonical cuBLASLt GEMM graph has invalid fixed resource state");
+  }
+  if (!is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured graph mixes canonical cuBLASLt GEMM state with another operation");
+  }
   if (is_ragged_paged_kv_write_bf16 &&
       !ragged_paged_kv_cache_write_bf16_graph_state_is_valid(owner)) {
     return validation_error(
@@ -12145,7 +12811,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
+       !is_indexed_rope_bf16 && !is_canonical_gemm_bf16 &&
+       !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -12316,6 +12983,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
     exec->graph = owner->graph;
     exec->exec = native_exec;
     exec->owns_capture_leases = true;
+    if (is_canonical_gemm_bf16) {
+      exec->canonical_gemm_bf16 = owner->canonical_gemm_bf16;
+      owner->canonical_gemm_bf16 = RileyCudaCanonicalGemmBf16GraphState{};
+    }
     if (is_ragged_paged_kv_write_bf16) {
       exec->ragged_paged_kv_write_bf16 =
           owner->ragged_paged_kv_write_bf16;
@@ -12399,6 +13070,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       !bf16_row_gather_argmax_exec_fields_are_clear(exec) ||
       !bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) ||
       !indexed_rope_bf16_exec_fields_are_clear(exec) ||
+      !canonical_gemm_bf16_exec_fields_are_clear(exec) ||
       !ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
@@ -12471,6 +13143,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       is_bf16_d2h_operation(exec->operation);
   const bool is_indexed_rope_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_canonical_gemm_bf16 =
+      is_canonical_gemm_bf16_operation(exec->operation);
   const bool is_ragged_paged_kv_write_bf16 =
       is_ragged_paged_fixed_address_operation(exec->operation);
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
@@ -12564,6 +13238,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
                             "graph exec mixes BF16 indexed-RoPE state with another operation");
   }
+  if (is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_exec_state_is_valid(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "canonical cuBLASLt GEMM graph exec has invalid fixed resource state");
+  }
+  if (!is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_exec_fields_are_clear(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "graph exec mixes canonical cuBLASLt GEMM state with another operation");
+  }
   if (is_ragged_paged_kv_write_bf16 &&
       !ragged_paged_kv_cache_write_bf16_exec_state_is_valid(exec)) {
     return validation_error(
@@ -12587,7 +13275,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16)) {
+       !is_indexed_rope_bf16 && !is_canonical_gemm_bf16 &&
+       !is_ragged_paged_kv_write_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -13028,6 +13717,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_canonical_gemm_bf16 =
+      is_canonical_gemm_bf16_operation(owner->operation);
   const bool is_ragged_paged_kv_write_bf16 =
       is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
@@ -13121,6 +13812,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
                             "captured graph mixes BF16 indexed-RoPE state with another operation");
   }
+  if (is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "canonical cuBLASLt GEMM graph has invalid fixed resource state");
+  }
+  if (!is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "captured graph mixes canonical cuBLASLt GEMM state with another operation");
+  }
   if (is_ragged_paged_kv_write_bf16 &&
       !ragged_paged_kv_cache_write_bf16_graph_state_is_valid(owner)) {
     return validation_error(
@@ -13144,7 +13849,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
+       !is_indexed_rope_bf16 && !is_canonical_gemm_bf16 &&
+       !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -13302,6 +14008,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->indexed_rope_bf16_sin,
                                  owner->indexed_rope_bf16_positions,
                                  owner->fill_buffer)
+                     : is_canonical_gemm_bf16
+                           ? release_graph_canonical_gemm_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->fill_buffer,
+                                 owner->canonical_gemm_bf16)
                      : is_ragged_paged_kv_write_bf16
                            ? release_graph_ragged_paged_kv_cache_write_bf16_leases(
                                  owner->owner, owner->stream,
@@ -13376,6 +14087,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_canonical_gemm_bf16 =
+      is_canonical_gemm_bf16_operation(owner->operation);
   const bool is_ragged_paged_kv_write_bf16 =
       is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
@@ -13469,6 +14182,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
                             "graph exec mixes BF16 indexed-RoPE state with another operation");
   }
+  if (is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_exec_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "canonical cuBLASLt GEMM graph exec has invalid fixed resource state");
+  }
+  if (!is_canonical_gemm_bf16 &&
+      !canonical_gemm_bf16_exec_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "graph exec mixes canonical cuBLASLt GEMM state with another operation");
+  }
   if (is_ragged_paged_kv_write_bf16 &&
       !ragged_paged_kv_cache_write_bf16_exec_state_is_valid(owner)) {
     return validation_error(
@@ -13492,7 +14219,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
+       !is_indexed_rope_bf16 && !is_canonical_gemm_bf16 &&
+       !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -13666,6 +14394,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->indexed_rope_bf16_sin,
                                  owner->indexed_rope_bf16_positions,
                                  owner->fill_buffer)
+                     : is_canonical_gemm_bf16
+                           ? release_graph_canonical_gemm_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->fill_buffer,
+                                 owner->canonical_gemm_bf16)
                      : is_ragged_paged_kv_write_bf16
                            ? release_graph_ragged_paged_kv_cache_write_bf16_leases(
                                  owner->owner, owner->stream,
