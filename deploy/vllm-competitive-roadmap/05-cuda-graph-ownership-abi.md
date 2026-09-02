@@ -312,7 +312,7 @@ C07 executor integration 또는 end-to-end 성능 향상을 입증하지 않는�
 
 C05-18은 C07 V1 pure-decode의 multi-row paged K/V write primitive만 one-node CUDA Graph로 좁힌다. 이것은
 기존 eager `ragged_paged_kv_cache_write`의 BF16 source-to-pool bit preservation과 packed device metadata의
-raw malformed-row no-op semantics를 보존하는 ownership/parity slice이며, K/V projection, metadata H2D,
+raw bounds-invalid-row no-op semantics를 보존하는 ownership/parity slice이며, K/V projection, metadata H2D,
 attention, scheduler logical commit, full layer loop 또는 executor integration을 capture하지 않는다.
 
 capture begin은 같은 primary context의 stream과 아홉 **서로 다른** fixed device allocation을 by-value로 받는다:
@@ -332,8 +332,8 @@ device metadata bytes가 host mirror와 계속 일치한다고 주장하지 않�
 enqueue는 allocation, synchronize, node update, H2D/D2H 또는 host report 없이 같은 capture stream에
 fixed-address ragged paged-KV write kernel을 정확히 한 번 기록한다. native capture/graph/exec과 safe owner는
 stream 및 아홉 allocation의 exclusive-use lease를 capture → graph → exec → launch completion → close까지
-유지한다. raw device metadata가 malformed이면 kernel의 existing bounds guard가 해당 row의 K/V pool write만
-no-op으로 남겨 eager와 같은 의미를 보존한다. enqueue 또는 context restoration이 불명확해지면 re-enqueue,
+유지한다. raw device metadata가 bounds-invalid row를 만들면 kernel의 existing bounds guard가 해당 row의 K/V
+pool write만 no-op으로 남겨 eager와 같은 의미를 보존한다. enqueue 또는 context restoration이 불명확해지면 re-enqueue,
 end/instantiate는 CUDA 호출 전에 거부하고 one-shot abort만 허용한다.
 
 새 additive capability/operation은 `RaggedPagedKvCacheWriteBf16 = 12`이다. capability 12의 `Supported`는
@@ -347,7 +347,7 @@ GPU acceptance criteria는 multi-sequence·page-16 boundary·shuffled physical b
 pool BF16 bytes와 exact parity, source/metadata bytes 불변, 최소 64회 sequential replay, second-enqueue rejection,
 foreign context·nine-way alias·geometry/capacity·busy·host-mirror preflight rejection 뒤 untouched-resource
 recovery, abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw device metadata의
-invalid row가 eager와 같이 그 row의 key/value pool write만 no-op으로 남기는지를 확인한다. 이 결과는 one-node
+bounds-invalid row가 eager와 같이 그 row의 key/value pool write만 no-op으로 남기는지를 확인한다. 이 결과는 one-node
 `KvWrite` lifecycle/parity의 근거일 뿐 full decode graph 또는 성능 향상 근거는 아니다.
 
 ## 2. 범위
