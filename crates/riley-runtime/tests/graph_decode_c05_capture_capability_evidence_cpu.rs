@@ -46,12 +46,14 @@ const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "CudaGraphCaptureOperation::H2D",
     "CudaGraphCaptureOperation::SiluBf16",
     "CudaGraphCaptureOperation::GatedMultiplyBf16",
+    "CudaGraphCaptureOperation::ResidualAddBf16",
     "CudaGraphCaptureCapability::Unknown",
     "CudaGraphCaptureCapability::Unsupported",
     "CudaGraphCaptureCapability::Supported",
     "PureDecodeGraphV1CaptureOperation::MetadataH2d",
     "PureDecodeGraphV1CaptureOperation::MlpSiluBf16",
     "PureDecodeGraphV1CaptureOperation::MlpGatedMultiply",
+    "PureDecodeGraphV1CaptureOperation::Residual",
     "PureDecodeGraphV1CaptureCapabilityInventory::default()",
     "fn map_exact_c05_capability",
     "pub(crate) fn pure_decode_graph_v1_c05_capture_capability_evidence",
@@ -147,24 +149,34 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
         "MLP gated multiply must be queried through the exact C05 operation"
     );
     assert!(
+        body.contains("CudaGraphCaptureOperation::ResidualAddBf16.capture_capability()?"),
+        "residual addition must be queried through the exact C05 operation"
+    );
+    assert!(
         body.contains(
             ".with_capability(\n            PureDecodeGraphV1CaptureOperation::MlpGatedMultiply,\n            mlp_gated_multiply,\n        )"
         ),
         "C05 gated-multiply evidence must map only to the matching C07 MLP operation"
     );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::Residual, residual)"),
+        "C05 residual-add evidence must map only to the matching C07 residual operation"
+    );
     assert_eq!(
         body.matches("capture_capability()?").count(),
-        3,
-        "C07-31 must query exactly its three reviewed C05 primitives"
+        4,
+        "C07-32 must query exactly its four reviewed C05 primitives"
     );
 
     assert!(
-        INVENTORY_SOURCE.contains("MlpSiluBf16") && INVENTORY_SOURCE.contains("MlpGatedMultiply"),
-        "C07 inventory must keep the SiLU and gated-multiply operations distinct",
+        INVENTORY_SOURCE.contains("MlpSiluBf16")
+            && INVENTORY_SOURCE.contains("MlpGatedMultiply")
+            && INVENTORY_SOURCE.contains("Residual"),
+        "C07 inventory must keep the SiLU, gated-multiply, and residual operations distinct",
     );
     assert!(
         LLAMA_MODULE_SOURCE.contains(
-            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-31 maps only exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
+            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-32 maps only exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
         ),
         "C07-29 evidence must remain a private CUDA-gated module",
     );
