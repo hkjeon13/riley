@@ -184,6 +184,13 @@ pub enum CudaGraphCaptureOperation {
     /// writes, scheduler commit, C07 executor integration, or full decode
     /// execution authority.
     GroupedRaggedPagedAttentionBf16 = 13,
+    /// One fixed-address BF16 embedding validation -> status-D2H graph.
+    ///
+    /// This retains a fixed BF16 table, U32 token IDs, BF16 output, device
+    /// error scratch, and exact pinned status record. It does not include
+    /// token H2D, table-residency policy, scheduler commit, C07 executor
+    /// integration, or full decode execution authority.
+    Bf16EmbeddingStatusD2H = 14,
 }
 
 impl CudaGraphCaptureOperation {
@@ -9006,6 +9013,736 @@ fn take_owned_graph_grouped_ragged_paged_attention_bf16_resources(
     })
 }
 
+// These values and the fixed record width are the native
+// `RileyCudaEmbeddingErrorReport` ABI, deliberately kept private to the
+// graph owner. Callers receive only a native-validated semantic status after
+// launch completion, never a reusable pinned allocation or a raw report
+// pointer.
+#[cfg(feature = "cuda")]
+const BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES: u64 = 32;
+#[cfg(feature = "cuda")]
+const BF16_EMBEDDING_STATUS_D2H_REPORT_NONE: u32 = 0;
+#[cfg(feature = "cuda")]
+const BF16_EMBEDDING_STATUS_D2H_REPORT_TOKEN_OUT_OF_RANGE: u32 = 1;
+
+/// Native-validated semantic result of one completed C05-20 embedding graph.
+///
+/// This is deliberately a status value rather than a CUDA failure. A token
+/// outside the fixed vocabulary is the eager embedding primitive's defined
+/// fail-before-write outcome, and the graph remains reusable after its report
+/// has been observed. Malformed reports and uncertain completion instead
+/// fail-close the executable and return [`CudaError`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Bf16EmbeddingStatusD2HStatus {
+    /// Every fixed device token ID was below `vocabulary_size` and the BF16
+    /// gather completed.
+    Success,
+    /// The earliest U32 device token ID outside the fixed vocabulary.
+    TokenOutOfRange {
+        /// Zero-based position in the fixed device token-ID allocation.
+        token_position: u64,
+        /// The U32 token ID read at `token_position`, widened losslessly.
+        token_id: u64,
+    },
+}
+
+/// A by-value stream, four fixed device allocations, and one exact pinned
+/// embedding-status report allocation recovered after a known C05-20 graph
+/// lifecycle release.
+///
+/// `table`, `token_ids`, `output`, and `device_error_scratch` have immutable
+/// capture-time roles and are deliberately not exposed while native may retain
+/// their addresses. The pinned report is graph-owned rather than general D2H
+/// staging until this bundle is recovered.
+pub struct OwnedGraphBf16EmbeddingStatusD2HResources {
+    stream: CudaStream,
+    table: CudaDeviceBuffer,
+    token_ids: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+    device_error_scratch: CudaDeviceBuffer,
+    pinned_report: CudaPinnedHostBuffer,
+}
+
+impl OwnedGraphBf16EmbeddingStatusD2HResources {
+    fn new(
+        stream: CudaStream,
+        table: CudaDeviceBuffer,
+        token_ids: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        device_error_scratch: CudaDeviceBuffer,
+        pinned_report: CudaPinnedHostBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            table,
+            token_ids,
+            output,
+            device_error_scratch,
+            pinned_report,
+        }
+    }
+
+    /// Returns all fixed resources only after native graph lease release is
+    /// known. The pinned report remains unavailable until that point even when
+    /// a prior completion receipt has copied its status to the caller.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaPinnedHostBuffer,
+    ) {
+        let Self {
+            stream,
+            table,
+            token_ids,
+            output,
+            device_error_scratch,
+            pinned_report,
+        } = self;
+        (
+            stream,
+            table,
+            token_ids,
+            output,
+            device_error_scratch,
+            pinned_report,
+        )
+    }
+
+    /// Explicitly destroys recovered allocations before the capture stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, table, token_ids, output, device_error_scratch, pinned_report) =
+            self.into_parts();
+        pinned_report.close()?;
+        device_error_scratch.close()?;
+        output.close()?;
+        token_ids.close()?;
+        table.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning one by-value fixed-address C05-20 graph capture.
+///
+/// Only pure Rust preflight errors return the untouched resource sextet. Once
+/// native capture entry was attempted, CUDA may retain every raw address, so
+/// the resources remain fail-closed and cannot be recovered through this
+/// error value.
+#[must_use]
+pub struct OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphBf16EmbeddingStatusD2HResources>,
+}
+
+impl OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphBf16EmbeddingStatusD2HResources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The rejected preflight or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns moved resources only when native capture was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphBf16EmbeddingStatusD2HResources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 embedding status-D2H capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active C05-20 five-node graph capture.
+pub struct OwnedGraphBf16EmbeddingStatusD2HCapture {
+    // Native drops before child wrappers: ambiguity retains every raw address
+    // and Rust resources must not drop independently.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphBf16EmbeddingStatusD2HResources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16EmbeddingStatusD2HCapture {
+    /// Records exactly reset -> validate -> gather -> finalize -> pinned D2H
+    /// once. It admits no host callback, fresh token staging, or node update.
+    pub fn enqueue_bf16_embedding_status_d2h(&mut self) -> CudaResult<()> {
+        const OPERATION: &str =
+            "OwnedGraphBf16EmbeddingStatusD2HCapture::enqueue_bf16_embedding_status_d2h";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 embedding status-D2H capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior five-node graph enqueue failed and this partial capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 embedding status-D2H graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_bf16_embedding_status_d2h();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                // A failed multi-node capture can have retained a recorded
+                // prefix. End/instantiate must never observe that prefix.
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the resource sextet into a captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedBf16EmbeddingStatusD2HGraph> {
+        const OPERATION: &str = "OwnedGraphBf16EmbeddingStatusD2HCapture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 embedding status-D2H capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior five-node graph enqueue failed and this partial capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 embedding status-D2H enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_bf16_embedding_status_d2h_resources(
+                &mut self.resources,
+                OPERATION,
+            )?;
+            Ok(OwnedCapturedBf16EmbeddingStatusD2HGraph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after known native release.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+        self.abort_once()?;
+        take_owned_graph_bf16_embedding_status_d2h_resources(
+            &mut self.resources,
+            "OwnedGraphBf16EmbeddingStatusD2HCapture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16EmbeddingStatusD2HCapture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16EmbeddingStatusD2HCapture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value captured C05-20 graph awaiting instantiate or close.
+pub struct OwnedCapturedBf16EmbeddingStatusD2HGraph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphBf16EmbeddingStatusD2HResources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedBf16EmbeddingStatusD2HGraph {
+    /// Instantiates while retaining the exact stream/allocation sextet.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HExec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_bf16_embedding_status_d2h_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16EmbeddingStatusD2HGraph::instantiate",
+            )?;
+            Ok(OwnedGraphBf16EmbeddingStatusD2HExec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16EmbeddingStatusD2HGraph::instantiate",
+            ))
+        }
+    }
+
+    /// Closes the captured graph and returns resources after known release.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_embedding_status_d2h_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16EmbeddingStatusD2HGraph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16EmbeddingStatusD2HGraph::close",
+            ))
+        }
+    }
+}
+
+/// By-value executable for one fixed BF16 embedding validation-status graph.
+///
+/// Its pinned report remains hidden until a matching launch completion creates
+/// [`OwnedGraphBf16EmbeddingStatusD2HCompletion`]. A result is not a C07
+/// scheduler commit or completion boundary.
+pub struct OwnedGraphBf16EmbeddingStatusD2HExec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphBf16EmbeddingStatusD2HResources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16EmbeddingStatusD2HExec {
+    /// Launches the fixed five-node graph once.
+    pub fn launch<'exec>(
+        &'exec mut self,
+    ) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec>> {
+        const OPERATION: &str = "OwnedGraphBf16EmbeddingStatusD2HExec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 embedding status-D2H transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 embedding status-D2H exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphBf16EmbeddingStatusD2HLaunch {
+                    native,
+                    exec: Some(self),
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns resources after known release.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphBf16EmbeddingStatusD2HExec::close",
+                "an earlier graph BF16 embedding status-D2H transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_embedding_status_d2h_resources(
+                &mut self.resources,
+                "OwnedGraphBf16EmbeddingStatusD2HExec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16EmbeddingStatusD2HExec::close",
+            ))
+        }
+    }
+}
+
+/// In-flight completion owner for one C05-20 graph replay.
+pub struct OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: Option<&'exec mut OwnedGraphBf16EmbeddingStatusD2HExec>,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl<'exec> OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec> {
+    /// Waits for completion and returns the sole status-report receipt.
+    ///
+    /// The receipt keeps the executable exclusively borrowed, so a new replay
+    /// or close cannot race the fixed pinned-host report view.
+    pub fn finish(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HCompletion<'exec>> {
+        self.complete_once()?;
+        let exec = self.exec.take().ok_or_else(|| {
+            CudaError::invalid_state(
+                "OwnedGraphBf16EmbeddingStatusD2HLaunch::finish",
+                "the graph launch completion owner was already consumed",
+            )
+        })?;
+        Ok(OwnedGraphBf16EmbeddingStatusD2HCompletion { exec })
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let Some(exec) = self.exec.as_deref_mut() else {
+            return if self.active {
+                Err(CudaError::invalid_state(
+                    "OwnedGraphBf16EmbeddingStatusD2HLaunch::finish",
+                    "the graph launch completion owner lost its executable borrow",
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16EmbeddingStatusD2HLaunch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16EmbeddingStatusD2HLaunch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+/// Completion-scoped semantic view of C05-20's exact pinned status record.
+///
+/// Native owns and validates the permanent raw report allocation. This receipt
+/// exposes only the two semantic outcomes after a known completion, and does
+/// not release or make the pinned allocation independently reusable.
+#[must_use]
+pub struct OwnedGraphBf16EmbeddingStatusD2HCompletion<'exec> {
+    exec: &'exec mut OwnedGraphBf16EmbeddingStatusD2HExec,
+}
+
+impl OwnedGraphBf16EmbeddingStatusD2HCompletion<'_> {
+    /// Reads one native-validated semantic status from the completed pinned
+    /// report.
+    ///
+    /// A returned [`Bf16EmbeddingStatusD2HStatus::TokenOutOfRange`] is the
+    /// intentional eager-equivalent no-output-write result, not an error that
+    /// poisons the graph. A native observation, metadata, or report-contract
+    /// failure instead retains all resources fail-closed.
+    pub fn read_status(&mut self) -> CudaResult<Bf16EmbeddingStatusD2HStatus> {
+        const OPERATION: &str = "OwnedGraphBf16EmbeddingStatusD2HCompletion::read_status";
+        if self.exec.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the graph executable is terminal after an uncertain transition",
+            ));
+        }
+        if self.exec.resources.is_none() {
+            self.exec.terminal = true;
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the graph executable lost its retained pinned embedding report allocation",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let report = match self.exec.native.read_bf16_embedding_status_d2h_report() {
+                Ok(report) => report,
+                Err(error) => {
+                    self.exec.terminal = true;
+                    return Err(error);
+                }
+            };
+            match report.code {
+                BF16_EMBEDDING_STATUS_D2H_REPORT_NONE => {
+                    if report.token_position != 0 || report.token_id != 0 {
+                        self.exec.terminal = true;
+                        return Err(CudaError::new(
+                            CudaErrorKind::Internal,
+                            CudaErrorDomain::Internal,
+                            CudaErrorStage::Synchronize,
+                            0,
+                            OPERATION,
+                            "native embedding graph accepted an inconsistent successful report",
+                        ));
+                    }
+                    Ok(Bf16EmbeddingStatusD2HStatus::Success)
+                }
+                BF16_EMBEDDING_STATUS_D2H_REPORT_TOKEN_OUT_OF_RANGE => {
+                    Ok(Bf16EmbeddingStatusD2HStatus::TokenOutOfRange {
+                        token_position: report.token_position,
+                        token_id: report.token_id,
+                    })
+                }
+                code => {
+                    self.exec.terminal = true;
+                    Err(CudaError::new(
+                        CudaErrorKind::Internal,
+                        CudaErrorDomain::Internal,
+                        CudaErrorStage::Synchronize,
+                        0,
+                        OPERATION,
+                        format!("native embedding graph returned unsupported report code {code}"),
+                    ))
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+}
+
+fn take_owned_graph_bf16_embedding_status_d2h_resources(
+    resources: &mut Option<OwnedGraphBf16EmbeddingStatusD2HResources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 embedding status-D2H owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_bf16_embedding_status_d2h_capture_preflight(
+    stream: &CudaStream,
+    table: &CudaDeviceBuffer,
+    token_ids: &CudaDeviceBuffer,
+    output: &CudaDeviceBuffer,
+    device_error_scratch: &CudaDeviceBuffer,
+    pinned_report: &CudaPinnedHostBuffer,
+    token_count: u64,
+    vocabulary_size: u64,
+    hidden_size: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    const BF16_BYTES: u64 = std::mem::size_of::<u16>() as u64;
+    const U32_BYTES: u64 = std::mem::size_of::<u32>() as u64;
+
+    // `CudaDeviceBuffer` is byte-addressed. The immutable parameter role is
+    // the graph's dtype contract, and this entry point deliberately admits no
+    // subspans, offsets, or F32 sibling path.
+    let buffers = [
+        ("table", table),
+        ("token_ids", token_ids),
+        ("output", output),
+        ("device_error_scratch", device_error_scratch),
+    ];
+    for (index, (left_name, left)) in buffers.iter().enumerate() {
+        for (right_name, right) in buffers.iter().skip(index + 1) {
+            if left.native_handle().same_allocation(right.native_handle()) {
+                return Err(CudaError::invalid_argument(
+                    operation,
+                    format!(
+                        "{left_name} and {right_name} must be distinct fixed device allocations"
+                    ),
+                ));
+            }
+        }
+    }
+    for (_, buffer) in &buffers {
+        ensure_same_context(&stream.context, buffer.context_owner(), operation)?;
+        buffer.ensure_idle_for_operation(operation)?;
+    }
+    ensure_same_context(&stream.context, pinned_report.context_owner(), operation)?;
+    pinned_report.ensure_idle_for_operation(operation)?;
+
+    if token_count == 0 || vocabulary_size == 0 || hidden_size == 0 {
+        return Err(CudaError::out_of_range(
+            operation,
+            "token_count, vocabulary_size, and hidden_size must all be non-zero for a five-node BF16 embedding status-D2H graph",
+        ));
+    }
+    let table_elements = vocabulary_size.checked_mul(hidden_size).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "vocabulary_size * hidden_size overflows the BF16 table element range",
+        )
+    })?;
+    let output_elements = token_count.checked_mul(hidden_size).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "token_count * hidden_size overflows the BF16 output element range",
+        )
+    })?;
+    let table_bytes = table_elements.checked_mul(BF16_BYTES).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "BF16 table element count overflows the byte range",
+        )
+    })?;
+    let token_bytes = token_count.checked_mul(U32_BYTES).ok_or_else(|| {
+        CudaError::out_of_range(operation, "U32 token count overflows the byte range")
+    })?;
+    let output_bytes = output_elements.checked_mul(BF16_BYTES).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "BF16 output element count overflows the byte range",
+        )
+    })?;
+    for (name, actual, required) in [
+        ("BF16 table", table.byte_len(), table_bytes),
+        ("U32 token_ids", token_ids.byte_len(), token_bytes),
+        ("BF16 output", output.byte_len(), output_bytes),
+    ] {
+        if actual < required {
+            return Err(CudaError::out_of_range(
+                operation,
+                format!(
+                    "{name} requires at least {required} bytes for its fixed ABI dtype/shape, but allocation capacity is {actual} bytes"
+                ),
+            ));
+        }
+    }
+    if device_error_scratch.byte_len() != BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "device_error_scratch length {} must exactly equal the fixed embedding report length {BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES}",
+                device_error_scratch.byte_len(),
+            ),
+        ));
+    }
+    if pinned_report.byte_len() != BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "pinned report length {} must exactly equal the fixed embedding report length {BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES}",
+                pinned_report.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -10320,6 +11057,123 @@ impl CudaStream {
                 OwnedGraphGroupedRaggedPagedAttentionBf16CaptureBeginError::recoverable(
                     CudaError::unavailable(
                         "CudaStream::begin_owned_graph_grouped_ragged_paged_attention_bf16_capture",
+                    ),
+                    resources,
+                ),
+            )
+        }
+    }
+
+    /// Begins one C05-20 fixed-address BF16 embedding validation-status D2H
+    /// graph capture.
+    ///
+    /// No token-ID host mirror is accepted or retained: each replay validates
+    /// the fixed U32 device token allocation and publishes either success or
+    /// the earliest OOB token through the fixed pinned report. The graph
+    /// records exactly reset, validate, BF16 gather, finalize, and D2H. Token
+    /// H2D, F32 embedding, table-residency policy, scheduler commit, C07
+    /// executor wiring, node updates, and eager fallback remain outside this
+    /// narrow ownership slice.
+    ///
+    /// # Errors
+    ///
+    /// Rust-side preflight failures return the untouched stream plus four
+    /// device allocations and pinned report. Native-entry errors retain every
+    /// raw address fail-closed.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_owned_graph_bf16_embedding_status_d2h_capture(
+        self,
+        table: CudaDeviceBuffer,
+        token_ids: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        device_error_scratch: CudaDeviceBuffer,
+        pinned_report: CudaPinnedHostBuffer,
+        token_count: u64,
+        vocabulary_size: u64,
+        hidden_size: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<
+        OwnedGraphBf16EmbeddingStatusD2HCapture,
+        OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError,
+    > {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphBf16EmbeddingStatusD2HResources::new(
+            self,
+            table,
+            token_ids,
+            output,
+            device_error_scratch,
+            pinned_report,
+        );
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphBf16EmbeddingStatusD2HResources::new(
+            self,
+            table,
+            token_ids,
+            output,
+            device_error_scratch,
+            pinned_report,
+        );
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str =
+                "CudaStream::begin_owned_graph_bf16_embedding_status_d2h_capture";
+            if let Err(error) = validate_graph_bf16_embedding_status_d2h_capture_preflight(
+                &resources.stream,
+                &resources.table,
+                &resources.token_ids,
+                &resources.output,
+                &resources.device_error_scratch,
+                &resources.pinned_report,
+                token_count,
+                vocabulary_size,
+                hidden_size,
+                OPERATION,
+            ) {
+                return Err(
+                    OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError::recoverable(
+                        error, resources,
+                    ),
+                );
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_bf16_embedding_status_d2h_capture(
+                    resources.table.native_handle(),
+                    resources.token_ids.native_handle(),
+                    resources.output.native_handle(),
+                    resources.device_error_scratch.native_handle(),
+                    resources.pinned_report.native_handle(),
+                    token_count,
+                    vocabulary_size,
+                    hidden_size,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError::terminal(
+                        error,
+                    ));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphBf16EmbeddingStatusD2HCapture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (token_count, vocabulary_size, hidden_size, mode);
+            Err(
+                OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError::recoverable(
+                    CudaError::unavailable(
+                        "CudaStream::begin_owned_graph_bf16_embedding_status_d2h_capture",
                     ),
                     resources,
                 ),

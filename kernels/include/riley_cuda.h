@@ -211,6 +211,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)12)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16 \
   ((RileyCudaGraphCaptureOperationKind)13)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_EMBEDDING_STATUS_D2H \
+  ((RileyCudaGraphCaptureOperationKind)14)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1478,6 +1480,42 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-20 capture containing exactly five fixed-address nodes in the
+// recorded order: embedding-error reset, U32 token validation, BF16 embedding
+// gather, error finalization, and a 32-byte error-report D2H transfer.
+// `table` is BF16 `[vocabulary_size, hidden_size]`, `token_ids` is U32
+// `[token_count]`, `output` is BF16 `[token_count, hidden_size]`, and
+// `device_error_scratch` is an exactly-sized, 8-byte-aligned U8 allocation
+// whose 32 bytes hold RileyCudaEmbeddingErrorReport. `pinned_report` is an
+// exact-size pinned-host destination for the same record. All four device
+// allocations must be pairwise distinct, every allocation must share the
+// stream context, and token_count/vocabulary_size/hidden_size must be
+// nonzero. The graph preserves eager embedding's fail-before-write contract:
+// a raw out-of-range device token suppresses every output write and records
+// the lowest invalid token position and its id. This narrow contract admits no
+// spans, offsets, H2D staging, host token mirror, fresh inputs, node updates,
+// executor wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_bf16_embedding_status_d2h(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* table,
+    RileyCudaDeviceBuffer* token_ids,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* device_error_scratch,
+    RileyCudaPinnedHostBuffer* pinned_report,
+    uint64_t token_count,
+    uint64_t vocabulary_size,
+    uint64_t hidden_size,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the exact five-node BF16 embedding validation-status chain for a
+// capture created by riley_cuda_graph_capture_begin_bf16_embedding_status_d2h.
+// A partial node submission leaves the capture terminal and abort-only.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Begins a C05-17 capture containing exactly one fixed-address BF16
 // row-indexed non-interleaved Llama RoPE node. `input` and `output` are BF16
 // `[active_row_count, head_count, head_size]`; `cos` and `sin` are F32
@@ -1659,6 +1697,19 @@ RileyCudaStatus riley_cuda_graph_launch_complete(
 // the graph owns its fixed destination.
 RileyCudaStatus
 riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results(
+    RileyCudaGraphExec* exec,
+    uint8_t* destination,
+    uint64_t destination_len,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Copies the fixed C05-20 embedding validation report from the still-leased
+// pinned destination after a successful matching graph launch completion.
+// destination_len must be exactly sizeof(RileyCudaEmbeddingErrorReport).
+// The function validates the canonical NONE/OOB record shape before copying;
+// a valid OOB record is successful status data rather than a graph-lifecycle
+// failure. Generic pinned-buffer CPU access remains unavailable while the
+// graph owns its fixed report destination.
+RileyCudaStatus riley_cuda_graph_exec_read_bf16_embedding_status_d2h_report(
     RileyCudaGraphExec* exec,
     uint8_t* destination,
     uint64_t destination_len,

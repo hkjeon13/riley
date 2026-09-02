@@ -109,6 +109,12 @@ constexpr const char* kBeginGroupedRaggedPagedAttentionBf16Operation =
     "begin CUDA Graph grouped BF16 ragged paged-attention capture";
 constexpr const char* kEnqueueGroupedRaggedPagedAttentionBf16Operation =
     "enqueue CUDA Graph grouped BF16 ragged paged attention";
+constexpr const char* kBeginBf16EmbeddingStatusD2HOperation =
+    "begin CUDA Graph BF16 embedding validation-status D2H capture";
+constexpr const char* kEnqueueBf16EmbeddingStatusD2HOperation =
+    "enqueue CUDA Graph BF16 embedding validation-status D2H";
+constexpr const char* kReadBf16EmbeddingStatusD2HReportOperation =
+    "read completed CUDA Graph BF16 embedding validation-status D2H report";
 // A failed node launch during a multi-node capture cannot safely be retried:
 // CUDA may have invalidated the capture after accepting a prefix. Keep this
 // terminal marker in the capture-only enqueue state so abort remains the sole
@@ -119,6 +125,9 @@ constexpr uint32_t kIndexedRopeBf16EnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kRaggedPagedKvCacheWriteBf16EnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kGroupedRaggedPagedAttentionBf16EnqueueTerminal =
     UINT32_MAX;
+constexpr uint32_t kBf16EmbeddingStatusD2HEnqueueTerminal = UINT32_MAX;
+constexpr uint32_t kGraphBf16EmbeddingThreads = 256;
+constexpr uint32_t kMaximumGraphBf16EmbeddingBlocks = 65535;
 constexpr uint32_t kGraphRaggedAttentionWarpSize = 32;
 constexpr uint32_t kGraphRaggedAttentionFullWarpMask = 0xffffffffU;
 constexpr uint32_t kGraphRaggedAttentionMaximumWarpsPerBlock = 16;
@@ -130,6 +139,15 @@ constexpr uint32_t kGraphRaggedAttentionSharedTileTokens =
     RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
 constexpr uint64_t kGraphMaximumGridX = 2147483647;
 constexpr uint64_t kGraphMaximumGridYOrZ = 65535;
+
+// C05-20 reuses C05-16's existing five-resource ownership ledger but never
+// its row-gather/argmax arithmetic. Keeping this discriminator centralized
+// makes generic capture/graph/exec lifecycle transitions require an exact
+// operation-specific predicate before touching those shared slots.
+bool is_bf16_d2h_operation(RileyCudaGraphCaptureOperation operation) noexcept {
+  return operation == RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H ||
+         operation == RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H;
+}
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -361,6 +379,75 @@ __global__ void graph_bf16_row_gather_bf16(
       output[index] = __float2bfloat16_rn(CUDART_NAN_F);
     } else {
       output[index] = input[input_row * column_count + column];
+    }
+  }
+}
+
+// This C05-20 chain is deliberately capture-local rather than
+// riley_cuda_embedding_execute: eager embedding owns transient leases and a
+// stack report, neither of which is valid once a graph permanently retains
+// fixed raw addresses. Keep the node order, 256-thread grid-stride topology,
+// atomic earliest-error selection, BF16 storage move, and fail-before-write
+// rule byte-for-byte equivalent to primitives.cu's BF16 path.
+__global__ void graph_reset_embedding_error(
+    RileyCudaEmbeddingErrorReport* report) {
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    report->struct_size = sizeof(RileyCudaEmbeddingErrorReport);
+    report->code = RILEY_CUDA_EMBEDDING_ERROR_NONE;
+    report->token_position = UINT64_MAX;
+    report->token_id = 0;
+    report->reserved = 0;
+  }
+}
+
+__global__ void graph_validate_embedding_tokens(
+    const uint32_t* token_ids, uint64_t token_count,
+    uint64_t vocabulary_size, RileyCudaEmbeddingErrorReport* report) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t position = first; position < token_count; position += stride) {
+    if (token_ids[position] >= vocabulary_size) {
+      atomicMin(reinterpret_cast<unsigned long long*>(&report->token_position),
+                static_cast<unsigned long long>(position));
+    }
+  }
+}
+
+__global__ void graph_bf16_embedding(
+    const __nv_bfloat16* table, const uint32_t* token_ids,
+    __nv_bfloat16* output, const RileyCudaEmbeddingErrorReport* report,
+    uint64_t hidden_size, uint64_t output_elements) {
+  // The validation node is ordered before this node on the captured stream.
+  // If any raw device token is invalid, retain eager's all-or-nothing output
+  // behavior instead of exposing a partial gather.
+  if (report->token_position != UINT64_MAX) {
+    return;
+  }
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < output_elements; index += stride) {
+    const uint64_t token_position = index / hidden_size;
+    const uint64_t hidden_index = index - token_position * hidden_size;
+    const uint64_t token_id = token_ids[token_position];
+    // This is a storage move. Preserve BF16 NaN payloads by avoiding an FP32
+    // round trip exactly as eager embedding_kernel<__nv_bfloat16> does.
+    output[index] = table[token_id * hidden_size + hidden_index];
+  }
+}
+
+__global__ void graph_finalize_embedding_error(
+    const uint32_t* token_ids, uint64_t token_count,
+    RileyCudaEmbeddingErrorReport* report) {
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    if (report->token_position == UINT64_MAX) {
+      report->token_position = 0;
+      report->token_id = 0;
+      report->code = RILEY_CUDA_EMBEDDING_ERROR_NONE;
+    } else if (report->token_position < token_count) {
+      report->token_id = token_ids[report->token_position];
+      report->code = RILEY_CUDA_EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE;
     }
   }
 }
@@ -1107,6 +1194,21 @@ bool bf16_row_gather_argmax_d2h_shape_is_valid(
   }
   *out_result_byte_len =
       output_row_count * sizeof(RileyCudaBf16ArgmaxResult);
+  return true;
+}
+
+bool bf16_embedding_status_d2h_shape_is_valid(
+    uint64_t vocabulary_size, uint64_t token_count, uint64_t hidden_size,
+    uint64_t* out_table_element_count,
+    uint64_t* out_output_element_count) noexcept {
+  if (out_table_element_count == nullptr || out_output_element_count == nullptr ||
+      vocabulary_size == 0 || token_count == 0 || hidden_size == 0 ||
+      vocabulary_size > UINT64_MAX / hidden_size ||
+      token_count > UINT64_MAX / hidden_size) {
+    return false;
+  }
+  *out_table_element_count = vocabulary_size * hidden_size;
+  *out_output_element_count = token_count * hidden_size;
   return true;
 }
 
@@ -2335,6 +2437,306 @@ bool bf16_row_gather_argmax_d2h_exec_state_is_valid(
              std::memory_order_acquire) == 1;
 }
 
+// C05-20 uses C05-16's storage slots only as a five-address ledger. The
+// operation tag and this separate geometry predicate prevent any row-gather
+// interpretation from leaking into the embedding chain:
+//   fill_buffer=output, d2h_input=table, d2h_indices=token IDs,
+//   d2h_gathered_logits=device error scratch, d2h_pinned_results=report.
+bool bf16_embedding_status_d2h_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  uint64_t table_element_count = 0;
+  uint64_t output_element_count = 0;
+  return capture != nullptr &&
+         capture->operation ==
+             RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+         capture->owner != nullptr && capture->stream != nullptr &&
+         capture->fill_buffer != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_input != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_indices != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_gathered_logits != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_pinned_results != nullptr &&
+         capture->fill_buffer != capture->bf16_row_gather_argmax_d2h_input &&
+         capture->fill_buffer != capture->bf16_row_gather_argmax_d2h_indices &&
+         capture->fill_buffer !=
+             capture->bf16_row_gather_argmax_d2h_gathered_logits &&
+         capture->bf16_row_gather_argmax_d2h_input !=
+             capture->bf16_row_gather_argmax_d2h_indices &&
+         capture->bf16_row_gather_argmax_d2h_input !=
+             capture->bf16_row_gather_argmax_d2h_gathered_logits &&
+         capture->bf16_row_gather_argmax_d2h_indices !=
+             capture->bf16_row_gather_argmax_d2h_gathered_logits &&
+         capture->fill_lease_held &&
+         capture->bf16_row_gather_argmax_d2h_input_lease_held &&
+         capture->bf16_row_gather_argmax_d2h_indices_lease_held &&
+         capture->bf16_row_gather_argmax_d2h_gathered_logits_lease_held &&
+         capture->bf16_row_gather_argmax_d2h_pinned_results_lease_held &&
+         bf16_embedding_status_d2h_shape_is_valid(
+             capture->bf16_row_gather_argmax_d2h_input_row_count,
+             capture->bf16_row_gather_argmax_d2h_output_row_count,
+             capture->bf16_row_gather_argmax_d2h_vocabulary_size,
+             &table_element_count, &output_element_count) &&
+         capture->bf16_row_gather_argmax_d2h_result_byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 &&
+         !capture->h2d_source_lease_held && capture->silu_input == nullptr &&
+         capture->silu_element_count == 0 && capture->silu_enqueue_count == 0 &&
+         !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
+         bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
+         same_context(capture->owner, capture->stream->owner) &&
+         same_context(capture->owner, capture->fill_buffer->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_d2h_input->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_d2h_indices->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_d2h_gathered_logits->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_d2h_pinned_results->owner) &&
+         capture->fill_buffer->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_input->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_indices->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_d2h_gathered_logits->device_data !=
+             nullptr &&
+         capture->bf16_row_gather_argmax_d2h_pinned_results->host_data !=
+             nullptr &&
+         table_element_count <=
+             capture->bf16_row_gather_argmax_d2h_input->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         capture->bf16_row_gather_argmax_d2h_output_row_count <=
+             capture->bf16_row_gather_argmax_d2h_indices->byte_len /
+                 sizeof(uint32_t) &&
+         output_element_count <= capture->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         capture->bf16_row_gather_argmax_d2h_gathered_logits->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         reinterpret_cast<uintptr_t>(
+             capture->bf16_row_gather_argmax_d2h_gathered_logits->device_data) %
+                 alignof(RileyCudaEmbeddingErrorReport) ==
+             0 &&
+         capture->bf16_row_gather_argmax_d2h_pinned_results->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->fill_buffer->active_uses.load(std::memory_order_acquire) ==
+             1 &&
+         capture->bf16_row_gather_argmax_d2h_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->bf16_row_gather_argmax_d2h_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->bf16_row_gather_argmax_d2h_gathered_logits->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->bf16_row_gather_argmax_d2h_pinned_results->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool bf16_embedding_status_d2h_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  uint64_t table_element_count = 0;
+  uint64_t output_element_count = 0;
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+         graph->owner != nullptr && graph->stream != nullptr &&
+         graph->fill_buffer != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_input != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_indices != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_gathered_logits != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_pinned_results != nullptr &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_d2h_input &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_d2h_indices &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_d2h_gathered_logits &&
+         graph->bf16_row_gather_argmax_d2h_input !=
+             graph->bf16_row_gather_argmax_d2h_indices &&
+         graph->bf16_row_gather_argmax_d2h_input !=
+             graph->bf16_row_gather_argmax_d2h_gathered_logits &&
+         graph->bf16_row_gather_argmax_d2h_indices !=
+             graph->bf16_row_gather_argmax_d2h_gathered_logits &&
+         bf16_embedding_status_d2h_shape_is_valid(
+             graph->bf16_row_gather_argmax_d2h_input_row_count,
+             graph->bf16_row_gather_argmax_d2h_output_row_count,
+             graph->bf16_row_gather_argmax_d2h_vocabulary_size,
+             &table_element_count, &output_element_count) &&
+         graph->bf16_row_gather_argmax_d2h_result_byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         same_context(graph->owner, graph->stream->owner) &&
+         same_context(graph->owner, graph->fill_buffer->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_d2h_input->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_d2h_indices->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_d2h_gathered_logits->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_d2h_pinned_results->owner) &&
+         graph->fill_buffer->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_input->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_indices->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_d2h_gathered_logits->device_data !=
+             nullptr &&
+         graph->bf16_row_gather_argmax_d2h_pinned_results->host_data !=
+             nullptr &&
+         table_element_count <= graph->bf16_row_gather_argmax_d2h_input->byte_len /
+                                    sizeof(__nv_bfloat16) &&
+         graph->bf16_row_gather_argmax_d2h_output_row_count <=
+             graph->bf16_row_gather_argmax_d2h_indices->byte_len /
+                 sizeof(uint32_t) &&
+         output_element_count <= graph->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         graph->bf16_row_gather_argmax_d2h_gathered_logits->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         reinterpret_cast<uintptr_t>(
+             graph->bf16_row_gather_argmax_d2h_gathered_logits->device_data) %
+                 alignof(RileyCudaEmbeddingErrorReport) ==
+             0 &&
+         graph->bf16_row_gather_argmax_d2h_pinned_results->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_d2h_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_d2h_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_d2h_gathered_logits->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_d2h_pinned_results->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool bf16_embedding_status_d2h_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  uint64_t table_element_count = 0;
+  uint64_t output_element_count = 0;
+  return exec != nullptr &&
+         exec->operation ==
+             RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+         exec->owner != nullptr && exec->stream != nullptr &&
+         exec->fill_buffer != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_input != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_indices != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_gathered_logits != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_pinned_results != nullptr &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_d2h_input &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_d2h_indices &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_d2h_gathered_logits &&
+         exec->bf16_row_gather_argmax_d2h_input !=
+             exec->bf16_row_gather_argmax_d2h_indices &&
+         exec->bf16_row_gather_argmax_d2h_input !=
+             exec->bf16_row_gather_argmax_d2h_gathered_logits &&
+         exec->bf16_row_gather_argmax_d2h_indices !=
+             exec->bf16_row_gather_argmax_d2h_gathered_logits &&
+         bf16_embedding_status_d2h_shape_is_valid(
+             exec->bf16_row_gather_argmax_d2h_input_row_count,
+             exec->bf16_row_gather_argmax_d2h_output_row_count,
+             exec->bf16_row_gather_argmax_d2h_vocabulary_size,
+             &table_element_count, &output_element_count) &&
+         exec->bf16_row_gather_argmax_d2h_result_byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
+         bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
+         same_context(exec->owner, exec->stream->owner) &&
+         same_context(exec->owner, exec->fill_buffer->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_d2h_input->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_d2h_indices->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_d2h_gathered_logits->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_d2h_pinned_results->owner) &&
+         exec->fill_buffer->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_input->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_indices->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_d2h_gathered_logits->device_data !=
+             nullptr &&
+         exec->bf16_row_gather_argmax_d2h_pinned_results->host_data !=
+             nullptr &&
+         table_element_count <= exec->bf16_row_gather_argmax_d2h_input->byte_len /
+                                    sizeof(__nv_bfloat16) &&
+         exec->bf16_row_gather_argmax_d2h_output_row_count <=
+             exec->bf16_row_gather_argmax_d2h_indices->byte_len /
+                 sizeof(uint32_t) &&
+         output_element_count <= exec->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         exec->bf16_row_gather_argmax_d2h_gathered_logits->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         reinterpret_cast<uintptr_t>(
+             exec->bf16_row_gather_argmax_d2h_gathered_logits->device_data) %
+                 alignof(RileyCudaEmbeddingErrorReport) ==
+             0 &&
+         exec->bf16_row_gather_argmax_d2h_pinned_results->byte_len ==
+             sizeof(RileyCudaEmbeddingErrorReport) &&
+         exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_d2h_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_d2h_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_d2h_gathered_logits->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_d2h_pinned_results->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool bf16_d2h_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         (capture->operation ==
+                  RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H
+              ? bf16_row_gather_argmax_d2h_capture_state_is_valid(capture)
+              : capture->operation ==
+                        RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+                    bf16_embedding_status_d2h_capture_state_is_valid(capture));
+}
+
+bool bf16_d2h_graph_state_is_valid(const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr &&
+         (graph->operation ==
+                  RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H
+              ? bf16_row_gather_argmax_d2h_graph_state_is_valid(graph)
+              : graph->operation ==
+                        RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+                    bf16_embedding_status_d2h_graph_state_is_valid(graph));
+}
+
+bool bf16_d2h_exec_state_is_valid(const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr &&
+         (exec->operation == RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H
+              ? bf16_row_gather_argmax_d2h_exec_state_is_valid(exec)
+              : exec->operation ==
+                        RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H &&
+                    bf16_embedding_status_d2h_exec_state_is_valid(exec));
+}
+
 // C05-17 owns five distinct fixed device allocations. The host position
 // mirror is intentionally absent from owner state: it has completed its
 // begin-time validation before any permanent lease or CUDA capture exists.
@@ -3287,16 +3689,20 @@ bool release_capture_bf16_row_gather_argmax_leases(
   return true;
 }
 
-// C05-16 retains the C05-15 device chain plus a pinned D2H destination. The
-// terminal marker is abort-releasable only: a partially recorded node prefix
-// keeps every raw address leased until CUDA capture termination is known.
+// C05-16/C05-20 share this five-address ownership ledger, but operation tags
+// and state predicates keep their recorded node chains disjoint. A terminal
+// marker is abort-releasable only: a partially recorded node prefix keeps
+// every raw address leased until CUDA capture termination is known.
 bool release_capture_bf16_row_gather_argmax_d2h_leases(
     RileyCudaGraphCapture* capture) noexcept {
-  if (!bf16_row_gather_argmax_d2h_capture_state_is_valid(capture) ||
+  if (!bf16_d2h_capture_state_is_valid(capture) ||
       (capture->bf16_row_gather_argmax_d2h_enqueue_count != 0 &&
        capture->bf16_row_gather_argmax_d2h_enqueue_count != 1 &&
        capture->bf16_row_gather_argmax_d2h_enqueue_count !=
-           kBf16RowGatherArgmaxD2HEnqueueTerminal)) {
+           (capture->operation ==
+                    RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H
+                ? kBf16EmbeddingStatusD2HEnqueueTerminal
+                : kBf16RowGatherArgmaxD2HEnqueueTerminal))) {
     return false;
   }
   if (!release_exclusive_use(
@@ -3447,8 +3853,7 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
        !bf16_row_gather_argmax_graph_fields_are_clear(graph))) {
     return false;
   }
-  if (capture->operation !=
-          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H &&
+  if (!is_bf16_d2h_operation(capture->operation) &&
       (!bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
        !bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph))) {
     return false;
@@ -3576,10 +3981,9 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_argmax_vocabulary_size) {
       return false;
     }
-  } else if (capture->operation ==
-             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H) {
-    if (!bf16_row_gather_argmax_d2h_capture_state_is_valid(capture) ||
-        !bf16_row_gather_argmax_d2h_graph_state_is_valid(graph) ||
+  } else if (is_bf16_d2h_operation(capture->operation)) {
+    if (!bf16_d2h_capture_state_is_valid(capture) ||
+        !bf16_d2h_graph_state_is_valid(graph) ||
         graph->bf16_row_gather_argmax_d2h_input !=
             capture->bf16_row_gather_argmax_d2h_input ||
         graph->bf16_row_gather_argmax_d2h_indices !=
@@ -3695,8 +4099,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
        !bf16_row_gather_argmax_graph_fields_are_clear(graph))) {
     return false;
   }
-  if (capture->operation !=
-          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H &&
+  if (!is_bf16_d2h_operation(capture->operation) &&
       (!bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
        !bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph))) {
     return false;
@@ -3887,11 +4290,10 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_argmax_vocabulary_size) {
       return false;
     }
-  } else if (capture->operation ==
-             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H) {
+  } else if (is_bf16_d2h_operation(capture->operation)) {
     if (capture->bf16_row_gather_argmax_d2h_enqueue_count != 1 ||
-        !bf16_row_gather_argmax_d2h_capture_state_is_valid(capture) ||
-        !bf16_row_gather_argmax_d2h_graph_state_is_valid(graph) ||
+        !bf16_d2h_capture_state_is_valid(capture) ||
+        !bf16_d2h_graph_state_is_valid(graph) ||
         graph->bf16_row_gather_argmax_d2h_input !=
             capture->bf16_row_gather_argmax_d2h_input ||
         graph->bf16_row_gather_argmax_d2h_indices !=
@@ -7410,6 +7812,380 @@ RileyCudaStatus capture_begin_bf16_row_gather_argmax_d2h_impl(
   return status;
 }
 
+// C05-20 keeps eager embedding's validation/status boundary inside one fixed
+// graph. The C05-16 ledger supplies the five permanent leases without
+// reusing C05-16 arithmetic or result interpretation.
+RileyCudaStatus capture_begin_bf16_embedding_status_d2h_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* table,
+    RileyCudaDeviceBuffer* token_ids, RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* device_error_scratch,
+    RileyCudaPinnedHostBuffer* pinned_report, uint64_t token_count,
+    uint64_t vocabulary_size, uint64_t hidden_size,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginBf16EmbeddingStatusD2HOperation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || table == nullptr || token_ids == nullptr ||
+      output == nullptr || device_error_scratch == nullptr ||
+      pinned_report == nullptr || stream->owner == nullptr ||
+      table->owner == nullptr || token_ids->owner == nullptr ||
+      output->owner == nullptr || device_error_scratch->owner == nullptr ||
+      pinned_report->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "stream, four embedding device allocations, pinned report, or their owner is null");
+  }
+  RileyCudaDeviceBuffer* const buffers[] = {
+      table, token_ids, output, device_error_scratch,
+  };
+  constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (!same_context(stream->owner, buffers[index]->owner)) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "capture stream and embedding device allocations must share one context owner");
+    }
+    for (size_t other = index + 1; other < kBufferCount; ++other) {
+      if (buffers[index] == buffers[other]) {
+        return validation_error(
+            error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+            kBeginBf16EmbeddingStatusD2HOperation,
+            "graph BF16 embedding status D2H requires four distinct device allocations");
+      }
+    }
+  }
+  if (!same_context(stream->owner, pinned_report->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "capture stream and pinned embedding report must share one context owner");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginBf16EmbeddingStatusD2HOperation,
+                            "only thread-local capture mode is admitted");
+  }
+  uint64_t table_element_count = 0;
+  uint64_t output_element_count = 0;
+  if (!bf16_embedding_status_d2h_shape_is_valid(
+          vocabulary_size, token_count, hidden_size, &table_element_count,
+          &output_element_count) ||
+      table_element_count > table->byte_len / sizeof(__nv_bfloat16) ||
+      token_count > token_ids->byte_len / sizeof(uint32_t) ||
+      output_element_count > output->byte_len / sizeof(__nv_bfloat16) ||
+      device_error_scratch->byte_len !=
+          sizeof(RileyCudaEmbeddingErrorReport) ||
+      reinterpret_cast<uintptr_t>(device_error_scratch->device_data) %
+              alignof(RileyCudaEmbeddingErrorReport) !=
+          0 ||
+      pinned_report->byte_len != sizeof(RileyCudaEmbeddingErrorReport)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "BF16 embedding status D2H geometry, exact report capacity, or alignment is invalid");
+  }
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index]->device_data == nullptr) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "graph BF16 embedding status D2H allocation has no live device storage");
+    }
+  }
+  if (pinned_report->host_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "graph BF16 embedding status D2H report has no live pinned host storage");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "a stream command batch blocks fixed-address BF16 embedding status D2H graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginBf16EmbeddingStatusD2HOperation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  bool resource_leases_held[kBufferCount] = {};
+  bool pinned_lease_held = false;
+  bool stream_lease_held = false;
+  const auto release_initial_leases = [&]() noexcept {
+    bool released = true;
+    if (stream_lease_held) {
+      released = release_exclusive_use(stream->active_uses) && released;
+      stream_lease_held = false;
+    }
+    if (pinned_lease_held) {
+      released = release_exclusive_use(pinned_report->active_uses) && released;
+      pinned_lease_held = false;
+    }
+    for (size_t index = kBufferCount; index != 0; --index) {
+      const size_t resource_index = index - 1;
+      if (resource_leases_held[resource_index]) {
+        released = release_exclusive_use(
+                       buffers[resource_index]->active_uses) &&
+                   released;
+        resource_leases_held[resource_index] = false;
+      }
+    }
+    return released;
+  };
+  const auto reject_busy = [&](const char* message) noexcept {
+    if (!release_initial_leases()) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "failed to release rejected BF16 embedding status D2H graph resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginBf16EmbeddingStatusD2HOperation, message);
+  };
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
+      return reject_busy(
+          "a fixed BF16 embedding status D2H device allocation has an active asynchronous use");
+    }
+    resource_leases_held[index] = true;
+  }
+  if (!try_acquire_exclusive_use(pinned_report->active_uses)) {
+    return reject_busy(
+        "the fixed BF16 embedding status D2H pinned report has an active copy token");
+  }
+  pinned_lease_held = true;
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return reject_busy("stream has an active asynchronous use or capture");
+  }
+  stream_lease_held = true;
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginBf16EmbeddingStatusD2HOperation,
+                            "failed to release exhausted graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginBf16EmbeddingStatusD2HOperation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginBf16EmbeddingStatusD2HOperation,
+                            "failed to release rejected graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginBf16EmbeddingStatusD2HOperation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "failed to release graph capture allocation rollback leases");
+    }
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
+                     kBeginBf16EmbeddingStatusD2HOperation,
+                     "host allocation failed for BF16 embedding status D2H graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "failed to release captured graph allocation rollback leases");
+    }
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
+                     kBeginBf16EmbeddingStatusD2HOperation,
+                     "host allocation failed for captured BF16 embedding status D2H graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H, nullptr, 0,
+      nullptr, 0, nullptr, nullptr, 0, nullptr, nullptr, 0, nullptr,
+      nullptr, 0, 0, 0.0F, nullptr, 0, 0, nullptr, nullptr, 0, 0, 0,
+      nullptr, nullptr, nullptr, 0, 0, 0, table, token_ids,
+      device_error_scratch, pinned_report, vocabulary_size, token_count,
+      hidden_size, sizeof(RileyCudaEmbeddingErrorReport));
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->bf16_row_gather_argmax_d2h_input = table;
+  capture->bf16_row_gather_argmax_d2h_indices = token_ids;
+  capture->bf16_row_gather_argmax_d2h_gathered_logits = device_error_scratch;
+  capture->bf16_row_gather_argmax_d2h_pinned_results = pinned_report;
+  capture->bf16_row_gather_argmax_d2h_input_row_count = vocabulary_size;
+  capture->bf16_row_gather_argmax_d2h_output_row_count = token_count;
+  capture->bf16_row_gather_argmax_d2h_vocabulary_size = hidden_size;
+  capture->bf16_row_gather_argmax_d2h_result_byte_len =
+      sizeof(RileyCudaEmbeddingErrorReport);
+  capture->bf16_row_gather_argmax_d2h_input_lease_held = true;
+  capture->bf16_row_gather_argmax_d2h_indices_lease_held = true;
+  capture->bf16_row_gather_argmax_d2h_gathered_logits_lease_held = true;
+  capture->bf16_row_gather_argmax_d2h_pinned_results_lease_held = true;
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    resource_leases_held[index] = false;
+  }
+  pinned_lease_held = false;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_bf16_row_gather_argmax_d2h_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "failed to release a blocked BF16 embedding status D2H graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_bf16_row_gather_argmax_d2h_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16EmbeddingStatusD2HOperation,
+          "failed to release a rejected BF16 embedding status D2H graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+      kBeginBf16EmbeddingStatusD2HOperation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginBf16EmbeddingStatusD2HOperation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginBf16EmbeddingStatusD2HOperation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_bf16_row_gather_argmax_d2h_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+        kBeginBf16EmbeddingStatusD2HOperation,
+        "failed to release an unstarted BF16 embedding status D2H graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 // C05-17 captures the eager indexed-RoPE BF16 arithmetic into a single fixed
 // node. All capacity and host-mirror checks finish before any lease is held;
 // only device pointers and immutable geometry are retained after capture
@@ -8572,6 +9348,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_EMBEDDING_STATUS_D2H:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16:
@@ -8922,8 +9699,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
       const bool is_bf16_row_gather_argmax_d2h =
-          owner->operation ==
-          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+          is_bf16_d2h_operation(owner->operation);
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_ragged_paged_kv_write_bf16 =
@@ -9118,6 +9894,22 @@ riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
   return capture_begin_bf16_row_gather_argmax_d2h_impl(
       stream, input, row_indices, gathered_logits, results, pinned_results,
       input_row_count, output_row_count, vocabulary_size, mode, out_capture,
+      out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_bf16_embedding_status_d2h(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* table,
+    RileyCudaDeviceBuffer* token_ids, RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* device_error_scratch,
+    RileyCudaPinnedHostBuffer* pinned_report, uint64_t token_count,
+    uint64_t vocabulary_size, uint64_t hidden_size,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_bf16_embedding_status_d2h_impl(
+      stream, table, token_ids, output, device_error_scratch, pinned_report,
+      token_count, vocabulary_size, hidden_size, mode, out_capture,
       out_graph_error, error);
 }
 
@@ -10200,6 +10992,148 @@ riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16EmbeddingStatusD2HOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueBf16EmbeddingStatusD2HOperation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->operation !=
+          RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H ||
+      owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !bf16_embedding_status_d2h_capture_state_is_valid(owner) ||
+      !bf16_embedding_status_d2h_graph_state_is_valid(owner->prepared_graph) ||
+      owner->bf16_row_gather_argmax_d2h_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16EmbeddingStatusD2HOperation,
+        "capture owner is not a live unqueued BF16 embedding status D2H graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16EmbeddingStatusD2HOperation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  const uint64_t token_count =
+      owner->bf16_row_gather_argmax_d2h_output_row_count;
+  const uint64_t vocabulary_size =
+      owner->bf16_row_gather_argmax_d2h_input_row_count;
+  const uint64_t hidden_size =
+      owner->bf16_row_gather_argmax_d2h_vocabulary_size;
+  const uint64_t output_element_count = token_count * hidden_size;
+  const uint64_t requested_token_blocks =
+      ((token_count - 1) / kGraphBf16EmbeddingThreads) + 1;
+  const uint64_t requested_output_blocks =
+      ((output_element_count - 1) / kGraphBf16EmbeddingThreads) + 1;
+  const uint32_t token_grid_x = static_cast<uint32_t>(
+      requested_token_blocks < kMaximumGraphBf16EmbeddingBlocks
+          ? requested_token_blocks
+          : kMaximumGraphBf16EmbeddingBlocks);
+  const uint32_t output_grid_x = static_cast<uint32_t>(
+      requested_output_blocks < kMaximumGraphBf16EmbeddingBlocks
+          ? requested_output_blocks
+          : kMaximumGraphBf16EmbeddingBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      kEnqueueBf16EmbeddingStatusD2HOperation, owner);
+  bool node_submission_started = false;
+  bool all_nodes_accepted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    node_submission_started = true;
+    auto* const report = static_cast<RileyCudaEmbeddingErrorReport*>(
+        owner->bf16_row_gather_argmax_d2h_gathered_logits->device_data);
+    const auto* const ids = static_cast<const uint32_t*>(
+        owner->bf16_row_gather_argmax_d2h_indices->device_data);
+    graph_reset_embedding_error<<<1, 1, 0, owner->stream->stream>>>(report);
+    status = runtime_error(cudaGetLastError(), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueBf16EmbeddingStatusD2HOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      graph_validate_embedding_tokens<<<token_grid_x, kGraphBf16EmbeddingThreads,
+                                        0, owner->stream->stream>>>(
+          ids, token_count, vocabulary_size, report);
+      status = runtime_error(cudaGetLastError(), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                             kEnqueueBf16EmbeddingStatusD2HOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      graph_bf16_embedding<<<output_grid_x, kGraphBf16EmbeddingThreads, 0,
+                             owner->stream->stream>>>(
+          static_cast<const __nv_bfloat16*>(
+              owner->bf16_row_gather_argmax_d2h_input->device_data),
+          ids, static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+          report, hidden_size, output_element_count);
+      status = runtime_error(cudaGetLastError(), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                             kEnqueueBf16EmbeddingStatusD2HOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      graph_finalize_embedding_error<<<1, 1, 0, owner->stream->stream>>>(
+          ids, token_count, report);
+      status = runtime_error(cudaGetLastError(), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                             kEnqueueBf16EmbeddingStatusD2HOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = runtime_error(
+          cudaMemcpyAsync(
+              owner->bf16_row_gather_argmax_d2h_pinned_results->host_data,
+              report, sizeof(RileyCudaEmbeddingErrorReport),
+              cudaMemcpyDeviceToHost, owner->stream->stream),
+          error, RILEY_CUDA_ERROR_STAGE_COPY,
+          kEnqueueBf16EmbeddingStatusD2HOperation);
+    }
+    all_nodes_accepted = status == RILEY_CUDA_STATUS_SUCCESS;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueBf16EmbeddingStatusD2HOperation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  if (node_submission_started &&
+      (!all_nodes_accepted || status != RILEY_CUDA_STATUS_SUCCESS ||
+       !restoration_known)) {
+    owner->bf16_row_gather_argmax_d2h_enqueue_count =
+        kBf16EmbeddingStatusD2HEnqueueTerminal;
+  } else if (all_nodes_accepted && status == RILEY_CUDA_STATUS_SUCCESS &&
+             restoration_known) {
+    owner->bf16_row_gather_argmax_d2h_enqueue_count = 1;
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -10653,8 +11587,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   const bool is_bf16_row_gather_argmax_d2h =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
@@ -10759,7 +11692,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_bf16_row_gather_argmax &&
        !bf16_row_gather_argmax_capture_state_is_valid(owner)) ||
       (is_bf16_row_gather_argmax_d2h &&
-       !bf16_row_gather_argmax_d2h_capture_state_is_valid(owner)) ||
+       !bf16_d2h_capture_state_is_valid(owner)) ||
       (is_indexed_rope_bf16 &&
        !indexed_rope_bf16_capture_state_is_valid(owner)) ||
       (is_ragged_paged_kv_write_bf16 &&
@@ -10971,8 +11904,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
       const bool is_bf16_row_gather_argmax_d2h =
-          owner->operation ==
-          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+          is_bf16_d2h_operation(owner->operation);
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_ragged_paged_kv_write_bf16 =
@@ -11096,8 +12028,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   const bool is_bf16_row_gather_argmax_d2h =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
@@ -11167,7 +12098,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
         "captured graph mixes BF16 row-gather argmax state with another operation");
   }
   if (is_bf16_row_gather_argmax_d2h &&
-      !bf16_row_gather_argmax_d2h_graph_state_is_valid(owner)) {
+      !bf16_d2h_graph_state_is_valid(owner)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
@@ -11537,8 +12468,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       exec->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   const bool is_bf16_row_gather_argmax_d2h =
-      exec->operation ==
-      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      is_bf16_d2h_operation(exec->operation);
   const bool is_indexed_rope_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
@@ -11608,7 +12538,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
         "graph exec mixes BF16 row-gather argmax state with another operation");
   }
   if (is_bf16_row_gather_argmax_d2h &&
-      !bf16_row_gather_argmax_d2h_exec_state_is_valid(exec)) {
+      !bf16_d2h_exec_state_is_valid(exec)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
@@ -11879,8 +12809,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_launch_complete(
     // graph exec's permanent stream/buffer leases.
     exec->launch_in_flight = false;
     exec->poisoned = false;
-    if (exec->operation ==
-        RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H) {
+    if (is_bf16_d2h_operation(exec->operation)) {
       exec->bf16_row_gather_argmax_d2h_completion_visible = true;
     }
     owner->~RileyCudaGraphLaunch();
@@ -11956,6 +12885,100 @@ riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results(
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_exec_read_bf16_embedding_status_d2h_report(
+    RileyCudaGraphExec* exec, uint8_t* destination,
+    uint64_t destination_len, RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kReadBf16EmbeddingStatusD2HReportOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_COMPLETION);
+  if (exec == nullptr || destination == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kReadBf16EmbeddingStatusD2HReportOperation,
+        "graph exec or embedding report destination is null");
+  }
+  const uint64_t capture_id = exec->capture_id;
+  const uint64_t exec_id = exec->exec_id;
+  record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_COMPLETION,
+                       capture_id, exec_id, false, false, false, false);
+  if (exec->operation !=
+          RileyCudaGraphCaptureOperation::kBf16EmbeddingStatusD2H ||
+      !bf16_embedding_status_d2h_exec_state_is_valid(exec) ||
+      exec->graph == nullptr || exec->exec == nullptr ||
+      !exec->owns_capture_leases || exec->launch_in_flight || exec->poisoned ||
+      !exec->bf16_row_gather_argmax_d2h_completion_visible ||
+      exec->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kReadBf16EmbeddingStatusD2HReportOperation,
+        "BF16 embedding status D2H report is not visible at a known graph completion boundary");
+  }
+  const uint64_t report_byte_len =
+      exec->bf16_row_gather_argmax_d2h_result_byte_len;
+  if (destination_len != report_byte_len ||
+      report_byte_len != sizeof(RileyCudaEmbeddingErrorReport) ||
+      report_byte_len > static_cast<uint64_t>(SIZE_MAX)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kReadBf16EmbeddingStatusD2HReportOperation,
+        "completion report destination length does not exactly match the fixed embedding report");
+  }
+
+  // Do not cast the pinned byte allocation to the record type: the public
+  // pinned-buffer ABI does not promise host pointer alignment. Validate a
+  // local copy before publishing it so malformed device status can never be
+  // mistaken for a user-visible token-range result.
+  RileyCudaEmbeddingErrorReport report{};
+  std::memcpy(&report,
+              exec->bf16_row_gather_argmax_d2h_pinned_results->host_data,
+              sizeof(report));
+  const uint64_t vocabulary_size =
+      exec->bf16_row_gather_argmax_d2h_input_row_count;
+  const uint64_t token_count =
+      exec->bf16_row_gather_argmax_d2h_output_row_count;
+  const bool no_error = report.code == RILEY_CUDA_EMBEDDING_ERROR_NONE &&
+                        report.token_position == 0 && report.token_id == 0;
+  const bool token_out_of_range =
+      report.code == RILEY_CUDA_EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE &&
+      report.token_position < token_count && report.token_id >= vocabulary_size &&
+      report.token_id <= UINT32_MAX;
+  if (report.struct_size != sizeof(report) || report.reserved != 0 ||
+      (!no_error && !token_out_of_range)) {
+    // Completion itself is known, but an impossible record makes the reusable
+    // graph and its fixed raw addresses fail-closed just like an ambiguous
+    // CUDA completion. Do not publish malformed status data.
+    exec->poisoned = true;
+    record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_COMPLETION,
+                         capture_id, exec_id, true, true, false, true);
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+        kReadBf16EmbeddingStatusD2HReportOperation,
+        "completed BF16 embedding status D2H report is malformed");
+  }
+
+  std::memcpy(destination, &report, sizeof(report));
+  // A canonical OOB report is expected status data. It intentionally does
+  // not poison this replayable graph or turn the raw read into an out-of-range
+  // lifecycle error; the safe FFI decodes `code` after this call succeeds.
+  record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_COMPLETION,
+                       capture_id, exec_id, true, true, true, false);
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_close(
     RileyCudaGraph** graph, RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) noexcept {
@@ -12002,8 +13025,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   const bool is_bf16_row_gather_argmax_d2h =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
@@ -12073,7 +13095,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         "captured graph mixes BF16 row-gather argmax state with another operation");
   }
   if (is_bf16_row_gather_argmax_d2h &&
-      !bf16_row_gather_argmax_d2h_graph_state_is_valid(owner)) {
+      !bf16_d2h_graph_state_is_valid(owner)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
@@ -12351,8 +13373,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   const bool is_bf16_row_gather_argmax_d2h =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      is_bf16_d2h_operation(owner->operation);
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
@@ -12422,7 +13443,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         "graph exec mixes BF16 row-gather argmax state with another operation");
   }
   if (is_bf16_row_gather_argmax_d2h &&
-      !bf16_row_gather_argmax_d2h_exec_state_is_valid(owner)) {
+      !bf16_d2h_exec_state_is_valid(owner)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,

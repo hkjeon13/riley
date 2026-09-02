@@ -174,6 +174,11 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kIndexedRopeBf16 = 11,
   kRaggedPagedKvCacheWriteBf16 = 12,
   kGroupedRaggedPagedAttentionBf16 = 13,
+  // C05-20 intentionally reuses the C05-16 five-resource D2H ledger slots:
+  // fill_buffer=embedding output, d2h_input=table, d2h_indices=token IDs,
+  // d2h_gathered_logits=device error scratch, and d2h_pinned_results=report.
+  // Operation-specific predicates keep these meanings disjoint.
+  kBf16EmbeddingStatusD2H = 14,
 };
 
 // C05-18's raw device metadata has no host-side lifetime. The primary key
