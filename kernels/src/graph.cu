@@ -2,7 +2,9 @@
 
 #include <cuda_bf16.h>
 
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <climits>
 #include <cstring>
 #include <cstdlib>
@@ -51,6 +53,10 @@ constexpr const char* kBeginResidualAddBf16Operation =
     "begin CUDA Graph BF16 residual-add capture";
 constexpr const char* kEnqueueResidualAddBf16Operation =
     "enqueue CUDA Graph BF16 residual add";
+constexpr const char* kBeginCanonicalRmsNormBf16Operation =
+    "begin CUDA Graph canonical BF16 RMSNorm capture";
+constexpr const char* kEnqueueCanonicalRmsNormBf16Operation =
+    "enqueue CUDA Graph canonical BF16 RMSNorm";
 constexpr const char* kQueryCaptureCapabilityOperation =
     "query CUDA Graph capture capability";
 constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
@@ -64,6 +70,8 @@ constexpr uint32_t kGraphFillThreads = 256;
 constexpr uint64_t kMaximumGraphFillGridX = static_cast<uint64_t>(INT_MAX);
 constexpr uint32_t kGraphSiluThreads = 256;
 constexpr uint32_t kMaximumGraphSiluBlocks = 65535;
+constexpr uint32_t kGraphCanonicalRmsNormThreads = 256;
+constexpr uint32_t kMaximumGraphCanonicalRmsNormBlocks = 65535;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -129,6 +137,50 @@ __global__ void graph_residual_add_bf16(const __nv_bfloat16* left,
   }
 }
 
+// This is deliberately capture-local rather than riley_cuda_rms_norm_execute:
+// eager RMSNorm owns transient ExclusiveUses and synchronizes completion,
+// neither of which is admissible while graph capture owns permanent input,
+// weight, and output leases. Keep the canonical BF16 reduction topology and
+// normalized-storage rounding boundary equal to the generic eager primitive.
+// It intentionally excludes the distinct Hugging Face SmolLM2 and Fixed37
+// reduction profiles.
+__global__ void graph_canonical_rms_norm_bf16(
+    const __nv_bfloat16* input, const __nv_bfloat16* weight,
+    __nv_bfloat16* output, uint64_t row_count, uint64_t hidden_size,
+    float epsilon) {
+  extern __shared__ float partial_sums[];
+  for (uint64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+    const uint64_t base = row * hidden_size;
+    float sum = 0.0F;
+    for (uint64_t column = threadIdx.x; column < hidden_size;
+         column += blockDim.x) {
+      const float value = __bfloat162float(input[base + column]);
+      sum += value * value;
+    }
+    partial_sums[threadIdx.x] = sum;
+    __syncthreads();
+    for (uint32_t offset = blockDim.x / 2; offset != 0; offset /= 2) {
+      if (threadIdx.x < offset) {
+        partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+      }
+      __syncthreads();
+    }
+    const float inverse_rms =
+        rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
+    for (uint64_t column = threadIdx.x; column < hidden_size;
+         column += blockDim.x) {
+      const float normalized =
+          __bfloat162float(input[base + column]) * inverse_rms;
+      const __nv_bfloat16 normalized_for_weight =
+          __float2bfloat16_rn(normalized);
+      output[base + column] = __float2bfloat16_rn(
+          __bfloat162float(normalized_for_weight) *
+          __bfloat162float(weight[column]));
+    }
+    __syncthreads();
+  }
+}
+
 bool residual_add_capture_fields_are_clear(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr && capture->residual_add_left == nullptr &&
@@ -151,6 +203,46 @@ bool residual_add_exec_fields_are_clear(
   return exec != nullptr && exec->residual_add_left == nullptr &&
          exec->residual_add_right == nullptr &&
          exec->residual_add_element_count == 0;
+}
+
+bool canonical_rms_norm_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr && capture->canonical_rms_norm_input == nullptr &&
+         capture->canonical_rms_norm_weight == nullptr &&
+         capture->canonical_rms_norm_row_count == 0 &&
+         capture->canonical_rms_norm_hidden_size == 0 &&
+         capture->canonical_rms_norm_epsilon == 0.0F &&
+         capture->canonical_rms_norm_enqueue_count == 0 &&
+         !capture->canonical_rms_norm_input_lease_held &&
+         !capture->canonical_rms_norm_weight_lease_held;
+}
+
+bool canonical_rms_norm_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && graph->canonical_rms_norm_input == nullptr &&
+         graph->canonical_rms_norm_weight == nullptr &&
+         graph->canonical_rms_norm_row_count == 0 &&
+         graph->canonical_rms_norm_hidden_size == 0 &&
+         graph->canonical_rms_norm_epsilon == 0.0F;
+}
+
+bool canonical_rms_norm_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && exec->canonical_rms_norm_input == nullptr &&
+         exec->canonical_rms_norm_weight == nullptr &&
+         exec->canonical_rms_norm_row_count == 0 &&
+         exec->canonical_rms_norm_hidden_size == 0 &&
+         exec->canonical_rms_norm_epsilon == 0.0F;
+}
+
+bool canonical_rms_norm_element_count(uint64_t row_count, uint64_t hidden_size,
+                                      uint64_t* out_element_count) noexcept {
+  if (out_element_count == nullptr || row_count == 0 || hidden_size == 0 ||
+      row_count > UINT64_MAX / hidden_size) {
+    return false;
+  }
+  *out_element_count = row_count * hidden_size;
+  return true;
 }
 
 // These predicates are intentionally structural only: callers separately
@@ -186,6 +278,7 @@ bool residual_add_capture_state_is_valid(
          capture->gated_multiply_enqueue_count == 0 &&
          !capture->gated_multiply_activated_gate_lease_held &&
          !capture->gated_multiply_up_lease_held &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
          same_context(capture->owner, capture->stream->owner) &&
          same_context(capture->owner, capture->fill_buffer->owner) &&
          same_context(capture->owner, capture->residual_add_left->owner) &&
@@ -224,6 +317,7 @@ bool residual_add_graph_state_is_valid(const RileyCudaGraph* graph) noexcept {
          graph->gated_multiply_activated_gate == nullptr &&
          graph->gated_multiply_up == nullptr &&
          graph->gated_multiply_element_count == 0 &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
          same_context(graph->owner, graph->stream->owner) &&
          same_context(graph->owner, graph->fill_buffer->owner) &&
          same_context(graph->owner, graph->residual_add_left->owner) &&
@@ -263,6 +357,7 @@ bool residual_add_exec_state_is_valid(
          exec->gated_multiply_activated_gate == nullptr &&
          exec->gated_multiply_up == nullptr &&
          exec->gated_multiply_element_count == 0 &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
          same_context(exec->owner, exec->stream->owner) &&
          same_context(exec->owner, exec->fill_buffer->owner) &&
          same_context(exec->owner, exec->residual_add_left->owner) &&
@@ -281,6 +376,160 @@ bool residual_add_exec_state_is_valid(
          exec->residual_add_left->active_uses.load(std::memory_order_acquire) ==
              1 &&
          exec->residual_add_right->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+// Canonical RMSNorm owns three distinct BF16 allocations. It has the same
+// fixed-address lease shape as residual add, but carries the exact generic
+// RMSNorm geometry and epsilon so profile-specific reductions cannot enter.
+bool canonical_rms_norm_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  uint64_t element_count = 0;
+  return capture != nullptr &&
+         capture->operation ==
+             RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16 &&
+         capture->owner != nullptr && capture->stream != nullptr &&
+         capture->fill_buffer != nullptr &&
+         capture->canonical_rms_norm_input != nullptr &&
+         capture->canonical_rms_norm_weight != nullptr &&
+         capture->fill_buffer != capture->canonical_rms_norm_input &&
+         capture->fill_buffer != capture->canonical_rms_norm_weight &&
+         capture->canonical_rms_norm_input !=
+             capture->canonical_rms_norm_weight &&
+         capture->fill_lease_held &&
+         capture->canonical_rms_norm_input_lease_held &&
+         capture->canonical_rms_norm_weight_lease_held &&
+         canonical_rms_norm_element_count(
+             capture->canonical_rms_norm_row_count,
+             capture->canonical_rms_norm_hidden_size, &element_count) &&
+         std::isfinite(capture->canonical_rms_norm_epsilon) &&
+         capture->canonical_rms_norm_epsilon > 0.0F &&
+         capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 &&
+         !capture->h2d_source_lease_held && capture->silu_input == nullptr &&
+         capture->silu_element_count == 0 && capture->silu_enqueue_count == 0 &&
+         !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         same_context(capture->owner, capture->stream->owner) &&
+         same_context(capture->owner, capture->fill_buffer->owner) &&
+         same_context(capture->owner,
+                      capture->canonical_rms_norm_input->owner) &&
+         same_context(capture->owner,
+                      capture->canonical_rms_norm_weight->owner) &&
+         capture->fill_buffer->device_data != nullptr &&
+         capture->canonical_rms_norm_input->device_data != nullptr &&
+         capture->canonical_rms_norm_weight->device_data != nullptr &&
+         element_count <= capture->fill_buffer->byte_len /
+                              sizeof(__nv_bfloat16) &&
+         element_count <= capture->canonical_rms_norm_input->byte_len /
+                              sizeof(__nv_bfloat16) &&
+         capture->canonical_rms_norm_hidden_size <=
+             capture->canonical_rms_norm_weight->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->fill_buffer->active_uses.load(std::memory_order_acquire) ==
+             1 &&
+         capture->canonical_rms_norm_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->canonical_rms_norm_weight->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool canonical_rms_norm_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  uint64_t element_count = 0;
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16 &&
+         graph->owner != nullptr && graph->stream != nullptr &&
+         graph->fill_buffer != nullptr && graph->canonical_rms_norm_input != nullptr &&
+         graph->canonical_rms_norm_weight != nullptr &&
+         graph->fill_buffer != graph->canonical_rms_norm_input &&
+         graph->fill_buffer != graph->canonical_rms_norm_weight &&
+         graph->canonical_rms_norm_input != graph->canonical_rms_norm_weight &&
+         canonical_rms_norm_element_count(graph->canonical_rms_norm_row_count,
+                                          graph->canonical_rms_norm_hidden_size,
+                                          &element_count) &&
+         std::isfinite(graph->canonical_rms_norm_epsilon) &&
+         graph->canonical_rms_norm_epsilon > 0.0F &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         same_context(graph->owner, graph->stream->owner) &&
+         same_context(graph->owner, graph->fill_buffer->owner) &&
+         same_context(graph->owner, graph->canonical_rms_norm_input->owner) &&
+         same_context(graph->owner, graph->canonical_rms_norm_weight->owner) &&
+         graph->fill_buffer->device_data != nullptr &&
+         graph->canonical_rms_norm_input->device_data != nullptr &&
+         graph->canonical_rms_norm_weight->device_data != nullptr &&
+         element_count <=
+             graph->fill_buffer->byte_len / sizeof(__nv_bfloat16) &&
+         element_count <= graph->canonical_rms_norm_input->byte_len /
+                              sizeof(__nv_bfloat16) &&
+         graph->canonical_rms_norm_hidden_size <=
+             graph->canonical_rms_norm_weight->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->canonical_rms_norm_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->canonical_rms_norm_weight->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool canonical_rms_norm_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  uint64_t element_count = 0;
+  return exec != nullptr &&
+         exec->operation ==
+             RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16 &&
+         exec->owner != nullptr && exec->stream != nullptr &&
+         exec->fill_buffer != nullptr && exec->canonical_rms_norm_input != nullptr &&
+         exec->canonical_rms_norm_weight != nullptr &&
+         exec->fill_buffer != exec->canonical_rms_norm_input &&
+         exec->fill_buffer != exec->canonical_rms_norm_weight &&
+         exec->canonical_rms_norm_input != exec->canonical_rms_norm_weight &&
+         canonical_rms_norm_element_count(exec->canonical_rms_norm_row_count,
+                                          exec->canonical_rms_norm_hidden_size,
+                                          &element_count) &&
+         std::isfinite(exec->canonical_rms_norm_epsilon) &&
+         exec->canonical_rms_norm_epsilon > 0.0F &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         same_context(exec->owner, exec->stream->owner) &&
+         same_context(exec->owner, exec->fill_buffer->owner) &&
+         same_context(exec->owner, exec->canonical_rms_norm_input->owner) &&
+         same_context(exec->owner, exec->canonical_rms_norm_weight->owner) &&
+         exec->fill_buffer->device_data != nullptr &&
+         exec->canonical_rms_norm_input->device_data != nullptr &&
+         exec->canonical_rms_norm_weight->device_data != nullptr &&
+         element_count <= exec->fill_buffer->byte_len /
+                              sizeof(__nv_bfloat16) &&
+         element_count <= exec->canonical_rms_norm_input->byte_len /
+                              sizeof(__nv_bfloat16) &&
+         exec->canonical_rms_norm_hidden_size <=
+             exec->canonical_rms_norm_weight->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->canonical_rms_norm_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->canonical_rms_norm_weight->active_uses.load(
              std::memory_order_acquire) == 1;
 }
 
@@ -362,6 +611,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
       !residual_add_capture_fields_are_clear(capture) ||
+      !canonical_rms_norm_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -401,7 +651,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
-      !residual_add_capture_fields_are_clear(capture)) {
+      !residual_add_capture_fields_are_clear(capture) ||
+      !canonical_rms_norm_capture_fields_are_clear(capture)) {
     return false;
   }
   if (!capture->fill_lease_held) {
@@ -438,6 +689,7 @@ bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
       !residual_add_capture_fields_are_clear(capture) ||
+      !canonical_rms_norm_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -477,6 +729,7 @@ bool release_capture_silu_bf16_leases(
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
       !residual_add_capture_fields_are_clear(capture) ||
+      !canonical_rms_norm_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->silu_input->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -521,6 +774,7 @@ bool release_capture_gated_multiply_bf16_leases(
       capture->silu_input != nullptr || capture->silu_element_count != 0 ||
       capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
       !residual_add_capture_fields_are_clear(capture) ||
+      !canonical_rms_norm_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->gated_multiply_activated_gate->active_uses.load(
           std::memory_order_acquire) != 1 ||
@@ -574,6 +828,7 @@ bool release_capture_residual_add_bf16_leases(
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
+      !canonical_rms_norm_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->residual_add_left->active_uses.load(std::memory_order_acquire) !=
           1 ||
@@ -600,6 +855,38 @@ bool release_capture_residual_add_bf16_leases(
   return true;
 }
 
+// C05-12 retains the canonical RMSNorm input, learned weight, and output for
+// the full capture lifecycle. Validate the whole immutable state before any
+// 1->0 transition so malformed raw ABI owners remain fail-closed.
+bool release_capture_canonical_rms_norm_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (!canonical_rms_norm_capture_state_is_valid(capture) ||
+      capture->canonical_rms_norm_enqueue_count > 1) {
+    return false;
+  }
+  if (!release_exclusive_use(
+          capture->canonical_rms_norm_weight->active_uses) ||
+      !release_exclusive_use(
+          capture->canonical_rms_norm_input->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->canonical_rms_norm_input = nullptr;
+  capture->canonical_rms_norm_weight = nullptr;
+  capture->canonical_rms_norm_row_count = 0;
+  capture->canonical_rms_norm_hidden_size = 0;
+  capture->canonical_rms_norm_epsilon = 0.0F;
+  capture->canonical_rms_norm_enqueue_count = 0;
+  capture->canonical_rms_norm_input_lease_held = false;
+  capture->canonical_rms_norm_weight_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -612,6 +899,12 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
       (!residual_add_capture_fields_are_clear(capture) ||
        !residual_add_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16 &&
+      (!canonical_rms_norm_capture_fields_are_clear(capture) ||
+       !canonical_rms_norm_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -670,6 +963,22 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->residual_add_element_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16) {
+    if (!canonical_rms_norm_capture_state_is_valid(capture) ||
+        !canonical_rms_norm_graph_state_is_valid(graph) ||
+        graph->canonical_rms_norm_input !=
+            capture->canonical_rms_norm_input ||
+        graph->canonical_rms_norm_weight !=
+            capture->canonical_rms_norm_weight ||
+        graph->canonical_rms_norm_row_count !=
+            capture->canonical_rms_norm_row_count ||
+        graph->canonical_rms_norm_hidden_size !=
+            capture->canonical_rms_norm_hidden_size ||
+        graph->canonical_rms_norm_epsilon !=
+            capture->canonical_rms_norm_epsilon) {
+      return false;
+    }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
@@ -714,6 +1023,12 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
       (!residual_add_capture_fields_are_clear(capture) ||
        !residual_add_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16 &&
+      (!canonical_rms_norm_capture_fields_are_clear(capture) ||
+       !canonical_rms_norm_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -834,6 +1149,22 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->gated_multiply_up_lease_held) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16) {
+    if (!canonical_rms_norm_capture_state_is_valid(capture) ||
+        !canonical_rms_norm_graph_state_is_valid(graph) ||
+        graph->canonical_rms_norm_input !=
+            capture->canonical_rms_norm_input ||
+        graph->canonical_rms_norm_weight !=
+            capture->canonical_rms_norm_weight ||
+        graph->canonical_rms_norm_row_count !=
+            capture->canonical_rms_norm_row_count ||
+        graph->canonical_rms_norm_hidden_size !=
+            capture->canonical_rms_norm_hidden_size ||
+        graph->canonical_rms_norm_epsilon !=
+            capture->canonical_rms_norm_epsilon) {
+      return false;
+    }
   } else {
     return false;
   }
@@ -867,6 +1198,14 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->residual_add_enqueue_count = 0;
   capture->residual_add_left_lease_held = false;
   capture->residual_add_right_lease_held = false;
+  capture->canonical_rms_norm_input = nullptr;
+  capture->canonical_rms_norm_weight = nullptr;
+  capture->canonical_rms_norm_row_count = 0;
+  capture->canonical_rms_norm_hidden_size = 0;
+  capture->canonical_rms_norm_epsilon = 0.0F;
+  capture->canonical_rms_norm_enqueue_count = 0;
+  capture->canonical_rms_norm_input_lease_held = false;
+  capture->canonical_rms_norm_weight_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -965,6 +1304,28 @@ bool release_graph_residual_add_bf16_leases(
   }
   return release_exclusive_use(right->active_uses) &&
          release_exclusive_use(left->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_canonical_rms_norm_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output) noexcept {
+  if (owner == nullptr || stream == nullptr || input == nullptr ||
+      weight == nullptr || output == nullptr || input == weight ||
+      input == output || weight == output ||
+      !same_context(owner, stream->owner) ||
+      !same_context(owner, input->owner) || !same_context(owner, weight->owner) ||
+      !same_context(owner, output->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      input->active_uses.load(std::memory_order_acquire) != 1 ||
+      weight->active_uses.load(std::memory_order_acquire) != 1 ||
+      output->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(weight->active_uses) &&
+         release_exclusive_use(input->active_uses) &&
          release_exclusive_use(output->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
@@ -2371,6 +2732,312 @@ RileyCudaStatus capture_begin_residual_add_bf16_impl(
   return status;
 }
 
+// C05-12 deliberately captures only the generic eager BF16 RMSNorm contract.
+// Its three fixed allocations and exact reduction geometry stay leased for the
+// complete capture/graph/exec lifetime; profile-specific and fused variants
+// use different arithmetic contracts and therefore do not enter this path.
+RileyCudaStatus capture_begin_canonical_rms_norm_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* weight, RileyCudaDeviceBuffer* output,
+    uint64_t row_count, uint64_t hidden_size, float epsilon,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalRmsNormBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || input == nullptr || weight == nullptr ||
+      output == nullptr || stream->owner == nullptr || input->owner == nullptr ||
+      weight->owner == nullptr || output->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "stream, canonical RMSNorm input, weight, output, or their owner is null");
+  }
+  if (!same_context(stream->owner, input->owner) ||
+      !same_context(stream->owner, weight->owner) ||
+      !same_context(stream->owner, output->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "capture stream and canonical RMSNorm allocations must share one context owner");
+  }
+  if (input == weight || input == output || weight == output) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "graph canonical RMSNorm requires three distinct device allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalRmsNormBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  uint64_t element_count = 0;
+  if (!canonical_rms_norm_element_count(row_count, hidden_size, &element_count) ||
+      element_count > input->byte_len / sizeof(__nv_bfloat16) ||
+      hidden_size > weight->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > output->byte_len / sizeof(__nv_bfloat16)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "canonical RMSNorm rows, hidden size, or allocation capacity is invalid");
+  }
+  if (!std::isfinite(epsilon) || epsilon <= 0.0F) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalRmsNormBf16Operation,
+                            "canonical RMSNorm epsilon must be finite and positive");
+  }
+  if (input->device_data == nullptr || weight->device_data == nullptr ||
+      output->device_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "canonical RMSNorm input, weight, or output has no live device allocation");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "a stream command batch blocks fixed-address canonical RMSNorm graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginCanonicalRmsNormBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(input->active_uses)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "canonical RMSNorm input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(weight->active_uses)) {
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+          "failed to release a rejected canonical RMSNorm input lease");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "canonical RMSNorm weight has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(output->active_uses)) {
+    const bool weight_released = release_exclusive_use(weight->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!weight_released || !input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+          "failed to release rejected canonical RMSNorm input leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "canonical RMSNorm output has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool output_released = release_exclusive_use(output->active_uses);
+    const bool weight_released = release_exclusive_use(weight->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!output_released || !weight_released || !input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+          "failed to release rejected canonical RMSNorm resource leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(weight->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginCanonicalRmsNormBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(weight->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginCanonicalRmsNormBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(weight->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginCanonicalRmsNormBf16Operation,
+        "host allocation failed for canonical RMSNorm graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(weight->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginCanonicalRmsNormBf16Operation,
+        "host allocation failed for captured canonical RMSNorm graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16, nullptr, 0,
+      nullptr, 0, nullptr, nullptr, 0, nullptr, nullptr, 0, input, weight,
+      row_count, hidden_size, epsilon);
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->canonical_rms_norm_input = input;
+  capture->canonical_rms_norm_weight = weight;
+  capture->canonical_rms_norm_row_count = row_count;
+  capture->canonical_rms_norm_hidden_size = hidden_size;
+  capture->canonical_rms_norm_epsilon = epsilon;
+  capture->canonical_rms_norm_input_lease_held = true;
+  capture->canonical_rms_norm_weight_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_canonical_rms_norm_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+          "failed to release a blocked canonical RMSNorm graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_canonical_rms_norm_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+          "failed to release a rejected canonical RMSNorm graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginCanonicalRmsNormBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE, kBeginCanonicalRmsNormBf16Operation,
+      capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginCanonicalRmsNormBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginCanonicalRmsNormBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_canonical_rms_norm_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginCanonicalRmsNormBf16Operation,
+        "failed to release an unstarted canonical RMSNorm graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -2398,6 +3065,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -2733,12 +3401,15 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
       const bool is_residual_add_bf16 =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kResidualAddBf16;
+      const bool is_canonical_rms_norm_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
       const bool release_graph_first =
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
-          is_residual_add_bf16;
+          is_residual_add_bf16 || is_canonical_rms_norm_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -2750,6 +3421,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                                              owner)
                                  : is_residual_add_bf16
                                        ? release_capture_residual_add_bf16_leases(
+                                             owner)
+                                 : is_canonical_rms_norm_bf16
+                                       ? release_capture_canonical_rms_norm_bf16_leases(
                                              owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
@@ -2831,6 +3505,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_residual_add_bf16(
   return capture_begin_residual_add_bf16_impl(
       stream, left, right, output, element_count, mode, out_capture,
       out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_canonical_rms_norm_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* weight, RileyCudaDeviceBuffer* output,
+    uint64_t row_count, uint64_t hidden_size, float epsilon,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_canonical_rms_norm_bf16_impl(
+      stream, input, weight, output, row_count, hidden_size, epsilon, mode,
+      out_capture, out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -3359,6 +4046,87 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_residual_add_bf16(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueCanonicalRmsNormBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueCanonicalRmsNormBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !canonical_rms_norm_capture_state_is_valid(owner) ||
+      owner->canonical_rms_norm_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueCanonicalRmsNormBf16Operation,
+        "capture owner is not a live unqueued canonical RMSNorm graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueCanonicalRmsNormBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  const uint32_t grid_x = static_cast<uint32_t>(
+      owner->canonical_rms_norm_row_count < kMaximumGraphCanonicalRmsNormBlocks
+          ? owner->canonical_rms_norm_row_count
+          : kMaximumGraphCanonicalRmsNormBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueCanonicalRmsNormBf16Operation,
+      owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    graph_canonical_rms_norm_bf16<<<
+        grid_x, kGraphCanonicalRmsNormThreads,
+        kGraphCanonicalRmsNormThreads * sizeof(float), owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(
+            owner->canonical_rms_norm_input->device_data),
+        static_cast<const __nv_bfloat16*>(
+            owner->canonical_rms_norm_weight->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        owner->canonical_rms_norm_row_count,
+        owner->canonical_rms_norm_hidden_size,
+        owner->canonical_rms_norm_epsilon);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueCanonicalRmsNormBf16Operation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      owner->canonical_rms_norm_enqueue_count = 1;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueCanonicalRmsNormBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -3407,9 +4175,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   const bool is_residual_add_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  const bool is_canonical_rms_norm_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
-       !is_residual_add_bf16) ||
+       !is_residual_add_bf16 && !is_canonical_rms_norm_bf16) ||
       (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
+      (!is_canonical_rms_norm_bf16 &&
+       !canonical_rms_norm_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
@@ -3482,7 +4255,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
         owner->gated_multiply_element_count >
             owner->fill_buffer->byte_len / sizeof(__nv_bfloat16))) ||
       (is_residual_add_bf16 &&
-       !residual_add_capture_state_is_valid(owner))) {
+       !residual_add_capture_state_is_valid(owner)) ||
+      (is_canonical_rms_norm_bf16 &&
+       !canonical_rms_norm_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -3499,7 +4274,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_silu_bf16 && owner->silu_enqueue_count != 1) ||
       (is_gated_multiply_bf16 &&
        owner->gated_multiply_enqueue_count != 1) ||
-      (is_residual_add_bf16 && owner->residual_add_enqueue_count != 1)) {
+      (is_residual_add_bf16 && owner->residual_add_enqueue_count != 1) ||
+      (is_canonical_rms_norm_bf16 &&
+       owner->canonical_rms_norm_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -3518,6 +4295,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        (owner->residual_add_left->active_uses.load(
             std::memory_order_acquire) != 1 ||
         owner->residual_add_right->active_uses.load(
+            std::memory_order_acquire) != 1)) ||
+      (is_canonical_rms_norm_bf16 &&
+       (owner->canonical_rms_norm_input->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->canonical_rms_norm_weight->active_uses.load(
             std::memory_order_acquire) != 1))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
@@ -3628,11 +4410,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       const bool is_residual_add_bf16 =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kResidualAddBf16;
+      const bool is_canonical_rms_norm_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
-          is_residual_add_bf16;
+          is_residual_add_bf16 || is_canonical_rms_norm_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -3644,6 +4429,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                                              owner)
                                  : is_residual_add_bf16
                                        ? release_capture_residual_add_bf16_leases(
+                                             owner)
+                                 : is_canonical_rms_norm_bf16
+                                       ? release_capture_canonical_rms_norm_bf16_leases(
                                              owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
@@ -3713,6 +4501,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   const bool is_residual_add_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  const bool is_canonical_rms_norm_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -3725,11 +4516,25 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
                             kInstantiateOperation,
                             "captured graph mixes residual-add state with another operation");
   }
+  if (is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured canonical RMSNorm graph has invalid fixed resource state");
+  }
+  if (!is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured graph mixes canonical RMSNorm state with another operation");
+  }
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
-       !is_residual_add_bf16) ||
+       !is_residual_add_bf16 && !is_canonical_rms_norm_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -3830,7 +4635,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->silu_input, owner->silu_element_count,
       owner->gated_multiply_activated_gate, owner->gated_multiply_up,
       owner->gated_multiply_element_count, owner->residual_add_left,
-      owner->residual_add_right, owner->residual_add_element_count);
+      owner->residual_add_right, owner->residual_add_element_count,
+      owner->canonical_rms_norm_input, owner->canonical_rms_norm_weight,
+      owner->canonical_rms_norm_row_count,
+      owner->canonical_rms_norm_hidden_size,
+      owner->canonical_rms_norm_epsilon);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -3936,6 +4745,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       exec->gated_multiply_up != nullptr ||
       exec->gated_multiply_element_count != 0 ||
       !residual_add_exec_fields_are_clear(exec) ||
+      !canonical_rms_norm_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -3993,6 +4803,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       exec->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   const bool is_residual_add_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  const bool is_canonical_rms_norm_bf16 =
+      exec->operation ==
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -4005,13 +4818,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
                             kLaunchOperation,
                             "graph exec mixes residual-add state with another operation");
   }
+  if (is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_exec_state_is_valid(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "canonical RMSNorm graph exec has invalid fixed resource state");
+  }
+  if (!is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_exec_fields_are_clear(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "graph exec mixes canonical RMSNorm state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
       exec->fill_buffer == nullptr || exec->graph == nullptr ||
       exec->exec == nullptr || !exec->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
-       !is_residual_add_bf16)) {
+       !is_residual_add_bf16 && !is_canonical_rms_norm_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -4275,6 +5102,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   const bool is_residual_add_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  const bool is_canonical_rms_norm_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -4287,13 +5117,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                             kCloseGraphOperation,
                             "captured graph mixes residual-add state with another operation");
   }
+  if (is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "canonical RMSNorm graph has invalid fixed resource state");
+  }
+  if (!is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "captured graph mixes canonical RMSNorm state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
-       !is_residual_add_bf16) ||
+       !is_residual_add_bf16 && !is_canonical_rms_norm_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -4411,6 +5255,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->owner, owner->stream,
                                  owner->residual_add_left,
                                  owner->residual_add_right, owner->fill_buffer)
+                     : is_canonical_rms_norm_bf16
+                           ? release_graph_canonical_rms_norm_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->canonical_rms_norm_input,
+                                 owner->canonical_rms_norm_weight,
+                                 owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -4466,6 +5316,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   const bool is_residual_add_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  const bool is_canonical_rms_norm_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -4478,13 +5331,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                             kCloseExecOperation,
                             "graph exec mixes residual-add state with another operation");
   }
+  if (is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_exec_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "canonical RMSNorm graph exec has invalid fixed resource state");
+  }
+  if (!is_canonical_rms_norm_bf16 &&
+      !canonical_rms_norm_exec_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "graph exec mixes canonical RMSNorm state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       owner->exec == nullptr || !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
-       !is_residual_add_bf16) ||
+       !is_residual_add_bf16 && !is_canonical_rms_norm_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -4618,6 +5485,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->owner, owner->stream,
                                  owner->residual_add_left,
                                  owner->residual_add_right, owner->fill_buffer)
+                     : is_canonical_rms_norm_bf16
+                           ? release_graph_canonical_rms_norm_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->canonical_rms_norm_input,
+                                 owner->canonical_rms_norm_weight,
+                                 owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {

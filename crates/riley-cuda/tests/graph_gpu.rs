@@ -3,7 +3,7 @@ use std::error::Error;
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaErrorKind,
     CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
-    ResidualAddParams, SiluParams, gated_multiply, residual_add, silu,
+    ResidualAddParams, RmsNormParams, SiluParams, gated_multiply, residual_add, rms_norm, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -133,6 +133,25 @@ fn graph_residual_add_bf16_fixture_bytes(element_count: usize, branch: usize) ->
         0xffc5,
     ];
     let pattern = if branch == 0 { &LEFT } else { &RIGHT };
+    (0..element_count)
+        .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
+        .collect()
+}
+
+fn graph_canonical_rms_norm_bf16_fixture_bytes(element_count: usize, branch: usize) -> Vec<u8> {
+    // These deliberately finite, non-profile-specific BF16 patterns exercise
+    // the generic canonical primitive's per-row reduction and its BF16 round
+    // of the normalized activation before learned-weight multiplication. They
+    // are not a Hugging Face SmolLM2 or Fixed37 fixture.
+    const INPUT: [u16; 12] = [
+        0x0000, 0x8000, 0x3f80, 0xbf80, 0x4000, 0xc000, 0x3e80, 0xbe80, 0x4080, 0xc080, 0x3f00,
+        0xbf00,
+    ];
+    const WEIGHT: [u16; 12] = [
+        0x3f80, 0xbf80, 0x3f00, 0xbf00, 0x4000, 0xc000, 0x3e80, 0xbe80, 0x3f40, 0xbf40, 0x3fc0,
+        0xbfc0,
+    ];
+    let pattern = if branch == 0 { &INPUT } else { &WEIGHT };
     (0..element_count)
         .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
         .collect()
@@ -693,6 +712,248 @@ fn owned_bf16_residual_add_graph_preflight_and_abort_recover_every_resource()
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-11-owned-bf16-residual-add-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_canonical_bf16_rms_norm_graph_replays_fixed_inputs_byte_exact_against_eager()
+-> Result<(), Box<dyn Error>> {
+    // This deliberately uses a generic, non-model geometry. It must remain
+    // byte-exact with the canonical eager `rms_norm` primitive, rather than
+    // with a Hugging Face SmolLM2, Fixed37, or residual-fused variant.
+    const ROW_COUNT: u64 = 17;
+    const HIDDEN_SIZE: u64 = 769;
+    const REPLAYS: usize = 32;
+    const EPSILON: f32 = 1.0e-5;
+    const ELEMENT_COUNT: u64 = ROW_COUNT * HIDDEN_SIZE;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let tensor_byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<u16>())?)
+        .ok_or("canonical BF16 RMSNorm graph tensor byte length overflow")?;
+    let weight_byte_len = HIDDEN_SIZE
+        .checked_mul(u64::try_from(std::mem::size_of::<u16>())?)
+        .ok_or("canonical BF16 RMSNorm graph weight byte length overflow")?;
+    let host_input =
+        graph_canonical_rms_norm_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?, 0);
+    let host_weight = graph_canonical_rms_norm_bf16_fixture_bytes(usize::try_from(HIDDEN_SIZE)?, 1);
+    assert_eq!(u64::try_from(host_input.len())?, tensor_byte_len);
+    assert_eq!(u64::try_from(host_weight.len())?, weight_byte_len);
+    let mut staging = context.allocate_pinned_host_buffer(tensor_byte_len)?;
+
+    let mut eager_input = context.allocate_device_buffer(tensor_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    let mut eager_weight = context.allocate_device_buffer(weight_byte_len)?;
+    eager_weight.upload_from_slice(0, &host_weight, &mut staging, &mut eager_stream)?;
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(tensor_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_weight = {
+        let mut buffer = context.allocate_device_buffer(weight_byte_len)?;
+        buffer.upload_from_slice(0, &host_weight, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let mut eager_output = context.allocate_device_buffer(tensor_byte_len)?;
+    let graph_output = context.allocate_device_buffer(tensor_byte_len)?;
+
+    {
+        let mut eager = RmsNormParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, tensor_byte_len)?,
+            weight: CudaBufferSpan::new(&eager_weight, CudaDType::BF16, 0, weight_byte_len)?,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, tensor_byte_len)?,
+            row_count: ROW_COUNT,
+            hidden_size: HIDDEN_SIZE,
+            epsilon: EPSILON,
+        };
+        rms_norm(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_canonical_rms_norm_bf16_capture(
+        graph_input,
+        graph_weight,
+        graph_output,
+        ROW_COUNT,
+        HIDDEN_SIZE,
+        EPSILON,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_canonical_rms_norm_bf16()?;
+    // The local one-node rejection must leave the first node/capture usable.
+    assert_invalid_state(
+        capture.enqueue_canonical_rms_norm_bf16(),
+        "second fixed canonical BF16 RMSNorm graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // This guards the owned lifecycle's resource accounting only; it is not a
+    // CUDA Graph performance claim.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_input, mut graph_weight, mut graph_output) =
+        resources.into_parts();
+    let mut eager_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_weight_after = vec![0_u8; usize::try_from(weight_byte_len)?];
+    eager_output.download_to_slice(0, &mut eager_bytes, &mut staging, &mut transfer_stream)?;
+    graph_output.download_to_slice(0, &mut graph_bytes, &mut staging, &mut transfer_stream)?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_weight.download_to_slice(
+        0,
+        &mut graph_weight_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_bytes, eager_bytes,
+        "fixed graph canonical BF16 RMSNorm output must match eager output bit-for-bit"
+    );
+    assert_eq!(
+        graph_input_after, host_input,
+        "fixed graph replay must not mutate its retained canonical RMSNorm input"
+    );
+    assert_eq!(
+        graph_weight_after, host_weight,
+        "fixed graph replay must not mutate its retained canonical RMSNorm weight"
+    );
+
+    graph_output.close()?;
+    graph_weight.close()?;
+    graph_input.close()?;
+    eager_output.close()?;
+    eager_weight.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-12-owned-canonical-bf16-rms-norm-fixed-address replays={REPLAYS} rows={ROW_COUNT} hidden={HIDDEN_SIZE} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_canonical_bf16_rms_norm_graph_preflight_and_abort_recover_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const ROW_COUNT: u64 = 4;
+    const HIDDEN_SIZE: u64 = 32;
+    const EPSILON: f32 = 1.0e-5;
+    const TENSOR_BYTE_LEN: u64 = ROW_COUNT * HIDDEN_SIZE * 2;
+    const WEIGHT_BYTE_LEN: u64 = HIDDEN_SIZE * 2;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let input = context.allocate_device_buffer(TENSOR_BYTE_LEN)?;
+    let weight = context.allocate_device_buffer(WEIGHT_BYTE_LEN)?;
+    let output = context.allocate_device_buffer(TENSOR_BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_canonical_rms_norm_bf16_capture(
+        input,
+        weight,
+        output,
+        0,
+        HIDDEN_SIZE,
+        EPSILON,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => {
+            panic!("zero-row owned canonical BF16 RMSNorm graph preflight unexpectedly succeeded")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("zero-row canonical RMSNorm preflight must return all untouched resources");
+    let (stream, input, weight, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let error = match stream.begin_owned_graph_canonical_rms_norm_bf16_capture(
+        input,
+        weight,
+        output,
+        ROW_COUNT,
+        HIDDEN_SIZE,
+        0.0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!(
+            "zero-epsilon owned canonical BF16 RMSNorm graph preflight unexpectedly succeeded"
+        ),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::InvalidArgument);
+    let resources = error
+        .into_resources()
+        .expect("invalid-epsilon canonical RMSNorm preflight must return all untouched resources");
+    let (stream, input, weight, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_canonical_rms_norm_bf16_capture(
+            input,
+            weight,
+            output,
+            ROW_COUNT,
+            HIDDEN_SIZE,
+            EPSILON,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, input, weight, output) = resources.into_parts();
+    let error = match stream.begin_owned_graph_canonical_rms_norm_bf16_capture(
+        input,
+        weight,
+        output,
+        ROW_COUNT + 1,
+        HIDDEN_SIZE,
+        EPSILON,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => {
+            panic!("oversized owned canonical BF16 RMSNorm graph preflight unexpectedly succeeded")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized canonical RMSNorm preflight must preserve all four resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-12-owned-canonical-bf16-rms-norm-preflight-abort-recovery status=passed");
     Ok(())
 }
 

@@ -166,6 +166,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kSiluBf16 = 3,
   kGatedMultiplyBf16 = 4,
   kResidualAddBf16 = 5,
+  kCanonicalRmsNormBf16 = 6,
 };
 
 struct RileyCudaGraphCapture {
@@ -207,6 +208,14 @@ struct RileyCudaGraphCapture {
         residual_add_enqueue_count(0),
         residual_add_left_lease_held(false),
         residual_add_right_lease_held(false),
+        canonical_rms_norm_input(nullptr),
+        canonical_rms_norm_weight(nullptr),
+        canonical_rms_norm_row_count(0),
+        canonical_rms_norm_hidden_size(0),
+        canonical_rms_norm_epsilon(0.0F),
+        canonical_rms_norm_enqueue_count(0),
+        canonical_rms_norm_input_lease_held(false),
+        canonical_rms_norm_weight_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -230,9 +239,9 @@ struct RileyCudaGraphCapture {
   // The current C05 operation family. `fill_buffer` continues to name the
   // retained primary device allocation for ABI continuity: it is the fill
   // target, H2D destination, or BF16 SiLU output. H2D retains a fixed pinned
-  // source, while the BF16 elementwise operations retain their fixed device
-  // inputs. Gated multiply keeps both its activated-gate and up inputs;
-  // residual add keeps its left and right inputs.
+  // source, while the BF16 primitives retain their fixed device inputs. Gated
+  // multiply keeps both its activated-gate and up inputs; residual add keeps
+  // its left and right inputs; canonical RMSNorm keeps its input and weight.
   RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
@@ -258,6 +267,14 @@ struct RileyCudaGraphCapture {
   uint32_t residual_add_enqueue_count;
   bool residual_add_left_lease_held;
   bool residual_add_right_lease_held;
+  RileyCudaDeviceBuffer* canonical_rms_norm_input;
+  RileyCudaDeviceBuffer* canonical_rms_norm_weight;
+  uint64_t canonical_rms_norm_row_count;
+  uint64_t canonical_rms_norm_hidden_size;
+  float canonical_rms_norm_epsilon;
+  uint32_t canonical_rms_norm_enqueue_count;
+  bool canonical_rms_norm_input_lease_held;
+  bool canonical_rms_norm_weight_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -323,7 +340,12 @@ struct RileyCudaGraph {
                  uint64_t captured_gated_multiply_element_count = 0,
                  RileyCudaDeviceBuffer* captured_residual_add_left = nullptr,
                  RileyCudaDeviceBuffer* captured_residual_add_right = nullptr,
-                 uint64_t captured_residual_add_element_count = 0) noexcept
+                 uint64_t captured_residual_add_element_count = 0,
+                 RileyCudaDeviceBuffer* captured_canonical_rms_norm_input = nullptr,
+                 RileyCudaDeviceBuffer* captured_canonical_rms_norm_weight = nullptr,
+                 uint64_t captured_canonical_rms_norm_row_count = 0,
+                 uint64_t captured_canonical_rms_norm_hidden_size = 0,
+                 float captured_canonical_rms_norm_epsilon = 0.0F) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -338,6 +360,11 @@ struct RileyCudaGraph {
         residual_add_left(captured_residual_add_left),
         residual_add_right(captured_residual_add_right),
         residual_add_element_count(captured_residual_add_element_count),
+        canonical_rms_norm_input(captured_canonical_rms_norm_input),
+        canonical_rms_norm_weight(captured_canonical_rms_norm_weight),
+        canonical_rms_norm_row_count(captured_canonical_rms_norm_row_count),
+        canonical_rms_norm_hidden_size(captured_canonical_rms_norm_hidden_size),
+        canonical_rms_norm_epsilon(captured_canonical_rms_norm_epsilon),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -356,6 +383,11 @@ struct RileyCudaGraph {
   RileyCudaDeviceBuffer* residual_add_left;
   RileyCudaDeviceBuffer* residual_add_right;
   uint64_t residual_add_element_count;
+  RileyCudaDeviceBuffer* canonical_rms_norm_input;
+  RileyCudaDeviceBuffer* canonical_rms_norm_weight;
+  uint64_t canonical_rms_norm_row_count;
+  uint64_t canonical_rms_norm_hidden_size;
+  float canonical_rms_norm_epsilon;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -381,7 +413,12 @@ struct RileyCudaGraphExec {
                      uint64_t captured_gated_multiply_element_count = 0,
                      RileyCudaDeviceBuffer* captured_residual_add_left = nullptr,
                      RileyCudaDeviceBuffer* captured_residual_add_right = nullptr,
-                     uint64_t captured_residual_add_element_count = 0) noexcept
+                     uint64_t captured_residual_add_element_count = 0,
+                     RileyCudaDeviceBuffer* captured_canonical_rms_norm_input = nullptr,
+                     RileyCudaDeviceBuffer* captured_canonical_rms_norm_weight = nullptr,
+                     uint64_t captured_canonical_rms_norm_row_count = 0,
+                     uint64_t captured_canonical_rms_norm_hidden_size = 0,
+                     float captured_canonical_rms_norm_epsilon = 0.0F) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -396,6 +433,11 @@ struct RileyCudaGraphExec {
         residual_add_left(captured_residual_add_left),
         residual_add_right(captured_residual_add_right),
         residual_add_element_count(captured_residual_add_element_count),
+        canonical_rms_norm_input(captured_canonical_rms_norm_input),
+        canonical_rms_norm_weight(captured_canonical_rms_norm_weight),
+        canonical_rms_norm_row_count(captured_canonical_rms_norm_row_count),
+        canonical_rms_norm_hidden_size(captured_canonical_rms_norm_hidden_size),
+        canonical_rms_norm_epsilon(captured_canonical_rms_norm_epsilon),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
@@ -419,6 +461,11 @@ struct RileyCudaGraphExec {
   RileyCudaDeviceBuffer* residual_add_left;
   RileyCudaDeviceBuffer* residual_add_right;
   uint64_t residual_add_element_count;
+  RileyCudaDeviceBuffer* canonical_rms_norm_input;
+  RileyCudaDeviceBuffer* canonical_rms_norm_weight;
+  uint64_t canonical_rms_norm_row_count;
+  uint64_t canonical_rms_norm_hidden_size;
+  float canonical_rms_norm_epsilon;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;

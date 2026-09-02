@@ -195,6 +195,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)4)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16 \
   ((RileyCudaGraphCaptureOperationKind)5)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)6)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1299,6 +1301,34 @@ RileyCudaStatus riley_cuda_graph_capture_begin_residual_add_bf16(
 // riley_cuda_graph_capture_begin_residual_add_bf16. The three captured
 // allocations and exact element count are immutable for the graph lifetime.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_residual_add_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-12 capture containing exactly one fixed-address, out-of-place
+// canonical BF16 RMSNorm node. `input`, `weight`, and `output` must be three
+// distinct live device allocations in the stream's context. `row_count`,
+// `hidden_size`, and positive finite `epsilon` are immutable capture-time
+// geometry. The operation follows only riley_cuda_rms_norm_execute's generic
+// BF16 reduction and storage-rounding contract; it does not cover the
+// profile-specific SmolLM2 or Fixed37 variants. No spans, offsets, in-place
+// aliasing, dynamic profile selection, fresh replay input, or fusion is
+// admitted.
+RileyCudaStatus riley_cuda_graph_capture_begin_canonical_rms_norm_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output,
+    uint64_t row_count,
+    uint64_t hidden_size,
+    float epsilon,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole canonical BF16 RMSNorm node for a capture created by
+// riley_cuda_graph_capture_begin_canonical_rms_norm_bf16. All three captured
+// allocations and exact geometry are immutable for the graph lifetime.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
