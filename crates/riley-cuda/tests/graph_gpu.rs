@@ -2630,7 +2630,7 @@ fn owned_indexed_rope_bf16_graph_replays_byte_exact_against_eager() -> Result<()
     const HEAD_SIZE: u64 = 6;
     const ROTARY_DIMENSION: u64 = 4;
     const TABLE_POSITION_COUNT: u64 = 5;
-    const REPLAYS: usize = 8;
+    const REPLAYS: usize = 64;
 
     let device = first_device()?;
     let context = device.create_context()?;
