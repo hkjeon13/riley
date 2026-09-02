@@ -97,12 +97,17 @@ constexpr const char* kEnqueueBf16RowGatherArgmaxD2HOperation =
     "enqueue CUDA Graph BF16 row-gather argmax D2H";
 constexpr const char* kReadBf16RowGatherArgmaxD2HResultsOperation =
     "read completed CUDA Graph BF16 row-gather argmax D2H results";
+constexpr const char* kBeginIndexedRopeBf16Operation =
+    "begin CUDA Graph BF16 indexed-RoPE capture";
+constexpr const char* kEnqueueIndexedRopeBf16Operation =
+    "enqueue CUDA Graph BF16 indexed-RoPE";
 // A failed node launch during a multi-node capture cannot safely be retried:
 // CUDA may have invalidated the capture after accepting a prefix. Keep this
 // terminal marker in the capture-only enqueue state so abort remains the sole
 // admissible transition while the exact fixed-address leases stay held.
 constexpr uint32_t kBf16RowGatherArgmaxEnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kBf16RowGatherArgmaxD2HEnqueueTerminal = UINT32_MAX;
+constexpr uint32_t kIndexedRopeBf16EnqueueTerminal = UINT32_MAX;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -338,6 +343,62 @@ __global__ void graph_bf16_row_gather_bf16(
   }
 }
 
+// This is deliberately capture-local rather than riley_cuda_indexed_rope_execute:
+// eager indexed RoPE acquires transient ExclusiveUses and synchronizes
+// completion, neither of which is admissible once the graph owns permanent
+// leases for its five fixed device allocations. Keep every BF16
+// storage-rounding boundary and the raw device-position OOB -> NaN behavior
+// identical to indexed_rope_kernel<__nv_bfloat16>.
+__global__ void graph_indexed_rope_bf16(
+    const __nv_bfloat16* input, const float* cos, const float* sin,
+    const uint32_t* positions, __nv_bfloat16* output,
+    uint64_t table_position_count, uint64_t head_count,
+    uint64_t head_size, uint64_t rotary_dimension,
+    uint64_t work_item_count) {
+  const uint64_t half = rotary_dimension / 2;
+  const uint64_t tail = head_size - rotary_dimension;
+  const uint64_t units_per_head = half + tail;
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t work = first; work < work_item_count; work += stride) {
+    const uint64_t head_linear = work / units_per_head;
+    const uint64_t unit = work - head_linear * units_per_head;
+    const uint64_t row = head_linear / head_count;
+    const uint64_t base = head_linear * head_size;
+    if (unit < half) {
+      const uint64_t first_index = base + unit;
+      const uint64_t second_index = first_index + half;
+      const uint64_t position = positions[row];
+      if (position >= table_position_count) {
+        output[first_index] = __float2bfloat16_rn(CUDART_NAN_F);
+        output[second_index] = __float2bfloat16_rn(CUDART_NAN_F);
+        continue;
+      }
+      const uint64_t table_index = position * half + unit;
+      const float first_value = __bfloat162float(input[first_index]);
+      const float second_value = __bfloat162float(input[second_index]);
+      const float cosine =
+          __bfloat162float(__float2bfloat16_rn(cos[table_index]));
+      const float sine =
+          __bfloat162float(__float2bfloat16_rn(sin[table_index]));
+      const float first_cosine = __bfloat162float(
+          __float2bfloat16_rn(first_value * cosine));
+      const float second_sine = __bfloat162float(
+          __float2bfloat16_rn(second_value * sine));
+      const float second_cosine = __bfloat162float(
+          __float2bfloat16_rn(second_value * cosine));
+      const float first_sine = __bfloat162float(
+          __float2bfloat16_rn(first_value * sine));
+      output[first_index] = __float2bfloat16_rn(first_cosine - second_sine);
+      output[second_index] = __float2bfloat16_rn(second_cosine + first_sine);
+    } else {
+      const uint64_t dimension = rotary_dimension + (unit - half);
+      output[base + dimension] = input[base + dimension];
+    }
+  }
+}
+
 bool residual_add_capture_fields_are_clear(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr && capture->residual_add_left == nullptr &&
@@ -522,6 +583,50 @@ bool bf16_row_gather_argmax_d2h_exec_fields_are_clear(
          !exec->bf16_row_gather_argmax_d2h_completion_visible;
 }
 
+bool indexed_rope_bf16_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr && capture->indexed_rope_bf16_input == nullptr &&
+         capture->indexed_rope_bf16_cos == nullptr &&
+         capture->indexed_rope_bf16_sin == nullptr &&
+         capture->indexed_rope_bf16_positions == nullptr &&
+         capture->indexed_rope_bf16_active_row_count == 0 &&
+         capture->indexed_rope_bf16_head_count == 0 &&
+         capture->indexed_rope_bf16_head_size == 0 &&
+         capture->indexed_rope_bf16_rotary_dimension == 0 &&
+         capture->indexed_rope_bf16_table_position_count == 0 &&
+         capture->indexed_rope_bf16_enqueue_count == 0 &&
+         !capture->indexed_rope_bf16_input_lease_held &&
+         !capture->indexed_rope_bf16_cos_lease_held &&
+         !capture->indexed_rope_bf16_sin_lease_held &&
+         !capture->indexed_rope_bf16_positions_lease_held;
+}
+
+bool indexed_rope_bf16_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && graph->indexed_rope_bf16_input == nullptr &&
+         graph->indexed_rope_bf16_cos == nullptr &&
+         graph->indexed_rope_bf16_sin == nullptr &&
+         graph->indexed_rope_bf16_positions == nullptr &&
+         graph->indexed_rope_bf16_active_row_count == 0 &&
+         graph->indexed_rope_bf16_head_count == 0 &&
+         graph->indexed_rope_bf16_head_size == 0 &&
+         graph->indexed_rope_bf16_rotary_dimension == 0 &&
+         graph->indexed_rope_bf16_table_position_count == 0;
+}
+
+bool indexed_rope_bf16_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && exec->indexed_rope_bf16_input == nullptr &&
+         exec->indexed_rope_bf16_cos == nullptr &&
+         exec->indexed_rope_bf16_sin == nullptr &&
+         exec->indexed_rope_bf16_positions == nullptr &&
+         exec->indexed_rope_bf16_active_row_count == 0 &&
+         exec->indexed_rope_bf16_head_count == 0 &&
+         exec->indexed_rope_bf16_head_size == 0 &&
+         exec->indexed_rope_bf16_rotary_dimension == 0 &&
+         exec->indexed_rope_bf16_table_position_count == 0;
+}
+
 bool bf16_argmax_shape_is_valid(uint64_t row_count, uint64_t vocabulary_size,
                                 uint64_t* out_logit_element_count) noexcept {
   if (out_logit_element_count == nullptr || row_count == 0 ||
@@ -577,6 +682,37 @@ bool bf16_row_gather_argmax_d2h_shape_is_valid(
   *out_result_byte_len =
       output_row_count * sizeof(RileyCudaBf16ArgmaxResult);
   return true;
+}
+
+bool indexed_rope_bf16_shape_is_valid(
+    uint64_t active_row_count, uint64_t head_count, uint64_t head_size,
+    uint64_t rotary_dimension, uint64_t table_position_count,
+    uint64_t* out_tensor_element_count, uint64_t* out_table_element_count,
+    uint64_t* out_work_item_count) noexcept {
+  if (out_tensor_element_count == nullptr || out_table_element_count == nullptr ||
+      out_work_item_count == nullptr || active_row_count == 0 ||
+      head_count == 0 || head_size == 0 || rotary_dimension == 0 ||
+      rotary_dimension > head_size || rotary_dimension % 2 != 0 ||
+      table_position_count == 0) {
+    return false;
+  }
+  const uint64_t half = rotary_dimension / 2;
+  const uint64_t tail = head_size - rotary_dimension;
+  uint64_t head_rows = 0;
+  uint64_t units_per_head = 0;
+  if (active_row_count > UINT64_MAX / head_count ||
+      (head_rows = active_row_count * head_count) > UINT64_MAX / head_size ||
+      table_position_count > UINT64_MAX / half ||
+      half > UINT64_MAX - tail ||
+      (units_per_head = half + tail) == 0 ||
+      head_rows > UINT64_MAX / units_per_head) {
+    return false;
+  }
+  *out_tensor_element_count = head_rows * head_size;
+  *out_table_element_count = table_position_count * half;
+  *out_work_item_count = head_rows * units_per_head;
+  return *out_tensor_element_count != 0 && *out_table_element_count != 0 &&
+         *out_work_item_count != 0;
 }
 
 bool canonical_rms_norm_element_count(uint64_t row_count, uint64_t hidden_size,
@@ -1682,6 +1818,242 @@ bool bf16_row_gather_argmax_d2h_exec_state_is_valid(
              std::memory_order_acquire) == 1;
 }
 
+// C05-17 owns five distinct fixed device allocations. The host position
+// mirror is intentionally absent from owner state: it has completed its
+// begin-time validation before any permanent lease or CUDA capture exists.
+bool indexed_rope_bf16_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  uint64_t tensor_element_count = 0;
+  uint64_t table_element_count = 0;
+  uint64_t work_item_count = 0;
+  return capture != nullptr &&
+         capture->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
+         capture->owner != nullptr && capture->stream != nullptr &&
+         capture->fill_buffer != nullptr &&
+         capture->indexed_rope_bf16_input != nullptr &&
+         capture->indexed_rope_bf16_cos != nullptr &&
+         capture->indexed_rope_bf16_sin != nullptr &&
+         capture->indexed_rope_bf16_positions != nullptr &&
+         capture->fill_buffer != capture->indexed_rope_bf16_input &&
+         capture->fill_buffer != capture->indexed_rope_bf16_cos &&
+         capture->fill_buffer != capture->indexed_rope_bf16_sin &&
+         capture->fill_buffer != capture->indexed_rope_bf16_positions &&
+         capture->indexed_rope_bf16_input != capture->indexed_rope_bf16_cos &&
+         capture->indexed_rope_bf16_input != capture->indexed_rope_bf16_sin &&
+         capture->indexed_rope_bf16_input != capture->indexed_rope_bf16_positions &&
+         capture->indexed_rope_bf16_cos != capture->indexed_rope_bf16_sin &&
+         capture->indexed_rope_bf16_cos != capture->indexed_rope_bf16_positions &&
+         capture->indexed_rope_bf16_sin != capture->indexed_rope_bf16_positions &&
+         capture->fill_lease_held &&
+         capture->indexed_rope_bf16_input_lease_held &&
+         capture->indexed_rope_bf16_cos_lease_held &&
+         capture->indexed_rope_bf16_sin_lease_held &&
+         capture->indexed_rope_bf16_positions_lease_held &&
+         indexed_rope_bf16_shape_is_valid(
+             capture->indexed_rope_bf16_active_row_count,
+             capture->indexed_rope_bf16_head_count,
+             capture->indexed_rope_bf16_head_size,
+             capture->indexed_rope_bf16_rotary_dimension,
+             capture->indexed_rope_bf16_table_position_count,
+             &tensor_element_count, &table_element_count, &work_item_count) &&
+         capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 &&
+         !capture->h2d_source_lease_held && capture->silu_input == nullptr &&
+         capture->silu_element_count == 0 && capture->silu_enqueue_count == 0 &&
+         !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
+         bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) &&
+         same_context(capture->owner, capture->stream->owner) &&
+         same_context(capture->owner, capture->fill_buffer->owner) &&
+         same_context(capture->owner, capture->indexed_rope_bf16_input->owner) &&
+         same_context(capture->owner, capture->indexed_rope_bf16_cos->owner) &&
+         same_context(capture->owner, capture->indexed_rope_bf16_sin->owner) &&
+         same_context(capture->owner, capture->indexed_rope_bf16_positions->owner) &&
+         capture->fill_buffer->device_data != nullptr &&
+         capture->indexed_rope_bf16_input->device_data != nullptr &&
+         capture->indexed_rope_bf16_cos->device_data != nullptr &&
+         capture->indexed_rope_bf16_sin->device_data != nullptr &&
+         capture->indexed_rope_bf16_positions->device_data != nullptr &&
+         tensor_element_count <= capture->indexed_rope_bf16_input->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         tensor_element_count <= capture->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         table_element_count <= capture->indexed_rope_bf16_cos->byte_len /
+                                    sizeof(float) &&
+         table_element_count <= capture->indexed_rope_bf16_sin->byte_len /
+                                    sizeof(float) &&
+         capture->indexed_rope_bf16_active_row_count <=
+             capture->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+         capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->indexed_rope_bf16_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->indexed_rope_bf16_cos->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->indexed_rope_bf16_sin->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->indexed_rope_bf16_positions->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool indexed_rope_bf16_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  uint64_t tensor_element_count = 0;
+  uint64_t table_element_count = 0;
+  uint64_t work_item_count = 0;
+  return graph != nullptr &&
+         graph->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
+         graph->owner != nullptr && graph->stream != nullptr &&
+         graph->fill_buffer != nullptr && graph->indexed_rope_bf16_input != nullptr &&
+         graph->indexed_rope_bf16_cos != nullptr &&
+         graph->indexed_rope_bf16_sin != nullptr &&
+         graph->indexed_rope_bf16_positions != nullptr &&
+         graph->fill_buffer != graph->indexed_rope_bf16_input &&
+         graph->fill_buffer != graph->indexed_rope_bf16_cos &&
+         graph->fill_buffer != graph->indexed_rope_bf16_sin &&
+         graph->fill_buffer != graph->indexed_rope_bf16_positions &&
+         graph->indexed_rope_bf16_input != graph->indexed_rope_bf16_cos &&
+         graph->indexed_rope_bf16_input != graph->indexed_rope_bf16_sin &&
+         graph->indexed_rope_bf16_input != graph->indexed_rope_bf16_positions &&
+         graph->indexed_rope_bf16_cos != graph->indexed_rope_bf16_sin &&
+         graph->indexed_rope_bf16_cos != graph->indexed_rope_bf16_positions &&
+         graph->indexed_rope_bf16_sin != graph->indexed_rope_bf16_positions &&
+         indexed_rope_bf16_shape_is_valid(
+             graph->indexed_rope_bf16_active_row_count,
+             graph->indexed_rope_bf16_head_count,
+             graph->indexed_rope_bf16_head_size,
+             graph->indexed_rope_bf16_rotary_dimension,
+             graph->indexed_rope_bf16_table_position_count,
+             &tensor_element_count, &table_element_count, &work_item_count) &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph) &&
+         same_context(graph->owner, graph->stream->owner) &&
+         same_context(graph->owner, graph->fill_buffer->owner) &&
+         same_context(graph->owner, graph->indexed_rope_bf16_input->owner) &&
+         same_context(graph->owner, graph->indexed_rope_bf16_cos->owner) &&
+         same_context(graph->owner, graph->indexed_rope_bf16_sin->owner) &&
+         same_context(graph->owner, graph->indexed_rope_bf16_positions->owner) &&
+         graph->fill_buffer->device_data != nullptr &&
+         graph->indexed_rope_bf16_input->device_data != nullptr &&
+         graph->indexed_rope_bf16_cos->device_data != nullptr &&
+         graph->indexed_rope_bf16_sin->device_data != nullptr &&
+         graph->indexed_rope_bf16_positions->device_data != nullptr &&
+         tensor_element_count <= graph->indexed_rope_bf16_input->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         tensor_element_count <= graph->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         table_element_count <= graph->indexed_rope_bf16_cos->byte_len /
+                                    sizeof(float) &&
+         table_element_count <= graph->indexed_rope_bf16_sin->byte_len /
+                                    sizeof(float) &&
+         graph->indexed_rope_bf16_active_row_count <=
+             graph->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+         graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->indexed_rope_bf16_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->indexed_rope_bf16_cos->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->indexed_rope_bf16_sin->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->indexed_rope_bf16_positions->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool indexed_rope_bf16_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  uint64_t tensor_element_count = 0;
+  uint64_t table_element_count = 0;
+  uint64_t work_item_count = 0;
+  return exec != nullptr &&
+         exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
+         exec->owner != nullptr && exec->stream != nullptr &&
+         exec->fill_buffer != nullptr && exec->indexed_rope_bf16_input != nullptr &&
+         exec->indexed_rope_bf16_cos != nullptr &&
+         exec->indexed_rope_bf16_sin != nullptr &&
+         exec->indexed_rope_bf16_positions != nullptr &&
+         exec->fill_buffer != exec->indexed_rope_bf16_input &&
+         exec->fill_buffer != exec->indexed_rope_bf16_cos &&
+         exec->fill_buffer != exec->indexed_rope_bf16_sin &&
+         exec->fill_buffer != exec->indexed_rope_bf16_positions &&
+         exec->indexed_rope_bf16_input != exec->indexed_rope_bf16_cos &&
+         exec->indexed_rope_bf16_input != exec->indexed_rope_bf16_sin &&
+         exec->indexed_rope_bf16_input != exec->indexed_rope_bf16_positions &&
+         exec->indexed_rope_bf16_cos != exec->indexed_rope_bf16_sin &&
+         exec->indexed_rope_bf16_cos != exec->indexed_rope_bf16_positions &&
+         exec->indexed_rope_bf16_sin != exec->indexed_rope_bf16_positions &&
+         indexed_rope_bf16_shape_is_valid(
+             exec->indexed_rope_bf16_active_row_count,
+             exec->indexed_rope_bf16_head_count,
+             exec->indexed_rope_bf16_head_size,
+             exec->indexed_rope_bf16_rotary_dimension,
+             exec->indexed_rope_bf16_table_position_count,
+             &tensor_element_count, &table_element_count, &work_item_count) &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
+         bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) &&
+         same_context(exec->owner, exec->stream->owner) &&
+         same_context(exec->owner, exec->fill_buffer->owner) &&
+         same_context(exec->owner, exec->indexed_rope_bf16_input->owner) &&
+         same_context(exec->owner, exec->indexed_rope_bf16_cos->owner) &&
+         same_context(exec->owner, exec->indexed_rope_bf16_sin->owner) &&
+         same_context(exec->owner, exec->indexed_rope_bf16_positions->owner) &&
+         exec->fill_buffer->device_data != nullptr &&
+         exec->indexed_rope_bf16_input->device_data != nullptr &&
+         exec->indexed_rope_bf16_cos->device_data != nullptr &&
+         exec->indexed_rope_bf16_sin->device_data != nullptr &&
+         exec->indexed_rope_bf16_positions->device_data != nullptr &&
+         tensor_element_count <= exec->indexed_rope_bf16_input->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         tensor_element_count <= exec->fill_buffer->byte_len /
+                                     sizeof(__nv_bfloat16) &&
+         table_element_count <= exec->indexed_rope_bf16_cos->byte_len /
+                                    sizeof(float) &&
+         table_element_count <= exec->indexed_rope_bf16_sin->byte_len /
+                                    sizeof(float) &&
+         exec->indexed_rope_bf16_active_row_count <=
+             exec->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+         exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->indexed_rope_bf16_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->indexed_rope_bf16_cos->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->indexed_rope_bf16_sin->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->indexed_rope_bf16_positions->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
 bool graph_error_is_compatible(const RileyCudaGraphErrorInfo* error) noexcept {
   return error == nullptr || error->struct_size >= sizeof(*error);
 }
@@ -1765,6 +2137,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       !bf16_row_gather_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
+      !indexed_rope_bf16_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -1809,7 +2182,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
-      !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture)) {
+      !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
+      !indexed_rope_bf16_capture_fields_are_clear(capture)) {
     return false;
   }
   if (!capture->fill_lease_held) {
@@ -2201,6 +2575,49 @@ bool release_capture_bf16_row_gather_argmax_d2h_leases(
   return true;
 }
 
+// C05-17 keeps five raw device addresses fixed through capture, graph, and
+// exec ownership. The terminal enqueue marker is abort-releasable only: after
+// a failed node launch we cannot distinguish an unrecorded graph from a graph
+// containing an accepted prefix without the one CUDA abort transition.
+bool release_capture_indexed_rope_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (!indexed_rope_bf16_capture_state_is_valid(capture) ||
+      (capture->indexed_rope_bf16_enqueue_count != 0 &&
+       capture->indexed_rope_bf16_enqueue_count != 1 &&
+       capture->indexed_rope_bf16_enqueue_count !=
+           kIndexedRopeBf16EnqueueTerminal)) {
+    return false;
+  }
+  if (!release_exclusive_use(
+          capture->indexed_rope_bf16_positions->active_uses) ||
+      !release_exclusive_use(capture->indexed_rope_bf16_sin->active_uses) ||
+      !release_exclusive_use(capture->indexed_rope_bf16_cos->active_uses) ||
+      !release_exclusive_use(capture->indexed_rope_bf16_input->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->indexed_rope_bf16_input = nullptr;
+  capture->indexed_rope_bf16_cos = nullptr;
+  capture->indexed_rope_bf16_sin = nullptr;
+  capture->indexed_rope_bf16_positions = nullptr;
+  capture->indexed_rope_bf16_active_row_count = 0;
+  capture->indexed_rope_bf16_head_count = 0;
+  capture->indexed_rope_bf16_head_size = 0;
+  capture->indexed_rope_bf16_rotary_dimension = 0;
+  capture->indexed_rope_bf16_table_position_count = 0;
+  capture->indexed_rope_bf16_enqueue_count = 0;
+  capture->indexed_rope_bf16_input_lease_held = false;
+  capture->indexed_rope_bf16_cos_lease_held = false;
+  capture->indexed_rope_bf16_sin_lease_held = false;
+  capture->indexed_rope_bf16_positions_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -2241,6 +2658,11 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H &&
       (!bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
        !bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
+      (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
+       !indexed_rope_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -2378,6 +2800,27 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_argmax_d2h_result_byte_len) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kIndexedRopeBf16) {
+    if (!indexed_rope_bf16_capture_state_is_valid(capture) ||
+        !indexed_rope_bf16_graph_state_is_valid(graph) ||
+        graph->indexed_rope_bf16_input != capture->indexed_rope_bf16_input ||
+        graph->indexed_rope_bf16_cos != capture->indexed_rope_bf16_cos ||
+        graph->indexed_rope_bf16_sin != capture->indexed_rope_bf16_sin ||
+        graph->indexed_rope_bf16_positions !=
+            capture->indexed_rope_bf16_positions ||
+        graph->indexed_rope_bf16_active_row_count !=
+            capture->indexed_rope_bf16_active_row_count ||
+        graph->indexed_rope_bf16_head_count !=
+            capture->indexed_rope_bf16_head_count ||
+        graph->indexed_rope_bf16_head_size !=
+            capture->indexed_rope_bf16_head_size ||
+        graph->indexed_rope_bf16_rotary_dimension !=
+            capture->indexed_rope_bf16_rotary_dimension ||
+        graph->indexed_rope_bf16_table_position_count !=
+            capture->indexed_rope_bf16_table_position_count) {
+      return false;
+    }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
@@ -2450,6 +2893,11 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H &&
       (!bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
        !bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
+      (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
+       !indexed_rope_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -2651,6 +3099,28 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_argmax_d2h_result_byte_len) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kIndexedRopeBf16) {
+    if (capture->indexed_rope_bf16_enqueue_count != 1 ||
+        !indexed_rope_bf16_capture_state_is_valid(capture) ||
+        !indexed_rope_bf16_graph_state_is_valid(graph) ||
+        graph->indexed_rope_bf16_input != capture->indexed_rope_bf16_input ||
+        graph->indexed_rope_bf16_cos != capture->indexed_rope_bf16_cos ||
+        graph->indexed_rope_bf16_sin != capture->indexed_rope_bf16_sin ||
+        graph->indexed_rope_bf16_positions !=
+            capture->indexed_rope_bf16_positions ||
+        graph->indexed_rope_bf16_active_row_count !=
+            capture->indexed_rope_bf16_active_row_count ||
+        graph->indexed_rope_bf16_head_count !=
+            capture->indexed_rope_bf16_head_count ||
+        graph->indexed_rope_bf16_head_size !=
+            capture->indexed_rope_bf16_head_size ||
+        graph->indexed_rope_bf16_rotary_dimension !=
+            capture->indexed_rope_bf16_rotary_dimension ||
+        graph->indexed_rope_bf16_table_position_count !=
+            capture->indexed_rope_bf16_table_position_count) {
+      return false;
+    }
   } else {
     return false;
   }
@@ -2728,6 +3198,20 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->bf16_row_gather_argmax_d2h_indices_lease_held = false;
   capture->bf16_row_gather_argmax_d2h_gathered_logits_lease_held = false;
   capture->bf16_row_gather_argmax_d2h_pinned_results_lease_held = false;
+  capture->indexed_rope_bf16_input = nullptr;
+  capture->indexed_rope_bf16_cos = nullptr;
+  capture->indexed_rope_bf16_sin = nullptr;
+  capture->indexed_rope_bf16_positions = nullptr;
+  capture->indexed_rope_bf16_active_row_count = 0;
+  capture->indexed_rope_bf16_head_count = 0;
+  capture->indexed_rope_bf16_head_size = 0;
+  capture->indexed_rope_bf16_rotary_dimension = 0;
+  capture->indexed_rope_bf16_table_position_count = 0;
+  capture->indexed_rope_bf16_enqueue_count = 0;
+  capture->indexed_rope_bf16_input_lease_held = false;
+  capture->indexed_rope_bf16_cos_lease_held = false;
+  capture->indexed_rope_bf16_sin_lease_held = false;
+  capture->indexed_rope_bf16_positions_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -2949,6 +3433,38 @@ bool release_graph_bf16_row_gather_argmax_d2h_leases(
          release_exclusive_use(row_indices->active_uses) &&
          release_exclusive_use(input->active_uses) &&
          release_exclusive_use(results->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_indexed_rope_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* cos,
+    RileyCudaDeviceBuffer* sin, RileyCudaDeviceBuffer* positions,
+    RileyCudaDeviceBuffer* output) noexcept {
+  if (owner == nullptr || stream == nullptr || input == nullptr ||
+      cos == nullptr || sin == nullptr || positions == nullptr ||
+      output == nullptr || input == cos || input == sin ||
+      input == positions || input == output || cos == sin ||
+      cos == positions || cos == output || sin == positions ||
+      sin == output || positions == output ||
+      !same_context(owner, stream->owner) ||
+      !same_context(owner, input->owner) || !same_context(owner, cos->owner) ||
+      !same_context(owner, sin->owner) ||
+      !same_context(owner, positions->owner) ||
+      !same_context(owner, output->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      input->active_uses.load(std::memory_order_acquire) != 1 ||
+      cos->active_uses.load(std::memory_order_acquire) != 1 ||
+      sin->active_uses.load(std::memory_order_acquire) != 1 ||
+      positions->active_uses.load(std::memory_order_acquire) != 1 ||
+      output->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(positions->active_uses) &&
+         release_exclusive_use(sin->active_uses) &&
+         release_exclusive_use(cos->active_uses) &&
+         release_exclusive_use(input->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -6046,6 +6562,384 @@ RileyCudaStatus capture_begin_bf16_row_gather_argmax_d2h_impl(
   return status;
 }
 
+// C05-17 captures the eager indexed-RoPE BF16 arithmetic into a single fixed
+// node. All capacity and host-mirror checks finish before any lease is held;
+// only device pointers and immutable geometry are retained after capture
+// starts, so this slice cannot become an implicit H2D positions update path.
+RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* cos, RileyCudaDeviceBuffer* sin,
+    RileyCudaDeviceBuffer* positions, RileyCudaDeviceBuffer* output,
+    const uint32_t* positions_mirror, uint64_t positions_mirror_len,
+    uint64_t active_row_count, uint64_t head_count, uint64_t head_size,
+    uint64_t rotary_dimension, uint64_t table_position_count,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginIndexedRopeBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || input == nullptr || cos == nullptr || sin == nullptr ||
+      positions == nullptr || output == nullptr || stream->owner == nullptr ||
+      input->owner == nullptr || cos->owner == nullptr || sin->owner == nullptr ||
+      positions->owner == nullptr || output->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "stream, five indexed-RoPE device allocations, or their owner is null");
+  }
+  if (!same_context(stream->owner, input->owner) ||
+      !same_context(stream->owner, cos->owner) ||
+      !same_context(stream->owner, sin->owner) ||
+      !same_context(stream->owner, positions->owner) ||
+      !same_context(stream->owner, output->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "capture stream and indexed-RoPE allocations must share one context owner");
+  }
+  if (input == cos || input == sin || input == positions || input == output ||
+      cos == sin || cos == positions || cos == output || sin == positions ||
+      sin == output || positions == output) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "graph BF16 indexed-RoPE requires five distinct device allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginIndexedRopeBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  uint64_t tensor_element_count = 0;
+  uint64_t table_element_count = 0;
+  uint64_t work_item_count = 0;
+  if (!indexed_rope_bf16_shape_is_valid(
+          active_row_count, head_count, head_size, rotary_dimension,
+          table_position_count, &tensor_element_count, &table_element_count,
+          &work_item_count) ||
+      tensor_element_count > input->byte_len / sizeof(__nv_bfloat16) ||
+      tensor_element_count > output->byte_len / sizeof(__nv_bfloat16) ||
+      table_element_count > cos->byte_len / sizeof(float) ||
+      table_element_count > sin->byte_len / sizeof(float) ||
+      active_row_count > positions->byte_len / sizeof(uint32_t)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "BF16 indexed-RoPE geometry is zero, invalid, overflows, or exceeds fixed capacity");
+  }
+  if (positions_mirror == nullptr || positions_mirror_len != active_row_count) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "indexed-RoPE positions mirror must be non-null and exactly active_row_count entries");
+  }
+  for (uint64_t row = 0; row < positions_mirror_len; ++row) {
+    if (static_cast<uint64_t>(positions_mirror[row]) >= table_position_count) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+          "indexed-RoPE positions mirror contains a table-position out of range");
+    }
+  }
+  if (input->device_data == nullptr || cos->device_data == nullptr ||
+      sin->device_data == nullptr || positions->device_data == nullptr ||
+      output->device_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "graph BF16 indexed-RoPE allocation has no live device storage");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "a stream command batch blocks fixed-address BF16 indexed-RoPE graph capture");
+  }
+  const RileyCudaStatus idle_status =
+      require_stream_capture_idle(stream, error, kBeginIndexedRopeBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  bool input_lease_held = false;
+  bool cos_lease_held = false;
+  bool sin_lease_held = false;
+  bool positions_lease_held = false;
+  bool output_lease_held = false;
+  bool stream_lease_held = false;
+  const auto release_initial_leases = [&]() noexcept {
+    bool released = true;
+    if (stream_lease_held) {
+      released = release_exclusive_use(stream->active_uses) && released;
+      stream_lease_held = false;
+    }
+    if (output_lease_held) {
+      released = release_exclusive_use(output->active_uses) && released;
+      output_lease_held = false;
+    }
+    if (positions_lease_held) {
+      released = release_exclusive_use(positions->active_uses) && released;
+      positions_lease_held = false;
+    }
+    if (sin_lease_held) {
+      released = release_exclusive_use(sin->active_uses) && released;
+      sin_lease_held = false;
+    }
+    if (cos_lease_held) {
+      released = release_exclusive_use(cos->active_uses) && released;
+      cos_lease_held = false;
+    }
+    if (input_lease_held) {
+      released = release_exclusive_use(input->active_uses) && released;
+      input_lease_held = false;
+    }
+    return released;
+  };
+  const auto reject_busy = [&](const char* resource) noexcept {
+    const bool released = release_initial_leases();
+    if (!released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release rejected BF16 indexed-RoPE leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginIndexedRopeBf16Operation, resource);
+  };
+  if (!try_acquire_exclusive_use(input->active_uses)) {
+    return reject_busy("graph BF16 indexed-RoPE input has an active asynchronous use");
+  }
+  input_lease_held = true;
+  if (!try_acquire_exclusive_use(cos->active_uses)) {
+    return reject_busy("graph BF16 indexed-RoPE cosine table has an active asynchronous use");
+  }
+  cos_lease_held = true;
+  if (!try_acquire_exclusive_use(sin->active_uses)) {
+    return reject_busy("graph BF16 indexed-RoPE sine table has an active asynchronous use");
+  }
+  sin_lease_held = true;
+  if (!try_acquire_exclusive_use(positions->active_uses)) {
+    return reject_busy("graph BF16 indexed-RoPE positions has an active asynchronous use");
+  }
+  positions_lease_held = true;
+  if (!try_acquire_exclusive_use(output->active_uses)) {
+    return reject_busy("graph BF16 indexed-RoPE output has an active asynchronous use");
+  }
+  output_lease_held = true;
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return reject_busy("stream has an active asynchronous use or capture");
+  }
+  stream_lease_held = true;
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    const bool released = release_initial_leases();
+    if (!released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release exhausted graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginIndexedRopeBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    const bool released = release_initial_leases();
+    if (!released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release rejected graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginIndexedRopeBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    const bool child_released = release_child(stream->owner);
+    const bool released = release_initial_leases();
+    if (!child_released || !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release graph capture allocation rollback leases");
+    }
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
+                     kBeginIndexedRopeBf16Operation,
+                     "host allocation failed for BF16 indexed-RoPE graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool released = release_initial_leases();
+    if (!child_released || !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release captured graph allocation rollback leases");
+    }
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
+                     kBeginIndexedRopeBf16Operation,
+                     "host allocation failed for captured BF16 indexed-RoPE graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kIndexedRopeBf16);
+  RileyCudaGraph* const graph = capture->prepared_graph;
+  graph->indexed_rope_bf16_input = input;
+  graph->indexed_rope_bf16_cos = cos;
+  graph->indexed_rope_bf16_sin = sin;
+  graph->indexed_rope_bf16_positions = positions;
+  graph->indexed_rope_bf16_active_row_count = active_row_count;
+  graph->indexed_rope_bf16_head_count = head_count;
+  graph->indexed_rope_bf16_head_size = head_size;
+  graph->indexed_rope_bf16_rotary_dimension = rotary_dimension;
+  graph->indexed_rope_bf16_table_position_count = table_position_count;
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->indexed_rope_bf16_input = input;
+  capture->indexed_rope_bf16_cos = cos;
+  capture->indexed_rope_bf16_sin = sin;
+  capture->indexed_rope_bf16_positions = positions;
+  capture->indexed_rope_bf16_active_row_count = active_row_count;
+  capture->indexed_rope_bf16_head_count = head_count;
+  capture->indexed_rope_bf16_head_size = head_size;
+  capture->indexed_rope_bf16_rotary_dimension = rotary_dimension;
+  capture->indexed_rope_bf16_table_position_count = table_position_count;
+  capture->indexed_rope_bf16_input_lease_held = true;
+  capture->indexed_rope_bf16_cos_lease_held = true;
+  capture->indexed_rope_bf16_sin_lease_held = true;
+  capture->indexed_rope_bf16_positions_lease_held = true;
+  input_lease_held = false;
+  cos_lease_held = false;
+  sin_lease_held = false;
+  positions_lease_held = false;
+  output_lease_held = false;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_indexed_rope_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release a blocked BF16 indexed-RoPE graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_indexed_rope_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginIndexedRopeBf16Operation,
+                            "failed to release a rejected BF16 indexed-RoPE graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE, kBeginIndexedRopeBf16Operation,
+      capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginIndexedRopeBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginIndexedRopeBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released = release_capture_indexed_rope_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                          kBeginIndexedRopeBf16Operation,
+                          "failed to release an unstarted BF16 indexed-RoPE graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -6078,6 +6972,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -6427,6 +7322,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
       const bool is_bf16_row_gather_argmax_d2h =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      const bool is_indexed_rope_bf16 =
+          owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
@@ -6434,7 +7331,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
-          is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h;
+          is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
+          is_indexed_rope_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -6460,6 +7358,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                                              owner)
                                  : is_bf16_row_gather_argmax_d2h
                                        ? release_capture_bf16_row_gather_argmax_d2h_leases(
+                                             owner)
+                                 : is_indexed_rope_bf16
+                                       ? release_capture_indexed_rope_bf16_leases(
                                              owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
@@ -6610,6 +7511,23 @@ riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
   return capture_begin_bf16_row_gather_argmax_d2h_impl(
       stream, input, row_indices, gathered_logits, results, pinned_results,
       input_row_count, output_row_count, vocabulary_size, mode, out_capture,
+      out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* cos, RileyCudaDeviceBuffer* sin,
+    RileyCudaDeviceBuffer* positions, RileyCudaDeviceBuffer* output,
+    const uint32_t* positions_mirror, uint64_t positions_mirror_len,
+    uint64_t active_row_count, uint64_t head_count, uint64_t head_size,
+    uint64_t rotary_dimension, uint64_t table_position_count,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_indexed_rope_bf16_impl(
+      stream, input, cos, sin, positions, output, positions_mirror,
+      positions_mirror_len, active_row_count, head_count, head_size,
+      rotary_dimension, table_position_count, mode, out_capture,
       out_graph_error, error);
 }
 
@@ -7629,6 +8547,120 @@ riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
   return status;
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueIndexedRopeBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueIndexedRopeBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !indexed_rope_bf16_capture_state_is_valid(owner) ||
+      owner->indexed_rope_bf16_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueIndexedRopeBf16Operation,
+        "capture owner is not a live unqueued BF16 indexed-RoPE graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueIndexedRopeBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  uint64_t tensor_element_count = 0;
+  uint64_t table_element_count = 0;
+  uint64_t work_item_count = 0;
+  if (!indexed_rope_bf16_shape_is_valid(
+          owner->indexed_rope_bf16_active_row_count,
+          owner->indexed_rope_bf16_head_count,
+          owner->indexed_rope_bf16_head_size,
+          owner->indexed_rope_bf16_rotary_dimension,
+          owner->indexed_rope_bf16_table_position_count,
+          &tensor_element_count, &table_element_count, &work_item_count)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueIndexedRopeBf16Operation,
+        "BF16 indexed-RoPE capture owner has invalid immutable geometry");
+  }
+  // These values are independently checked by the state validator and are
+  // intentionally recomputed here to reject a corrupted immutable shape
+  // before deriving launch geometry.
+  (void)tensor_element_count;
+  (void)table_element_count;
+  const uint64_t requested_blocks =
+      ((work_item_count - 1) / kGraphBf16RowGatherThreads) + 1;
+  const uint32_t grid_x = static_cast<uint32_t>(
+      requested_blocks < kMaximumGraphBf16RowGatherBlocks
+          ? requested_blocks
+          : kMaximumGraphBf16RowGatherBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueIndexedRopeBf16Operation,
+      owner);
+  bool node_submission_started = false;
+  bool node_accepted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    node_submission_started = true;
+    graph_indexed_rope_bf16<<<grid_x, kGraphBf16RowGatherThreads, 0,
+                              owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(
+            owner->indexed_rope_bf16_input->device_data),
+        static_cast<const float*>(owner->indexed_rope_bf16_cos->device_data),
+        static_cast<const float*>(owner->indexed_rope_bf16_sin->device_data),
+        static_cast<const uint32_t*>(
+            owner->indexed_rope_bf16_positions->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        owner->indexed_rope_bf16_table_position_count,
+        owner->indexed_rope_bf16_head_count,
+        owner->indexed_rope_bf16_head_size,
+        owner->indexed_rope_bf16_rotary_dimension, work_item_count);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueIndexedRopeBf16Operation);
+    node_accepted = status == RILEY_CUDA_STATUS_SUCCESS;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueIndexedRopeBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  if (node_submission_started &&
+      (!node_accepted || status != RILEY_CUDA_STATUS_SUCCESS ||
+       !restoration_known)) {
+    owner->indexed_rope_bf16_enqueue_count =
+        kIndexedRopeBf16EnqueueTerminal;
+  } else if (node_accepted && status == RILEY_CUDA_STATUS_SUCCESS &&
+             restoration_known) {
+    owner->indexed_rope_bf16_enqueue_count = 1;
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -7690,10 +8722,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   const bool is_bf16_row_gather_argmax_d2h =
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+  const bool is_indexed_rope_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
-       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h) ||
+       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
+       !is_indexed_rope_bf16) ||
       (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
       (!is_canonical_rms_norm_bf16 &&
        !canonical_rms_norm_capture_fields_are_clear(owner)) ||
@@ -7704,6 +8739,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        !bf16_row_gather_argmax_capture_fields_are_clear(owner)) ||
       (!is_bf16_row_gather_argmax_d2h &&
        !bf16_row_gather_argmax_d2h_capture_fields_are_clear(owner)) ||
+      (!is_indexed_rope_bf16 &&
+       !indexed_rope_bf16_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
@@ -7785,7 +8822,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_bf16_row_gather_argmax &&
        !bf16_row_gather_argmax_capture_state_is_valid(owner)) ||
       (is_bf16_row_gather_argmax_d2h &&
-       !bf16_row_gather_argmax_d2h_capture_state_is_valid(owner))) {
+       !bf16_row_gather_argmax_d2h_capture_state_is_valid(owner)) ||
+      (is_indexed_rope_bf16 &&
+       !indexed_rope_bf16_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -7810,7 +8849,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_bf16_row_gather_argmax &&
        owner->bf16_row_gather_argmax_enqueue_count != 1) ||
       (is_bf16_row_gather_argmax_d2h &&
-       owner->bf16_row_gather_argmax_d2h_enqueue_count != 1)) {
+       owner->bf16_row_gather_argmax_d2h_enqueue_count != 1) ||
+      (is_indexed_rope_bf16 &&
+       owner->indexed_rope_bf16_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -7858,6 +8899,15 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
         owner->bf16_row_gather_argmax_d2h_gathered_logits->active_uses.load(
             std::memory_order_acquire) != 1 ||
         owner->bf16_row_gather_argmax_d2h_pinned_results->active_uses.load(
+            std::memory_order_acquire) != 1)) ||
+      (is_indexed_rope_bf16 &&
+       (owner->indexed_rope_bf16_input->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->indexed_rope_bf16_cos->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->indexed_rope_bf16_sin->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->indexed_rope_bf16_positions->active_uses.load(
             std::memory_order_acquire) != 1))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
@@ -7982,13 +9032,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       const bool is_bf16_row_gather_argmax_d2h =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+      const bool is_indexed_rope_bf16 =
+          owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
-          is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h;
+          is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
+          is_indexed_rope_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -8014,6 +9067,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                                              owner)
                                  : is_bf16_row_gather_argmax_d2h
                                        ? release_capture_bf16_row_gather_argmax_d2h_leases(
+                                             owner)
+                                 : is_indexed_rope_bf16
+                                       ? release_capture_indexed_rope_bf16_leases(
                                              owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
@@ -8096,6 +9152,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   const bool is_bf16_row_gather_argmax_d2h =
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+  const bool is_indexed_rope_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -8172,7 +9230,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
-        "captured graph mixes BF16 row-gather argmax D2H state with another operation");
+                            "captured graph mixes BF16 row-gather argmax D2H state with another operation");
+  }
+  if (is_indexed_rope_bf16 && !indexed_rope_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured BF16 indexed-RoPE graph has invalid fixed resource state");
+  }
+  if (!is_indexed_rope_bf16 &&
+      !indexed_rope_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured graph mixes BF16 indexed-RoPE state with another operation");
   }
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
@@ -8180,7 +9251,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
-       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h) ||
+       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
+       !is_indexed_rope_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -8305,6 +9377,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->bf16_row_gather_argmax_d2h_output_row_count,
       owner->bf16_row_gather_argmax_d2h_vocabulary_size,
       owner->bf16_row_gather_argmax_d2h_result_byte_len);
+  exec->indexed_rope_bf16_input = owner->indexed_rope_bf16_input;
+  exec->indexed_rope_bf16_cos = owner->indexed_rope_bf16_cos;
+  exec->indexed_rope_bf16_sin = owner->indexed_rope_bf16_sin;
+  exec->indexed_rope_bf16_positions = owner->indexed_rope_bf16_positions;
+  exec->indexed_rope_bf16_active_row_count =
+      owner->indexed_rope_bf16_active_row_count;
+  exec->indexed_rope_bf16_head_count = owner->indexed_rope_bf16_head_count;
+  exec->indexed_rope_bf16_head_size = owner->indexed_rope_bf16_head_size;
+  exec->indexed_rope_bf16_rotary_dimension =
+      owner->indexed_rope_bf16_rotary_dimension;
+  exec->indexed_rope_bf16_table_position_count =
+      owner->indexed_rope_bf16_table_position_count;
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -8415,6 +9499,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       !bf16_row_gather_exec_fields_are_clear(exec) ||
       !bf16_row_gather_argmax_exec_fields_are_clear(exec) ||
       !bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) ||
+      !indexed_rope_bf16_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -8485,6 +9570,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   const bool is_bf16_row_gather_argmax_d2h =
       exec->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+  const bool is_indexed_rope_bf16 =
+      exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -8563,6 +9650,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
         "graph exec mixes BF16 row-gather argmax D2H state with another operation");
   }
+  if (is_indexed_rope_bf16 && !indexed_rope_bf16_exec_state_is_valid(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "BF16 indexed-RoPE graph exec has invalid fixed resource state");
+  }
+  if (!is_indexed_rope_bf16 &&
+      !indexed_rope_bf16_exec_fields_are_clear(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "graph exec mixes BF16 indexed-RoPE state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
@@ -8571,7 +9671,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
-       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h)) {
+       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
+       !is_indexed_rope_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -8918,6 +10019,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   const bool is_bf16_row_gather_argmax_d2h =
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+  const bool is_indexed_rope_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -8996,6 +10099,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
         "captured graph mixes BF16 row-gather argmax D2H state with another operation");
   }
+  if (is_indexed_rope_bf16 && !indexed_rope_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "BF16 indexed-RoPE graph has invalid fixed resource state");
+  }
+  if (!is_indexed_rope_bf16 &&
+      !indexed_rope_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "captured graph mixes BF16 indexed-RoPE state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -9004,7 +10120,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
-       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h) ||
+       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
+       !is_indexed_rope_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -9154,6 +10271,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->bf16_row_gather_argmax_d2h_gathered_logits,
                                  owner->fill_buffer,
                                  owner->bf16_row_gather_argmax_d2h_pinned_results)
+                     : is_indexed_rope_bf16
+                           ? release_graph_indexed_rope_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->indexed_rope_bf16_input,
+                                 owner->indexed_rope_bf16_cos,
+                                 owner->indexed_rope_bf16_sin,
+                                 owner->indexed_rope_bf16_positions,
+                                 owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -9222,6 +10347,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   const bool is_bf16_row_gather_argmax_d2h =
       owner->operation ==
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
+  const bool is_indexed_rope_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -9300,6 +10427,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
         "graph exec mixes BF16 row-gather argmax D2H state with another operation");
   }
+  if (is_indexed_rope_bf16 && !indexed_rope_bf16_exec_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "BF16 indexed-RoPE graph exec has invalid fixed resource state");
+  }
+  if (!is_indexed_rope_bf16 &&
+      !indexed_rope_bf16_exec_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "graph exec mixes BF16 indexed-RoPE state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -9308,7 +10448,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
-       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h) ||
+       !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
+       !is_indexed_rope_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -9474,6 +10615,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->bf16_row_gather_argmax_d2h_gathered_logits,
                                  owner->fill_buffer,
                                  owner->bf16_row_gather_argmax_d2h_pinned_results)
+                     : is_indexed_rope_bf16
+                           ? release_graph_indexed_rope_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->indexed_rope_bf16_input,
+                                 owner->indexed_rope_bf16_cos,
+                                 owner->indexed_rope_bf16_sin,
+                                 owner->indexed_rope_bf16_positions,
+                                 owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {

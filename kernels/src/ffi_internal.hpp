@@ -171,6 +171,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kBf16RowGather = 8,
   kBf16RowGatherArgmax = 9,
   kBf16RowGatherArgmaxD2H = 10,
+  kIndexedRopeBf16 = 11,
 };
 
 struct RileyCudaGraphCapture {
@@ -256,6 +257,20 @@ struct RileyCudaGraphCapture {
         bf16_row_gather_argmax_d2h_indices_lease_held(false),
         bf16_row_gather_argmax_d2h_gathered_logits_lease_held(false),
         bf16_row_gather_argmax_d2h_pinned_results_lease_held(false),
+        indexed_rope_bf16_input(nullptr),
+        indexed_rope_bf16_cos(nullptr),
+        indexed_rope_bf16_sin(nullptr),
+        indexed_rope_bf16_positions(nullptr),
+        indexed_rope_bf16_active_row_count(0),
+        indexed_rope_bf16_head_count(0),
+        indexed_rope_bf16_head_size(0),
+        indexed_rope_bf16_rotary_dimension(0),
+        indexed_rope_bf16_table_position_count(0),
+        indexed_rope_bf16_enqueue_count(0),
+        indexed_rope_bf16_input_lease_held(false),
+        indexed_rope_bf16_cos_lease_held(false),
+        indexed_rope_bf16_sin_lease_held(false),
+        indexed_rope_bf16_positions_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -287,7 +302,9 @@ struct RileyCudaGraphCapture {
   // C05-15 keeps input, U32 indices, and gathered BF16 logits while
   // fill_buffer is deterministic argmax results.
   // C05-16 retains the same four device allocations plus an exact pinned
-  // result destination for its captured D2H node.
+  // result destination for its captured D2H node. C05-17 retains BF16 input
+  // and output (through fill_buffer), F32 cosine/sine tables, and U32 device
+  // positions; its temporary host position mirror is never retained.
   RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
@@ -357,6 +374,20 @@ struct RileyCudaGraphCapture {
   bool bf16_row_gather_argmax_d2h_indices_lease_held;
   bool bf16_row_gather_argmax_d2h_gathered_logits_lease_held;
   bool bf16_row_gather_argmax_d2h_pinned_results_lease_held;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_input;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_active_row_count;
+  uint64_t indexed_rope_bf16_head_count;
+  uint64_t indexed_rope_bf16_head_size;
+  uint64_t indexed_rope_bf16_rotary_dimension;
+  uint64_t indexed_rope_bf16_table_position_count;
+  uint32_t indexed_rope_bf16_enqueue_count;
+  bool indexed_rope_bf16_input_lease_held;
+  bool indexed_rope_bf16_cos_lease_held;
+  bool indexed_rope_bf16_sin_lease_held;
+  bool indexed_rope_bf16_positions_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -449,7 +480,16 @@ struct RileyCudaGraph {
                  uint64_t captured_bf16_row_gather_argmax_d2h_input_row_count = 0,
                  uint64_t captured_bf16_row_gather_argmax_d2h_output_row_count = 0,
                  uint64_t captured_bf16_row_gather_argmax_d2h_vocabulary_size = 0,
-                 uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0) noexcept
+                 uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0,
+                 RileyCudaDeviceBuffer* captured_indexed_rope_bf16_input = nullptr,
+                 RileyCudaDeviceBuffer* captured_indexed_rope_bf16_cos = nullptr,
+                 RileyCudaDeviceBuffer* captured_indexed_rope_bf16_sin = nullptr,
+                 RileyCudaDeviceBuffer* captured_indexed_rope_bf16_positions = nullptr,
+                 uint64_t captured_indexed_rope_bf16_active_row_count = 0,
+                 uint64_t captured_indexed_rope_bf16_head_count = 0,
+                 uint64_t captured_indexed_rope_bf16_head_size = 0,
+                 uint64_t captured_indexed_rope_bf16_rotary_dimension = 0,
+                 uint64_t captured_indexed_rope_bf16_table_position_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -505,6 +545,18 @@ struct RileyCudaGraph {
             captured_bf16_row_gather_argmax_d2h_vocabulary_size),
         bf16_row_gather_argmax_d2h_result_byte_len(
             captured_bf16_row_gather_argmax_d2h_result_byte_len),
+        indexed_rope_bf16_input(captured_indexed_rope_bf16_input),
+        indexed_rope_bf16_cos(captured_indexed_rope_bf16_cos),
+        indexed_rope_bf16_sin(captured_indexed_rope_bf16_sin),
+        indexed_rope_bf16_positions(captured_indexed_rope_bf16_positions),
+        indexed_rope_bf16_active_row_count(
+            captured_indexed_rope_bf16_active_row_count),
+        indexed_rope_bf16_head_count(captured_indexed_rope_bf16_head_count),
+        indexed_rope_bf16_head_size(captured_indexed_rope_bf16_head_size),
+        indexed_rope_bf16_rotary_dimension(
+            captured_indexed_rope_bf16_rotary_dimension),
+        indexed_rope_bf16_table_position_count(
+            captured_indexed_rope_bf16_table_position_count),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -550,6 +602,15 @@ struct RileyCudaGraph {
   uint64_t bf16_row_gather_argmax_d2h_output_row_count;
   uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
   uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_input;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_active_row_count;
+  uint64_t indexed_rope_bf16_head_count;
+  uint64_t indexed_rope_bf16_head_size;
+  uint64_t indexed_rope_bf16_rotary_dimension;
+  uint64_t indexed_rope_bf16_table_position_count;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -602,7 +663,16 @@ struct RileyCudaGraphExec {
                      uint64_t captured_bf16_row_gather_argmax_d2h_input_row_count = 0,
                      uint64_t captured_bf16_row_gather_argmax_d2h_output_row_count = 0,
                      uint64_t captured_bf16_row_gather_argmax_d2h_vocabulary_size = 0,
-                     uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0) noexcept
+                     uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0,
+                     RileyCudaDeviceBuffer* captured_indexed_rope_bf16_input = nullptr,
+                     RileyCudaDeviceBuffer* captured_indexed_rope_bf16_cos = nullptr,
+                     RileyCudaDeviceBuffer* captured_indexed_rope_bf16_sin = nullptr,
+                     RileyCudaDeviceBuffer* captured_indexed_rope_bf16_positions = nullptr,
+                     uint64_t captured_indexed_rope_bf16_active_row_count = 0,
+                     uint64_t captured_indexed_rope_bf16_head_count = 0,
+                     uint64_t captured_indexed_rope_bf16_head_size = 0,
+                     uint64_t captured_indexed_rope_bf16_rotary_dimension = 0,
+                     uint64_t captured_indexed_rope_bf16_table_position_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -658,6 +728,18 @@ struct RileyCudaGraphExec {
             captured_bf16_row_gather_argmax_d2h_vocabulary_size),
         bf16_row_gather_argmax_d2h_result_byte_len(
             captured_bf16_row_gather_argmax_d2h_result_byte_len),
+        indexed_rope_bf16_input(captured_indexed_rope_bf16_input),
+        indexed_rope_bf16_cos(captured_indexed_rope_bf16_cos),
+        indexed_rope_bf16_sin(captured_indexed_rope_bf16_sin),
+        indexed_rope_bf16_positions(captured_indexed_rope_bf16_positions),
+        indexed_rope_bf16_active_row_count(
+            captured_indexed_rope_bf16_active_row_count),
+        indexed_rope_bf16_head_count(captured_indexed_rope_bf16_head_count),
+        indexed_rope_bf16_head_size(captured_indexed_rope_bf16_head_size),
+        indexed_rope_bf16_rotary_dimension(
+            captured_indexed_rope_bf16_rotary_dimension),
+        indexed_rope_bf16_table_position_count(
+            captured_indexed_rope_bf16_table_position_count),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
@@ -709,6 +791,15 @@ struct RileyCudaGraphExec {
   uint64_t bf16_row_gather_argmax_d2h_output_row_count;
   uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
   uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_input;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
+  RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_active_row_count;
+  uint64_t indexed_rope_bf16_head_count;
+  uint64_t indexed_rope_bf16_head_size;
+  uint64_t indexed_rope_bf16_rotary_dimension;
+  uint64_t indexed_rope_bf16_table_position_count;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;

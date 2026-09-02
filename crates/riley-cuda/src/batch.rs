@@ -1077,7 +1077,12 @@ fn sequence_logical_length(
     full_blocks * PACKED_BATCH_BLOCK_SIZE + u64::from(valid_tokens[end - 1])
 }
 
-fn validate_indexed_positions(positions: &[u32], table_position_count: u64) -> CudaResult<()> {
+/// Validates the host mirror required by eager and fixed-address graph indexed
+/// RoPE before either path enters native CUDA.
+pub(crate) fn validate_indexed_positions(
+    positions: &[u32],
+    table_position_count: u64,
+) -> CudaResult<()> {
     const OPERATION: &str = "indexed_rope";
     for (row, &position) in positions.iter().enumerate() {
         if u64::from(position) >= table_position_count {

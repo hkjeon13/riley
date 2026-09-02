@@ -1503,6 +1503,30 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+        stream: *mut RawStream,
+        input: *mut RawDeviceBuffer,
+        cos: *mut RawDeviceBuffer,
+        sin: *mut RawDeviceBuffer,
+        positions: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        host_positions_mirror: *const u32,
+        host_positions_mirror_len: u64,
+        active_row_count: u64,
+        head_count: u64,
+        head_size: u64,
+        rotary_dimension: u64,
+        table_position_count: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -3409,6 +3433,114 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_indexed_rope_bf16_capture(
+        &mut self,
+        input: &DeviceBufferHandle,
+        cos: &DeviceBufferHandle,
+        sin: &DeviceBufferHandle,
+        positions: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        host_positions_mirror: &[u32],
+        active_row_count: u64,
+        head_count: u64,
+        head_size: u64,
+        rotary_dimension: u64,
+        table_position_count: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 indexed RoPE capture";
+        let host_positions_mirror_len =
+            u64::try_from(host_positions_mirror.len()).map_err(|_| {
+                CudaError::out_of_range(
+                    OPERATION,
+                    "host positions mirror length does not fit the native U64 ABI",
+                )
+            })?;
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner retains this stream and all five
+        // fixed device allocations through the complete capture/graph/exec
+        // lifecycle. The temporary host mirror is borrowed only for native
+        // begin validation and cannot be retained by the native graph owner.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_indexed_rope_bf16(
+                self.as_ptr(),
+                input.as_ptr(),
+                cos.as_ptr(),
+                sin.as_ptr(),
+                positions.as_ptr(),
+                output.as_ptr(),
+                host_positions_mirror.as_ptr(),
+                host_positions_mirror_len,
+                active_row_count,
+                head_count,
+                head_size,
+                rotary_dimension,
+                table_position_count,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 indexed RoPE capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 indexed RoPE capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -3719,6 +3851,30 @@ impl GraphCaptureHandle {
         // closed or known-aborted.
         let status = unsafe {
             riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_indexed_rope_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph BF16 indexed RoPE";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner keeps the captured stream and all
+        // five fixed, distinct device allocations alive and inaccessible to
+        // other safe operations while this capture is active.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
                 pointer.as_ptr(),
                 &mut graph_error,
                 &mut error,

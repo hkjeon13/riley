@@ -205,6 +205,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)9)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H \
   ((RileyCudaGraphCaptureOperationKind)10)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)11)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1469,6 +1471,47 @@ RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
 // succeeded; any partial-node failure leaves the capture terminal and
 // abort-only.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-17 capture containing exactly one fixed-address BF16
+// row-indexed non-interleaved Llama RoPE node. `input` and `output` are BF16
+// `[active_row_count, head_count, head_size]`; `cos` and `sin` are F32
+// `[table_position_count, rotary_dimension / 2]`; and `positions` is U32
+// `[active_row_count]`. All five live device allocations must be pairwise
+// distinct, share the stream context, and remain fixed for the graph lifetime.
+// Every dimension is nonzero; `rotary_dimension` is even and no larger than
+// `head_size`. `positions_mirror` is a temporary host-side validation witness:
+// it must have exactly `active_row_count` entries and every entry must be less
+// than `table_position_count`; native does not retain it or introduce H2D
+// staging. The captured kernel preserves eager indexed-RoPE's BF16
+// storage-rounding, non-rotary bit-copy, and raw device-position OOB -> NaN
+// rotary-row behavior. This narrow contract admits no spans, offsets,
+// in-place aliasing, fresh replay inputs, node updates, H2D/D2H, runtime
+// wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* cos,
+    RileyCudaDeviceBuffer* sin,
+    RileyCudaDeviceBuffer* positions,
+    RileyCudaDeviceBuffer* output,
+    const uint32_t* positions_mirror,
+    uint64_t positions_mirror_len,
+    uint64_t active_row_count,
+    uint64_t head_count,
+    uint64_t head_size,
+    uint64_t rotary_dimension,
+    uint64_t table_position_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole fixed-address BF16 indexed-RoPE node for a capture created
+// by riley_cuda_graph_capture_begin_indexed_rope_bf16. The five allocations
+// and exact geometry remain immutable for the graph lifetime. A failed CUDA
+// node launch leaves the capture terminal and abort-only.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

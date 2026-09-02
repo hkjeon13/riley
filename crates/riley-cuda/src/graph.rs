@@ -162,6 +162,13 @@ pub enum CudaGraphCaptureOperation {
     /// It does not validate token/status records, commit scheduler state, or
     /// establish a C07 completion boundary.
     Bf16RowGatherArgmaxD2H = 10,
+    /// One fixed-address, out-of-place BF16 indexed RoPE kernel.
+    ///
+    /// This retains only the fixed input, cosine/sine tables, device
+    /// positions, and output allocations. It does not include H2D/D2H,
+    /// final normalization, C07 executor integration, or full decode
+    /// execution authority.
+    IndexedRopeBf16 = 11,
 }
 
 impl CudaGraphCaptureOperation {
@@ -6949,6 +6956,623 @@ fn validate_graph_bf16_row_gather_argmax_d2h_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and five distinct fixed device buffers recovered from a
+/// known BF16 indexed-RoPE graph lifecycle transition.
+///
+/// The host position mirror is validation-only and is never retained. The
+/// input, cosine table, sine table, device positions, and output stay fixed
+/// and inaccessible while capture, graph, or exec may retain their addresses.
+pub struct OwnedGraphIndexedRopeBf16Resources {
+    stream: CudaStream,
+    input: CudaDeviceBuffer,
+    cos: CudaDeviceBuffer,
+    sin: CudaDeviceBuffer,
+    positions: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+}
+
+impl OwnedGraphIndexedRopeBf16Resources {
+    fn new(
+        stream: CudaStream,
+        input: CudaDeviceBuffer,
+        cos: CudaDeviceBuffer,
+        sin: CudaDeviceBuffer,
+        positions: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            input,
+            cos,
+            sin,
+            positions,
+            output,
+        }
+    }
+
+    /// Returns the exact fixed stream and device buffers after known native
+    /// graph-lease release.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            input,
+            cos,
+            sin,
+            positions,
+            output,
+        } = self;
+        (stream, input, cos, sin, positions, output)
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, input, cos, sin, positions, output) = self.into_parts();
+        output.close()?;
+        positions.close()?;
+        sin.close()?;
+        cos.close()?;
+        input.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning an owned fixed-address BF16 indexed-RoPE graph
+/// capture.
+///
+/// Only Rust-side preflight failures recover the untouched resource sextet.
+/// Once native begin is attempted, ambiguous CUDA state retains every raw
+/// address fail-closed.
+#[must_use]
+pub struct OwnedGraphIndexedRopeBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphIndexedRopeBf16Resources>,
+}
+
+impl OwnedGraphIndexedRopeBf16CaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphIndexedRopeBf16Resources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns moved resources only when native capture ownership was never
+    /// entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphIndexedRopeBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphIndexedRopeBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphIndexedRopeBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphIndexedRopeBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 indexed-RoPE capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphIndexedRopeBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address BF16 indexed-RoPE CUDA Graph
+/// capture.
+pub struct OwnedGraphIndexedRopeBf16Capture {
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphIndexedRopeBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphIndexedRopeBf16Capture {
+    /// Captures the one immutable BF16 indexed-RoPE node.
+    pub fn enqueue_indexed_rope_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphIndexedRopeBf16Capture::enqueue_indexed_rope_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 indexed-RoPE capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 indexed-RoPE enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 indexed-RoPE graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_indexed_rope_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed resource sextet into a by-value
+    /// captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedIndexedRopeBf16Graph> {
+        const OPERATION: &str = "OwnedGraphIndexedRopeBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 indexed-RoPE capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 indexed-RoPE enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 indexed-RoPE enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources =
+                take_owned_graph_indexed_rope_bf16_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedIndexedRopeBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_indexed_rope_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphIndexedRopeBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphIndexedRopeBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphIndexedRopeBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 indexed-RoPE CUDA Graph awaiting instantiate
+/// or close.
+pub struct OwnedCapturedIndexedRopeBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphIndexedRopeBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedIndexedRopeBf16Graph {
+    /// Instantiates the graph while retaining its fixed resource sextet by
+    /// value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_indexed_rope_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedIndexedRopeBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphIndexedRopeBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedIndexedRopeBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_indexed_rope_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedIndexedRopeBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedIndexedRopeBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 indexed-RoPE CUDA Graph executable.
+///
+/// It replays only capture-time device allocations. Host/device position
+/// staging, result transfer, C07 executor wiring, node updates, fresh inputs,
+/// sampling, scheduling, and eager fallback stay outside this narrow C05
+/// ownership slice.
+pub struct OwnedGraphIndexedRopeBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphIndexedRopeBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphIndexedRopeBf16Exec {
+    /// Replays the fixed-address BF16 indexed-RoPE graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphIndexedRopeBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 indexed-RoPE transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 indexed-RoPE exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphIndexedRopeBf16Launch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its resource sextet only after
+    /// native close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphIndexedRopeBf16Exec::close",
+                "an earlier graph BF16 indexed-RoPE transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_indexed_rope_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphIndexedRopeBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphIndexedRopeBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// Completion owner for one indexed-RoPE graph executable replay.
+pub struct OwnedGraphIndexedRopeBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphIndexedRopeBf16Exec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphIndexedRopeBf16Launch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphIndexedRopeBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphIndexedRopeBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_indexed_rope_bf16_resources(
+    resources: &mut Option<OwnedGraphIndexedRopeBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 indexed-RoPE owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_indexed_rope_bf16_capture_preflight(
+    stream: &CudaStream,
+    input: &CudaDeviceBuffer,
+    cos: &CudaDeviceBuffer,
+    sin: &CudaDeviceBuffer,
+    positions: &CudaDeviceBuffer,
+    output: &CudaDeviceBuffer,
+    positions_host: &[u32],
+    active_row_count: u64,
+    head_count: u64,
+    head_size: u64,
+    rotary_dimension: u64,
+    table_position_count: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    if input.native_handle().same_allocation(cos.native_handle())
+        || input.native_handle().same_allocation(sin.native_handle())
+        || input
+            .native_handle()
+            .same_allocation(positions.native_handle())
+        || input
+            .native_handle()
+            .same_allocation(output.native_handle())
+        || cos.native_handle().same_allocation(sin.native_handle())
+        || cos
+            .native_handle()
+            .same_allocation(positions.native_handle())
+        || cos.native_handle().same_allocation(output.native_handle())
+        || sin
+            .native_handle()
+            .same_allocation(positions.native_handle())
+        || sin.native_handle().same_allocation(output.native_handle())
+        || positions
+            .native_handle()
+            .same_allocation(output.native_handle())
+    {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "input, cos, sin, positions, and output must be distinct fixed device allocations",
+        ));
+    }
+    ensure_same_context(&stream.context, input.context_owner(), operation)?;
+    ensure_same_context(&stream.context, cos.context_owner(), operation)?;
+    ensure_same_context(&stream.context, sin.context_owner(), operation)?;
+    ensure_same_context(&stream.context, positions.context_owner(), operation)?;
+    ensure_same_context(&stream.context, output.context_owner(), operation)?;
+    input.ensure_idle_for_operation(operation)?;
+    cos.ensure_idle_for_operation(operation)?;
+    sin.ensure_idle_for_operation(operation)?;
+    positions.ensure_idle_for_operation(operation)?;
+    output.ensure_idle_for_operation(operation)?;
+    if active_row_count == 0
+        || head_count == 0
+        || head_size == 0
+        || rotary_dimension == 0
+        || table_position_count == 0
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            "active_row_count, head_count, head_size, rotary_dimension, and table_position_count must all be non-zero for a one-node BF16 indexed-RoPE graph",
+        ));
+    }
+    if rotary_dimension > head_size || rotary_dimension % 2 != 0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "rotary_dimension must be even and no larger than head_size",
+        ));
+    }
+    let mirrored_rows = u64::try_from(positions_host.len()).map_err(|_| {
+        CudaError::out_of_range(
+            operation,
+            "positions_host length exceeds the U64 active-row-count range",
+        )
+    })?;
+    if mirrored_rows != active_row_count {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "positions_host length must exactly equal active_row_count",
+        ));
+    }
+    // This uses eager-equivalent host-mirror validation only. It deliberately
+    // makes no claim about the bytes already staged in the fixed device
+    // positions allocation, whose raw OOB behavior remains the eager kernel's
+    // BF16-NaN sentinel contract.
+    crate::batch::validate_indexed_positions(positions_host, table_position_count)?;
+    let tensor_elements = active_row_count
+        .checked_mul(head_count)
+        .and_then(|value| value.checked_mul(head_size))
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "active_row_count * head_count * head_size overflows the BF16 indexed-RoPE tensor element range",
+            )
+        })?;
+    let tensor_bytes = tensor_elements
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(operation, "BF16 indexed-RoPE tensor byte range overflows")
+        })?;
+    let table_elements = table_position_count
+        .checked_mul(rotary_dimension / 2)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "table_position_count * (rotary_dimension / 2) overflows the indexed-RoPE table element range",
+            )
+        })?;
+    let table_bytes = table_elements
+        .checked_mul(std::mem::size_of::<f32>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "indexed-RoPE cosine/sine table byte range overflows",
+            )
+        })?;
+    let positions_bytes = active_row_count
+        .checked_mul(std::mem::size_of::<u32>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "active_row_count overflows the indexed-RoPE U32 positions byte range",
+            )
+        })?;
+    if tensor_bytes > input.byte_len()
+        || table_bytes > cos.byte_len()
+        || table_bytes > sin.byte_len()
+        || positions_bytes > positions.byte_len()
+        || tensor_bytes > output.byte_len()
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "active_row_count={active_row_count}, head_count={head_count}, head_size={head_size}, rotary_dimension={rotary_dimension}, table_position_count={table_position_count} require input/cos/sin/positions/output capacities {tensor_bytes}/{table_bytes}/{table_bytes}/{positions_bytes}/{tensor_bytes} bytes, but capacities are {}/{}/{}/{}/{} bytes",
+                input.byte_len(),
+                cos.byte_len(),
+                sin.byte_len(),
+                positions.byte_len(),
+                output.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -7858,6 +8482,122 @@ impl CudaStream {
                     resources,
                 ),
             )
+        }
+    }
+
+    /// Begins one C05-17 fixed-address BF16 indexed-RoPE graph capture.
+    ///
+    /// The temporary host position mirror provides eager-equivalent geometry
+    /// and bounds validation only; it is not retained and does not attest to
+    /// bytes in the fixed device positions allocation. This graph contains
+    /// exactly one indexed-RoPE node and deliberately excludes H2D/D2H,
+    /// completion receipts, final norm, C07 executor wiring, sampling,
+    /// scheduler commit, node updates, and eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust-side preflight failures return the untouched resource sextet.
+    /// Native-entry errors retain every raw address fail-closed.
+    pub fn begin_owned_graph_indexed_rope_bf16_capture(
+        self,
+        input: CudaDeviceBuffer,
+        cos: CudaDeviceBuffer,
+        sin: CudaDeviceBuffer,
+        positions: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        positions_host: &[u32],
+        head_count: u64,
+        head_size: u64,
+        rotary_dimension: u64,
+        table_position_count: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphIndexedRopeBf16Capture, OwnedGraphIndexedRopeBf16CaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources =
+            OwnedGraphIndexedRopeBf16Resources::new(self, input, cos, sin, positions, output);
+        #[cfg(not(feature = "cuda"))]
+        let resources =
+            OwnedGraphIndexedRopeBf16Resources::new(self, input, cos, sin, positions, output);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_indexed_rope_bf16_capture";
+            let active_row_count = match u64::try_from(positions_host.len()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Err(OwnedGraphIndexedRopeBf16CaptureBeginError::recoverable(
+                        CudaError::out_of_range(
+                            OPERATION,
+                            "positions_host length exceeds the U64 active-row-count range",
+                        ),
+                        resources,
+                    ));
+                }
+            };
+            if let Err(error) = validate_graph_indexed_rope_bf16_capture_preflight(
+                &resources.stream,
+                &resources.input,
+                &resources.cos,
+                &resources.sin,
+                &resources.positions,
+                &resources.output,
+                positions_host,
+                active_row_count,
+                head_count,
+                head_size,
+                rotary_dimension,
+                table_position_count,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphIndexedRopeBf16CaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_indexed_rope_bf16_capture(
+                    resources.input.native_handle(),
+                    resources.cos.native_handle(),
+                    resources.sin.native_handle(),
+                    resources.positions.native_handle(),
+                    resources.output.native_handle(),
+                    positions_host,
+                    active_row_count,
+                    head_count,
+                    head_size,
+                    rotary_dimension,
+                    table_position_count,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphIndexedRopeBf16CaptureBeginError::terminal(error));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphIndexedRopeBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (
+                positions_host,
+                head_count,
+                head_size,
+                rotary_dimension,
+                table_position_count,
+                mode,
+            );
+            Err(OwnedGraphIndexedRopeBf16CaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_indexed_rope_bf16_capture"),
+                resources,
+            ))
         }
     }
 

@@ -4,8 +4,9 @@ use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
     Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
     CudaErrorKind, CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
-    ResidualAddParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
-    gated_multiply, residual_add, rms_norm, row_gather, silu,
+    IndexedRopeParams, ResidualAddParams, RmsNormParams, RowGatherParams, SiluParams,
+    deterministic_bf16_argmax, gated_multiply, indexed_rope, residual_add, rms_norm, row_gather,
+    silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -228,6 +229,33 @@ fn graph_bf16_row_gather_fixture_bytes(input_row_count: usize, column_count: usi
 
 fn u32_words_to_ne_bytes(words: &[u32]) -> Vec<u8> {
     words.iter().flat_map(|word| word.to_ne_bytes()).collect()
+}
+
+fn bf16_words_to_ne_bytes(words: &[u16]) -> Vec<u8> {
+    words.iter().flat_map(|word| word.to_ne_bytes()).collect()
+}
+
+fn f32_words_to_ne_bytes(words: &[f32]) -> Vec<u8> {
+    words.iter().flat_map(|word| word.to_ne_bytes()).collect()
+}
+
+fn graph_indexed_rope_bf16_fixture_bytes() -> Vec<u8> {
+    // Three rows, one head, six BF16 channels. The final two channels are
+    // outside a four-wide rotary dimension and must remain byte-identical.
+    const WORDS: [u16; 18] = [
+        0x3f80, 0x4000, 0x4040, 0x4080, 0x40a0, 0x40c0, // row 0
+        0xbf80, 0xc000, 0xc040, 0xc080, 0xc0a0, 0xc0c0, // row 1
+        0x3e80, 0xbf00, 0x3f40, 0xbf80, 0x4000, 0xc000, // row 2
+    ];
+    bf16_words_to_ne_bytes(&WORDS)
+}
+
+fn graph_indexed_rope_table_bytes() -> (Vec<u8>, Vec<u8>) {
+    // Five positions × two rotary pairs. Tables are F32 by the eager/native
+    // indexed-RoPE ABI, while output comparisons remain exact BF16 bytes.
+    const COS: [f32; 10] = [1.0, 1.0, 0.5, 0.25, 0.0, -0.5, -0.5, -1.0, 0.25, 0.75];
+    const SIN: [f32; 10] = [0.0, 0.0, 0.5, 0.75, 1.0, 0.5, 0.75, 0.0, -0.5, 0.25];
+    (f32_words_to_ne_bytes(&COS), f32_words_to_ne_bytes(&SIN))
 }
 
 #[test]
@@ -2591,6 +2619,502 @@ fn owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-16-owned-bf16-row-gather-argmax-d2h-oob-result-bytes status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_indexed_rope_bf16_graph_replays_byte_exact_against_eager() -> Result<(), Box<dyn Error>> {
+    const ACTIVE_ROW_COUNT: u64 = 3;
+    const HEAD_COUNT: u64 = 1;
+    const HEAD_SIZE: u64 = 6;
+    const ROTARY_DIMENSION: u64 = 4;
+    const TABLE_POSITION_COUNT: u64 = 5;
+    const REPLAYS: usize = 8;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let bf16_byte_width = u64::try_from(std::mem::size_of::<u16>())?;
+    let f32_byte_width = u64::try_from(std::mem::size_of::<f32>())?;
+    let u32_byte_width = u64::try_from(std::mem::size_of::<u32>())?;
+    let tensor_byte_len = ACTIVE_ROW_COUNT
+        .checked_mul(HEAD_COUNT)
+        .and_then(|value| value.checked_mul(HEAD_SIZE))
+        .and_then(|value| value.checked_mul(bf16_byte_width))
+        .ok_or("C05-17 BF16 indexed-RoPE tensor byte length overflow")?;
+    let table_byte_len = TABLE_POSITION_COUNT
+        .checked_mul(ROTARY_DIMENSION / 2)
+        .and_then(|value| value.checked_mul(f32_byte_width))
+        .ok_or("C05-17 indexed-RoPE table byte length overflow")?;
+    let positions_byte_len = ACTIVE_ROW_COUNT
+        .checked_mul(u32_byte_width)
+        .ok_or("C05-17 indexed-RoPE positions byte length overflow")?;
+    let host_input = graph_indexed_rope_bf16_fixture_bytes();
+    let (host_cos, host_sin) = graph_indexed_rope_table_bytes();
+    let eager_positions_host = [4_u32, 0, 2];
+    let graph_positions_host = vec![4_u32, 0, 2];
+    let host_positions = u32_words_to_ne_bytes(&eager_positions_host);
+    let output_sentinel = vec![0xa5; usize::try_from(tensor_byte_len)?];
+    assert_eq!(u64::try_from(host_input.len())?, tensor_byte_len);
+    assert_eq!(u64::try_from(host_cos.len())?, table_byte_len);
+    assert_eq!(u64::try_from(host_sin.len())?, table_byte_len);
+    assert_eq!(u64::try_from(host_positions.len())?, positions_byte_len);
+    let mut staging = context
+        .allocate_pinned_host_buffer(tensor_byte_len.max(table_byte_len).max(positions_byte_len))?;
+
+    let mut eager_input = context.allocate_device_buffer(tensor_byte_len)?;
+    let mut eager_cos = context.allocate_device_buffer(table_byte_len)?;
+    let mut eager_sin = context.allocate_device_buffer(table_byte_len)?;
+    let mut eager_positions = context.allocate_device_buffer(positions_byte_len)?;
+    let mut eager_output = context.allocate_device_buffer(tensor_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    eager_cos.upload_from_slice(0, &host_cos, &mut staging, &mut eager_stream)?;
+    eager_sin.upload_from_slice(0, &host_sin, &mut staging, &mut eager_stream)?;
+    eager_positions.upload_from_slice(0, &host_positions, &mut staging, &mut eager_stream)?;
+    eager_output.upload_from_slice(0, &output_sentinel, &mut staging, &mut eager_stream)?;
+
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(tensor_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_cos = {
+        let mut buffer = context.allocate_device_buffer(table_byte_len)?;
+        buffer.upload_from_slice(0, &host_cos, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_sin = {
+        let mut buffer = context.allocate_device_buffer(table_byte_len)?;
+        buffer.upload_from_slice(0, &host_sin, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_positions = {
+        let mut buffer = context.allocate_device_buffer(positions_byte_len)?;
+        buffer.upload_from_slice(0, &host_positions, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_output = {
+        let mut buffer = context.allocate_device_buffer(tensor_byte_len)?;
+        buffer.upload_from_slice(0, &output_sentinel, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+
+    {
+        let mut eager = IndexedRopeParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, tensor_byte_len)?,
+            cos: CudaBufferSpan::new(&eager_cos, CudaDType::F32, 0, table_byte_len)?,
+            sin: CudaBufferSpan::new(&eager_sin, CudaDType::F32, 0, table_byte_len)?,
+            positions: CudaBufferSpan::new(
+                &eager_positions,
+                CudaDType::U32,
+                0,
+                positions_byte_len,
+            )?,
+            positions_host: &eager_positions_host,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, tensor_byte_len)?,
+            head_count: HEAD_COUNT,
+            head_size: HEAD_SIZE,
+            rotary_dimension: ROTARY_DIMENSION,
+            table_position_count: TABLE_POSITION_COUNT,
+        };
+        indexed_rope(&mut eager, &mut eager_stream)?;
+    }
+    eager_stream.synchronize()?;
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_indexed_rope_bf16_capture(
+        graph_input,
+        graph_cos,
+        graph_sin,
+        graph_positions,
+        graph_output,
+        &graph_positions_host,
+        HEAD_COUNT,
+        HEAD_SIZE,
+        ROTARY_DIMENSION,
+        TABLE_POSITION_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    // The safe host mirror is admission-only; the graph retains no host
+    // pointer and replays the fixed device positions allocation.
+    drop(graph_positions_host);
+    capture.enqueue_indexed_rope_bf16()?;
+    assert_invalid_state(
+        capture.enqueue_indexed_rope_bf16(),
+        "second C05-17 fixed one-node indexed-RoPE graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (
+        capture_stream,
+        mut graph_input,
+        mut graph_cos,
+        mut graph_sin,
+        mut graph_positions,
+        mut graph_output,
+    ) = resources.into_parts();
+    let mut eager_output_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_output_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_cos_after = vec![0_u8; usize::try_from(table_byte_len)?];
+    let mut graph_sin_after = vec![0_u8; usize::try_from(table_byte_len)?];
+    let mut graph_positions_after = vec![0_u8; usize::try_from(positions_byte_len)?];
+    eager_output.download_to_slice(
+        0,
+        &mut eager_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_output.download_to_slice(
+        0,
+        &mut graph_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_cos.download_to_slice(0, &mut graph_cos_after, &mut staging, &mut transfer_stream)?;
+    graph_sin.download_to_slice(0, &mut graph_sin_after, &mut staging, &mut transfer_stream)?;
+    graph_positions.download_to_slice(
+        0,
+        &mut graph_positions_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_output_bytes, eager_output_bytes,
+        "C05-17 fixed graph output must match eager indexed-RoPE bytes exactly"
+    );
+    assert_eq!(graph_input_after, host_input);
+    assert_eq!(graph_cos_after, host_cos);
+    assert_eq!(graph_sin_after, host_sin);
+    assert_eq!(graph_positions_after, host_positions);
+
+    graph_output.close()?;
+    graph_positions.close()?;
+    graph_sin.close()?;
+    graph_cos.close()?;
+    graph_input.close()?;
+    eager_output.close()?;
+    eager_positions.close()?;
+    eager_sin.close()?;
+    eager_cos.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-17-owned-indexed-rope-bf16-fixed-address replays={REPLAYS} rows={ACTIVE_ROW_COUNT} heads={HEAD_COUNT} head_size={HEAD_SIZE} rotary={ROTARY_DIMENSION} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_indexed_rope_bf16_graph_preserves_device_position_oob_nan_bytes()
+-> Result<(), Box<dyn Error>> {
+    const ACTIVE_ROW_COUNT: u64 = 3;
+    const HEAD_COUNT: u64 = 1;
+    const HEAD_SIZE: u64 = 6;
+    const ROTARY_DIMENSION: u64 = 4;
+    const TABLE_POSITION_COUNT: u64 = 5;
+    const BF16_BYTES: u64 = 2;
+    const U32_BYTES: u64 = 4;
+
+    // The mirror is in range and therefore approves capture admission. The
+    // second fixed device position is exactly table_position_count and tests
+    // the eager primitive's raw OOB sentinel path instead.
+    let eager_positions_host = [4_u32, 0, 2];
+    let graph_positions_host = vec![4_u32, 0, 2];
+    let device_positions = [4_u32, TABLE_POSITION_COUNT as u32, 2];
+    let host_input = graph_indexed_rope_bf16_fixture_bytes();
+    let (host_cos, host_sin) = graph_indexed_rope_table_bytes();
+    let host_device_positions = u32_words_to_ne_bytes(&device_positions);
+    let tensor_byte_len = ACTIVE_ROW_COUNT * HEAD_COUNT * HEAD_SIZE * BF16_BYTES;
+    let table_byte_len =
+        TABLE_POSITION_COUNT * (ROTARY_DIMENSION / 2) * u64::try_from(std::mem::size_of::<f32>())?;
+    let positions_byte_len = ACTIVE_ROW_COUNT * U32_BYTES;
+    assert_eq!(u64::try_from(host_input.len())?, tensor_byte_len);
+    assert_eq!(
+        u64::try_from(host_device_positions.len())?,
+        positions_byte_len
+    );
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let mut staging = context
+        .allocate_pinned_host_buffer(tensor_byte_len.max(table_byte_len).max(positions_byte_len))?;
+
+    let mut eager_input = context.allocate_device_buffer(tensor_byte_len)?;
+    let mut eager_cos = context.allocate_device_buffer(table_byte_len)?;
+    let mut eager_sin = context.allocate_device_buffer(table_byte_len)?;
+    let mut eager_positions = context.allocate_device_buffer(positions_byte_len)?;
+    let mut eager_output = context.allocate_device_buffer(tensor_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    eager_cos.upload_from_slice(0, &host_cos, &mut staging, &mut eager_stream)?;
+    eager_sin.upload_from_slice(0, &host_sin, &mut staging, &mut eager_stream)?;
+    eager_positions.upload_from_slice(
+        0,
+        &host_device_positions,
+        &mut staging,
+        &mut eager_stream,
+    )?;
+
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(tensor_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_cos = {
+        let mut buffer = context.allocate_device_buffer(table_byte_len)?;
+        buffer.upload_from_slice(0, &host_cos, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_sin = {
+        let mut buffer = context.allocate_device_buffer(table_byte_len)?;
+        buffer.upload_from_slice(0, &host_sin, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_positions = {
+        let mut buffer = context.allocate_device_buffer(positions_byte_len)?;
+        buffer.upload_from_slice(0, &host_device_positions, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_output = context.allocate_device_buffer(tensor_byte_len)?;
+
+    {
+        let mut eager = IndexedRopeParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, tensor_byte_len)?,
+            cos: CudaBufferSpan::new(&eager_cos, CudaDType::F32, 0, table_byte_len)?,
+            sin: CudaBufferSpan::new(&eager_sin, CudaDType::F32, 0, table_byte_len)?,
+            positions: CudaBufferSpan::new(
+                &eager_positions,
+                CudaDType::U32,
+                0,
+                positions_byte_len,
+            )?,
+            positions_host: &eager_positions_host,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, tensor_byte_len)?,
+            head_count: HEAD_COUNT,
+            head_size: HEAD_SIZE,
+            rotary_dimension: ROTARY_DIMENSION,
+            table_position_count: TABLE_POSITION_COUNT,
+        };
+        indexed_rope(&mut eager, &mut eager_stream)?;
+    }
+    eager_stream.synchronize()?;
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_indexed_rope_bf16_capture(
+        graph_input,
+        graph_cos,
+        graph_sin,
+        graph_positions,
+        graph_output,
+        &graph_positions_host,
+        HEAD_COUNT,
+        HEAD_SIZE,
+        ROTARY_DIMENSION,
+        TABLE_POSITION_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    drop(graph_positions_host);
+    capture.enqueue_indexed_rope_bf16()?;
+    let mut exec = capture.end()?.instantiate()?;
+    exec.launch()?.finish()?;
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_input, graph_cos, graph_sin, graph_positions, mut graph_output) =
+        resources.into_parts();
+    let mut eager_output_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_output_bytes = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(tensor_byte_len)?];
+    eager_output.download_to_slice(
+        0,
+        &mut eager_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_output.download_to_slice(
+        0,
+        &mut graph_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_output_bytes, eager_output_bytes,
+        "C05-17 graph must preserve eager raw device-position OOB bytes"
+    );
+    assert_eq!(graph_input_after, host_input);
+
+    let oob_row = 1_usize;
+    for channel in 0..usize::try_from(ROTARY_DIMENSION)? {
+        let element = oob_row * usize::try_from(HEAD_SIZE)? + channel;
+        let byte_offset = element * usize::try_from(BF16_BYTES)?;
+        let bits = u16::from_ne_bytes([
+            graph_output_bytes[byte_offset],
+            graph_output_bytes[byte_offset + 1],
+        ]);
+        assert!(
+            (bits & 0x7f80) == 0x7f80 && (bits & 0x007f) != 0,
+            "C05-17 device-OOB row rotary channel {channel} must retain the eager BF16 NaN sentinel"
+        );
+    }
+    for channel in usize::try_from(ROTARY_DIMENSION)?..usize::try_from(HEAD_SIZE)? {
+        let element = oob_row * usize::try_from(HEAD_SIZE)? + channel;
+        let byte_offset = element * usize::try_from(BF16_BYTES)?;
+        assert_eq!(
+            &graph_output_bytes[byte_offset..byte_offset + usize::try_from(BF16_BYTES)?],
+            &host_input[byte_offset..byte_offset + usize::try_from(BF16_BYTES)?],
+            "C05-17 device-OOB row non-rotary tail channel {channel} must remain an exact input copy"
+        );
+    }
+
+    graph_output.close()?;
+    graph_positions.close()?;
+    graph_sin.close()?;
+    graph_cos.close()?;
+    graph_input.close()?;
+    eager_output.close()?;
+    eager_positions.close()?;
+    eager_sin.close()?;
+    eager_cos.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-17-owned-indexed-rope-bf16-device-position-oob status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_indexed_rope_bf16_graph_preflight_and_abort_recover_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const ACTIVE_ROW_COUNT: u64 = 3;
+    const HEAD_COUNT: u64 = 1;
+    const HEAD_SIZE: u64 = 6;
+    const ROTARY_DIMENSION: u64 = 4;
+    const TABLE_POSITION_COUNT: u64 = 5;
+    const TENSOR_BYTE_LEN: u64 = ACTIVE_ROW_COUNT * HEAD_COUNT * HEAD_SIZE * 2;
+    const TABLE_BYTE_LEN: u64 = TABLE_POSITION_COUNT * (ROTARY_DIMENSION / 2) * 4;
+    const POSITIONS_BYTE_LEN: u64 = ACTIVE_ROW_COUNT * 4;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let input = context.allocate_device_buffer(TENSOR_BYTE_LEN)?;
+    let cos = context.allocate_device_buffer(TABLE_BYTE_LEN)?;
+    let sin = context.allocate_device_buffer(TABLE_BYTE_LEN)?;
+    let positions = context.allocate_device_buffer(POSITIONS_BYTE_LEN)?;
+    let short_output = context.allocate_device_buffer(TENSOR_BYTE_LEN - 2)?;
+    let allocation_with_resources = context.allocation_stats()?;
+    let valid_positions_host = [0_u32, 1, 2];
+    let oob_positions_host = [0_u32, 1, TABLE_POSITION_COUNT as u32];
+
+    let error = match stream.begin_owned_graph_indexed_rope_bf16_capture(
+        input,
+        cos,
+        sin,
+        positions,
+        short_output,
+        &oob_positions_host,
+        HEAD_COUNT,
+        HEAD_SIZE,
+        ROTARY_DIMENSION,
+        TABLE_POSITION_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("C05-17 out-of-range host position preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("C05-17 host-mirror preflight must return every untouched resource");
+    let (stream, input, cos, sin, positions, short_output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let error = match stream.begin_owned_graph_indexed_rope_bf16_capture(
+        input,
+        cos,
+        sin,
+        positions,
+        short_output,
+        &valid_positions_host,
+        HEAD_COUNT,
+        HEAD_SIZE,
+        ROTARY_DIMENSION,
+        TABLE_POSITION_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("C05-17 short-output preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("C05-17 short-output preflight must return every untouched resource");
+    let (stream, input, cos, sin, positions, short_output) = resources.into_parts();
+    short_output.close()?;
+    let output = context.allocate_device_buffer(TENSOR_BYTE_LEN)?;
+
+    let resources = stream
+        .begin_owned_graph_indexed_rope_bf16_capture(
+            input,
+            cos,
+            sin,
+            positions,
+            output,
+            &valid_positions_host,
+            HEAD_COUNT,
+            HEAD_SIZE,
+            ROTARY_DIMENSION,
+            TABLE_POSITION_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    resources.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-17-owned-indexed-rope-bf16-preflight-abort-recovery status=passed");
     Ok(())
 }
 

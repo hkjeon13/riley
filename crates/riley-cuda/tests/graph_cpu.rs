@@ -2628,9 +2628,9 @@ fn owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_co
         .split("fn validate_graph_bf16_row_gather_argmax_d2h_capture_preflight(")
         .nth(1)
         .expect("C05-16 BF16 row-gather -> argmax -> D2H preflight must remain present")
-        .split("impl CudaStream")
+        .split("pub struct OwnedGraphIndexedRopeBf16Resources")
         .next()
-        .expect("C05-16 preflight must precede stream entry points");
+        .expect("C05-16 preflight must end before the C05-17 resource owner");
     for required in [
         "pinned_results",
         "row_indices_host",
@@ -2965,6 +2965,278 @@ fn fill_capture_is_preallocated_and_replay_is_bound_to_its_exact_stream() {
         assert!(
             internal.contains(required),
             "missing fixed-buffer graph ownership contract: {required}"
+        );
+    }
+}
+
+#[test]
+fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16",
+        "riley_cuda_graph_capture_begin_indexed_rope_bf16",
+        "riley_cuda_graph_capture_enqueue_indexed_rope_bf16",
+        "positions_mirror_len",
+        "active_row_count",
+        "rotary_dimension",
+        "table_position_count",
+    ] {
+        assert!(header.contains(required), "missing C05-17 ABI: {required}");
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_indexed_rope_bf16",
+        "riley_cuda_graph_capture_enqueue_indexed_rope_bf16",
+        "begin_graph_indexed_rope_bf16_capture",
+        "enqueue_indexed_rope_bf16",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-17 Rust FFI boundary: {required}"
+        );
+    }
+    for required in [
+        "graph_capture_begin_indexed_rope_bf16_symbol",
+        "graph_capture_enqueue_indexed_rope_bf16_symbol",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16 == 11",
+    ] {
+        assert!(
+            abi_layout.contains(required),
+            "C05-17 ABI layout/linkage witness is missing: {required}"
+        );
+    }
+    assert!(abi_link.contains("CudaGraphCaptureOperation::IndexedRopeBf16"));
+    assert!(graph.contains("IndexedRopeBf16 = 11"));
+    for required in [
+        "kIndexedRopeBf16 = 11",
+        "indexed_rope_bf16_input",
+        "indexed_rope_bf16_cos",
+        "indexed_rope_bf16_sin",
+        "indexed_rope_bf16_positions",
+        "indexed_rope_bf16_enqueue_count",
+        "indexed_rope_bf16_input_lease_held",
+        "indexed_rope_bf16_positions_lease_held",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-17 native fixed-address ownership state is missing: {required}"
+        );
+    }
+    assert!(
+        !internal.contains("indexed_rope_bf16_positions_mirror"),
+        "the temporary host position mirror must not survive native capture admission"
+    );
+    for required in [
+        "release_capture_indexed_rope_bf16_leases",
+        "release_graph_indexed_rope_bf16_leases",
+        "indexed_rope_bf16_capture_state_is_valid",
+        "indexed_rope_bf16_graph_state_is_valid",
+        "indexed_rope_bf16_exec_state_is_valid",
+    ] {
+        assert!(
+            native.contains(required),
+            "C05-17 native lifecycle is missing: {required}"
+        );
+    }
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_indexed_rope_bf16_impl(")
+        .nth(1)
+        .expect("C05-17 native begin implementation must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("C05-17 native begin implementation must end before exported wrappers");
+    for required in [
+        "positions_mirror == nullptr || positions_mirror_len != active_row_count",
+        "positions_mirror[row]",
+        "try_acquire_exclusive_use(input->active_uses)",
+        "try_acquire_exclusive_use(cos->active_uses)",
+        "try_acquire_exclusive_use(sin->active_uses)",
+        "try_acquire_exclusive_use(positions->active_uses)",
+        "try_acquire_exclusive_use(output->active_uses)",
+        "cudaStreamBeginCapture",
+        "RileyCudaGraphCaptureOperation::kIndexedRopeBf16",
+    ] {
+        assert!(
+            begin.contains(required),
+            "C05-17 native begin must retain exact validation/ownership: {required}"
+        );
+    }
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_indexed_rope_bf16");
+    assert_eq!(
+        enqueue.matches("graph_indexed_rope_bf16<<<").count(),
+        1,
+        "C05-17 capture enqueue must record exactly one indexed-RoPE node"
+    );
+    for required in [
+        "indexed_rope_bf16_enqueue_count != 0",
+        "cudaGetLastError",
+        "kIndexedRopeBf16EnqueueTerminal",
+    ] {
+        assert!(
+            enqueue.contains(required),
+            "C05-17 enqueue lifecycle is missing: {required}"
+        );
+    }
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "cudaMemcpyAsync",
+        "riley_cuda_indexed_rope_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-17 one-node enqueue must stay allocation-free and capture-safe: {forbidden}"
+        );
+    }
+
+    for required in [
+        "pub struct OwnedGraphIndexedRopeBf16Resources",
+        "pub struct OwnedGraphIndexedRopeBf16CaptureBeginError",
+        "pub struct OwnedGraphIndexedRopeBf16Capture",
+        "pub struct OwnedCapturedIndexedRopeBf16Graph",
+        "pub struct OwnedGraphIndexedRopeBf16Exec",
+        "pub struct OwnedGraphIndexedRopeBf16Launch<'exec>",
+        "pub fn begin_owned_graph_indexed_rope_bf16_capture",
+        "pub fn enqueue_indexed_rope_bf16(&mut self)",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-17 safe owner contract is missing: {required}"
+        );
+    }
+    let preflight = graph
+        .split("fn validate_graph_indexed_rope_bf16_capture_preflight(")
+        .nth(1)
+        .expect("C05-17 indexed-RoPE preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-17 preflight must precede stream entry points");
+    for required in [
+        "positions_host",
+        "active_row_count == 0",
+        "rotary_dimension > head_size || rotary_dimension % 2 != 0",
+        "crate::batch::validate_indexed_positions(positions_host, table_position_count)",
+        "positions_host length must exactly equal active_row_count",
+        "tensor_bytes",
+        "table_bytes",
+        "positions_bytes",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-17 preflight must retain exact fixed-shape validation: {required}"
+        );
+    }
+    assert_eq!(
+        preflight.matches("same_allocation").count(),
+        10,
+        "C05-17 must reject every alias across five fixed device allocations"
+    );
+    assert_eq!(
+        preflight.matches("ensure_same_context").count(),
+        5,
+        "C05-17 must bind every fixed device allocation to the capture context"
+    );
+    assert_eq!(
+        preflight.matches("ensure_idle_for_operation").count(),
+        5,
+        "C05-17 must require every fixed device allocation to be idle"
+    );
+
+    let resources = graph
+        .split("impl OwnedGraphIndexedRopeBf16Resources")
+        .nth(1)
+        .expect("C05-17 resource sextet must remain present")
+        .split("/// Error from beginning an owned fixed-address BF16 indexed-RoPE graph")
+        .next()
+        .expect("C05-17 resource sextet must end before its begin error");
+    for (earlier, later) in [
+        ("output.close()?", "positions.close()?"),
+        ("positions.close()?", "sin.close()?"),
+        ("sin.close()?", "cos.close()?"),
+        ("cos.close()?", "input.close()?"),
+        ("input.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-17 resource close order");
+    }
+    assert!(
+        !resources.contains("positions_host"),
+        "the C05-17 temporary host position mirror must not be retained by resources"
+    );
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_indexed_rope_bf16_capture")
+        .nth(1)
+        .expect("owned C05-17 graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned C05-17 capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_indexed_rope_bf16_capture_preflight",
+        "begin_graph_indexed_rope_bf16_capture",
+        "C05-17 Rust preflight",
+    );
+    assert!(
+        owned_begin.contains("let active_row_count = match u64::try_from(positions_host.len())")
+    );
+    assert!(
+        !owned_begin.contains("active_row_count: u64"),
+        "C05-17 must derive active rows only from the temporary host mirror"
+    );
+
+    for owner in [
+        "pub struct OwnedGraphIndexedRopeBf16Capture {",
+        "pub struct OwnedCapturedIndexedRopeBf16Graph {",
+        "pub struct OwnedGraphIndexedRopeBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphIndexedRopeBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before fixed resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphIndexedRopeBf16Exec")
+        .nth(1)
+        .expect("C05-17 owned exec must remain present")
+        .split("/// Completion owner for one indexed-RoPE graph executable replay")
+        .next()
+        .expect("C05-17 owned exec must end before its completion owner");
+    for forbidden in [
+        "launch_with_input",
+        "launch_with_source",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "GpuGreedy",
+        "CompletionBoundary",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !owned_exec.contains(forbidden),
+            "C05-17 must not expose mutable replay or C07 execution capability: {forbidden}"
         );
     }
 }
