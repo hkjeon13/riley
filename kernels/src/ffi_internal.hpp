@@ -170,6 +170,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kBf16Argmax = 7,
   kBf16RowGather = 8,
   kBf16RowGatherArgmax = 9,
+  kBf16RowGatherArgmaxD2H = 10,
 };
 
 struct RileyCudaGraphCapture {
@@ -242,6 +243,19 @@ struct RileyCudaGraphCapture {
         bf16_row_gather_argmax_input_lease_held(false),
         bf16_row_gather_argmax_indices_lease_held(false),
         bf16_row_gather_argmax_gathered_logits_lease_held(false),
+        bf16_row_gather_argmax_d2h_input(nullptr),
+        bf16_row_gather_argmax_d2h_indices(nullptr),
+        bf16_row_gather_argmax_d2h_gathered_logits(nullptr),
+        bf16_row_gather_argmax_d2h_pinned_results(nullptr),
+        bf16_row_gather_argmax_d2h_input_row_count(0),
+        bf16_row_gather_argmax_d2h_output_row_count(0),
+        bf16_row_gather_argmax_d2h_vocabulary_size(0),
+        bf16_row_gather_argmax_d2h_result_byte_len(0),
+        bf16_row_gather_argmax_d2h_enqueue_count(0),
+        bf16_row_gather_argmax_d2h_input_lease_held(false),
+        bf16_row_gather_argmax_d2h_indices_lease_held(false),
+        bf16_row_gather_argmax_d2h_gathered_logits_lease_held(false),
+        bf16_row_gather_argmax_d2h_pinned_results_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -272,6 +286,8 @@ struct RileyCudaGraphCapture {
   // BF16 row gather keeps input and U32 indices while fill_buffer is output;
   // C05-15 keeps input, U32 indices, and gathered BF16 logits while
   // fill_buffer is deterministic argmax results.
+  // C05-16 retains the same four device allocations plus an exact pinned
+  // result destination for its captured D2H node.
   RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
@@ -328,6 +344,19 @@ struct RileyCudaGraphCapture {
   bool bf16_row_gather_argmax_input_lease_held;
   bool bf16_row_gather_argmax_indices_lease_held;
   bool bf16_row_gather_argmax_gathered_logits_lease_held;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_indices;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_gathered_logits;
+  RileyCudaPinnedHostBuffer* bf16_row_gather_argmax_d2h_pinned_results;
+  uint64_t bf16_row_gather_argmax_d2h_input_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_output_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
+  uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  uint32_t bf16_row_gather_argmax_d2h_enqueue_count;
+  bool bf16_row_gather_argmax_d2h_input_lease_held;
+  bool bf16_row_gather_argmax_d2h_indices_lease_held;
+  bool bf16_row_gather_argmax_d2h_gathered_logits_lease_held;
+  bool bf16_row_gather_argmax_d2h_pinned_results_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -412,7 +441,15 @@ struct RileyCudaGraph {
                  RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_gathered_logits = nullptr,
                  uint64_t captured_bf16_row_gather_argmax_input_row_count = 0,
                  uint64_t captured_bf16_row_gather_argmax_output_row_count = 0,
-                 uint64_t captured_bf16_row_gather_argmax_vocabulary_size = 0) noexcept
+                 uint64_t captured_bf16_row_gather_argmax_vocabulary_size = 0,
+                 RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_input = nullptr,
+                 RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_indices = nullptr,
+                 RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_gathered_logits = nullptr,
+                 RileyCudaPinnedHostBuffer* captured_bf16_row_gather_argmax_d2h_pinned_results = nullptr,
+                 uint64_t captured_bf16_row_gather_argmax_d2h_input_row_count = 0,
+                 uint64_t captured_bf16_row_gather_argmax_d2h_output_row_count = 0,
+                 uint64_t captured_bf16_row_gather_argmax_d2h_vocabulary_size = 0,
+                 uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -452,6 +489,22 @@ struct RileyCudaGraph {
             captured_bf16_row_gather_argmax_output_row_count),
         bf16_row_gather_argmax_vocabulary_size(
             captured_bf16_row_gather_argmax_vocabulary_size),
+        bf16_row_gather_argmax_d2h_input(
+            captured_bf16_row_gather_argmax_d2h_input),
+        bf16_row_gather_argmax_d2h_indices(
+            captured_bf16_row_gather_argmax_d2h_indices),
+        bf16_row_gather_argmax_d2h_gathered_logits(
+            captured_bf16_row_gather_argmax_d2h_gathered_logits),
+        bf16_row_gather_argmax_d2h_pinned_results(
+            captured_bf16_row_gather_argmax_d2h_pinned_results),
+        bf16_row_gather_argmax_d2h_input_row_count(
+            captured_bf16_row_gather_argmax_d2h_input_row_count),
+        bf16_row_gather_argmax_d2h_output_row_count(
+            captured_bf16_row_gather_argmax_d2h_output_row_count),
+        bf16_row_gather_argmax_d2h_vocabulary_size(
+            captured_bf16_row_gather_argmax_d2h_vocabulary_size),
+        bf16_row_gather_argmax_d2h_result_byte_len(
+            captured_bf16_row_gather_argmax_d2h_result_byte_len),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -489,6 +542,14 @@ struct RileyCudaGraph {
   uint64_t bf16_row_gather_argmax_input_row_count;
   uint64_t bf16_row_gather_argmax_output_row_count;
   uint64_t bf16_row_gather_argmax_vocabulary_size;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_indices;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_gathered_logits;
+  RileyCudaPinnedHostBuffer* bf16_row_gather_argmax_d2h_pinned_results;
+  uint64_t bf16_row_gather_argmax_d2h_input_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_output_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
+  uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -533,7 +594,15 @@ struct RileyCudaGraphExec {
                      RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_gathered_logits = nullptr,
                      uint64_t captured_bf16_row_gather_argmax_input_row_count = 0,
                      uint64_t captured_bf16_row_gather_argmax_output_row_count = 0,
-                     uint64_t captured_bf16_row_gather_argmax_vocabulary_size = 0) noexcept
+                     uint64_t captured_bf16_row_gather_argmax_vocabulary_size = 0,
+                     RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_input = nullptr,
+                     RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_indices = nullptr,
+                     RileyCudaDeviceBuffer* captured_bf16_row_gather_argmax_d2h_gathered_logits = nullptr,
+                     RileyCudaPinnedHostBuffer* captured_bf16_row_gather_argmax_d2h_pinned_results = nullptr,
+                     uint64_t captured_bf16_row_gather_argmax_d2h_input_row_count = 0,
+                     uint64_t captured_bf16_row_gather_argmax_d2h_output_row_count = 0,
+                     uint64_t captured_bf16_row_gather_argmax_d2h_vocabulary_size = 0,
+                     uint64_t captured_bf16_row_gather_argmax_d2h_result_byte_len = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -573,12 +642,29 @@ struct RileyCudaGraphExec {
             captured_bf16_row_gather_argmax_output_row_count),
         bf16_row_gather_argmax_vocabulary_size(
             captured_bf16_row_gather_argmax_vocabulary_size),
+        bf16_row_gather_argmax_d2h_input(
+            captured_bf16_row_gather_argmax_d2h_input),
+        bf16_row_gather_argmax_d2h_indices(
+            captured_bf16_row_gather_argmax_d2h_indices),
+        bf16_row_gather_argmax_d2h_gathered_logits(
+            captured_bf16_row_gather_argmax_d2h_gathered_logits),
+        bf16_row_gather_argmax_d2h_pinned_results(
+            captured_bf16_row_gather_argmax_d2h_pinned_results),
+        bf16_row_gather_argmax_d2h_input_row_count(
+            captured_bf16_row_gather_argmax_d2h_input_row_count),
+        bf16_row_gather_argmax_d2h_output_row_count(
+            captured_bf16_row_gather_argmax_d2h_output_row_count),
+        bf16_row_gather_argmax_d2h_vocabulary_size(
+            captured_bf16_row_gather_argmax_d2h_vocabulary_size),
+        bf16_row_gather_argmax_d2h_result_byte_len(
+            captured_bf16_row_gather_argmax_d2h_result_byte_len),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
         exec(nullptr),
         owns_capture_leases(false),
         launch_in_flight(false),
+        bf16_row_gather_argmax_d2h_completion_visible(false),
         h2d_input_staged(false),
         poisoned(false) {}
 
@@ -615,12 +701,24 @@ struct RileyCudaGraphExec {
   uint64_t bf16_row_gather_argmax_input_row_count;
   uint64_t bf16_row_gather_argmax_output_row_count;
   uint64_t bf16_row_gather_argmax_vocabulary_size;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_indices;
+  RileyCudaDeviceBuffer* bf16_row_gather_argmax_d2h_gathered_logits;
+  RileyCudaPinnedHostBuffer* bf16_row_gather_argmax_d2h_pinned_results;
+  uint64_t bf16_row_gather_argmax_d2h_input_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_output_row_count;
+  uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
+  uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;
   cudaGraphExec_t exec;
   bool owns_capture_leases;
   bool launch_in_flight;
+  // C05-16 exposes raw D2H result bytes only through its exact completion
+  // receipt after a successful launch completion. A later launch clears this
+  // fact before CUDA submission; permanent pinned ownership remains held.
+  bool bf16_row_gather_argmax_d2h_completion_visible;
   // H2D execs require a fresh exact payload stage before every replay. A
   // launch attempt consumes this flag even when CUDA reports a deferred error.
   bool h2d_input_staged;

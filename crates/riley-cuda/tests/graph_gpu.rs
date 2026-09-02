@@ -2058,6 +2058,544 @@ fn owned_bf16_row_gather_argmax_graph_preflight_and_abort_recover_every_resource
 
 #[test]
 #[ignore = "remote GPU"]
+fn owned_bf16_row_gather_argmax_d2h_graph_replays_raw_result_bytes_exactly_against_eager()
+-> Result<(), Box<dyn Error>> {
+    const INPUT_ROW_COUNT: u64 = 13;
+    const OUTPUT_ROW_COUNT: u64 = 7;
+    const VOCABULARY_SIZE: u64 = 257;
+    const REPLAYS: usize = 64;
+
+    let eager_row_indices = vec![12_u32, 0, 7, 3, 10, 1, 5];
+    let graph_row_indices_host = eager_row_indices.clone();
+    assert_eq!(
+        u64::try_from(graph_row_indices_host.len())?,
+        OUTPUT_ROW_COUNT
+    );
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let bf16_byte_width = u64::try_from(std::mem::size_of::<u16>())?;
+    let u32_byte_width = u64::try_from(std::mem::size_of::<u32>())?;
+    let input_byte_len = INPUT_ROW_COUNT
+        .checked_mul(VOCABULARY_SIZE)
+        .and_then(|element_count| element_count.checked_mul(bf16_byte_width))
+        .ok_or("C05-16 BF16 row-gather -> argmax -> D2H input byte length overflow")?;
+    let row_indices_byte_len = OUTPUT_ROW_COUNT
+        .checked_mul(u32_byte_width)
+        .ok_or("C05-16 BF16 row-gather -> argmax -> D2H row-index byte length overflow")?;
+    let gathered_byte_len = OUTPUT_ROW_COUNT
+        .checked_mul(VOCABULARY_SIZE)
+        .and_then(|element_count| element_count.checked_mul(bf16_byte_width))
+        .ok_or("C05-16 BF16 row-gather -> argmax -> D2H gathered byte length overflow")?;
+    let results_byte_len = OUTPUT_ROW_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<
+            riley_cuda::Bf16ArgmaxResult,
+        >())?)
+        .ok_or("C05-16 BF16 row-gather -> argmax -> D2H result byte length overflow")?;
+
+    let selected_logits = graph_bf16_argmax_edge_fixture_bytes();
+    assert_eq!(u64::try_from(selected_logits.len())?, gathered_byte_len);
+    let row_byte_len = usize::try_from(VOCABULARY_SIZE * bf16_byte_width)?;
+    let mut host_input = vec![0xc1_u8; usize::try_from(input_byte_len)?];
+    for (output_row, &input_row) in eager_row_indices.iter().enumerate() {
+        let source_start = output_row * row_byte_len;
+        let source_end = source_start + row_byte_len;
+        let destination_start = usize::try_from(input_row)? * row_byte_len;
+        let destination_end = destination_start + row_byte_len;
+        host_input[destination_start..destination_end]
+            .copy_from_slice(&selected_logits[source_start..source_end]);
+    }
+    let host_row_indices = u32_words_to_ne_bytes(&eager_row_indices);
+    let gathered_sentinel = vec![0xa5; usize::try_from(gathered_byte_len)?];
+    let results_sentinel = vec![0xa5; usize::try_from(results_byte_len)?];
+    let mut staging = context.allocate_pinned_host_buffer(input_byte_len)?;
+
+    let mut eager_input = context.allocate_device_buffer(input_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    let mut eager_row_indices_buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+    eager_row_indices_buffer.upload_from_slice(
+        0,
+        &host_row_indices,
+        &mut staging,
+        &mut eager_stream,
+    )?;
+    let mut eager_gathered = context.allocate_device_buffer(gathered_byte_len)?;
+    eager_gathered.upload_from_slice(0, &gathered_sentinel, &mut staging, &mut eager_stream)?;
+    let mut eager_results = context.allocate_device_buffer(results_byte_len)?;
+    eager_results.upload_from_slice(0, &results_sentinel, &mut staging, &mut eager_stream)?;
+
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(input_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_row_indices = {
+        let mut buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+        buffer.upload_from_slice(0, &host_row_indices, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_gathered = {
+        let mut buffer = context.allocate_device_buffer(gathered_byte_len)?;
+        buffer.upload_from_slice(0, &gathered_sentinel, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_results = {
+        let mut buffer = context.allocate_device_buffer(results_byte_len)?;
+        buffer.upload_from_slice(0, &results_sentinel, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_pinned_results = context.allocate_pinned_host_buffer(results_byte_len)?;
+
+    {
+        let mut eager = RowGatherParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, input_byte_len)?,
+            row_indices: CudaBufferSpan::new(
+                &eager_row_indices_buffer,
+                CudaDType::U32,
+                0,
+                row_indices_byte_len,
+            )?,
+            row_indices_host: &eager_row_indices,
+            output: CudaBufferSpanMut::new(
+                &mut eager_gathered,
+                CudaDType::BF16,
+                0,
+                gathered_byte_len,
+            )?,
+            input_row_count: INPUT_ROW_COUNT,
+            column_count: VOCABULARY_SIZE,
+        };
+        row_gather(&mut eager, &mut eager_stream)?;
+    }
+    {
+        let mut eager = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&eager_gathered, CudaDType::BF16, 0, gathered_byte_len)?,
+            results: CudaBufferSpanMut::new(
+                &mut eager_results,
+                CudaDType::U32,
+                0,
+                results_byte_len,
+            )?,
+            row_count: OUTPUT_ROW_COUNT,
+            vocabulary_size: VOCABULARY_SIZE,
+        };
+        deterministic_bf16_argmax(&mut eager, &mut eager_stream)?;
+    }
+    eager_stream.synchronize()?;
+    let mut eager_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    eager_results.download_to_slice(
+        0,
+        &mut eager_result_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        eager_result_bytes,
+        graph_bf16_argmax_edge_expected_result_bytes(),
+        "C05-16 eager chain must retain deterministic result-record semantics"
+    );
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
+        graph_input,
+        graph_row_indices,
+        graph_gathered,
+        graph_results,
+        graph_pinned_results,
+        &graph_row_indices_host,
+        INPUT_ROW_COUNT,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    // Admission uses this safe mirror only for preflight. It must never be
+    // retained by capture, graph, exec, or the completion-scoped raw receipt.
+    drop(graph_row_indices_host);
+    capture.enqueue_bf16_row_gather_argmax_d2h()?;
+    assert_invalid_state(
+        capture.enqueue_bf16_row_gather_argmax_d2h(),
+        "second C05-16 fixed three-node graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let mut graph_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    for _ in 0..REPLAYS {
+        let mut completion = exec.launch()?.finish()?;
+        let mut short_destination = vec![0_u8; graph_result_bytes.len() - 1];
+        let error = completion
+            .read_result_bytes(&mut short_destination)
+            .expect_err(
+                "a short C05-16 raw result destination must be rejected before native read",
+            );
+        assert_eq!(error.kind(), CudaErrorKind::OutOfRange);
+        completion.read_result_bytes(&mut graph_result_bytes)?;
+        assert_eq!(
+            graph_result_bytes, eager_result_bytes,
+            "each C05-16 graph replay must D2H exact eager result-record bytes"
+        );
+        drop(completion);
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (
+        capture_stream,
+        mut graph_input,
+        mut graph_row_indices,
+        mut graph_gathered,
+        mut graph_results,
+        graph_pinned_results,
+    ) = resources.into_parts();
+    let mut eager_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+    let mut graph_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+    let mut graph_device_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(input_byte_len)?];
+    let mut graph_row_indices_after = vec![0_u8; usize::try_from(row_indices_byte_len)?];
+    eager_gathered.download_to_slice(
+        0,
+        &mut eager_gathered_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_gathered.download_to_slice(
+        0,
+        &mut graph_gathered_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_results.download_to_slice(
+        0,
+        &mut graph_device_result_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_row_indices.download_to_slice(
+        0,
+        &mut graph_row_indices_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_gathered_bytes, eager_gathered_bytes,
+        "C05-16 gathered BF16 device bytes must match the eager first node"
+    );
+    assert_eq!(
+        graph_device_result_bytes, graph_result_bytes,
+        "C05-16 pinned D2H bytes must match the graph's retained result records"
+    );
+    assert_eq!(graph_input_after, host_input);
+    assert_eq!(graph_row_indices_after, host_row_indices);
+
+    graph_pinned_results.close()?;
+    graph_results.close()?;
+    graph_gathered.close()?;
+    graph_row_indices.close()?;
+    graph_input.close()?;
+    eager_results.close()?;
+    eager_gathered.close()?;
+    eager_row_indices_buffer.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-16-owned-bf16-row-gather-argmax-d2h-fixed-address replays={REPLAYS} input_rows={INPUT_ROW_COUNT} output_rows={OUTPUT_ROW_COUNT} vocabulary={VOCABULARY_SIZE} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_row_gather_argmax_d2h_graph_requires_exact_pinned_results_and_recovers_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const INPUT_ROW_COUNT: u64 = 8;
+    const OUTPUT_ROW_COUNT: u64 = 4;
+    const VOCABULARY_SIZE: u64 = 32;
+    const INPUT_BYTE_LEN: u64 = INPUT_ROW_COUNT * VOCABULARY_SIZE * 2;
+    const ROW_INDICES_BYTE_LEN: u64 = OUTPUT_ROW_COUNT * 4;
+    const GATHERED_BYTE_LEN: u64 = OUTPUT_ROW_COUNT * VOCABULARY_SIZE * 2;
+    const RESULTS_BYTE_LEN: u64 = OUTPUT_ROW_COUNT * 8;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let valid_host_mirror = [0_u32, 1, 2, 3];
+
+    let stream = context.create_stream()?;
+    let input = context.allocate_device_buffer(INPUT_BYTE_LEN)?;
+    let row_indices = context.allocate_device_buffer(ROW_INDICES_BYTE_LEN)?;
+    let gathered_logits = context.allocate_device_buffer(GATHERED_BYTE_LEN)?;
+    let results = context.allocate_device_buffer(RESULTS_BYTE_LEN)?;
+    let short_pinned_results = context.allocate_pinned_host_buffer(RESULTS_BYTE_LEN - 1)?;
+    let allocation_with_resources = context.allocation_stats()?;
+    let error = match stream.begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
+        input,
+        row_indices,
+        gathered_logits,
+        results,
+        short_pinned_results,
+        &valid_host_mirror,
+        INPUT_ROW_COUNT,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("short pinned C05-16 result buffer preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("pinned-result preflight must return every untouched C05-16 resource");
+    let (stream, input, row_indices, gathered_logits, results, short_pinned_results) =
+        resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    short_pinned_results.close()?;
+    let exact_pinned_results = context.allocate_pinned_host_buffer(RESULTS_BYTE_LEN)?;
+    let resources = stream
+        .begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
+            input,
+            row_indices,
+            gathered_logits,
+            results,
+            exact_pinned_results,
+            &valid_host_mirror,
+            INPUT_ROW_COUNT,
+            VOCABULARY_SIZE,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    resources.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-16-owned-bf16-row-gather-argmax-d2h-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_bytes()
+-> Result<(), Box<dyn Error>> {
+    const INPUT_ROW_COUNT: u64 = 4;
+    const OUTPUT_ROW_COUNT: u64 = 3;
+    const VOCABULARY_SIZE: u64 = 5;
+    const BF16_BYTES: u64 = 2;
+    const U32_BYTES: u64 = 4;
+
+    // The safe host mirror deliberately remains in range. It proves only
+    // shape/admission; device bytes remain the captured truth, and the middle
+    // device index is deliberately OOB to exercise the raw CUDA primitive's
+    // NaN -> non-finite argmax record behavior through C05-16 D2H.
+    let host_mirror = [2_u32, 3, 0];
+    let device_indices = [2_u32, INPUT_ROW_COUNT as u32, 0];
+    let host_input_bits = [
+        0x3f80_u16, 0x4000, 0x4040, 0x4080, 0x40a0, // row 0: token 4
+        0xbf80, 0xc000, 0xc040, 0xc080, 0xc0a0, // row 1: token 0
+        0x0000, 0x3f80, 0x4000, 0x4040, 0x4080, // row 2: token 4
+        0x3f00, 0x3f80, 0x4000, 0x4040, 0x4080, // row 3: unused
+    ];
+    let host_input: Vec<u8> = host_input_bits
+        .iter()
+        .flat_map(|bits| bits.to_ne_bytes())
+        .collect();
+    let host_device_index_bytes = u32_words_to_ne_bytes(&device_indices);
+    let input_byte_len = INPUT_ROW_COUNT * VOCABULARY_SIZE * BF16_BYTES;
+    let row_indices_byte_len = OUTPUT_ROW_COUNT * U32_BYTES;
+    let gathered_byte_len = OUTPUT_ROW_COUNT * VOCABULARY_SIZE * BF16_BYTES;
+    let results_byte_len =
+        OUTPUT_ROW_COUNT * u64::try_from(std::mem::size_of::<riley_cuda::Bf16ArgmaxResult>())?;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(input_byte_len)?;
+
+    let mut eager_input = context.allocate_device_buffer(input_byte_len)?;
+    let mut eager_indices = context.allocate_device_buffer(row_indices_byte_len)?;
+    let mut eager_gathered = context.allocate_device_buffer(gathered_byte_len)?;
+    let mut eager_results = context.allocate_device_buffer(results_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    eager_indices.upload_from_slice(
+        0,
+        &host_device_index_bytes,
+        &mut staging,
+        &mut eager_stream,
+    )?;
+    {
+        let mut eager = RowGatherParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, input_byte_len)?,
+            row_indices: CudaBufferSpan::new(
+                &eager_indices,
+                CudaDType::U32,
+                0,
+                row_indices_byte_len,
+            )?,
+            row_indices_host: &host_mirror,
+            output: CudaBufferSpanMut::new(
+                &mut eager_gathered,
+                CudaDType::BF16,
+                0,
+                gathered_byte_len,
+            )?,
+            input_row_count: INPUT_ROW_COUNT,
+            column_count: VOCABULARY_SIZE,
+        };
+        row_gather(&mut eager, &mut eager_stream)?;
+    }
+    {
+        let mut eager = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&eager_gathered, CudaDType::BF16, 0, gathered_byte_len)?,
+            results: CudaBufferSpanMut::new(
+                &mut eager_results,
+                CudaDType::U32,
+                0,
+                results_byte_len,
+            )?,
+            row_count: OUTPUT_ROW_COUNT,
+            vocabulary_size: VOCABULARY_SIZE,
+        };
+        deterministic_bf16_argmax(&mut eager, &mut eager_stream)?;
+    }
+    eager_stream.synchronize()?;
+    let mut eager_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    eager_results.download_to_slice(
+        0,
+        &mut eager_result_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(input_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_indices = {
+        let mut buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+        buffer.upload_from_slice(0, &host_device_index_bytes, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_gathered = context.allocate_device_buffer(gathered_byte_len)?;
+    let graph_results = context.allocate_device_buffer(results_byte_len)?;
+    let graph_pinned_results = context.allocate_pinned_host_buffer(results_byte_len)?;
+    let capture = capture_stream.begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
+        graph_input,
+        graph_indices,
+        graph_gathered,
+        graph_results,
+        graph_pinned_results,
+        &host_mirror,
+        INPUT_ROW_COUNT,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    let mut capture = capture;
+    capture.enqueue_bf16_row_gather_argmax_d2h()?;
+    let mut exec = capture.end()?.instantiate()?;
+    let mut graph_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    exec.launch()?
+        .finish()?
+        .read_result_bytes(&mut graph_result_bytes)?;
+    assert_eq!(
+        graph_result_bytes, eager_result_bytes,
+        "C05-16 D2H must preserve raw OOB result bytes from the eager chain"
+    );
+
+    let invalid_result_start = std::mem::size_of::<riley_cuda::Bf16ArgmaxResult>();
+    let invalid_result_end =
+        invalid_result_start + std::mem::size_of::<riley_cuda::Bf16ArgmaxResult>();
+    let invalid_result = &graph_result_bytes[invalid_result_start..invalid_result_end];
+    let invalid_token_id = u32::from_ne_bytes(
+        invalid_result[..std::mem::size_of::<u32>()]
+            .try_into()
+            .expect("one result token field must occupy four bytes"),
+    );
+    let invalid_status = u32::from_ne_bytes(
+        invalid_result[std::mem::size_of::<u32>()..]
+            .try_into()
+            .expect("one result status field must occupy four bytes"),
+    );
+    assert_eq!(invalid_token_id, BF16_ARGMAX_INVALID_TOKEN_ID);
+    assert_eq!(invalid_status, BF16_ARGMAX_STATUS_NON_FINITE);
+
+    let resources = exec.close()?;
+    let (
+        capture_stream,
+        graph_input,
+        graph_indices,
+        mut graph_gathered,
+        graph_results,
+        graph_pinned_results,
+    ) = resources.into_parts();
+    let mut eager_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+    let mut graph_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+    eager_gathered.download_to_slice(
+        0,
+        &mut eager_gathered_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_gathered.download_to_slice(
+        0,
+        &mut graph_gathered_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(graph_gathered_bytes, eager_gathered_bytes);
+    let invalid_row_start = usize::try_from(VOCABULARY_SIZE * BF16_BYTES)?;
+    let invalid_row_end = invalid_row_start + usize::try_from(VOCABULARY_SIZE * BF16_BYTES)?;
+    assert!(
+        graph_gathered_bytes[invalid_row_start..invalid_row_end]
+            .chunks_exact(usize::try_from(BF16_BYTES)?)
+            .all(|bytes| {
+                let bits = u16::from_ne_bytes([bytes[0], bytes[1]]);
+                (bits & 0x7f80) == 0x7f80 && (bits & 0x007f) != 0
+            }),
+        "the OOB graph-gather row must contain BF16 NaNs before D2H result capture"
+    );
+
+    graph_pinned_results.close()?;
+    graph_results.close()?;
+    graph_gathered.close()?;
+    graph_indices.close()?;
+    graph_input.close()?;
+    eager_results.close()?;
+    eager_gathered.close()?;
+    eager_indices.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-16-owned-bf16-row-gather-argmax-d2h-oob-result-bytes status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
 fn owned_fixed_fill_exec_moves_replays_and_returns_resources() -> Result<(), Box<dyn Error>> {
     const ELEMENT_COUNT: u64 = 1_024;
     const REPLAYS: usize = 32;

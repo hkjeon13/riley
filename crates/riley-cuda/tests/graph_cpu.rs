@@ -2350,9 +2350,9 @@ fn owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c
         .split("fn validate_graph_bf16_row_gather_argmax_capture_preflight(")
         .nth(1)
         .expect("C05-15 BF16 row-gather -> argmax preflight must remain present")
-        .split("impl CudaStream")
+        .split("/// A by-value stream, four fixed device allocations, and one exact pinned")
         .next()
-        .expect("C05-15 BF16 row-gather -> argmax preflight must precede stream entry points");
+        .expect("C05-15 BF16 row-gather -> argmax preflight must end before C05-16 owners");
     for required in [
         "row_indices_host",
         "output_row_count == 0",
@@ -2429,9 +2429,9 @@ fn owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c
         .split("pub fn begin_owned_graph_bf16_row_gather_argmax_capture")
         .nth(1)
         .expect("owned BF16 row-gather -> argmax graph capture entry point must remain present")
-        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .split("/// Begins one C05-16 fixed-address BF16 row-gather -> argmax -> pinned")
         .next()
-        .expect("owned C05-15 capture must precede borrowed fill capture");
+        .expect("owned C05-15 capture must end before C05-16 capture");
     assert_precedes(
         owned_begin,
         "validate_graph_bf16_row_gather_argmax_capture_preflight",
@@ -2507,6 +2507,306 @@ fn owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c
         assert!(
             !owned_exec.contains(forbidden),
             "C05-15 must not expose C07 or mutable replay capability: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_contract() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+
+    for required in [
+        "riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h",
+        "riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h",
+        "riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results",
+    ] {
+        assert!(header.contains(required), "missing C05-16 ABI: {required}");
+        assert!(
+            ffi.contains(required),
+            "missing C05-16 Rust FFI: {required}"
+        );
+    }
+    for required in [
+        "graph_capture_begin_bf16_row_gather_argmax_d2h_symbol",
+        "graph_capture_enqueue_bf16_row_gather_argmax_d2h_symbol",
+        "graph_exec_read_bf16_row_gather_argmax_d2h_results_symbol",
+    ] {
+        assert!(
+            abi_layout.contains(required),
+            "C05-16 ABI layout/linkage witness is missing: {required}"
+        );
+    }
+    assert!(graph.contains("Bf16RowGatherArgmaxD2H = 10"));
+    for required in [
+        "kBf16RowGatherArgmaxD2H = 10",
+        "bf16_row_gather_argmax_d2h_pinned_results",
+        "bf16_row_gather_argmax_d2h_result_byte_len",
+        "bf16_row_gather_argmax_d2h_enqueue_count",
+        "bf16_row_gather_argmax_d2h_pinned_results_lease_held",
+        "bf16_row_gather_argmax_d2h_completion_visible",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-16 native fixed-address ownership state is missing: {required}"
+        );
+    }
+    assert!(native.contains("release_capture_bf16_row_gather_argmax_d2h_leases"));
+    assert!(native.contains("release_graph_bf16_row_gather_argmax_d2h_leases"));
+
+    let enqueue = native_export_body(
+        native,
+        "riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h",
+    );
+    for required in [
+        "graph_bf16_row_gather_bf16<<<",
+        "graph_bf16_argmax_bf16<<<",
+        "cudaMemcpyAsync(",
+        "cudaMemcpyDeviceToHost",
+        "bf16_row_gather_argmax_d2h_enqueue_count",
+    ] {
+        assert!(
+            enqueue.contains(required),
+            "C05-16 capture enqueue must retain its fixed three-node chain: {required}"
+        );
+    }
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "riley_cuda_row_gather_execute",
+        "riley_cuda_bf16_argmax_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-16 capture enqueue must stay allocation-free and capture-safe: {forbidden}"
+        );
+    }
+    let read = native_export_body(
+        native,
+        "riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results",
+    );
+    for required in [
+        "bf16_row_gather_argmax_d2h_completion_visible",
+        "destination_len != result_byte_len",
+        "std::memcpy",
+        "true, true, true, false",
+    ] {
+        assert!(
+            read.contains(required),
+            "C05-16 read receipt must remain completion-scoped and lease-preserving: {required}"
+        );
+    }
+    assert!(
+        !read.contains("release_graph_bf16_row_gather_argmax_d2h_leases"),
+        "reading raw result bytes must not release the replayable graph lease"
+    );
+
+    for required in [
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HResources",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HCapture",
+        "pub struct OwnedCapturedBf16RowGatherArgmaxD2HGraph",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HExec",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec>",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HCompletion<'exec>",
+        "pub fn begin_owned_graph_bf16_row_gather_argmax_d2h_capture",
+        "pub fn enqueue_bf16_row_gather_argmax_d2h(&mut self)",
+        "pub fn read_result_bytes(&mut self, destination: &mut [u8])",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-16 safe owner contract is missing: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_bf16_row_gather_argmax_d2h_capture_preflight(")
+        .nth(1)
+        .expect("C05-16 BF16 row-gather -> argmax -> D2H preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-16 preflight must precede stream entry points");
+    for required in [
+        "pinned_results",
+        "row_indices_host",
+        "input_row_count == 0",
+        "output_row_count == 0",
+        "vocabulary_size == 0",
+        "vocabulary_size > u64::from(u32::MAX)",
+        "crate::batch::validate_gather_indices(row_indices_host, input_row_count)",
+        "size_of::<Bf16ArgmaxResult>()",
+        "pinned_results.byte_len() != result_bytes",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-16 preflight must retain six-resource validation: {required}"
+        );
+    }
+    assert_eq!(
+        preflight.matches("same_allocation").count(),
+        6,
+        "C05-16 must reject every device-allocation alias across its four fixed device buffers"
+    );
+    assert_eq!(
+        preflight.matches("ensure_same_context").count(),
+        5,
+        "C05-16 must bind four device allocations and the pinned result allocation to the capture context"
+    );
+    assert_eq!(
+        preflight.matches("ensure_idle_for_operation").count(),
+        5,
+        "C05-16 must require all four device allocations and the pinned result allocation to be idle"
+    );
+
+    let resources = graph
+        .split("impl OwnedGraphBf16RowGatherArgmaxD2HResources")
+        .nth(1)
+        .expect("C05-16 resource sextet must remain present")
+        .split("/// Error from beginning one by-value fixed-address C05-16 graph capture")
+        .next()
+        .expect("C05-16 resource sextet must end before its begin error");
+    for (earlier, later) in [
+        ("pinned_results.close()?", "results.close()?"),
+        ("results.close()?", "gathered_logits.close()?"),
+        ("gathered_logits.close()?", "row_indices.close()?"),
+        ("row_indices.close()?", "input.close()?"),
+        ("input.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-16 resource close order");
+    }
+    assert!(
+        !resources.contains("row_indices_host"),
+        "the temporary host row-index mirror must not survive capture admission"
+    );
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_bf16_row_gather_argmax_d2h_capture")
+        .nth(1)
+        .expect("owned C05-16 graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned C05-16 capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_bf16_row_gather_argmax_d2h_capture_preflight",
+        "begin_graph_bf16_row_gather_argmax_d2h_capture",
+        "C05-16 Rust preflight",
+    );
+    assert!(
+        owned_begin.contains("let output_row_count = match u64::try_from(row_indices_host.len())")
+    );
+    assert!(
+        !owned_begin.contains("output_row_count: u64"),
+        "C05-16 must derive output rows only from the temporary host mirror"
+    );
+    assert!(owned_begin.contains("OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError::recoverable"));
+    assert!(owned_begin.contains("OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError::terminal"));
+
+    for owner in [
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HCapture {",
+        "pub struct OwnedCapturedBf16RowGatherArgmaxD2HGraph {",
+        "pub struct OwnedGraphBf16RowGatherArgmaxD2HExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphBf16RowGatherArgmaxD2HResources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before its captured resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let capture = graph
+        .split("impl OwnedGraphBf16RowGatherArgmaxD2HCapture {")
+        .nth(1)
+        .expect("owned C05-16 capture must remain present")
+        .split("impl Drop for OwnedGraphBf16RowGatherArgmaxD2HCapture")
+        .next()
+        .expect("owned C05-16 capture must end before its drop policy");
+    assert!(capture.contains("self.enqueue_failed = true"));
+    assert!(capture.contains("this partial capture must be aborted"));
+    assert!(
+        capture.contains(
+            "capture end requires the one fixed BF16 row-gather -> argmax -> D2H enqueue"
+        )
+    );
+
+    let launch = graph
+        .split("impl<'exec> OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec>")
+        .nth(1)
+        .expect("C05-16 launch completion owner must remain present")
+        .split("impl Drop for OwnedGraphBf16RowGatherArgmaxD2HLaunch")
+        .next()
+        .expect("C05-16 launch completion owner must end before its drop policy");
+    assert!(
+        launch.contains("CudaResult<OwnedGraphBf16RowGatherArgmaxD2HCompletion<'exec>>"),
+        "C05-16 finish must hand out an explicitly completion-scoped receipt"
+    );
+    let completion = graph
+        .split("impl OwnedGraphBf16RowGatherArgmaxD2HCompletion")
+        .nth(1)
+        .expect("C05-16 completion receipt must remain present")
+        .split("fn take_owned_graph_bf16_row_gather_argmax_d2h_resources")
+        .next()
+        .expect("C05-16 receipt must end before owner-resource recovery");
+    for required in [
+        "destination must have exactly the capture-time result byte length",
+        "pinned_results.byte_len()",
+        "read_bf16_row_gather_argmax_d2h_results(destination)",
+        "if result.is_err()",
+        "self.exec.terminal = true",
+    ] {
+        assert!(
+            completion.contains(required),
+            "C05-16 completion receipt must remain raw, exact-length, and op-specific: {required}"
+        );
+    }
+    let native_read = completion
+        .split("#[cfg(feature = \"cuda\")]")
+        .nth(1)
+        .expect("C05-16 completion receipt must retain its CUDA result-read branch")
+        .split("#[cfg(not(feature = \"cuda\"))]")
+        .next()
+        .expect("C05-16 CUDA result-read branch must end before its unavailable branch");
+    assert_precedes(
+        native_read,
+        "read_bf16_row_gather_argmax_d2h_results(destination)",
+        "if result.is_err()",
+        "C05-16 native result-read must inspect its result before deciding terminality",
+    );
+    assert_precedes(
+        native_read,
+        "if result.is_err()",
+        "self.exec.terminal = true",
+        "C05-16 native result-read failure must terminalize its Rust exec",
+    );
+    for forbidden in [
+        "deterministic_bf16_argmax",
+        "row_gather(",
+        "GpuGreedy",
+        "CompletionBoundary",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !completion.contains(forbidden),
+            "C05-16 raw completion receipt must not perform model/runtime work: {forbidden}"
         );
     }
 }

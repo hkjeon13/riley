@@ -1483,6 +1483,26 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
+        stream: *mut RawStream,
+        input: *mut RawDeviceBuffer,
+        row_indices: *mut RawDeviceBuffer,
+        gathered_logits: *mut RawDeviceBuffer,
+        results: *mut RawDeviceBuffer,
+        pinned_results: *mut RawPinnedHostBuffer,
+        input_row_count: u64,
+        output_row_count: u64,
+        vocabulary_size: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -1512,6 +1532,13 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_graph_launch_complete(
         launch: *mut *mut RawGraphLaunch,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results(
+        exec: *mut RawGraphExec,
+        destination: *mut u8,
+        destination_len: u64,
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -3290,6 +3317,98 @@ impl StreamHandle {
         ))
     }
 
+    pub(super) fn begin_graph_bf16_row_gather_argmax_d2h_capture(
+        &mut self,
+        input: &DeviceBufferHandle,
+        row_indices: &DeviceBufferHandle,
+        gathered_logits: &DeviceBufferHandle,
+        results: &DeviceBufferHandle,
+        pinned_results: &PinnedHostBufferHandle,
+        input_row_count: u64,
+        output_row_count: u64,
+        vocabulary_size: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 row-gather -> argmax -> D2H capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner retains this stream, four distinct
+        // fixed device allocations, and the exact pinned result destination
+        // through the complete capture/graph/exec lifetime.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
+                self.as_ptr(),
+                input.as_ptr(),
+                row_indices.as_ptr(),
+                gathered_logits.as_ptr(),
+                results.as_ptr(),
+                pinned_results.as_ptr(),
+                input_row_count,
+                output_row_count,
+                vocabulary_size,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 row-gather -> argmax -> D2H capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 row-gather -> argmax -> D2H capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -3588,6 +3707,30 @@ impl GraphCaptureHandle {
         status_result(status, OPERATION, &error)
     }
 
+    pub(super) fn enqueue_bf16_row_gather_argmax_d2h(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph BF16 row-gather -> argmax -> D2H";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner retains all four fixed device
+        // allocations and the fixed pinned destination until this graph is
+        // closed or known-aborted.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
     /// Ends an active capture and transfers a fully-known graph owner out of
     /// it. The input pointer is taken before FFI because a native end attempt
     /// is one-shot. Native validation before CUDA entry is allowed to return
@@ -3866,6 +4009,41 @@ impl GraphExecHandle {
         };
         let graph_failure = decode_graph_failure_info(&graph_error)?;
         if !graph_exec_input_stage_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn read_bf16_row_gather_argmax_d2h_results(
+        &mut self,
+        destination: &mut [u8],
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "read completed CUDA Graph BF16 row-gather -> argmax D2H results";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let destination_len = u64::try_from(destination.len()).map_err(|_| {
+            CudaError::out_of_range(
+                OPERATION,
+                "result destination length does not fit the fixed-width native ABI",
+            )
+        })?;
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the op-specific completion receipt exclusively borrows the
+        // exec and keeps its retained pinned result allocation alive. Native
+        // permits this raw CPU copy only after the matching launch completion.
+        let status = unsafe {
+            riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results(
+                pointer.as_ptr(),
+                destination.as_mut_ptr(),
+                destination_len,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_exec_d2h_read_metadata_is_valid(&graph_error, &graph_failure, status) {
             return Err(malformed_graph_metadata(OPERATION));
         }
         status_result(status, OPERATION, &error)
@@ -7059,6 +7237,23 @@ fn graph_launch_complete_metadata_is_valid(
         && matches!(decoded.stage(), Some(CudaGraphStage::Completion))
         && decoded.capture_id().is_some()
         && decoded.exec_id().is_some()
+}
+
+/// A successful C05-16 result read proves a completed graph replay and that
+/// every transient completion/read outcome is known. The true release bit does
+/// not release the executable's permanent pinned-result lease, which remains
+/// held until explicit exec close.
+fn graph_exec_d2h_read_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+    status: i32,
+) -> bool {
+    graph_launch_complete_metadata_is_valid(raw, decoded)
+        && (status != STATUS_SUCCESS
+            || (decoded.submission_started()
+                && decoded.completion_known()
+                && decoded.resource_release_known()
+                && !decoded.poisoned()))
 }
 
 fn graph_close_metadata_is_valid(

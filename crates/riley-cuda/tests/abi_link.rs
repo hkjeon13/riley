@@ -23,6 +23,7 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         CudaGraphCaptureOperation::Bf16Argmax,
         CudaGraphCaptureOperation::Bf16RowGather,
         CudaGraphCaptureOperation::Bf16RowGatherArgmax,
+        CudaGraphCaptureOperation::Bf16RowGatherArgmaxD2H,
     ] {
         assert_eq!(
             operation

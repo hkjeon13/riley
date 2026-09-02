@@ -203,6 +203,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)8)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX \
   ((RileyCudaGraphCaptureOperationKind)9)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H \
+  ((RileyCudaGraphCaptureOperationKind)10)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1429,6 +1431,47 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-16 capture containing exactly three fixed-address nodes in the
+// recorded order: BF16 row gather, deterministic BF16 argmax, then an exact
+// device-result-to-pinned-host D2H transfer. `input` is contiguous BF16
+// `[input_row_count, vocabulary_size]`, `row_indices` is contiguous U32
+// `[output_row_count]`, `gathered_logits` is contiguous BF16
+// `[output_row_count, vocabulary_size]`, `results` is `output_row_count`
+// RileyCudaBf16ArgmaxResult records, and `pinned_results` is an exact-size
+// pinned-host destination for those same records. The four live device
+// allocations must be pairwise distinct; all five allocations share the
+// stream context and remain fixed for the graph lifetime. Every dimension
+// must be nonzero, vocabulary_size is in 1..=UINT32_MAX, and the pinned
+// destination byte length must exactly equal
+// `output_row_count * sizeof(RileyCudaBf16ArgmaxResult)`. Raw device indices
+// outside input_row_count preserve the row-gather BF16 NaN and deterministic
+// argmax non-finite-record behavior. This narrow contract accepts no host
+// mirror, spans, offsets, H2D staging, fresh inputs, node updates, sampling,
+// executor wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results,
+    RileyCudaPinnedHostBuffer* pinned_results,
+    uint64_t input_row_count,
+    uint64_t output_row_count,
+    uint64_t vocabulary_size,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the exact row-gather, argmax, and result D2H node triple for a
+// capture created by riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h.
+// All fixed allocations and geometry remain immutable for the graph lifetime.
+// The triple is considered enqueued only after all three CUDA submissions have
+// succeeded; any partial-node failure leaves the capture terminal and
+// abort-only.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Ends one prepared fixed-operation capture and transfers its context-child,
 // exact stream, device-destination, and (for H2D) pinned-source leases to the
 // returned graph. Once CUDA end has been attempted, *capture is null even if
@@ -1473,6 +1516,20 @@ RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
 // retains the graph exec and its leases fail-closed in that case.
 RileyCudaStatus riley_cuda_graph_launch_complete(
     RileyCudaGraphLaunch** launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Copies the fixed C05-16 D2H result records from the still-leased pinned
+// destination into an exact caller-provided byte slice. This is an
+// operation-specific completion receipt: it is accepted only after a
+// successful riley_cuda_graph_launch_complete for the same exec, rejects an
+// in-flight or stale launch, and neither interprets records nor releases any
+// graph lease. Generic pinned-buffer read/write/close remain unavailable while
+// the graph owns its fixed destination.
+RileyCudaStatus
+riley_cuda_graph_exec_read_bf16_row_gather_argmax_d2h_results(
+    RileyCudaGraphExec* exec,
+    uint8_t* destination,
+    uint64_t destination_len,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // These one-shot closes consume their raw owner once CUDA destruction is
