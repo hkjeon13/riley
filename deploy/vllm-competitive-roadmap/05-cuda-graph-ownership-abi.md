@@ -360,6 +360,47 @@ resource를 되돌렸고 begin 뒤 abort도 bundle close 및 allocation statisti
 lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을 입증하지
 않는다.
 
+### C05-19 — fixed-address BF16 grouped D64 ragged paged-attention capture (CUDA; planned)
+
+C05-19는 C05-18 K/V write 직후의 decode attention read만 one-node CUDA Graph로 좁힌다. 정확히는 eager
+`grouped_ragged_paged_attention`의 canonical D64 grouped-head implementation을 graph에 기록한다. capture begin의
+immutable `QH`, `KVH`와 `scale`이 shared-KV CTA 조건을 만족하면 그 resolved CTA kernel 하나를, 그렇지 않으면
+generic grouped-head kernel 하나를 기록하며, instantiated graph는 그 begin-time topology만 재생한다. legacy one-warp
+attention, Fixed37 two-pass attention, K/V write, projection, metadata H2D와 full layer loop는 범위 밖이다.
+
+capture begin은 같은 primary context의 stream과 아홉 **서로 다른** fixed device allocation을 by-value로 받는다:
+BF16 query `[T,QH,64]`, BF16 key/value pool 각각 `[P,KVH,16,64]`, BF16 output `[M,QH,64]`, U32
+sequence-block offsets `[S+1]`, U32 block IDs `[B]`, U16 valid tokens `[B]`, U32 row sequence slots `[T]`, U32
+row positions `[T]`이다. `S`, `B`, `T`, `P`, `QH`, `KVH`, `M`은 nonzero이고 `QH % KVH == 0`, `M >= T`,
+scale은 finite positive, packed format v1/block size 16, D=64을 고정한다. 모든 element/byte product, nine-way
+nonalias, span capacity, same context와 idle lease는 CUDA capture 전에 checked arithmetic으로 검사한다.
+
+safe begin은 existing `PackedBatchHostV1`의 canonical CSR/physical-block/row address validation을 일회성
+admission witness로만 사용한다. host slices는 begin 뒤 owner에 보관하지 않으며, graph가 replay 동안 raw device
+metadata가 그 host witness와 같은 bytes라고 주장하지 않는다. raw device metadata가 bounds-invalid row나 address를
+만들면 graph node는 eager grouped attention과 같은 BF16 non-finite/NaN output semantics를 정확히 보존해야 한다;
+inactive `[T,M)` output tail은 eager와 같이 zero다.
+
+enqueue는 allocation, synchronize, node update, H2D/D2H 또는 host report 없이 capture stream에 resolved grouped
+attention kernel을 정확히 한 번 기록한다. native capture/graph/exec과 safe owner는 stream 및 아홉 allocation의
+exclusive-use lease를 capture → graph → exec → launch completion → close까지 보유한다. enqueue 또는 context
+restoration이 불명확해진 경우 re-enqueue/end/instantiate는 CUDA 호출 전에 거부하고 one-shot abort만 허용한다.
+abort/end-capture/destroy/context restoration과 모든 lease release가 known일 때만 resource bundle을 회복하며, 그 외에는
+owner와 raw addresses를 poisoned-retained로 남긴다.
+
+새 additive capability/operation은 grouped D64 attention 정확한 구현 하나만 나타낸다. 이 `Supported`는 legacy,
+Fixed37, arbitrary attention profile 또는 C07의 일반 `Attention` slot을 자동으로 지원한다고 뜻하지 않는다. 특히 현재
+C07 executor는 attention implementation과 parent KV allocation의 layer span을 별도로 선택하므로, 이 slice는 C06
+dispatch/registry, C07 executor wiring/evidence promotion, layer-offset ownership, sampling, scheduler commit 또는
+성능 승격을 만들지 않는다.
+
+GPU acceptance criteria는 shared-KV competitive fixture(`QH=9`, `KVH=3`)의 multi-sequence, page-16 boundary,
+shuffled physical block IDs, padded output tail에서 eager grouped attention과 BF16 output byte-exact parity, 최소
+64회 sequential replay, second-enqueue rejection, source/key/value/metadata bytes 불변, foreign context·nine-way
+alias·geometry/capacity/busy/host-witness preflight rejection 뒤 untouched-resource recovery, raw bounds-invalid device
+metadata parity, abort/explicit close 뒤 allocation statistics 0을 확인한다. 이 결과는 one-node grouped attention
+lifecycle/parity의 근거일 뿐 full decode graph 또는 end-to-end 성능 향상 근거가 아니다.
+
 ## 2. 범위
 
 ### 포함
