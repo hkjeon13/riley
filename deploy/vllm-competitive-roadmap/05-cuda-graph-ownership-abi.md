@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-18까지 C07 pure-decode의 indexed BF16 RoPE와 multi-row paged `KvWrite` 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17/18도 full decode graph 또는 성능 향상 근거는 아니다.
+**상태:** In progress — C05-19까지 C07 pure-decode의 indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, 이 raw primitive 결과도 full decode graph 또는 성능 향상 근거는 아니다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -360,7 +360,7 @@ resource를 되돌렸고 begin 뒤 abort도 bundle close 및 allocation statisti
 lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을 입증하지
 않는다.
 
-### C05-19 — fixed-address BF16 grouped D64 ragged paged-attention capture (CUDA; planned)
+### C05-19 — fixed-address BF16 grouped D64 ragged paged-attention capture (CUDA; completed)
 
 C05-19는 C05-18 K/V write 직후의 decode attention read만 one-node CUDA Graph로 좁힌다. 정확히는 eager
 `grouped_ragged_paged_attention`의 canonical D64 grouped-head implementation을 graph에 기록한다. capture begin의
@@ -400,6 +400,16 @@ shuffled physical block IDs, padded output tail에서 eager grouped attention과
 alias·geometry/capacity/busy/host-witness preflight rejection 뒤 untouched-resource recovery, raw bounds-invalid device
 metadata parity, abort/explicit close 뒤 allocation statistics 0을 확인한다. 이 결과는 one-node grouped attention
 lifecycle/parity의 근거일 뿐 full decode graph 또는 end-to-end 성능 향상 근거가 아니다.
+
+**완료 검증 (2026-09-02):** 원격 RTX 4090/CUDA 12.8에서 C ABI link, CUDA feature library(53 passed, 3 ignored),
+CPU graph source-contract 29개, C05-19 전용 GPU 회귀 4개, 공유 lifecycle의 C05-18 GPU 회귀 3개, 기존 ignored
+graph GPU 회귀 40개를 통과했다. competitive shared-KV fixture(`QH=9`, `KVH=3`, `T=5`, `M=8`)는 shuffled physical
+block/page-16 경계에서 eager grouped attention의 BF16 output bytes와 정확히 일치하고, query/K/V pool/metadata를
+바꾸지 않은 채 64회 replay와 padded zero tail을 확인했다. 별도 group-one fixture는 generic grouped-head fallback도
+eager와 byte-exact함을 확인했으며, valid host witness 아래 raw device row slot을 범위 밖으로 바꾼 경우에는 eager와
+동일한 BF16-NaN row bytes를 보존했다. short output preflight와 begin 뒤 abort도 모든 resource 및 allocation statistics
+0으로 회복했다. 이는 one-node grouped attention lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode
+graph 또는 end-to-end 성능 향상을 입증하지 않는다.
 
 ## 2. 범위
 
