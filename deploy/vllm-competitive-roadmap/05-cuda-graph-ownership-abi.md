@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-17까지 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 포함한 fixed-address CUDA Graph lifecycle/parity를 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17도 full decode graph 또는 성능 향상 근거는 아니다.
+**상태:** In progress — C05-17까지 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 포함한 fixed-address CUDA Graph lifecycle/parity를 닫았다. 다음 C05-18은 C07의 multi-row paged `KvWrite`와 정확히 맞는 ragged BF16 K/V scatter 한 kernel을 독립 fixed-address graph로 좁힌다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17/18도 full decode graph 또는 성능 향상 근거는 아니다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -307,6 +307,48 @@ byte-exact하고, input/cos/sin/device-position bytes가 그대로인 채 64회 
 보존했다. out-of-range host mirror·short output preflight와 begin 뒤 abort recovery는 resource bundle 및
 allocation statistics 0을 확인했다. 이는 one-node RoPE lifecycle/parity의 실제 근거일 뿐 full decode,
 C07 executor integration 또는 end-to-end 성능 향상을 입증하지 않는다.
+
+### C05-18 — fixed-address BF16 ragged paged-KV write capture (CUDA; planned)
+
+C05-18은 C07 V1 pure-decode의 multi-row paged K/V write primitive만 one-node CUDA Graph로 좁힌다. 이것은
+기존 eager `ragged_paged_kv_cache_write`의 BF16 source-to-pool bit preservation과 packed device metadata의
+raw malformed-row no-op semantics를 보존하는 ownership/parity slice이며, K/V projection, metadata H2D,
+attention, scheduler logical commit, full layer loop 또는 executor integration을 capture하지 않는다.
+
+capture begin은 같은 primary context의 stream과 아홉 **서로 다른** fixed device allocation을 by-value로 받는다:
+BF16 key source와 value source `[active_row_count, KVH, D]`, BF16 key pool과 value pool
+`[physical_block_count, KVH, 16, D]`, 그리고 U32 sequence-block offsets `[sequence_count + 1]`, U32
+block IDs `[block_count]`, U16 valid tokens `[block_count]`, U32 row sequence slots
+`[active_row_count]`, U32 row positions `[active_row_count]`이다. `sequence_count`, `block_count`,
+`active_row_count`, `physical_block_count`, `KVH`, `D`는 nonzero이며 packed format version 1과 block size 16,
+checked source/pool/metadata byte capacities, nine-way nonalias, same context와 idle lease를 CUDA capture 전에
+검사한다.
+
+safe begin은 existing `PackedBatchHostV1`/`PackedBatchV1`의 validated host mirror를 admission evidence로만
+사용한다. CSR monotonicity·nonempty sequence range·canonical valid-token count·physical ID uniqueness/range·row
+slot/position·duplicate logical row address 검증 뒤 host slices는 graph owner에 보관하지 않으며, capture 뒤
+device metadata bytes가 host mirror와 계속 일치한다고 주장하지 않는다.
+
+enqueue는 allocation, synchronize, node update, H2D/D2H 또는 host report 없이 같은 capture stream에
+fixed-address ragged paged-KV write kernel을 정확히 한 번 기록한다. native capture/graph/exec과 safe owner는
+stream 및 아홉 allocation의 exclusive-use lease를 capture → graph → exec → launch completion → close까지
+유지한다. raw device metadata가 malformed이면 kernel의 existing bounds guard가 해당 row의 K/V pool write만
+no-op으로 남겨 eager와 같은 의미를 보존한다. enqueue 또는 context restoration이 불명확해지면 re-enqueue,
+end/instantiate는 CUDA 호출 전에 거부하고 one-shot abort만 허용한다.
+
+새 additive capability/operation은 `RaggedPagedKvCacheWriteBf16 = 12`이다. capability 12의 `Supported`는
+contiguous K/V write, generic scatter, RoPE, H2D 또는 다른 C05 operation을 조합해 대체할 수 없다. 이 slice는
+metadata upload/update, attention read, projection, scheduler commit, C06 dispatch/registry, C07 executor
+wiring/identity/metrics, node update, fresh allocations, sampling 또는 performance promotion을 만들지 않는다.
+후속 C07 evidence adapter만 이 정확한 operation을 `KvWrite` slot에 매핑할 수 있고, inventory aggregate는
+나머지 operation이 명시적으로 review되기 전까지 `Unknown`이다.
+
+GPU acceptance criteria는 multi-sequence·page-16 boundary·shuffled physical block ID valid host mirror에서 eager
+pool BF16 bytes와 exact parity, source/metadata bytes 불변, 최소 64회 sequential replay, second-enqueue rejection,
+foreign context·nine-way alias·geometry/capacity·busy·host-mirror preflight rejection 뒤 untouched-resource
+recovery, abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw device metadata의
+invalid row가 eager와 같이 그 row의 key/value pool write만 no-op으로 남기는지를 확인한다. 이 결과는 one-node
+`KvWrite` lifecycle/parity의 근거일 뿐 full decode graph 또는 성능 향상 근거는 아니다.
 
 ## 2. 범위
 
