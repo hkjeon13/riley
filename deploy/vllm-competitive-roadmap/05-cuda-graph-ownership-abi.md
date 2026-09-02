@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. 다음 C05-21은 projection/LM-head의 미검증 클래스인 canonical cuBLASLt GEMM 한 plan의 capture feasibility와 lifecycle을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
+**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-21 canonical cuBLASLt GEMM graph는 원격 RTX 4090/CUDA 12.8에서 fixed-address capture/lifecycle/byte-parity acceptance를 통과했다. 다음 C05-22는 RMSNorm→GEMM 두-node dependency chain을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -461,7 +461,7 @@ preflight와 begin 뒤 abort는 resource bundle 및 allocation statistics 0으�
 primitive lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을
 입증하지 않는다.
 
-### C05-21 — fixed-address canonical cuBLASLt GEMM graph feasibility (CUDA; planned)
+### C05-21 — fixed-address canonical cuBLASLt GEMM graph feasibility (CUDA; completed)
 
 C05-21은 projection/LM-head에 필요한 cuBLASLt GEMM class를 전체 executor에 연결하지 않고, cold-prepared
 `RileyCudaGemmPlan` 하나와 정확히 같은 BF16 input, BF16 weight, BF16 output, U8 workspace allocation만 쓰는
@@ -494,6 +494,38 @@ statistics 0이다. C05-20 embedding graph와 달리 현재 C07 executor는 borr
 shared command-batch completion을 사용하므로 이 feasibility 결과만으로 C07 `Embedding`, `LayerProjectionGemm` 또는
 `LmHead` capability를 `Supported`로 올리지 않는다. 이 결과는 one canonical GEMM lifecycle/parity의 근거일 뿐 full
 decode graph 또는 end-to-end 성능 향상 근거가 아니다.
+
+**구현/로컬 검증 (2026-09-02):** operation kind `15`와 additive begin/enqueue C ABI, opaque prepared-plan
+exclusive-use lease, four fixed whole-allocation owner, strict `flags==0`/no-split-K deterministic plan preflight,
+capture-time `cublasLtMatmul`, abort/end/instantiate/launch/graph-close/exec-close transfer를 구현했다. 로컬에서는
+`cargo fmt --all -- --check`, C11 ABI syntax, C05 graph source-contract 31개, `riley-cuda` library 76개,
+새 C05-21 GPU test binary compile 및 `cargo check`를 통과했다. 이 증거는 CUDA C++ compilation이나 real GPU graph
+acceptance를 대체하지 않는다.
+
+**완료 검증 (2026-09-02):** 원격 RTX 4090/CUDA 12.8에서 C ABI link 1개, CUDA feature library 53개(3 ignored),
+CPU graph source-contract 31개, C05-18/19/20 전용 GPU 회귀 3/4/3개, 기존 graph GPU suite 40개와
+`graph_c05_21_gpu` 2개를 통과했다. cold-prepared canonical BF16 `M=1, N=576, K=576` plan은 capture-only
+`cublasLtMatmul` 한 node를 end/instantiate한 뒤 eager baseline과 output bytes가 정확히 일치했고, input/weight
+bytes를 바꾸지 않은 채 64회 replay와 second-enqueue rejection을 확인했다. replay 중 caller allocation accounting은
+변하지 않았고 explicit close 뒤 allocation statistics는 baseline 0으로 회복했다. input/weight/output/workspace 각각의
+wrong-exact-size preflight 및 begin 뒤 abort도 untouched resource bundle과 allocation baseline을 회복했다. 이는 one
+canonical GEMM lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을
+입증하지 않는다.
+
+### C05-22 — fixed-address canonical BF16 RMSNorm → cuBLASLt GEMM graph (CUDA; planned)
+
+C05-22는 C05-21 GPU acceptance와 기존 canonical BF16 RMSNorm graph parity를 전제로, 하나의 fixed-address
+RMSNorm output allocation을 canonical strict-no-split cuBLASLt GEMM input으로 의도적으로 공유하는 two-node graph만
+다룬다. RMSNorm의 input/weight, GEMM weight/output/workspace 및 plan은 모두 distinct whole allocation이어야 하며,
+그 한 intermediate dependency 외 alias, span/offset, dynamic shape, H2D/D2H, command batch, node update, C07 executor
+wiring, full decode graph와 성능 승격은 포함하지 않는다.
+
+GPU acceptance는 eager two-step과 intermediate/final BF16 byte parity, source input 및 두 weight bytes 불변, 64회
+replay, second-enqueue rejection, short-buffer/foreign-context/forbidden-alias preflight recovery, abort/explicit close 뒤
+allocation statistics 0이다. capture가 해당 cuBLASLt plan을 거부하면 native status/domain을 보존해
+`not-supported`로 닫고 eager fallback으로 graph support를 주장하지 않는다. 현 C07 decode는 borrowed weight span과
+shared workspace/command-batch completion을 사용하므로 C05-22도 `LayerProjectionGemm`, `LmHead`, `FinalNorm`을
+`Supported`로 올리는 근거가 되지 않는다.
 
 ## 2. 범위
 
