@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-5는 C07 consumer가 static metadata identity를 exact 검증한 뒤에만 complete cache key를 조합하게 했다.
+**상태:** In progress — C06-6는 synthetic C05 fixed-fill owner를 통해 exact C06 logical slot의 remote GPU replay/fallback acceptance와 concurrent immutable-registry selection을 닫았다. C07 model graph, production executor/CLI, hot allocation campaign은 여전히 별도 범위다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -90,6 +90,21 @@ composition error다. helper는 static value를 rebuild하거나 metadata/KV fac
 static identity를 그대로 보존한다. registry lookup, dispatch, metrics, graph owner/handle, CUDA capture/launch,
 allocation 또는 execution work를 하지 않는다. 따라서 complete key도 graph-ready, capture-safe, prepared,
 replayable 또는 performance improvement를 뜻하지 않는다.
+
+### C06-6 — synthetic logical-slot dispatch acceptance (CPU + remote GPU)
+
+C06의 immutable registry가 선택한 logical replay slot은 native graph handle이 아니며 C06 자체가 resource를
+resolve하거나 launch하지 않는다. 따라서 이 slice는 production module이 아닌 test-only synthetic owner table에서만
+one exact full-graph slot을 C05 fixed-fill executable에 연결했다. RTX 4090/CUDA 12.8 acceptance는 matching
+`auto` full selection이 그 exact slot만 resolve하여 64회 replay하고 eager fixed-fill output bytes와 일치함,
+replay 중 retained allocation accounting 불변, stale slot reject, 그리고 close 뒤 baseline 회복을 확인한다.
+signature miss의 `auto`와 `disabled`는 owner를 launch하지 않고 eager만 실행하며, `require` miss는 graph와 eager
+모두 실행하지 않는 것을 확인했다. CPU regression은 같은 immutable two-entry registry를 concurrent workers가
+반복 select할 때 full/piecewise exact slot과 `not-prepared` miss를 섞지 않음을 확인한다.
+
+이 test-only bridge는 C07 decode graph, Llama executor wiring, server configuration, launch-after-mutation recovery,
+or performance promotion evidence가 아니다. C06 production code는 계속 value-only이며 C07 owner가 future native
+resource resolution과 lifecycle을 별도로 증명해야 한다.
 
 ## 2. Execution mode
 

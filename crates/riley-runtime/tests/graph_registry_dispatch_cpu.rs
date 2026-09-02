@@ -1,3 +1,5 @@
+use std::sync::{Arc, Barrier};
+
 use riley_runtime::llama::{
     ExecutionGraphPolicy, ExecutionMode, GraphCaptureSafety, GraphComputeType, GraphDataType,
     GraphDeviceSignature, GraphDispatchError, GraphDispatchRequest, GraphEntryFootprint,
@@ -439,6 +441,110 @@ fn adapter_keeps_prelookup_rejections_and_disabled_policy_outside_registry_selec
         .expect("disabled must ignore all graph facts"),
         GraphFallbackReason::PolicyDisabled,
     );
+}
+
+#[test]
+fn immutable_registry_selection_is_concurrent_and_keeps_exact_slots() {
+    const WORKERS: usize = 8;
+    const SELECTIONS_PER_WORKER: usize = 256;
+
+    let full_signature = signature(
+        GraphWorkloadStage::PureDecode,
+        GraphSamplingBackend::GpuGreedy,
+        1,
+    );
+    let piecewise_signature = signature(
+        GraphWorkloadStage::Mixed,
+        GraphSamplingBackend::GpuGreedy,
+        2,
+    );
+    let missing_signature = signature(
+        GraphWorkloadStage::PureDecode,
+        GraphSamplingBackend::GpuGreedy,
+        9,
+    );
+    let registry = Arc::new(
+        GraphRegistry::<2>::try_new(
+            limits(2, 1, 1),
+            &[
+                entry(
+                    full_signature,
+                    GraphReplayMode::FullGraph,
+                    10,
+                    GraphRegistryEntryState::Prepared,
+                ),
+                entry(
+                    piecewise_signature,
+                    GraphReplayMode::PiecewiseGraph,
+                    11,
+                    GraphRegistryEntryState::Prepared,
+                ),
+            ],
+        )
+        .expect("the immutable two-entry registry must fit its reviewed quotas"),
+    );
+    let start = Arc::new(Barrier::new(WORKERS));
+    let mut workers = Vec::with_capacity(WORKERS);
+
+    for worker in 0..WORKERS {
+        let registry = Arc::clone(&registry);
+        let start = Arc::clone(&start);
+        workers.push(std::thread::spawn(move || {
+            start.wait();
+            for _ in 0..SELECTIONS_PER_WORKER {
+                let (request, signature, expected) = match worker % 3 {
+                    0 => (
+                        request(
+                            ExecutionGraphPolicy::Auto,
+                            GraphWorkloadStage::PureDecode,
+                            GraphSamplingBackend::GpuGreedy,
+                            true,
+                        ),
+                        full_signature,
+                        GraphRegistryDispatchDecision::FullGraph {
+                            replay_slot: GraphReplaySlot::new(10),
+                        },
+                    ),
+                    1 => (
+                        request(
+                            ExecutionGraphPolicy::Auto,
+                            GraphWorkloadStage::Mixed,
+                            GraphSamplingBackend::GpuGreedy,
+                            true,
+                        ),
+                        piecewise_signature,
+                        GraphRegistryDispatchDecision::PiecewiseGraph {
+                            replay_slot: GraphReplaySlot::new(11),
+                        },
+                    ),
+                    _ => (
+                        request(
+                            ExecutionGraphPolicy::Auto,
+                            GraphWorkloadStage::PureDecode,
+                            GraphSamplingBackend::GpuGreedy,
+                            true,
+                        ),
+                        missing_signature,
+                        GraphRegistryDispatchDecision::ExactEager {
+                            reason: GraphFallbackReason::NotPrepared,
+                        },
+                    ),
+                };
+                assert_eq!(
+                    select_registered_execution_graph(request, signature, &registry)
+                        .expect("auto selection must not fail closed"),
+                    expected,
+                    "concurrent immutable dispatch must retain each exact slot and miss reason"
+                );
+            }
+        }));
+    }
+
+    for worker in workers {
+        worker
+            .join()
+            .expect("concurrent immutable registry selection must not panic");
+    }
 }
 
 #[test]
