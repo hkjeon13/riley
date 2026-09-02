@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-16까지 decode output 경계의 fixed-address BF16 row-gather → argmax → exact result D2H three-node graph GPU lifecycle/parity를 닫았다. 이 raw result receipt는 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않는다.
+**상태:** In progress — C05-16까지 decode output 경계의 fixed-address BF16 row-gather → argmax → exact result D2H three-node graph GPU lifecycle/parity를 닫았다. 다음 C05-17은 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 독립 fixed-address graph로 좁힌다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -261,6 +261,44 @@ suite 37개를 통과했다. 정상 valid-permutation은 64회 replay에서 eage
 result-record bytes가 정확히 일치했고, exact pinned-size preflight/abort recovery와 raw device-index OOB의
 NaN·non-finite result bytes도 별도 GPU regression으로 닫았다. 이 결과는 세-node raw result lifecycle/parity의
 근거일 뿐 host token/status validation, scheduler commit, C07 inventory 승격 또는 성능 향상 주장은 아니다.
+
+### C05-17 — fixed-address BF16 indexed-RoPE capture (CUDA; planned)
+
+C05-17은 C07 V1 pure-decode chain의 per-row-position RoPE primitive만 one-node CUDA Graph로 좁힌다. 이것은
+기존 eager `indexed_rope`의 non-interleaved Llama BF16 semantics와 raw device-position OOB의 BF16-NaN
+sentinel을 보존하는 ownership/parity slice이며, embedding, Q/KV projection, attention, KV mutation 또는 full
+layer loop를 capture하지 않는다.
+
+capture begin은 같은 primary context의 stream과 다섯 **서로 다른** fixed device allocation을 by-value로 받는다:
+BF16 input `[active_row_count, head_count, head_size]`, F32 cosine table
+`[table_position_count, rotary_dimension / 2]`, 같은 크기의 F32 sine table, U32 device positions
+`[active_row_count]`, BF16 output이다. `active_row_count`, `head_count`, `head_size`, `rotary_dimension`,
+`table_position_count`는 모두 nonzero이고 `rotary_dimension`은 even이며 `head_size`를 넘지 않는다. 모든
+element/byte product, five-way alias, context와 idle lease를 CUDA capture 전에 checked arithmetic으로 검사한다.
+safe begin은 temporary `positions_host` mirror가 `active_row_count`와 정확히 같은 길이이고 모든 값이
+`table_position_count`보다 작은지만 existing eager validator와 같은 의미로 확인한다. mirror는 native begin
+validation 뒤 보관하거나 graph node에 capture하지 않으며, 이미 staged된 device positions의 byte identity를
+주장하지 않는다.
+
+enqueue는 allocation, synchronize, node update 또는 host report 없이 같은 capture stream에 fixed-address indexed
+BF16 RoPE kernel을 정확히 한 번 기록한다. native capture/graph/exec과 safe owner는 stream 및 다섯 allocation의
+exclusive-use lease를 capture → graph → exec → launch completion → close까지 유지한다. enqueue 또는 context
+restoration이 불명확해진 경우 re-enqueue/end/instantiate는 CUDA 호출 전에 거부하고 one-shot abort만 허용한다.
+abort/end-capture/destroy/context restoration과 모든 lease release가 known일 때만 resource bundle을 회복하며,
+그 외에는 owner와 raw addresses를 poisoned-retained로 남긴다.
+
+새 additive capability/operation은 `IndexedRopeBf16 = 11`이다. capability 11의 `Supported`는 canonical
+RMSNorm, existing generic RoPE, H2D 또는 다른 C05 operation을 조합해 대체할 수 없다. 이 slice는 H2D/D2H,
+completion receipt, final norm, C06 dispatch/registry, C07 executor wiring/identity/metrics, node update, fresh
+inputs, sampling, scheduler commit 또는 performance promotion을 만들지 않는다. 후속 C07 evidence adapter만 이
+정확한 operation을 `Rope` slot에 매핑할 수 있고, inventory aggregate는 나머지 operation이 명시적으로
+review되기 전까지 `Unknown`이다.
+
+GPU acceptance는 valid host mirror와 eager indexed-RoPE의 exact BF16 output bytes, 최소 64회 sequential replay,
+second-enqueue rejection, foreign context·five-way alias·geometry/capacity·busy·host-mirror preflight rejection 뒤
+untouched-resource recovery, abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw
+device-position OOB가 eager와 동일한 BF16-NaN sentinel bytes를 내는지 확인한다. 이 결과는 one-node RoPE
+lifecycle/parity의 근거일 뿐 full decode graph 또는 성능 향상 근거는 아니다.
 
 ## 2. 범위
 
