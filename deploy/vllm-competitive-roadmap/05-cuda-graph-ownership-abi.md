@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-19까지 C07 pure-decode의 indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, 이 raw primitive 결과도 full decode graph 또는 성능 향상 근거는 아니다.
+**상태:** In progress — C05-19까지 C07 pure-decode의 indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. 다음 C05-20은 eager embedding의 검증 결과까지 포함한 BF16 gather chain을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -410,6 +410,46 @@ eager와 byte-exact함을 확인했으며, valid host witness 아래 raw device 
 동일한 BF16-NaN row bytes를 보존했다. short output preflight와 begin 뒤 abort도 모든 resource 및 allocation statistics
 0으로 회복했다. 이는 one-node grouped attention lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode
 graph 또는 end-to-end 성능 향상을 입증하지 않는다.
+
+### C05-20 — fixed-address BF16 embedding validation-status D2H capture (CUDA; planned)
+
+C05-20은 C07 decode 입력의 embedding gather를 독립 five-node CUDA Graph로 좁힌다. 기존 eager
+`embedding`은 stack-backed report 때문에 `reset -> validate token IDs -> gather -> finalize report -> D2H -> synchronize`
+순서를 매번 제출한다. 이 slice는 같은 device-side validation/gather 순서와 fixed pinned-host report destination을 하나의
+graph에 보관한다. projection, token H2D, embedding-table residency 정책, scheduler commit, C06/C07 executor integration,
+full decode graph 및 성능 승격은 포함하지 않는다.
+
+capture begin은 같은 primary context의 다섯 **서로 다른** fixed allocation을 by-value로 받는다: BF16 table
+`[V,H]`, U32 token IDs `[M]`, BF16 output `[M,H]`, 8-byte aligned U8 device error scratch
+`sizeof(RileyCudaEmbeddingErrorReport) == 32`, 그리고 같은 정확한 32-byte record를 담는 pinned-host destination이다.
+`M`, `V`, `H`는 nonzero이고 모든 checked element/byte product, exact scratch/report capacity, dtype, device four-way
+nonalias, same-context 및 idle lease를 CUDA capture 전에 검사한다. 이 graph는 exact BF16 storage path만 admit하며 F32
+embedding 또는 zero-token eager special case를 일반화하지 않는다.
+
+safe begin은 token-ID host mirror를 요구하거나 보관하지 않는다. IDs는 fixed device allocation에서 replay마다 읽히며,
+그래프의 validation node가 raw bytes를 직접 판정한다. 따라서 graph가 시작한 뒤 raw device token ID가 vocabulary 범위
+밖이면 eager와 같이 gather node는 **모든** output write를 억제하고, finalize node는 가장 낮은 invalid position과 그 ID를
+32-byte report에 기록한다. 정상 replay는 `NONE, position=0, id=0` record를 기록한다. completion은 launch finish 뒤에만
+retained pinned report를 canonical layout으로 읽을 수 있으며, malformed record 또는 completion uncertainty는 graph와
+모든 raw address를 fail-closed retained 상태로 남긴다.
+
+enqueue는 allocation, synchronize, node update, H2D, host callback 또는 host report copy 없이 capture stream에 정확히
+다섯 node를 기록한다: error reset kernel, token validation kernel, BF16 gather kernel, report-finalize kernel, pinned D2H.
+native capture/graph/exec과 safe owner는 stream, 네 device allocation과 pinned report allocation의 exclusive-use lease를
+capture -> graph -> exec -> launch completion -> close까지 유지한다. enqueue/context restoration ambiguity는 re-enqueue,
+end, instantiate를 CUDA 호출 전에 거부하고 one-shot abort만 허용한다.
+
+새 additive capture operation은 이 exact BF16 validation-status chain만 의미한다. `Supported`는 F32 embedding, arbitrary
+host result plumbing, C07의 full `Embedding` executor slot, other input profiles 또는 end-to-end graph capture를 자동으로
+지원한다는 뜻이 아니다. C07 evidence promotion은 executor가 이 fixed table/token/output/report ownership과 completion
+boundary를 실제로 선택할 수 있다는 별도 proof가 생긴 뒤에만 검토한다.
+
+GPU acceptance criteria는 normal BF16 table/token fixture에서 eager output bytes 및 32-byte report byte-exact parity,
+input table/token bytes 불변, 최소 64회 sequential replay, second-enqueue rejection을 확인한다. 별도 raw-device-ID test는
+host-side prevalidation 없이 OOB ID를 넣어 earliest-error report와 output no-write sentinel을 eager와 일치시킨다.
+short scratch/report/output, alias/context/busy preflight rejection 뒤 untouched-resource recovery, finish 전 report-read rejection,
+abort/explicit close 뒤 allocation statistics 0도 확인한다. 이 결과는 validation-aware embedding primitive lifecycle/parity의
+근거일 뿐 full decode graph 또는 end-to-end 성능 향상 근거가 아니다.
 
 ## 2. 범위
 
