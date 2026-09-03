@@ -6,6 +6,7 @@ import json
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -18,6 +19,9 @@ if str(SCRIPTS) not in sys.path:
 
 import check_campaign  # noqa: E402
 import competitive_common  # noqa: E402
+import execute_campaign  # noqa: E402
+import materialize_lane  # noqa: E402
+import raw_journal  # noqa: E402
 import run_campaign  # noqa: E402
 
 
@@ -31,14 +35,22 @@ class CampaignFixture:
         self.root = Path(self.temporary.name)
         self.source_root = SCRIPTS.parents[2]
         self.contract_path = self.root / competitive_common.CANONICAL_CONTRACT_RELATIVE_PATH
+        self.workspace = (
+            self.root
+            / competitive_common.CAMPAIGN_ARTIFACT_WORKSPACE_RELATIVE_PATH
+            / "test-campaign-v1"
+        )
+        self.workspace.mkdir(parents=True)
         self.matrix_path = self.root / "campaigns" / "latency-concrete.json"
-        self.riley_lane_path = self.root / "campaigns" / "riley-pinned.json"
-        self.competitor_lane_path = self.root / "campaigns" / "vllm-pinned.json"
+        self.riley_lane_path = self.workspace / "riley-pinned.json"
+        self.competitor_lane_path = self.workspace / "vllm-pinned.json"
         self.requests_path = self.root / "campaigns" / "requests.json"
         self.preflight_path = self.root / "campaigns" / "preflight.txt"
-        self.plan_path = self.root / "campaigns" / "plan.json"
-        self.raw_path = self.root / "campaigns" / "raw.jsonl"
+        self.plan_path = self.workspace / "plan.json"
+        self.raw_path = self.workspace / "raw.jsonl"
+        self._materialization_generation = 0
         self._write_assets()
+        self._write_materialized_lanes()
         self.plan = self._build_plan()
         _write_json(self.plan_path, self.plan)
         self.plan_sha256 = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
@@ -142,51 +154,6 @@ class CampaignFixture:
                 ],
             },
         )
-        for path, parent_path in (
-            (self.riley_lane_path, "benchmarks/competitive/lanes/riley.json"),
-            (self.competitor_lane_path, "benchmarks/competitive/lanes/vllm-current.json"),
-        ):
-            parent_lane = competitive_common.load_json(self.root / parent_path)
-            engine = parent_lane["engine"]["name"]
-            _write_json(
-                path,
-                {
-                    "schema_version": competitive_common.LANE_SCHEMA_VERSION,
-                    "lane_id": parent_lane["lane_id"],
-                    "role": parent_lane["role"],
-                    "availability": "available",
-                    "engine": {
-                        "name": engine,
-                        "backend": parent_lane["engine"]["backend"],
-                        "pin_status": "pinned",
-                        "version": "test-1.0.0",
-                        "revision": "a" * 40,
-                        "dependency_lock_sha256": "7" * 64,
-                    },
-                    "command": {
-                        "status": "available",
-                        "argv": [engine, "benchmark", "--result-dir", "{result_dir}"],
-                        "required_placeholders": ["result_dir"],
-                        "output_format": competitive_common.RAW_SCHEMA_VERSION,
-                    },
-                    "artifact_requirements": parent_lane["artifact_requirements"],
-                    "artifact_receipts": {
-                        "executable_sha256": "8" * 64,
-                        "source_or_wheel_sha256": "9" * 64,
-                        "dependency_lock_sha256": "7" * 64,
-                        "runtime_options_sha256": "a" * 64,
-                        "model_identity_sha256": "b" * 64,
-                        "tokenizer_identity_sha256": "c" * 64,
-                    },
-                    "parent_contract": parent_contract,
-                    "parent_asset": {
-                        "path": parent_path,
-                        "sha256": competitive_common.CANONICAL_ASSET_SHA256[parent_path],
-                        "schema_version": competitive_common.LANE_SCHEMA_VERSION,
-                        "asset_id": parent_lane["lane_id"],
-                    },
-                },
-            )
         _write_json(
             self.requests_path,
             {
@@ -240,6 +207,75 @@ class CampaignFixture:
             },
         )
 
+    def _lane_input(self, role: str) -> dict[str, object]:
+        template_path = (
+            "benchmarks/competitive/lanes/riley.json"
+            if role == "riley"
+            else "benchmarks/competitive/lanes/vllm-current.json"
+        )
+        template = competitive_common.load_json(self.root / template_path)
+        model = competitive_common.load_json(self.requests_path)["model_identity"]
+        bindings = {
+            "riley_executable": "/opt/campaign/riley",
+            "vllm_executable": "/opt/campaign/vllm",
+            "checkpoint_path": "/opt/campaign/checkpoints/test-model",
+            "model_id": str(model["model_id"]),
+            "model_revision": str(model["model_revision"]),
+            "dtype": "bf16",
+            "host": "127.0.0.1",
+            "port": "9100" if role == "riley" else "9200",
+            "bind_address": "127.0.0.1:9100",
+            "device_ordinal": "0",
+        }
+        return {
+            "schema_version": materialize_lane.MATERIALIZATION_INPUT_SCHEMA_VERSION,
+            "campaign_id": "test-campaign-v1",
+            "lane_id": template["lane_id"],
+            "role": template["role"],
+            "source": {"git_revision": "d" * 40, "git_dirty": False},
+            "engine": {
+                "version": "test-1.0.0",
+                "revision": "a" * 40,
+                "dependency_lock_sha256": "7" * 64,
+            },
+            "artifact_receipts": {
+                "executable_sha256": "8" * 64,
+                "source_or_wheel_sha256": "9" * 64,
+                "dependency_lock_sha256": "7" * 64,
+                "runtime_options_sha256": "a" * 64,
+                "model_identity_sha256": competitive_common.sha256_bytes(
+                    competitive_common.canonical_json_bytes(model)
+                ),
+                "tokenizer_identity_sha256": execute_campaign._tokenizer_identity_sha256(model),
+            },
+            "command_bindings": {
+                key: bindings[key] for key in template["command"]["required_placeholders"]
+            },
+        }
+
+    def _write_materialized_lanes(self) -> dict[str, dict[str, object]]:
+        self._materialization_generation += 1
+        lanes: dict[str, dict[str, object]] = {}
+        for role, template_relative, output_stem in (
+            ("riley", "benchmarks/competitive/lanes/riley.json", "riley-pinned"),
+            ("competitor", "benchmarks/competitive/lanes/vllm-current.json", "vllm-pinned"),
+        ):
+            input_path = self.workspace / f"{output_stem}-input-{self._materialization_generation}.json"
+            output_path = self.workspace / f"{output_stem}-{self._materialization_generation}.json"
+            _write_json(input_path, self._lane_input(role))
+            lane = materialize_lane.write_materialized_lane(
+                root=self.root,
+                template_path=self.root / template_relative,
+                immutable_input_path=input_path,
+                output_path=output_path,
+            )
+            if role == "riley":
+                self.riley_lane_path = output_path
+            else:
+                self.competitor_lane_path = output_path
+            lanes[role] = lane
+        return lanes
+
     def _build_plan(self, **overrides: object) -> dict[str, object]:
         arguments: dict[str, object] = {
             "root": self.root,
@@ -276,6 +312,9 @@ class CampaignFixture:
         for invocation in self.plan["invocations"]:  # type: ignore[index]
             role = invocation["role"]  # type: ignore[index]
             riley = role == "riley"
+            lane_path = self.riley_lane_path if riley else self.competitor_lane_path
+            lane = competitive_common.load_json(lane_path)
+            receipts = lane["artifact_receipts"]
             workload_receipt = workload_receipts[str(invocation["cell_id"])]
             rows.append(
                 {
@@ -309,6 +348,8 @@ class CampaignFixture:
                         "container_image_digest": "sha256:" + "1" * 64,
                         "git_commit": "d" * 40,
                         "source_archive_sha256": "2" * 64,
+                        "executable_sha256": receipts["executable_sha256"],
+                        "dependency_lock_sha256": receipts["dependency_lock_sha256"],
                         "lane_command_sha256": ("3" if riley else "4") * 64,
                         "engine_version": "test-1.0.0",
                         "engine_revision": "a" * 40,
@@ -376,6 +417,25 @@ class CampaignFixture:
         return rows
 
     def write_rows(self) -> None:
+        previous: str | None = None
+        for sequence, row in enumerate(self.rows, start=1):
+            row["adapter_sequence"] = sequence
+            row["adapter_previous_receipt_sha256"] = previous
+            row.pop("adapter_receipt_sha256", None)
+            try:
+                receipt = raw_journal.adapter_receipt_sha256(
+                    row,
+                    sequence=sequence,
+                    previous_receipt_sha256=previous,
+                )
+            except competitive_common.ContractError:
+                # Negative checker fixtures deliberately contain malformed
+                # payloads (invalid plan hash/NaN).  Preserve a syntactically
+                # present journal field so the checker, not the fixture
+                # builder, demonstrates fail-closed behavior.
+                receipt = "0" * 64
+            row["adapter_receipt_sha256"] = receipt
+            previous = receipt
         self.raw_path.write_text(
             "".join(json.dumps(row, sort_keys=True, allow_nan=True) + "\n" for row in self.rows),
             encoding="utf-8",
@@ -691,8 +751,14 @@ class CampaignCheckerTests(unittest.TestCase):
         unpinned_lane["engine"]["revision"] = None
         unpinned_lane["engine"]["dependency_lock_sha256"] = None
         unpinned_lane["command"]["status"] = "campaign-pin-required"
+        template = competitive_common.load_json(
+            self.fixture.root / "benchmarks/competitive/lanes/riley.json"
+        )
+        unpinned_lane["command"]["argv"] = template["command"]["argv"]
+        unpinned_lane["command"]["required_placeholders"] = template["command"]["required_placeholders"]
         unpinned_lane.pop("artifact_receipts")
-        path = self.fixture.root / "campaigns" / "riley-unpinned.json"
+        unpinned_lane.pop("materialization")
+        path = self.fixture.workspace / "riley-unpinned.json"
         _write_json(path, unpinned_lane)
         blocked = self.fixture._build_plan(
             riley_lane_path=path,
@@ -713,6 +779,516 @@ class CampaignCheckerTests(unittest.TestCase):
         drifted = self.report(current_source={"git_revision": "e" * 40, "git_dirty": False})
         self.assertEqual(drifted["status"], "incomparable")
         self.assertIn("current Git HEAD differs", drifted["comparability"]["reasons"][0])  # type: ignore[index]
+
+
+class _FakeProcess:
+    def __init__(
+        self,
+        *,
+        environment: dict[str, object],
+        completion: execute_campaign.ProcessCompletion,
+        wait_values: list[execute_campaign.ProcessCompletion | None] | None = None,
+        close_error: Exception | None = None,
+        environment_error: Exception | None = None,
+    ) -> None:
+        self._environment = environment
+        self.environment_error = environment_error
+        self.completion = completion
+        self.wait_values = list(wait_values or [])
+        self.close_error = close_error
+        self.wait_calls: list[float] = []
+        self.terminate_calls = 0
+        self.kill_calls = 0
+        self.close_calls = 0
+
+    @property
+    def environment(self) -> dict[str, object]:
+        if self.environment_error is not None:
+            raise self.environment_error
+        return self._environment
+
+    def wait(self, timeout_seconds: float) -> execute_campaign.ProcessCompletion | None:
+        self.wait_calls.append(timeout_seconds)
+        if self.wait_values:
+            return self.wait_values.pop(0)
+        return self.completion
+
+    def terminate(self) -> None:
+        self.terminate_calls += 1
+
+    def kill(self) -> None:
+        self.kill_calls += 1
+
+    def close(self) -> None:
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class _ScriptedExecutor:
+    def __init__(self, steps: list[object]) -> None:
+        self.steps = list(steps)
+        self.contexts: list[execute_campaign.InvocationContext] = []
+        self.processes: list[_FakeProcess] = []
+
+    def start(self, context: execute_campaign.InvocationContext) -> _FakeProcess:
+        self.contexts.append(context)
+        if not self.steps:
+            raise AssertionError("fake executor received more starts than scripted")
+        step = self.steps.pop(0)
+        if isinstance(step, BaseException):
+            raise step
+        if not isinstance(step, _FakeProcess):
+            raise AssertionError(f"unsupported fake step {step!r}")
+        self.processes.append(step)
+        return step
+
+
+class CampaignExecutionAdapterTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fixture = CampaignFixture()
+        self.raw_path = self.fixture.workspace / "adapter.raw.jsonl"
+
+    def tearDown(self) -> None:
+        self.fixture.close()
+
+    def _lane_input(self, role: str) -> dict[str, object]:
+        template_path = (
+            "benchmarks/competitive/lanes/riley.json"
+            if role == "riley"
+            else "benchmarks/competitive/lanes/vllm-current.json"
+        )
+        template = competitive_common.load_json(self.fixture.root / template_path)
+        model = competitive_common.load_json(self.fixture.requests_path)["model_identity"]
+        command_bindings = {
+            "riley_executable": "/opt/campaign/riley",
+            "vllm_executable": "/opt/campaign/vllm",
+            "checkpoint_path": "/opt/campaign/checkpoints/test-model",
+            "model_id": str(model["model_id"]),
+            "model_revision": str(model["model_revision"]),
+            "dtype": "bf16",
+            "host": "127.0.0.1",
+            "port": "9100" if role == "riley" else "9200",
+            "bind_address": "127.0.0.1:9100",
+            "device_ordinal": "0",
+        }
+        required = template["command"]["required_placeholders"]
+        return {
+            "schema_version": materialize_lane.MATERIALIZATION_INPUT_SCHEMA_VERSION,
+            "campaign_id": "test-campaign-v1",
+            "lane_id": template["lane_id"],
+            "role": template["role"],
+            "source": {"git_revision": "d" * 40, "git_dirty": False},
+            "engine": {
+                "version": "test-1.0.0",
+                "revision": "a" * 40,
+                "dependency_lock_sha256": "7" * 64,
+            },
+            "artifact_receipts": {
+                "executable_sha256": "8" * 64,
+                "source_or_wheel_sha256": "9" * 64,
+                "dependency_lock_sha256": "7" * 64,
+                "runtime_options_sha256": "a" * 64,
+                "model_identity_sha256": competitive_common.sha256_bytes(
+                    competitive_common.canonical_json_bytes(model)
+                ),
+                "tokenizer_identity_sha256": execute_campaign._tokenizer_identity_sha256(model),
+            },
+            "command_bindings": {key: command_bindings[key] for key in required},
+        }
+
+    def _materialize_lanes(self) -> dict[str, dict[str, object]]:
+        lanes = self.fixture._write_materialized_lanes()
+        self.fixture.plan = self.fixture._build_plan()
+        _write_json(self.fixture.plan_path, self.fixture.plan)
+        self.fixture.plan_sha256 = hashlib.sha256(self.fixture.plan_path.read_bytes()).hexdigest()
+        return lanes
+
+    def _success_processes(self, lanes: Mapping[str, Mapping[str, object]]) -> list[_FakeProcess]:
+        row_by_invocation = {
+            str(row["invocation_id"]): row
+            for row in self.fixture.rows
+        }
+        # The source fixture constructs rows in immutable invocation order.
+        processes: list[_FakeProcess] = []
+        for invocation in self.fixture.plan["invocations"]:  # type: ignore[index]
+            source_row = deepcopy(row_by_invocation[str(invocation["invocation_id"])])
+            role = str(invocation["role"])
+            lane = lanes[role]
+            engine = lane["engine"]
+            receipts = lane["artifact_receipts"]
+            command = lane["command"]
+            model = self.fixture.plan["request_manifest"]["model_identity"]  # type: ignore[index]
+            environment = source_row["environment"]
+            environment["source_archive_sha256"] = receipts["source_or_wheel_sha256"]
+            environment["executable_sha256"] = receipts["executable_sha256"]
+            environment["dependency_lock_sha256"] = receipts["dependency_lock_sha256"]
+            environment["lane_command_sha256"] = competitive_common.sha256_bytes(
+                competitive_common.canonical_json_bytes(command["argv"])
+            )
+            environment["engine_version"] = engine["version"]
+            environment["engine_revision"] = engine["revision"]
+            environment["engine_options_sha256"] = receipts["runtime_options_sha256"]
+            environment["model_id"] = model["model_id"]
+            environment["model_revision"] = model["model_revision"]
+            environment["model_weights_sha256"] = model["weights_sha256"]
+            environment["tokenizer_revision"] = model["tokenizer_revision"]
+            environment["tokenizer_files_sha256"] = model["tokenizer_aggregate_sha256"]
+            completion = execute_campaign.ProcessCompletion(
+                returncode=0,
+                recorded_at_utc="2026-08-28T00:00:01Z",
+                observation={
+                    "status": source_row["status"],
+                    "failure_reason": source_row["failure_reason"],
+                    "metrics": source_row["metrics"],
+                    "requests": source_row["requests"],
+                },
+            )
+            processes.append(_FakeProcess(environment=environment, completion=completion))
+        return processes
+
+    def _execute(
+        self,
+        executor: _ScriptedExecutor,
+        *,
+        max_start_attempts: int = 1,
+    ) -> dict[str, object]:
+        with patch.object(
+            check_campaign,
+            "current_source_receipt",
+            return_value={"git_revision": "d" * 40, "git_dirty": False},
+        ):
+            return execute_campaign.execute_plan(
+                plan_path=self.fixture.plan_path,
+                raw_path=self.raw_path,
+                executor=executor,
+                root=self.fixture.root,
+                timeout_seconds=0.5,
+                cleanup_grace_seconds=0.1,
+                max_start_attempts=max_start_attempts,
+                now_utc=lambda: "2026-08-28T00:00:02Z",
+            )
+
+    def test_materialization_is_fully_substituted_and_rejects_dirty_or_extra_input(self) -> None:
+        template_path = self.fixture.root / "benchmarks/competitive/lanes/riley.json"
+        dirty = self._lane_input("riley")
+        dirty["source"]["git_dirty"] = True  # type: ignore[index]
+        dirty_path = self.fixture.workspace / "dirty-materialization-input.json"
+        _write_json(dirty_path, dirty)
+        with self.assertRaisesRegex(competitive_common.ContractError, "git_dirty"):
+            materialize_lane.materialize_lane(
+                root=self.fixture.root,
+                template_path=template_path,
+                immutable_input_path=dirty_path,
+            )
+
+        extra = self._lane_input("riley")
+        extra["command_bindings"]["unreviewed_option"] = "unsafe"  # type: ignore[index]
+        extra_path = self.fixture.workspace / "extra-materialization-input.json"
+        _write_json(extra_path, extra)
+        with self.assertRaisesRegex(competitive_common.ContractError, "exactly match"):
+            materialize_lane.materialize_lane(
+                root=self.fixture.root,
+                template_path=template_path,
+                immutable_input_path=extra_path,
+            )
+
+        valid_path = self.fixture.workspace / "valid-materialization-input.json"
+        _write_json(valid_path, self._lane_input("riley"))
+        lane = materialize_lane.materialize_lane(
+            root=self.fixture.root,
+            template_path=template_path,
+            immutable_input_path=valid_path,
+        )
+        self.assertEqual(lane["availability"], "available")
+        self.assertEqual(lane["command"]["required_placeholders"], [])
+        self.assertFalse(any("{" in item or "}" in item for item in lane["command"]["argv"]))
+        self.assertEqual(lane["materialization"]["campaign_id"], "test-campaign-v1")
+        self.assertEqual(
+            lane["command"]["argv"],
+            [
+                "/opt/campaign/riley",
+                "serve",
+                "--model",
+                "/opt/campaign/checkpoints/test-model",
+                "--model-id",
+                "test/model",
+                "--bind",
+                "127.0.0.1:9100",
+                "--device",
+                "0",
+            ],
+        )
+
+        input_path = self.fixture.workspace / "riley-materialization-input.json"
+        output_path = self.fixture.workspace / "riley-materialized.json"
+        _write_json(input_path, self._lane_input("riley"))
+        written = materialize_lane.write_materialized_lane(
+            root=self.fixture.root,
+            template_path=template_path,
+            immutable_input_path=input_path,
+            output_path=output_path,
+        )
+        self.assertEqual(competitive_common.load_json(output_path), written)
+        with self.assertRaisesRegex(competitive_common.ContractError, "overwrite"):
+            materialize_lane.write_materialized_lane(
+                root=self.fixture.root,
+                template_path=template_path,
+                immutable_input_path=input_path,
+                output_path=output_path,
+            )
+
+    def test_adapter_consumes_exact_ab_ba_plan_and_writes_checkable_journal(self) -> None:
+        lanes = self._materialize_lanes()
+        executor = _ScriptedExecutor(self._success_processes(lanes))
+        report = self._execute(executor)
+        self.assertEqual(report["status"], "passed")
+        expected_invocations = [
+            item["invocation_id"]
+            for item in sorted(self.fixture.plan["invocations"], key=lambda item: item["sequence"])  # type: ignore[index]
+        ]
+        self.assertEqual([context.invocation_id for context in executor.contexts], expected_invocations)
+        rows = [row for _path, _line, row in competitive_common.load_jsonl([self.raw_path])]
+        self.assertEqual([row["adapter_sequence"] for row in rows], list(range(1, len(rows) + 1)))
+        self.assertTrue(all(row["preflight_receipt_sha256"] == self.fixture.plan["preflight"]["sha256"] for row in rows))  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            executor.contexts[0].workload["warm_state"] = "cold"  # type: ignore[index]
+
+    def test_adapter_rejects_materialization_campaign_or_source_drift_before_start(self) -> None:
+        self._materialize_lanes()
+        lane = competitive_common.load_json(self.fixture.riley_lane_path)
+        lane["materialization"]["campaign_id"] = "other-campaign-v1"
+        _write_json(self.fixture.riley_lane_path, lane)
+        self.fixture.plan["lanes"]["riley"]["sha256"] = hashlib.sha256(  # type: ignore[index]
+            self.fixture.riley_lane_path.read_bytes()
+        ).hexdigest()
+        _write_json(self.fixture.plan_path, self.fixture.plan)
+        with patch.object(
+            check_campaign,
+            "current_source_receipt",
+            return_value={"git_revision": "d" * 40, "git_dirty": False},
+        ):
+            with self.assertRaisesRegex(competitive_common.ContractError, "materialization campaign"):
+                execute_campaign.execute_plan(
+                    plan_path=self.fixture.plan_path,
+                    raw_path=self.raw_path,
+                    executor=_ScriptedExecutor([]),
+                    root=self.fixture.root,
+                )
+
+        self._materialize_lanes()
+        lane = competitive_common.load_json(self.fixture.riley_lane_path)
+        lane["materialization"]["source_git_revision"] = "e" * 40
+        _write_json(self.fixture.riley_lane_path, lane)
+        self.fixture.plan["lanes"]["riley"]["sha256"] = hashlib.sha256(  # type: ignore[index]
+            self.fixture.riley_lane_path.read_bytes()
+        ).hexdigest()
+        _write_json(self.fixture.plan_path, self.fixture.plan)
+        with patch.object(
+            check_campaign,
+            "current_source_receipt",
+            return_value={"git_revision": "d" * 40, "git_dirty": False},
+        ):
+            with self.assertRaisesRegex(competitive_common.ContractError, "materialization source"):
+                execute_campaign.execute_plan(
+                    plan_path=self.fixture.plan_path,
+                    raw_path=self.raw_path,
+                    executor=_ScriptedExecutor([]),
+                    root=self.fixture.root,
+                )
+
+    def test_adapter_rejects_ab_ba_sequence_drift_before_start(self) -> None:
+        self._materialize_lanes()
+        plan = competitive_common.load_json(self.fixture.plan_path)
+        plan["invocations"][0]["sequence"] = 2
+        _write_json(self.fixture.plan_path, plan)
+        with patch.object(
+            check_campaign,
+            "current_source_receipt",
+            return_value={"git_revision": "d" * 40, "git_dirty": False},
+        ):
+            with self.assertRaisesRegex(competitive_common.ContractError, "invocation order/sequence"):
+                execute_campaign.execute_plan(
+                    plan_path=self.fixture.plan_path,
+                    raw_path=self.raw_path,
+                    executor=_ScriptedExecutor([]),
+                    root=self.fixture.root,
+                )
+
+    def test_adapter_rejects_raw_path_escape_and_materializer_rejects_output_symlink_escape(self) -> None:
+        outside = self.fixture.root.parent / "outside-c01-raw.jsonl"
+        with self.assertRaisesRegex(competitive_common.ContractError, "raw output path"):
+            execute_campaign.execute_plan(
+                plan_path=self.fixture.plan_path,
+                raw_path=outside,
+                executor=_ScriptedExecutor([]),
+                root=self.fixture.root,
+            )
+
+        input_path = self.fixture.workspace / "riley-input.json"
+        _write_json(input_path, self._lane_input("riley"))
+        outside_template = self.fixture.root.parent / "outside-c01-template.json"
+        with self.assertRaisesRegex(competitive_common.ContractError, "template path"):
+            materialize_lane.write_materialized_lane(
+                root=self.fixture.root,
+                template_path=outside_template,
+                immutable_input_path=input_path,
+                output_path=self.fixture.workspace / "unused.json",
+            )
+        outside_input = self.fixture.root.parent / "outside-c01-input.json"
+        with self.assertRaisesRegex(competitive_common.ContractError, "immutable input"):
+            materialize_lane.write_materialized_lane(
+                root=self.fixture.root,
+                template_path=self.fixture.root / "benchmarks/competitive/lanes/riley.json",
+                immutable_input_path=outside_input,
+                output_path=self.fixture.workspace / "unused.json",
+            )
+        outside_lane = self.fixture.root.parent / "outside-c01-lane.json"
+        link = self.fixture.workspace / "escaped-lane.json"
+        link.symlink_to(outside_lane)
+        with self.assertRaisesRegex(competitive_common.ContractError, "output"):
+            materialize_lane.write_materialized_lane(
+                root=self.fixture.root,
+                template_path=self.fixture.root / "benchmarks/competitive/lanes/riley.json",
+                immutable_input_path=input_path,
+                output_path=link,
+            )
+
+    def test_adapter_retries_only_before_start_and_cleans_stale_process_before_next_arm(self) -> None:
+        lanes = self._materialize_lanes()
+        processes = self._success_processes(lanes)
+        stale = processes[0]
+        stale.wait_values = [None, None, stale.completion]
+        executor = _ScriptedExecutor([execute_campaign.TransientStartError(), *processes])
+        report = self._execute(executor, max_start_attempts=2)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(stale.terminate_calls, 1)
+        self.assertEqual(stale.kill_calls, 1)
+        self.assertEqual(stale.close_calls, 1)
+        self.assertEqual(len(executor.processes), len(processes))
+        self.assertIsNot(executor.processes[0], executor.processes[1])
+        rows = [row for _path, _line, row in competitive_common.load_jsonl([self.raw_path])]
+        self.assertEqual(rows[0]["status"], "failure")
+        self.assertIsNone(rows[0]["metrics"])
+
+    def test_adapter_records_malformed_completion_and_close_failure_as_terminal_failures(self) -> None:
+        lanes = self._materialize_lanes()
+        malformed_processes = self._success_processes(lanes)
+        malformed_processes[0].completion = execute_campaign.ProcessCompletion(
+            returncode=0,
+            recorded_at_utc="2026-08-28T00:00:01Z",
+            observation={
+                "status": "success",
+                "failure_reason": None,
+                "metrics": None,
+                "requests": [],
+            },
+        )
+        report = self._execute(_ScriptedExecutor(malformed_processes))
+        self.assertEqual(report["status"], "failed")
+        rows = [row for _path, _line, row in competitive_common.load_jsonl([self.raw_path])]
+        self.assertIn("adapter rejected process completion", rows[0]["failure_reason"])
+        self.assertIsNone(rows[0]["metrics"])
+
+        self.raw_path.unlink()
+        close_failure_processes = self._success_processes(lanes)
+        close_failure_processes[0].close_error = RuntimeError("synthetic close failure")
+        report = self._execute(_ScriptedExecutor(close_failure_processes))
+        self.assertEqual(report["status"], "failed")
+        rows = [row for _path, _line, row in competitive_common.load_jsonl([self.raw_path])]
+        self.assertIn("process close failed", rows[0]["failure_reason"])
+
+    def test_adapter_cleans_started_process_when_environment_receipt_fails(self) -> None:
+        lanes = self._materialize_lanes()
+        processes = self._success_processes(lanes)
+        failed_environment = processes[0]
+        failed_environment.environment_error = RuntimeError("synthetic environment receipt failure")
+        # The first grace wait proves terminate did not finish the process;
+        # the second proves the kill path did.
+        failed_environment.wait_values = [None, failed_environment.completion]
+        with self.assertRaisesRegex(competitive_common.ContractError, "environment receipt failed"):
+            self._execute(_ScriptedExecutor(processes))
+        self.assertEqual(failed_environment.terminate_calls, 1)
+        self.assertEqual(failed_environment.kill_calls, 1)
+        self.assertEqual(failed_environment.close_calls, 1)
+        self.assertFalse(self.raw_path.exists(), "untrusted environment evidence must not create a raw row")
+
+    def test_adapter_lease_rejects_second_runner_before_it_starts_an_arm(self) -> None:
+        lanes = self._materialize_lanes()
+        first_processes = self._success_processes(lanes)
+        first = first_processes[0]
+        entered_wait = threading.Event()
+        release_wait = threading.Event()
+        original_wait = first.wait
+
+        def block_first_wait(timeout_seconds: float) -> execute_campaign.ProcessCompletion | None:
+            entered_wait.set()
+            if not release_wait.wait(timeout=3.0):
+                raise RuntimeError("test did not release first adapter")
+            return original_wait(timeout_seconds)
+
+        first.wait = block_first_wait  # type: ignore[method-assign]
+        first_executor = _ScriptedExecutor(first_processes)
+        first_result: dict[str, object] = {}
+
+        def run_first_adapter() -> None:
+            try:
+                first_result["report"] = self._execute(first_executor)
+            except BaseException as error:  # surfaced in the parent assertion below
+                first_result["error"] = error
+
+        worker = threading.Thread(target=run_first_adapter)
+        worker.start()
+        self.assertTrue(entered_wait.wait(timeout=3.0), "first adapter did not start its first arm")
+        second_executor = _ScriptedExecutor([])
+        try:
+            with self.assertRaisesRegex(competitive_common.ContractError, "already holds journal lease"):
+                self._execute(second_executor)
+            self.assertEqual(second_executor.contexts, [], "second adapter must fail before start()")
+        finally:
+            release_wait.set()
+            worker.join(timeout=5.0)
+        self.assertFalse(worker.is_alive(), "first adapter did not finish after lease release")
+        self.assertNotIn("error", first_result)
+        self.assertEqual(first_result["report"]["status"], "passed")  # type: ignore[index]
+
+    def test_journal_rejects_duplicate_out_of_order_and_partial_records(self) -> None:
+        lanes = self._materialize_lanes()
+        self._execute(_ScriptedExecutor(self._success_processes(lanes)))
+        rows = [row for _path, _line, row in competitive_common.load_jsonl([self.raw_path])]
+        expected = [
+            str(item["invocation_id"])
+            for item in sorted(self.fixture.plan["invocations"], key=lambda item: item["sequence"])  # type: ignore[index]
+        ]
+        journal = raw_journal.AppendOnlyRawJournal(
+            path=self.raw_path,
+            plan_sha256=self.fixture.plan_sha256,
+            expected_invocation_ids=expected,
+        )
+        duplicate = {key: value for key, value in rows[-1].items() if key not in raw_journal.JOURNAL_FIELDS}
+        with self.assertRaisesRegex(competitive_common.ContractError, "already contains every"):
+            journal.append(duplicate)
+
+        out_of_order_path = self.fixture.root / "campaigns" / "out-of-order.raw.jsonl"
+        out_of_order = raw_journal.AppendOnlyRawJournal(
+            path=out_of_order_path,
+            plan_sha256=self.fixture.plan_sha256,
+            expected_invocation_ids=expected,
+        )
+        later = {key: value for key, value in rows[1].items() if key not in raw_journal.JOURNAL_FIELDS}
+        with self.assertRaisesRegex(competitive_common.ContractError, "out of immutable plan order"):
+            out_of_order.append(later)
+
+        partial_path = self.fixture.root / "campaigns" / "partial.raw.jsonl"
+        partial_path.write_text('{"partial":', encoding="utf-8")
+        partial = raw_journal.AppendOnlyRawJournal(
+            path=partial_path,
+            plan_sha256=self.fixture.plan_sha256,
+            expected_invocation_ids=expected,
+        )
+        first = {key: value for key, value in rows[0].items() if key not in raw_journal.JOURNAL_FIELDS}
+        with self.assertRaisesRegex(competitive_common.ContractError, "invalid JSON"):
+            partial.append(first)
 
 
 class StaticManifestTests(unittest.TestCase):

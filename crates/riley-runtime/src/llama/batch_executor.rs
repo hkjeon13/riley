@@ -10,29 +10,17 @@
 #![cfg_attr(all(test, not(feature = "cuda")), allow(dead_code))]
 
 use std::fmt;
-use std::mem;
 
 use riley_cuda::{
-    AttentionReductionProfile, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
-    CudaDeviceBuffer, CudaExecutionStream, CudaStream, EmbeddingParams,
-    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
-    PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    ResidualRmsNormParams, RmsNormParams, RopeTableParams, SiluParams, embedding,
-    fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
-    ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, rope_table, silu,
+    AttentionReductionProfile, CudaContext, CudaDeviceBuffer, CudaStream,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS,
 };
 use riley_model::LoadedModel;
 
-use super::batch::{
-    LlamaBatchMetadataConfig, LlamaBatchRow, LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
-};
+use super::batch::{LlamaBatchRow, LlamaPackedBatchMetadata};
 pub use super::executor::allocation::PreparedLlamaBatchAllocationReport;
 use super::executor::allocation::build_batch_allocation_report;
-use super::executor::buffers::{
-    BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES, allocate_packed_device_input,
-    allocate_packed_host_input, allocate_synchronous_device_input, allocate_synchronous_host_input,
-    close_device_input, close_host_input,
-};
+use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
 pub use super::executor::config::{
     BatchMetadataTransport, ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
     RaggedAttentionImplementation, ResidualNormImplementation,
@@ -42,50 +30,37 @@ use super::executor::config::{
     ragged_attention_implementation_id, residual_norm_implementation_id,
     runtime_selection_policy_id,
 };
-use super::executor::device_views::{packed_device_views, per_operation_device_views};
 use super::executor::dispatch::{
-    BatchDispatchDisposition, OutputPrimitiveDispatch, dispatch_output_primitives,
-    execute_iteration_command_batch,
+    BatchDispatchDisposition, execute_packed as dispatch_execute_packed,
 };
+use super::executor::error::cuda_error as batch_cuda;
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
-use super::executor::error::{checked_byte_len, cuda_error as batch_cuda, record_close, usize_u64};
-use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
-use super::executor::host::allocate_zeroed_host_bytes;
+use super::executor::gemm_plan::PreparedLlamaBatchShape;
 use super::executor::metadata::{
-    PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
+    PackedIterationLayout, pack_iteration_input, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
-use super::executor::output::{
-    GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes, greedy_result_capacity_bytes,
-    output_logits_bytes,
+use super::executor::output::{decode_greedy_tokens, greedy_result_bytes};
+use super::executor::owner::{
+    BatchHostWorkspace, PreparedLlamaBatchOwner, SUPPORTED_HEAD_DIMENSION,
 };
 use super::executor::poison::poison_for_batch_error;
-use super::executor::rope::{
-    absolute_rope_position_count, build_absolute_cpu_rope_tables, build_absolute_rope_angles,
-};
+use super::executor::rope::absolute_rope_position_count;
 use super::executor::shape::{
     LlamaBatchShapeHistory, batch_shape_policy_id, select_prepared_dense_rows,
 };
 pub use super::executor::shape::{LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS};
-use super::forward::{
-    ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile,
-    PreparedLlamaForward, execute_gemm, execute_profile_residual_rms_norm,
-    execute_profile_rms_norm, execute_projection_bias, poison_for_cuda_error, span, span_mut,
-    weight_span,
-};
-use super::{ExecutionSite, LlamaExecutionPlan, LlamaOp, LlamaReductionProfile};
-use crate::cuda_weights::CudaUploadedWeights;
+use super::forward::{PreparedLlamaForward, poison_for_cuda_error};
+use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 
 #[cfg(test)]
 use super::forward::PreparedLlamaForwardConfig;
 
 const BF16_BYTES: u64 = 2;
-const F32_BYTES: u64 = 4;
 const BF16_BYTES_USIZE: usize = 2;
-const SUPPORTED_HEAD_DIMENSION: usize = 64;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BatchOutputMode {
     Logits,
@@ -102,11 +77,6 @@ fn shape_history_for_config(
     )
 }
 
-struct BatchHostWorkspace {
-    input: BatchHostInput,
-    greedy_results: Box<[u8]>,
-}
-
 /// Shape-bucketed, shared-KV Llama continuous-batch executor.
 ///
 /// The scheduler retains ownership of logical reservations. A successful call
@@ -117,23 +87,11 @@ struct BatchHostWorkspace {
 pub struct PreparedLlamaBatchExecutor {
     config: PreparedLlamaBatchExecutorConfig,
     shape_history: LlamaBatchShapeHistory,
-    metadata: PreparedLlamaBatchMetadata,
-    forward: PreparedLlamaForward,
-    shape_variants: Box<[PreparedLlamaBatchShape]>,
-    layout: KvLayout,
-    key_cache: CudaDeviceBuffer,
-    value_cache: CudaDeviceBuffer,
-    absolute_rope_cos: CudaDeviceBuffer,
-    absolute_rope_sin: CudaDeviceBuffer,
-    device_input: BatchDeviceInput,
-    gathered_logits: Option<CudaDeviceBuffer>,
-    greedy_results: Option<CudaDeviceBuffer>,
-    host: BatchHostWorkspace,
+    owner: PreparedLlamaBatchOwner,
     allocation_report: PreparedLlamaBatchAllocationReport,
     output_count: usize,
     output_mode: BatchOutputMode,
     output_ready: bool,
-    poisoned: bool,
 }
 
 impl fmt::Debug for PreparedLlamaBatchExecutor {
@@ -142,13 +100,13 @@ impl fmt::Debug for PreparedLlamaBatchExecutor {
             .debug_struct("PreparedLlamaBatchExecutor")
             .field("config", &self.config)
             .field("shape_history", &self.shape_history)
-            .field("shape_variant_count", &self.shape_variants.len())
-            .field("layout", &self.layout)
+            .field("shape_variant_count", &self.owner.shape_variants.len())
+            .field("layout", &self.owner.layout)
             .field("allocation_report", &self.allocation_report)
             .field("output_count", &self.output_count)
             .field("output_mode", &self.output_mode)
             .field("output_ready", &self.output_ready)
-            .field("poisoned", &self.poisoned)
+            .field("poisoned", &self.owner.poisoned)
             .finish_non_exhaustive()
     }
 }
@@ -178,210 +136,41 @@ impl PreparedLlamaBatchExecutor {
         let config = normalize_prepared_config(config);
         config.validate_metadata_transport()?;
         let mut shape_history = shape_history_for_config(config)?;
-        let spec = model.spec();
-        let attention = spec
-            .blocks()
-            .first()
-            .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "model.blocks",
-                reason: "the validated model must contain at least one decoder layer",
-            })?
-            .attention();
-        if attention.head_dimension() != SUPPORTED_HEAD_DIMENSION {
-            return Err(LlamaBatchExecutorError::UnsupportedHeadDimension {
-                expected: SUPPORTED_HEAD_DIMENSION,
-                actual: attention.head_dimension(),
-            });
-        }
         let bounds = config.metadata();
-        if bounds.max_input_tokens() > spec.max_sequence_length() {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "max_input_tokens",
-                reason: "maximum dense rows must not exceed the model sequence length",
-            });
-        }
-
-        let metadata = PreparedLlamaBatchMetadata::prepare(bounds)?;
-        let mut forward = PreparedLlamaForward::prepare(
-            model,
-            context,
-            stream,
-            bounds.max_input_tokens(),
-            config.forward(),
-        )?;
-        let shape_variants = match prepare_shape_variants(
-            model,
-            context,
-            &forward,
-            config.shape_policy(),
-            config.configured_shape_buckets(),
-        ) {
-            Ok(variants) => variants,
-            Err(error) => {
-                let _ = forward.close();
-                return Err(error);
-            }
-        };
-        shape_history.retain_prepared_variants(forward.plan.sequence_length(), |dense_rows| {
-            shape_variants
-                .iter()
-                .any(|shape| shape.dense_rows == dense_rows)
-        });
-        let required_gemm_workspace_bytes = shape_variants.iter().fold(
-            forward.gemms.maximum_workspace_bytes(),
-            |required, shape| required.max(shape.gemms.maximum_workspace_bytes()),
+        let owner = PreparedLlamaBatchOwner::prepare(model, context, stream, config)?;
+        shape_history.retain_prepared_variants(
+            owner.forward.plan.sequence_length(),
+            |dense_rows| {
+                owner
+                    .shape_variants
+                    .iter()
+                    .any(|shape| shape.dense_rows == dense_rows)
+            },
         );
-        if let Err(error) =
-            forward.ensure_batch_shape_gemm_workspace(context, required_gemm_workspace_bytes)
-        {
-            for shape in shape_variants {
-                let _ = shape.close();
-            }
-            let _ = forward.close();
-            return Err(LlamaBatchExecutorError::Forward(error));
-        }
-        let dimensions = forward.plan.dimensions();
-        if dimensions.head_dimension() != SUPPORTED_HEAD_DIMENSION {
-            return Err(LlamaBatchExecutorError::UnsupportedHeadDimension {
-                expected: SUPPORTED_HEAD_DIMENSION,
-                actual: dimensions.head_dimension(),
-            });
-        }
-        let layout = KvLayout::checked(
-            forward.plan.layers().len(),
-            bounds.physical_block_count(),
-            dimensions.key_value_heads(),
-            dimensions.head_dimension(),
-        )?;
-
-        let key_cache = allocate_device(
-            context,
-            layout.bytes_per_kind(),
-            ExecutionSite::layer(0, LlamaOp::KvCacheWrite),
-        )?;
-        let value_cache = allocate_device(
-            context,
-            layout.bytes_per_kind(),
-            ExecutionSite::layer(0, LlamaOp::KvCacheWrite),
-        )?;
-        let rope_bytes_per_kind = checked_product_u64(
-            &[
-                usize_u64(
-                    spec.max_sequence_length(),
-                    LlamaBatchExecutorResource::RopeCos,
-                )?,
-                usize_u64(
-                    dimensions.head_dimension() / 2,
-                    LlamaBatchExecutorResource::RopeCos,
-                )?,
-                F32_BYTES,
-            ],
-            LlamaBatchExecutorResource::RopeCos,
-        )?;
-        let mut absolute_rope_cos = allocate_device(
-            context,
-            rope_bytes_per_kind,
-            ExecutionSite::layer(0, LlamaOp::QueryRope),
-        )?;
-        let mut absolute_rope_sin = allocate_device(
-            context,
-            rope_bytes_per_kind,
-            ExecutionSite::layer(0, LlamaOp::QueryRope),
-        )?;
-        let rope_site = ExecutionSite::layer(0, LlamaOp::QueryRope);
-        if forward.rope_table_profile() == LlamaRopeTableProfile::HuggingFaceCuda {
-            let rope_angles = build_absolute_rope_angles(
-                spec.max_sequence_length(),
-                dimensions.head_dimension(),
-                forward.plan.rope_theta(),
-            )?;
-            absolute_rope_cos
-                .upload_from_slice(0, &rope_angles, &mut forward.io_staging, stream)
-                .map_err(|source| batch_cuda(rope_site, source))?;
-            let mut rope_table_params = RopeTableParams {
-                angles_cos: span_mut(
-                    &mut absolute_rope_cos,
-                    CudaDType::F32,
-                    rope_bytes_per_kind,
-                    rope_site,
-                )?,
-                sin: span_mut(
-                    &mut absolute_rope_sin,
-                    CudaDType::F32,
-                    rope_bytes_per_kind,
-                    rope_site,
-                )?,
-                element_count: rope_bytes_per_kind / F32_BYTES,
-            };
-            rope_table(&mut rope_table_params, stream)
-                .map_err(|source| batch_cuda(rope_site, source))?;
-        } else {
-            let (rope_cos, rope_sin) = build_absolute_cpu_rope_tables(
-                spec.max_sequence_length(),
-                dimensions.head_dimension(),
-                forward.plan.rope_theta(),
-            )?;
-            absolute_rope_cos
-                .upload_from_slice(0, &rope_cos, &mut forward.io_staging, stream)
-                .map_err(|source| batch_cuda(rope_site, source))?;
-            absolute_rope_sin
-                .upload_from_slice(0, &rope_sin, &mut forward.io_staging, stream)
-                .map_err(|source| batch_cuda(rope_site, source))?;
-        }
-
-        let device_input = allocate_device_input(context, bounds, config.metadata_transport())?;
-        let gathered_logits_capacity_bytes =
-            output_logits_bytes(bounds.max_output_slots(), dimensions.vocabulary_size())?;
-        let gathered_logits = if bounds.max_output_slots() == 0 {
-            None
-        } else {
-            Some(allocate_device(
-                context,
-                gathered_logits_capacity_bytes,
-                ExecutionSite::global(LlamaOp::OutputGather),
-            )?)
-        };
-        let greedy_result_capacity_bytes = greedy_result_capacity_bytes(bounds.max_output_slots())?;
-        let greedy_results = if bounds.max_output_slots() == 0 {
-            None
-        } else {
-            Some(allocate_device(
-                context,
-                greedy_result_capacity_bytes,
-                ExecutionSite::global(LlamaOp::OutputGather),
-            )?)
-        };
-        let host = allocate_host_workspace(context, bounds, config.metadata_transport())?;
         let allocation_report = build_batch_allocation_report(
-            forward.allocation_report(),
+            owner.forward.allocation_report(),
             bounds,
             config.metadata_transport(),
-            layout.total_bytes(),
-            rope_bytes_per_kind,
-            gathered_logits_capacity_bytes,
-            greedy_result_capacity_bytes,
+            owner.layout.total_bytes(),
+            owner.absolute_rope_cos.byte_len(),
+            owner
+                .gathered_logits
+                .as_ref()
+                .map_or(0, CudaDeviceBuffer::byte_len),
+            owner
+                .greedy_results
+                .as_ref()
+                .map_or(0, CudaDeviceBuffer::byte_len),
         )?;
 
         Ok(Self {
             config,
             shape_history,
-            metadata,
-            forward,
-            shape_variants,
-            layout,
-            key_cache,
-            value_cache,
-            absolute_rope_cos,
-            absolute_rope_sin,
-            device_input,
-            gathered_logits,
-            greedy_results,
-            host,
+            owner,
             allocation_report,
             output_count: 0,
             output_mode: BatchOutputMode::Logits,
             output_ready: false,
-            poisoned: false,
         })
     }
 
@@ -426,7 +215,7 @@ impl PreparedLlamaBatchExecutor {
     /// preference requested by the caller.
     #[must_use]
     pub fn prefill_attention_implementation_id(&self) -> &'static str {
-        self.forward.attention_selection().implementation_id()
+        self.owner.forward.attention_selection().implementation_id()
     }
 
     /// Stable ID of the ragged paged-attention implementation bound to this
@@ -449,7 +238,7 @@ impl PreparedLlamaBatchExecutor {
     /// exposed here.
     #[must_use]
     pub const fn gemm_reduction_policy_aggregate_id(&self) -> &'static str {
-        self.forward.reduction_profile().id()
+        self.owner.forward.reduction_profile().id()
     }
 
     /// Stable C02 value for the residual-plus-RMSNorm implementation.
@@ -461,14 +250,14 @@ impl PreparedLlamaBatchExecutor {
     /// Runtime selection contract bound to the prepared reduction profile.
     #[must_use]
     pub const fn runtime_selection_policy_id(&self) -> &'static str {
-        runtime_selection_policy_id(self.forward.reduction_profile())
+        runtime_selection_policy_id(self.owner.forward.reduction_profile())
     }
 
     /// Number of exact dense-row plans owned by this executor, including the
     /// maximum rollback plan held by the shared forward owner.
     #[must_use]
     pub fn prepared_shape_count(&self) -> usize {
-        self.shape_variants.len() + 1
+        self.owner.shape_variants.len() + 1
     }
 
     /// Selects the prepared dense row count for a prospective active batch.
@@ -480,8 +269,11 @@ impl PreparedLlamaBatchExecutor {
         self.config.select_dense_rows(active_rows)?;
         Ok(select_prepared_dense_rows(
             active_rows,
-            self.forward.plan.sequence_length(),
-            self.shape_variants.iter().map(|shape| shape.dense_rows),
+            self.owner.forward.plan.sequence_length(),
+            self.owner
+                .shape_variants
+                .iter()
+                .map(|shape| shape.dense_rows),
         ))
     }
 
@@ -521,7 +313,7 @@ impl PreparedLlamaBatchExecutor {
     /// Vocabulary width of every gathered output row.
     #[must_use]
     pub const fn vocabulary_size(&self) -> usize {
-        self.forward.plan.dimensions().vocabulary_size()
+        self.owner.forward.plan.dimensions().vocabulary_size()
     }
 
     /// Number of absolute positions represented by the cold-prepared `RoPE` tables.
@@ -532,8 +324,8 @@ impl PreparedLlamaBatchExecutor {
     /// represented as a host `usize`.
     pub fn maximum_position_count(&self) -> LlamaBatchExecutorResult<usize> {
         let positions = absolute_rope_position_count(
-            self.absolute_rope_cos.byte_len(),
-            self.forward.plan.dimensions().head_dimension(),
+            self.owner.absolute_rope_cos.byte_len(),
+            self.owner.forward.plan.dimensions().head_dimension(),
         )?;
         usize::try_from(positions).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
             resource: LlamaBatchExecutorResource::RopeCos,
@@ -542,7 +334,7 @@ impl PreparedLlamaBatchExecutor {
 
     #[must_use]
     pub const fn kv_layout(&self) -> KvLayout {
-        self.layout
+        self.owner.layout
     }
 
     #[must_use]
@@ -562,9 +354,10 @@ impl PreparedLlamaBatchExecutor {
 
     #[must_use]
     pub fn is_poisoned(&self) -> bool {
-        self.poisoned
-            || self.forward.poisoned
+        self.owner.poisoned
+            || self.owner.forward.poisoned
             || self
+                .owner
                 .shape_variants
                 .iter()
                 .any(|shape| shape.gemms.any_poisoned())
@@ -620,10 +413,17 @@ impl PreparedLlamaBatchExecutor {
         }
         self.output_ready = false;
         self.output_count = 0;
-        self.forward.output_ready = false;
+        self.owner.forward.output_ready = false;
         let Self {
             config,
             shape_history,
+            owner,
+            allocation_report: _,
+            output_count,
+            output_mode,
+            output_ready,
+        } = self;
+        let PreparedLlamaBatchOwner {
             metadata,
             forward,
             shape_variants,
@@ -636,12 +436,8 @@ impl PreparedLlamaBatchExecutor {
             gathered_logits,
             greedy_results,
             host,
-            allocation_report: _,
-            output_count,
-            output_mode,
-            output_ready,
             poisoned,
-        } = self;
+        } = owner;
         let packed = metadata.pack(rows)?;
         let active_rows = packed.total_input_tokens();
         config.select_dense_rows(active_rows)?;
@@ -807,17 +603,17 @@ impl PreparedLlamaBatchExecutor {
         if destination.is_empty() {
             return Ok(());
         }
-        let gathered =
-            self.gathered_logits
-                .as_mut()
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "gathered_logits",
-                    reason: "non-empty output has no cold-prepared device buffer",
-                })?;
-        match gathered.download_to_slice(0, destination, &mut self.forward.io_staging, stream) {
+        let gathered = self.owner.gathered_logits.as_mut().ok_or(
+            LlamaBatchExecutorError::InvalidConfiguration {
+                field: "gathered_logits",
+                reason: "non-empty output has no cold-prepared device buffer",
+            },
+        )?;
+        match gathered.download_to_slice(0, destination, &mut self.owner.forward.io_staging, stream)
+        {
             Ok(()) => Ok(()),
             Err(source) => {
-                poison_for_cuda_error(&mut self.poisoned, &source);
+                poison_for_cuda_error(&mut self.owner.poisoned, &source);
                 Err(batch_cuda(
                     ExecutionSite::global(LlamaOp::OutputGather),
                     source,
@@ -865,22 +661,25 @@ impl PreparedLlamaBatchExecutor {
         }
         let vocabulary_size = self.vocabulary_size();
         let result_bytes = self.greedy_result_byte_len_for(self.output_count)?;
-        let device =
-            self.greedy_results
-                .as_mut()
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "greedy_results",
-                    reason: "non-empty output has no cold-prepared greedy result buffer",
-                })?;
-        let host = self.host.greedy_results.get_mut(..result_bytes).ok_or(
+        let device = self.owner.greedy_results.as_mut().ok_or(
             LlamaBatchExecutorError::InvalidConfiguration {
-                field: "greedy_results_host",
-                reason: "cold-prepared host result storage is too short",
+                field: "greedy_results",
+                reason: "non-empty output has no cold-prepared greedy result buffer",
             },
         )?;
-        if let Err(source) = device.download_to_slice(0, host, &mut self.forward.io_staging, stream)
+        let host = self
+            .owner
+            .host
+            .greedy_results
+            .get_mut(..result_bytes)
+            .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "greedy_results_host",
+                reason: "cold-prepared host result storage is too short",
+            })?;
+        if let Err(source) =
+            device.download_to_slice(0, host, &mut self.owner.forward.io_staging, stream)
         {
-            poison_for_cuda_error(&mut self.poisoned, &source);
+            poison_for_cuda_error(&mut self.owner.poisoned, &source);
             return Err(batch_cuda(
                 ExecutionSite::global(LlamaOp::OutputGather),
                 source,
@@ -888,7 +687,7 @@ impl PreparedLlamaBatchExecutor {
         }
         if let Err(error) = decode_greedy_tokens(host, vocabulary_size, destination) {
             if matches!(&error, LlamaBatchExecutorError::InvalidGreedyResult { .. }) {
-                self.poisoned = true;
+                self.owner.poisoned = true;
             }
             return Err(error);
         }
@@ -902,97 +701,13 @@ impl PreparedLlamaBatchExecutor {
     ///
     /// Returns the first CUDA cleanup failure after attempting every owned
     /// device resource and the underlying prepared forward.
-    #[allow(clippy::too_many_lines)]
     pub fn close(self) -> LlamaBatchExecutorResult<()> {
-        let Self {
-            config: _,
-            shape_history: _,
-            metadata: _,
-            forward,
-            shape_variants,
-            layout: _,
-            key_cache,
-            value_cache,
-            absolute_rope_cos,
-            absolute_rope_sin,
-            device_input,
-            gathered_logits,
-            greedy_results,
-            host,
-            allocation_report: _,
-            output_count: _,
-            output_mode: _,
-            output_ready: _,
-            poisoned: _,
-        } = self;
-        let mut first = None;
-        record_close(
-            &mut first,
-            LlamaBatchExecutorResource::KeyCache,
-            key_cache.close(),
-        );
-        record_close(
-            &mut first,
-            LlamaBatchExecutorResource::ValueCache,
-            value_cache.close(),
-        );
-        record_close(
-            &mut first,
-            LlamaBatchExecutorResource::RopeCos,
-            absolute_rope_cos.close(),
-        );
-        record_close(
-            &mut first,
-            LlamaBatchExecutorResource::RopeSin,
-            absolute_rope_sin.close(),
-        );
-        if let Some(error) = close_device_input(device_input) {
-            if first.is_none() {
-                first = Some(error);
-            }
-        }
-        if let Some(buffer) = gathered_logits {
-            record_close(
-                &mut first,
-                LlamaBatchExecutorResource::GatheredLogits,
-                buffer.close(),
-            );
-        }
-        if let Some(buffer) = greedy_results {
-            record_close(
-                &mut first,
-                LlamaBatchExecutorResource::GreedyResults,
-                buffer.close(),
-            );
-        }
-        if let Some(error) = close_host_input(host.input) {
-            if first.is_none() {
-                first = Some(error);
-            }
-        }
-        let mut shape_error = None;
-        for shape in shape_variants {
-            if let Err(error) = shape.close() {
-                if shape_error.is_none() {
-                    shape_error = Some(error);
-                }
-            }
-        }
-        let forward_result = forward.close().map_err(LlamaBatchExecutorError::Forward);
-        match (first, shape_error, forward_result) {
-            (Some(error), _, _) | (None, Some(error), _) => Err(error),
-            (None, None, result) => result,
-        }
+        self.owner.close()
     }
 }
 
 // HOT_BATCH_EXECUTE_BEGIN
-#[allow(
-    clippy::too_many_arguments,
-    clippy::too_many_lines,
-    clippy::cast_precision_loss,
-    clippy::large_types_passed_by_value
-)]
+#[allow(clippy::too_many_arguments)]
 fn execute_packed(
     packed: LlamaPackedBatchMetadata<'_>,
     config: PreparedLlamaBatchExecutorConfig,
@@ -1012,1006 +727,27 @@ fn execute_packed(
     dispatch_disposition: &mut BatchDispatchDisposition,
     stream: &mut CudaStream,
 ) -> LlamaBatchExecutorResult<()> {
-    let bounds = config.metadata();
-    let active = packed.total_input_tokens();
-    if dense_rows != forward.plan.sequence_length()
-        && !shape_variants
-            .iter()
-            .any(|shape| shape.dense_rows == dense_rows)
-    {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "shape_variants",
-            reason: "selected dense-row bucket was not prepared",
-        });
-    }
-    let metadata_site = ExecutionSite::global(LlamaOp::BatchMetadataUpload);
-    let host_batch = PackedBatchHostV1::new(
-        packed.block_row_offsets(),
-        packed.physical_block_ids(),
-        packed.valid_tokens(),
-        packed.row_sequence_slots(),
-        packed.position_ids(),
-        usize_u64(
-            bounds.physical_block_count(),
-            LlamaBatchExecutorResource::PhysicalBlockIds,
-        )?,
-    )
-    .map_err(|source| batch_cuda(metadata_site, source))?;
-    let packed_layout = match (&mut host.input, &mut *device, config.metadata_transport()) {
-        (
-            BatchHostInput::PerOperation(host),
-            BatchDeviceInput::PerOperation(device),
-            BatchMetadataTransport::Synchronous,
-        ) => {
-            host.padded_tokens[..dense_rows].fill(0);
-            host.padded_tokens[..active].copy_from_slice(packed.input_token_ids());
-            upload_batch_tokens(forward, &host.padded_tokens[..dense_rows], stream)?;
-            encode_u32(packed.block_row_offsets(), &mut host.sequence_block_offsets);
-            encode_u32(packed.physical_block_ids(), &mut host.physical_block_ids);
-            encode_u16(packed.valid_tokens(), &mut host.valid_tokens);
-            encode_u32(packed.row_sequence_slots(), &mut host.row_sequence_slots);
-            encode_u32(packed.position_ids(), &mut host.row_positions);
-            encode_u32(
-                packed.output_token_indices(),
-                &mut host.output_token_indices,
-            );
-
-            upload_prefix(
-                &mut device.sequence_block_offsets,
-                &host.sequence_block_offsets,
-                packed.block_row_offsets().len() * U32_BYTES,
-                &mut forward.io_staging,
-                stream,
-                metadata_site,
-            )?;
-            upload_prefix(
-                &mut device.physical_block_ids,
-                &host.physical_block_ids,
-                packed.physical_block_ids().len() * U32_BYTES,
-                &mut forward.io_staging,
-                stream,
-                metadata_site,
-            )?;
-            upload_prefix(
-                &mut device.valid_tokens,
-                &host.valid_tokens,
-                packed.valid_tokens().len() * U16_BYTES,
-                &mut forward.io_staging,
-                stream,
-                metadata_site,
-            )?;
-            upload_prefix(
-                &mut device.row_sequence_slots,
-                &host.row_sequence_slots,
-                active * U32_BYTES,
-                &mut forward.io_staging,
-                stream,
-                metadata_site,
-            )?;
-            upload_prefix(
-                &mut device.row_positions,
-                &host.row_positions,
-                active * U32_BYTES,
-                &mut forward.io_staging,
-                stream,
-                metadata_site,
-            )?;
-            if packed.output_count() != 0 {
-                let output_indices = device.output_token_indices.as_mut().ok_or(
-                    LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "output_token_indices",
-                        reason: "non-empty output has no cold-prepared device index buffer",
-                    },
-                )?;
-                upload_prefix(
-                    output_indices,
-                    &host.output_token_indices,
-                    packed.output_count() * U32_BYTES,
-                    &mut forward.io_staging,
-                    stream,
-                    metadata_site,
-                )?;
-            }
-            None
-        }
-        (
-            BatchHostInput::IterationBatch(host),
-            BatchDeviceInput::IterationBatch { slab },
-            BatchMetadataTransport::PackedAsync,
-        ) => {
-            let layout = PackedIterationLayout::for_batch(&packed, dense_rows)?;
-            layout.validate_capacity(host.bytes.len())?;
-            layout.validate_u64_capacity(slab.byte_len())?;
-            pack_iteration_input(&packed, dense_rows, layout, &mut host.bytes)?;
-            host.pinned
-                .write(0, &host.bytes[..layout.total_bytes])
-                .map_err(|source| batch_cuda(metadata_site, source))?;
-            Some(layout)
-        }
-        _ => {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "metadata_transport",
-                reason: "cold-prepared host/device input transport does not match configuration",
-            });
-        }
-    };
-
-    let mut execute_iteration_body = |batch: PackedBatchV1<'_>,
-                                      token_ids: Option<CudaBufferSpan<'_>>,
-                                      output_indices: Option<CudaBufferSpan<'_>>,
-                                      stream: &mut dyn CudaExecutionStream|
-     -> LlamaBatchExecutorResult<()> {
-        let rms_norm_profile = forward.rms_norm_profile();
-        let PreparedLlamaForward {
-            plan: maximum_plan,
-            weights,
-            gemms: maximum_gemms,
-            buffers,
-            ..
-        } = forward;
-        let (plan, gemms) = if dense_rows == maximum_plan.sequence_length() {
-            (&*maximum_plan, maximum_gemms)
-        } else {
-            let shape = shape_variants
-                .iter_mut()
-                .find(|shape| shape.dense_rows == dense_rows)
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "shape_variants",
-                    reason: "selected dense-row bucket was not prepared",
-                })?;
-            (&shape.plan, &mut shape.gemms)
-        };
-        execute_fixed_graph(
-            plan,
-            weights,
-            gemms,
-            buffers,
-            config.residual_norm_implementation(),
-            rms_norm_profile,
-            config.ragged_attention_reduction_profile(),
-            config.ragged_attention_implementation(),
-            layout,
-            key_cache,
-            value_cache,
-            rope_cos,
-            rope_sin,
-            token_ids,
-            batch,
-            packed.position_ids(),
-            stream,
-        )?;
-
-        if packed.output_count() != 0 {
-            dispatch_output_primitives(
-                OutputPrimitiveDispatch {
-                    logits: &buffers.logits,
-                    logits_byte_len: plan.workspace_spec().logits_bytes(),
-                    vocabulary_size: plan.dimensions().vocabulary_size(),
-                    dense_rows,
-                    output_indices,
-                    output_indices_host: packed.output_token_indices(),
-                    output_count: packed.output_count(),
-                    gathered_logits,
-                    greedy_results,
-                    produce_greedy_tokens: output_mode == BatchOutputMode::GreedyTokens,
-                },
-                stream,
-            )?;
-        }
-        Ok(())
-    };
-
-    match (
-        config.execution_completion_implementation(),
-        config.metadata_transport(),
-    ) {
-        (ExecutionCompletionImplementation::PerOperation, BatchMetadataTransport::Synchronous) => {
-            let BatchDeviceInput::PerOperation(device) = &*device else {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "metadata_transport",
-                    reason: "synchronous execution has no per-operation device metadata",
-                });
-            };
-            let views = per_operation_device_views(host_batch, device, &packed, metadata_site)?;
-            execute_iteration_body(
-                views.batch,
-                views.token_ids,
-                views.output_token_indices,
-                stream,
-            )
-        }
-        (
-            ExecutionCompletionImplementation::IterationBatch,
-            BatchMetadataTransport::Synchronous,
-        ) => {
-            let BatchDeviceInput::PerOperation(device) = &*device else {
-                return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "metadata_transport",
-                    reason: "synchronous execution has no per-operation device metadata",
-                });
-            };
-            let views = per_operation_device_views(host_batch, device, &packed, metadata_site)?;
-            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
-                execute_iteration_body(
-                    views.batch,
-                    views.token_ids,
-                    views.output_token_indices,
-                    commands,
-                )
-            })
-        }
-        (
-            ExecutionCompletionImplementation::IterationBatch,
-            BatchMetadataTransport::PackedAsync,
-        ) => {
-            let layout = packed_layout.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "packed_iteration_layout",
-                reason: "packed async input was not prepared before command-batch begin",
-            })?;
-            let copy_byte_len = usize_u64(
-                layout.total_bytes,
-                LlamaBatchExecutorResource::PackedIterationInput,
-            )?;
-            match (&*device, &host.input) {
-                (BatchDeviceInput::IterationBatch { slab }, BatchHostInput::IterationBatch(_)) => {
-                    // Resolve every dtype, alignment, range, host-shape, and
-                    // output-view check before the first H2D submission. The
-                    // same immutable descriptors are rebound after enqueue;
-                    // no shape or offset can change inside the command batch.
-                    let _preflight_views =
-                        packed_device_views(host_batch, slab, &packed, layout, metadata_site)?;
-                }
-                _ => {
-                    return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "metadata_transport",
-                        reason: "packed async execution has no packed host/device slab",
-                    });
-                }
-            }
-            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
-                match (&mut *device, &host.input) {
-                    (
-                        BatchDeviceInput::IterationBatch { slab },
-                        BatchHostInput::IterationBatch(host),
-                    ) => {
-                        let copy_result = slab
-                            .copy_from_pinned_in_command_batch(
-                                0,
-                                &host.pinned,
-                                0,
-                                copy_byte_len,
-                                commands,
-                            )
-                            .map_err(|source| batch_cuda(metadata_site, source));
-                        match copy_result {
-                            Err(error) => Err(error),
-                            Ok(()) => {
-                                match packed_device_views(
-                                    host_batch,
-                                    slab,
-                                    &packed,
-                                    layout,
-                                    metadata_site,
-                                ) {
-                                    Err(error) => Err(error),
-                                    Ok(views) => execute_iteration_body(
-                                        views.batch,
-                                        views.token_ids,
-                                        views.output_token_indices,
-                                        commands,
-                                    ),
-                                }
-                            }
-                        }
-                    }
-                    _ => Err(LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "metadata_transport",
-                        reason: "packed async execution has no packed host/device slab",
-                    }),
-                }
-            })
-        }
-        (ExecutionCompletionImplementation::PerOperation, BatchMetadataTransport::PackedAsync) => {
-            Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "metadata_transport",
-                reason: "packed async metadata requires iteration-batch completion",
-            })
-        }
-    }
-}
-
-#[allow(
-    clippy::too_many_arguments,
-    clippy::too_many_lines,
-    clippy::cast_precision_loss,
-    clippy::large_types_passed_by_value,
-    clippy::similar_names
-)]
-fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
-    plan: &LlamaExecutionPlan,
-    weights: &CudaUploadedWeights,
-    gemms: &mut GemmPlans,
-    buffers: &mut ForwardBuffers,
-    residual_norm_implementation: ResidualNormImplementation,
-    rms_norm_profile: LlamaRmsNormProfile,
-    attention_reduction_profile: AttentionReductionProfile,
-    attention_implementation: RaggedAttentionImplementation,
-    layout: KvLayout,
-    key_cache: &mut CudaDeviceBuffer,
-    value_cache: &mut CudaDeviceBuffer,
-    rope_cos: &CudaDeviceBuffer,
-    rope_sin: &CudaDeviceBuffer,
-    token_ids: Option<CudaBufferSpan<'_>>,
-    batch: PackedBatchV1<'_>,
-    positions_host: &[u32],
-    stream: &mut S,
-) -> LlamaBatchExecutorResult<()> {
-    let dense_rows = usize_u64(
-        plan.sequence_length(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let dimensions = plan.dimensions();
-    let hidden = usize_u64(
-        dimensions.hidden_size(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let key_value_width = usize_u64(
-        dimensions.key_value_width(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let query_heads = usize_u64(
-        dimensions.query_heads(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let key_value_heads = usize_u64(
-        dimensions.key_value_heads(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let head_size = usize_u64(
-        dimensions.head_dimension(),
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let max_positions =
-        absolute_rope_position_count(rope_cos.byte_len(), dimensions.head_dimension())?;
-    let hidden_elements = plan.workspace_spec().hidden_buffer_bytes() / BF16_BYTES;
-    let intermediate_elements = plan.workspace_spec().intermediate_buffer_bytes() / BF16_BYTES;
-
-    let embedding_site = ExecutionSite::global(LlamaOp::Embedding);
-    let embedding_weight = weight_span(weights, plan.embedding_weight(), embedding_site)?;
-    {
-        let token_ids = match token_ids {
-            Some(token_ids) => token_ids,
-            None => span(
-                &buffers.token_ids,
-                CudaDType::U32,
-                plan.workspace_spec().token_ids_bytes(),
-                embedding_site,
-            )?,
-        };
-        let mut params = EmbeddingParams {
-            table: embedding_weight,
-            token_ids,
-            output: span_mut(
-                &mut buffers.hidden_current,
-                CudaDType::BF16,
-                plan.workspace_spec().hidden_buffer_bytes(),
-                embedding_site,
-            )?,
-            error_scratch: span_mut(
-                &mut buffers.embedding_error_scratch,
-                CudaDType::U8,
-                plan.workspace_spec().embedding_error_scratch_bytes(),
-                embedding_site,
-            )?,
-            token_count: dense_rows,
-            vocabulary_size: usize_u64(
-                dimensions.vocabulary_size(),
-                LlamaBatchExecutorResource::GatheredLogits,
-            )?,
-            hidden_size: hidden,
-        };
-        embedding(&mut params, stream).map_err(|source| {
-            LlamaBatchExecutorError::Forward(LlamaForwardError::Embedding {
-                site: embedding_site,
-                source,
-            })
-        })?;
-    }
-
-    for layer in plan.layers() {
-        let layer_index = layer.index();
-        let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
-        let input_norm_weight = weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
-        {
-            let mut params = RmsNormParams {
-                input: span(
-                    &buffers.hidden_current,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    input_norm_site,
-                )?,
-                weight: input_norm_weight,
-                output: span_mut(
-                    &mut buffers.hidden_norm,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    input_norm_site,
-                )?,
-                row_count: dense_rows,
-                hidden_size: hidden,
-                epsilon: layer.input_norm_epsilon(),
-            };
-            execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
-                .map_err(|source| batch_cuda(input_norm_site, source))?;
-        }
-
-        let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-        execute_gemm(
-            &mut gemms.hidden,
-            &buffers.hidden_norm,
-            weight_span(weights, layer.query_weight(), query_site)?,
-            &mut buffers.hidden_projection,
-            &mut buffers.gemm_workspace,
-            stream,
-            query_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.query_bias(),
-            &mut buffers.hidden_projection,
-            dense_rows,
-            hidden,
-            stream,
-            query_site,
-        )?;
-        let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-        execute_gemm(
-            &mut gemms.key_value,
-            &buffers.hidden_norm,
-            weight_span(weights, layer.key_weight(), key_site)?,
-            &mut buffers.key_raw,
-            &mut buffers.gemm_workspace,
-            stream,
-            key_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.key_bias(),
-            &mut buffers.key_raw,
-            dense_rows,
-            key_value_width,
-            stream,
-            key_site,
-        )?;
-        let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
-        execute_gemm(
-            &mut gemms.key_value,
-            &buffers.hidden_norm,
-            weight_span(weights, layer.value_weight(), value_site)?,
-            &mut buffers.value_raw,
-            &mut buffers.gemm_workspace,
-            stream,
-            value_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.value_bias(),
-            &mut buffers.value_raw,
-            dense_rows,
-            key_value_width,
-            stream,
-            value_site,
-        )?;
-
-        let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
-        {
-            let mut params = IndexedRopeParams {
-                input: span(
-                    &buffers.hidden_projection,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    query_rope_site,
-                )?,
-                cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
-                    .map_err(|source| batch_cuda(query_rope_site, source))?,
-                sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
-                    .map_err(|source| batch_cuda(query_rope_site, source))?,
-                positions: batch.device_row_positions(),
-                positions_host,
-                output: span_mut(
-                    &mut buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    query_rope_site,
-                )?,
-                head_count: query_heads,
-                head_size,
-                rotary_dimension: head_size,
-                table_position_count: max_positions,
-            };
-            indexed_rope(&mut params, stream)
-                .map_err(|source| batch_cuda(query_rope_site, source))?;
-        }
-        let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
-        {
-            let mut params = IndexedRopeParams {
-                input: span(
-                    &buffers.key_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    key_rope_site,
-                )?,
-                cos: CudaBufferSpan::new(rope_cos, CudaDType::F32, 0, rope_cos.byte_len())
-                    .map_err(|source| batch_cuda(key_rope_site, source))?,
-                sin: CudaBufferSpan::new(rope_sin, CudaDType::F32, 0, rope_sin.byte_len())
-                    .map_err(|source| batch_cuda(key_rope_site, source))?,
-                positions: batch.device_row_positions(),
-                positions_host,
-                output: span_mut(
-                    &mut buffers.key_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    key_rope_site,
-                )?,
-                head_count: key_value_heads,
-                head_size,
-                rotary_dimension: head_size,
-                table_position_count: max_positions,
-            };
-            indexed_rope(&mut params, stream)
-                .map_err(|source| batch_cuda(key_rope_site, source))?;
-        }
-
-        let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
-        let layer_offset = layout.layer_byte_offset(layer_index).ok_or(
-            LlamaBatchExecutorError::InvalidConfiguration {
-                field: "KV layer offset",
-                reason: "decoder layer lies outside the prepared KV layout",
-            },
-        )?;
-        {
-            let mut params = RaggedPagedKvCacheWriteParams {
-                key_source: span(
-                    &buffers.key_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    cache_site,
-                )?,
-                value_source: span(
-                    &buffers.value_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().key_value_buffer_bytes(),
-                    cache_site,
-                )?,
-                key_pool: CudaBufferSpanMut::new(
-                    key_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(cache_site, source))?,
-                value_pool: CudaBufferSpanMut::new(
-                    value_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(cache_site, source))?,
-                batch,
-                key_value_head_count: key_value_heads,
-                head_size,
-            };
-            ragged_paged_kv_cache_write(&mut params, stream)
-                .map_err(|source| batch_cuda(cache_site, source))?;
-        }
-
-        let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
-        {
-            let mut params = RaggedPagedAttentionParams {
-                query: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    attention_site,
-                )?,
-                key_pool: CudaBufferSpan::new(
-                    key_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                value_pool: CudaBufferSpan::new(
-                    value_cache,
-                    CudaDType::BF16,
-                    layer_offset,
-                    layout.layer_stride_bytes(),
-                )
-                .map_err(|source| batch_cuda(attention_site, source))?,
-                output: span_mut(
-                    &mut buffers.hidden_context,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    attention_site,
-                )?,
-                batch,
-                query_head_count: query_heads,
-                key_value_head_count: key_value_heads,
-                head_size,
-                output_row_count: dense_rows,
-                scale: 1.0 / (head_size as f32).sqrt(),
-            };
-            match attention_reduction_profile {
-                AttentionReductionProfile::CanonicalV1 => match attention_implementation {
-                    RaggedAttentionImplementation::Legacy => {
-                        ragged_paged_attention(&mut params, stream)
-                    }
-                    RaggedAttentionImplementation::GroupedHeads => {
-                        grouped_ragged_paged_attention(&mut params, stream)
-                    }
-                },
-                AttentionReductionProfile::FixedContiguous37BalancedV1 => {
-                    fixed37_ragged_paged_attention(&mut params, stream)
-                }
-            }
-            .map_err(|source| batch_cuda(attention_site, source))?;
-        }
-
-        let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
-        execute_gemm(
-            &mut gemms.hidden,
-            &buffers.hidden_context,
-            weight_span(weights, layer.output_weight(), output_site)?,
-            &mut buffers.hidden_projection,
-            &mut buffers.gemm_workspace,
-            stream,
-            output_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.output_bias(),
-            &mut buffers.hidden_projection,
-            dense_rows,
-            hidden,
-            stream,
-            output_site,
-        )?;
-        let attention_residual_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
-        let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
-        match residual_norm_implementation {
-            ResidualNormImplementation::Separate => {
-                let mut residual = ResidualAddParams {
-                    left: span(
-                        &buffers.hidden_current,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    right: span(
-                        &buffers.hidden_projection,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    output: span_mut(
-                        &mut buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        attention_residual_site,
-                    )?,
-                    element_count: hidden_elements,
-                };
-                residual_add(&mut residual, stream)
-                    .map_err(|source| batch_cuda(attention_residual_site, source))?;
-                let mut norm = RmsNormParams {
-                    input: span(
-                        &buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    weight: weight_span(
-                        weights,
-                        layer.post_attention_norm_weight(),
-                        post_norm_site,
-                    )?,
-                    output: span_mut(
-                        &mut buffers.hidden_norm,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    row_count: dense_rows,
-                    hidden_size: hidden,
-                    epsilon: layer.post_attention_norm_epsilon(),
-                };
-                execute_profile_rms_norm(rms_norm_profile, &mut norm, stream)
-                    .map_err(|source| batch_cuda(post_norm_site, source))?;
-            }
-            ResidualNormImplementation::Fused => {
-                let mut fused = ResidualRmsNormParams {
-                    left: span(
-                        &buffers.hidden_current,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    right: span(
-                        &buffers.hidden_projection,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    weight: weight_span(
-                        weights,
-                        layer.post_attention_norm_weight(),
-                        post_norm_site,
-                    )?,
-                    residual_output: span_mut(
-                        &mut buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    normalized_output: span_mut(
-                        &mut buffers.hidden_norm,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        post_norm_site,
-                    )?,
-                    row_count: dense_rows,
-                    hidden_size: hidden,
-                    epsilon: layer.post_attention_norm_epsilon(),
-                };
-                execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
-                    .map_err(|source| batch_cuda(post_norm_site, source))?;
-            }
-        }
-        let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
-        execute_gemm(
-            &mut gemms.intermediate,
-            &buffers.hidden_norm,
-            weight_span(weights, layer.gate_weight(), gate_site)?,
-            &mut buffers.gate_raw,
-            &mut buffers.gemm_workspace,
-            stream,
-            gate_site,
-        )?;
-        let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
-        execute_gemm(
-            &mut gemms.intermediate,
-            &buffers.hidden_norm,
-            weight_span(weights, layer.up_weight(), up_site)?,
-            &mut buffers.up_raw,
-            &mut buffers.gemm_workspace,
-            stream,
-            up_site,
-        )?;
-        let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
-        {
-            let mut params = SiluParams {
-                input: span(
-                    &buffers.gate_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    silu_site,
-                )?,
-                output: span_mut(
-                    &mut buffers.gate_activated,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    silu_site,
-                )?,
-                element_count: intermediate_elements,
-            };
-            silu(&mut params, stream).map_err(|source| batch_cuda(silu_site, source))?;
-        }
-        let gated_site = ExecutionSite::layer(layer_index, LlamaOp::GatedMultiply);
-        {
-            let mut params = GatedMultiplyParams {
-                activated_gate: span(
-                    &buffers.gate_activated,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    gated_site,
-                )?,
-                up: span(
-                    &buffers.up_raw,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    gated_site,
-                )?,
-                output: span_mut(
-                    &mut buffers.gated_product,
-                    CudaDType::BF16,
-                    plan.workspace_spec().intermediate_buffer_bytes(),
-                    gated_site,
-                )?,
-                element_count: intermediate_elements,
-            };
-            gated_multiply(&mut params, stream).map_err(|source| batch_cuda(gated_site, source))?;
-        }
-        let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
-        execute_gemm(
-            &mut gemms.down,
-            &buffers.gated_product,
-            weight_span(weights, layer.down_weight(), down_site)?,
-            &mut buffers.hidden_current,
-            &mut buffers.gemm_workspace,
-            stream,
-            down_site,
-        )?;
-        let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
-        {
-            let mut params = ResidualAddParams {
-                left: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                right: span(
-                    &buffers.hidden_current,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                output: span_mut(
-                    &mut buffers.hidden_projection,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    mlp_residual_site,
-                )?,
-                element_count: hidden_elements,
-            };
-            residual_add(&mut params, stream)
-                .map_err(|source| batch_cuda(mlp_residual_site, source))?;
-        }
-        mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
-    }
-
-    let final_norm_site = ExecutionSite::global(LlamaOp::FinalNorm);
-    {
-        let mut params = RmsNormParams {
-            input: span(
-                &buffers.hidden_current,
-                CudaDType::BF16,
-                plan.workspace_spec().hidden_buffer_bytes(),
-                final_norm_site,
-            )?,
-            weight: weight_span(weights, plan.final_norm_weight(), final_norm_site)?,
-            output: span_mut(
-                &mut buffers.hidden_norm,
-                CudaDType::BF16,
-                plan.workspace_spec().hidden_buffer_bytes(),
-                final_norm_site,
-            )?,
-            row_count: dense_rows,
-            hidden_size: hidden,
-            epsilon: plan.final_norm_epsilon(),
-        };
-        execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
-            .map_err(|source| batch_cuda(final_norm_site, source))?;
-    }
-    let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
-    execute_gemm(
-        &mut gemms.lm_head,
-        &buffers.hidden_norm,
-        weight_span(weights, plan.lm_head_weight(), lm_head_site)?,
-        &mut buffers.logits,
-        &mut buffers.gemm_workspace,
+    dispatch_execute_packed(
+        packed,
+        config,
+        dense_rows,
+        forward,
+        shape_variants,
+        layout,
+        key_cache,
+        value_cache,
+        rope_cos,
+        rope_sin,
+        device,
+        gathered_logits,
+        greedy_results,
+        &mut host.input,
+        output_mode == BatchOutputMode::GreedyTokens,
+        dispatch_disposition,
         stream,
-        lm_head_site,
-    )?;
-    Ok(())
+    )
 }
 // HOT_BATCH_EXECUTE_END
-
-fn allocate_device_input(
-    context: &CudaContext,
-    bounds: LlamaBatchMetadataConfig,
-    transport: BatchMetadataTransport,
-) -> LlamaBatchExecutorResult<BatchDeviceInput> {
-    match transport {
-        BatchMetadataTransport::Synchronous => allocate_synchronous_device_input(context, bounds),
-        BatchMetadataTransport::PackedAsync => {
-            let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
-            allocate_packed_device_input(context, capacity)
-        }
-    }
-}
-
-fn allocate_host_workspace(
-    context: &CudaContext,
-    bounds: LlamaBatchMetadataConfig,
-    transport: BatchMetadataTransport,
-) -> LlamaBatchExecutorResult<BatchHostWorkspace> {
-    let input = match transport {
-        BatchMetadataTransport::Synchronous => allocate_synchronous_host_input(bounds)?,
-        BatchMetadataTransport::PackedAsync => {
-            let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
-            allocate_packed_host_input(context, capacity)?
-        }
-    };
-    Ok(BatchHostWorkspace {
-        input,
-        greedy_results: allocate_zeroed_host_bytes(bounds.max_output_slots(), GREEDY_RESULT_BYTES)?,
-    })
-}
-
-fn allocate_device(
-    context: &CudaContext,
-    byte_len: u64,
-    site: ExecutionSite,
-) -> LlamaBatchExecutorResult<CudaDeviceBuffer> {
-    context
-        .allocate_device_buffer(byte_len)
-        .map_err(|source| batch_cuda(site, source))
-}
-
-fn upload_batch_tokens(
-    forward: &mut PreparedLlamaForward,
-    token_ids: &[u32],
-    stream: &mut CudaStream,
-) -> LlamaBatchExecutorResult<()> {
-    if token_ids.len() == forward.plan.sequence_length() {
-        return forward.upload_tokens(token_ids, stream).map_err(Into::into);
-    }
-    let byte_len = checked_byte_len(
-        token_ids.len(),
-        U32_BYTES,
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    if byte_len > forward.token_bytes.len() {
-        return Err(LlamaBatchExecutorError::InvalidBatch {
-            field: "dense_rows",
-            reason: "selected token prefix exceeds the shared maximum buffer",
-        });
-    }
-    encode_u32(token_ids, &mut forward.token_bytes[..byte_len]);
-    forward.tokens_ready = false;
-    forward.output_ready = false;
-    let site = ExecutionSite::global(LlamaOp::Embedding);
-    match forward.buffers.token_ids.upload_from_slice(
-        0,
-        &forward.token_bytes[..byte_len],
-        &mut forward.io_staging,
-        stream,
-    ) {
-        Ok(()) => {
-            forward.tokens_ready = true;
-            Ok(())
-        }
-        Err(source) => {
-            poison_for_cuda_error(&mut forward.poisoned, &source);
-            Err(batch_cuda(site, source))
-        }
-    }
-}
-
-fn upload_prefix(
-    destination: &mut CudaDeviceBuffer,
-    source: &[u8],
-    byte_len: usize,
-    staging: &mut riley_cuda::CudaPinnedHostBuffer,
-    stream: &mut CudaStream,
-    site: ExecutionSite,
-) -> LlamaBatchExecutorResult<()> {
-    destination
-        .upload_from_slice(0, &source[..byte_len], staging, stream)
-        .map_err(|source| batch_cuda(site, source))
-}
-
-fn checked_product_u64(
-    values: &[u64],
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<u64> {
-    values.iter().try_fold(1_u64, |product, &value| {
-        product
-            .checked_mul(value)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
-    })
-}
 
 const _: () = assert!(KV_BLOCK_SIZE == 16);
 const _: () = assert!(SUPPORTED_HEAD_DIMENSION == 64);
@@ -2020,7 +756,8 @@ const _: () = assert!(SUPPORTED_HEAD_DIMENSION == 64);
 mod tests {
     use super::*;
     use crate::llama::batch::{
-        LlamaBatchBlockTable, LlamaBatchRowKind, PreparedLlamaBatchMetadata,
+        LlamaBatchBlockTable, LlamaBatchMetadataConfig, LlamaBatchRowKind,
+        PreparedLlamaBatchMetadata,
     };
     use crate::llama::executor::metadata::ByteRegion;
     use crate::paged_kv::BLOCK_TABLE_V1_VERSION;

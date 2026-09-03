@@ -15,6 +15,7 @@ pub(crate) mod host;
 pub(crate) mod metadata;
 pub(crate) mod metrics;
 pub(crate) mod output;
+pub(crate) mod owner;
 pub(crate) mod poison;
 pub(crate) mod rope;
 pub(crate) mod shape;

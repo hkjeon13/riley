@@ -1,9 +1,11 @@
 # C01 — vLLM 승리 계약 v1
 
-**상태:** In progress — `ae28891`에서 source-level contract/schema, canonical matrix/lane template,
-plan-only generator, fail-closed checker, synthetic fixture suite를 추가했다. executable lane, remote
-execution adapter, raw result collection, Tier D dry-run 및 closed M4/M5 report는 아직 없으며 M4/M5
-성능 주장은 하지 않는다.
+**상태:** In progress — `ae28891`의 contract/schema, canonical matrix/lane template, plan-only
+generator, fail-closed checker 위에 C01-A~C01-C source implementation을 추가했다. 이제 reviewed
+template + immutable input으로 materialized lane을 만들고, injected fake/process transport가
+immutable plan → append-only raw journal → checker까지 연결된다. 실제 Riley/vLLM candidate/version
+pin, approved remote GPU transport, Tier D dry-run, actual raw capture 및 closed M4/M5 report는 아직
+없으며 M4/M5 성능 주장은 하지 않는다.
 **의미 등급:** `reference`  
 **한 가지 목적:** Riley와 vLLM을 같은 조건에서 비교하고 M4 parity/M5 win을 기계적으로 판정하는 immutable benchmark contract를 만든다.
 
@@ -14,6 +16,26 @@ execution adapter, raw result collection, Tier D dry-run 및 closed M4/M5 report
 현재 저장소에는 재현 가능한 benchmark matrix와 vLLM 0.27.1 lane이 있지만, 최신 Riley fast path와 vLLM을 같은 candidate campaign에서 비교한 closed report는 없다. 기존 SmolLM2-135M 결과는 kernel과 runtime 병목을 빠르게 찾는 진단에는 유용하지만 일반적인 LLM serving 승리를 주장하기에는 모델 크기와 workload 범위가 좁다.
 
 이 PR은 성능을 개선하지 않는다. 앞으로 어떤 결과가 나와야 `Riley가 vLLM보다 빠르다`고 말할 수 있는지를 결과를 보기 전에 고정한다.
+
+## 구현 상태 (2026-09-03)
+
+- C01-A: `materialize_lane.py`가 create-only campaign-local lane을 만들고 immutable input file,
+  reviewed template, expanded argv의 SHA-256 binding을 재검증한다.
+- C01-B: `execute_campaign.py`는 SSH/GPU 구현 없이 injected `InvocationExecutor`만 받아 immutable
+  AB/BA plan을 실행한다. fresh lifecycle, pre-start retry, timeout cleanup과 one-journal lease를
+  source-level에서 고정한다.
+- C01-C: `raw_journal.py`의 fsync/hash-chain JSONL과 checker의 single-journal/materialized-lane
+  claim gate가 raw environment의 executable/dependency-lock receipt까지 대조한다.
+- C01 lane contract correction: Riley template은 실제 CLI와 동일하게 local
+  `checkpoint_path`를 `--model`에, public `model_id`를 `--model-id`에,
+  `bind_address`/`device_ordinal`을 `--bind`/`--device`에만 넣는다. nonexistent
+  `--revision`/`--dtype`/`--host`/`--port` argv는 제거했으며, model revision/dtype은
+  command option이 아니라 immutable model/runtime identity receipt로 고정한다.
+
+생성 plan, materialization input/lane, raw journal은 clean source claim을 유지하도록
+`benchmarks/competitive/.campaign-work/<campaign-id>/`에만 둔다. 이 구현은 fake CPU tests로
+검증한 adapter boundary이며, immutable input에 실제 version/pin을 선택하거나 remote GPU를 실행한
+결과가 아니다.
 
 ## 2. 범위
 

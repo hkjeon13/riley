@@ -11,6 +11,7 @@ const EXECUTOR_DISPATCH: &str = include_str!("../src/llama/executor/dispatch.rs"
 const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
 const EXECUTOR_HOST: &str = include_str!("../src/llama/executor/host.rs");
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
+const EXECUTOR_OWNER: &str = include_str!("../src/llama/executor/owner.rs");
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
 const EXECUTOR_POISON: &str = include_str!("../src/llama/executor/poison.rs");
 const EXECUTOR_ROPE: &str = include_str!("../src/llama/executor/rope.rs");
@@ -98,6 +99,66 @@ fn executor_allocation_only_aggregates_cold_scalar_facts() {
     );
     assert!(!BATCH_EXECUTOR.contains("pub struct PreparedLlamaBatchAllocationReport"));
     assert!(!BATCH_EXECUTOR.contains("fn build_batch_allocation_report"));
+}
+
+#[test]
+fn executor_owner_is_the_single_cuda_lifetime_and_explicit_close_boundary() {
+    for required in [
+        "struct PreparedLlamaBatchOwner",
+        "struct BatchHostWorkspace",
+        "PreparedLlamaForward::prepare",
+        "prepare_shape_variants",
+        "KvLayout::checked",
+        "BatchDeviceInput",
+        "BatchHostInput",
+        "pub(in crate::llama) fn close",
+        "LlamaBatchExecutorResource::KeyCache",
+        "LlamaBatchExecutorResource::ValueCache",
+        "LlamaBatchExecutorResource::RopeCos",
+        "LlamaBatchExecutorResource::RopeSin",
+        "close_device_input",
+        "close_host_input",
+        "record_first_error",
+        "finish_close_errors",
+        "forward.close()",
+    ] {
+        assert!(
+            EXECUTOR_OWNER.contains(required),
+            "executor owner omitted required ownership/lifecycle token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "crate::server",
+        "scheduler::",
+    ] {
+        assert!(
+            !EXECUTOR_OWNER.contains(forbidden),
+            "executor owner crossed its resource-lifetime boundary with {forbidden:?}"
+        );
+    }
+
+    let close_begin = EXECUTOR_OWNER
+        .find("pub(in crate::llama) fn close")
+        .expect("owner close remains explicit");
+    let close = &EXECUTOR_OWNER[close_begin..];
+    let key_cache = close
+        .find("LlamaBatchExecutorResource::KeyCache")
+        .expect("key cache close remains explicit");
+    let value_cache = close
+        .find("LlamaBatchExecutorResource::ValueCache")
+        .expect("value cache close remains explicit");
+    let rope_cos = close
+        .find("LlamaBatchExecutorResource::RopeCos")
+        .expect("RoPE cosine close remains explicit");
+    let rope_sin = close
+        .find("LlamaBatchExecutorResource::RopeSin")
+        .expect("RoPE sine close remains explicit");
+    assert!(
+        key_cache < value_cache && value_cache < rope_cos && rope_cos < rope_sin,
+        "owner must preserve the established first-error close order"
+    );
 }
 
 #[test]
@@ -375,7 +436,7 @@ fn executor_device_views_only_bind_borrowed_cuda_metadata() {
 }
 
 #[test]
-fn executor_dispatch_only_binds_borrowed_primitives_and_completion() {
+fn executor_dispatch_owns_borrowed_iteration_orchestration() {
     for required in [
         "enum BatchDispatchDisposition",
         "mutation_may_have_occurred",
@@ -403,40 +464,43 @@ fn executor_dispatch_only_binds_borrowed_primitives_and_completion() {
         "output_logits_bytes",
         "greedy_result_bytes",
         "cuda_error as dispatch_cuda",
+        "pub(in crate::llama) fn execute_packed",
+        "fn execute_fixed_graph",
+        "BatchMetadataTransport",
+        "ExecutionCompletionImplementation",
+        "BatchHostInput",
+        "BatchDeviceInput",
+        "LlamaPackedBatchMetadata",
+        "PackedBatchHostV1::new(",
+        "per_operation_device_views",
+        "packed_device_views",
+        "upload_batch_tokens",
+        "upload_prefix",
+        "copy_from_pinned_in_command_batch",
+        "ForwardBuffers",
+        "LlamaExecutionPlan",
+        "GemmPlans",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "ragged_paged_attention",
     ] {
         assert!(
             EXECUTOR_DISPATCH.contains(required),
-            "executor dispatch omitted required borrowed-dispatch token {required:?}"
+            "executor dispatch omitted required iteration-orchestration token {required:?}"
         );
     }
     for forbidden in [
         "batch_executor",
-        "ForwardBuffers",
-        "LlamaExecutionPlan",
         "BatchOutputMode",
-        "PreparedLlamaBatchExecutor",
-        "PreparedLlamaForward",
-        "BatchHostInput",
-        "BatchDeviceInput",
-        "BatchMetadataTransport",
-        "LlamaPackedBatchMetadata",
-        "PackedBatchV1",
+        "pub struct PreparedLlamaBatchExecutor",
         "CudaContext",
-        "CudaPinnedHostBuffer",
-        "CudaUploadedWeights",
-        "KvLayout",
-        "GemmPlans",
         "RopeTableParams",
-        "indexed_rope",
-        "ragged_paged_attention",
+        "rope_table(",
+        "LoadedModel",
         "allocate_device_buffer",
         "allocate_pinned_host_buffer",
-        "upload_from_slice",
-        "copy_from_pinned",
         "close(",
-        "poison",
         "poison_for_batch_error",
-        "forward_poisoned",
         "Vec",
         "Box",
         "String",
@@ -444,7 +508,7 @@ fn executor_dispatch_only_binds_borrowed_primitives_and_completion() {
     ] {
         assert!(
             !EXECUTOR_DISPATCH.contains(forbidden),
-            "executor dispatch crossed its borrowed-output boundary with {forbidden:?}"
+            "executor dispatch crossed its borrowed iteration-orchestration boundary with {forbidden:?}"
         );
     }
 }

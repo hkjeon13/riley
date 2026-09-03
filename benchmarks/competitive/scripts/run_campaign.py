@@ -30,6 +30,7 @@ from competitive_common import (
     matrix_cells,
     normalise_sampling_identity,
     path_for_plan,
+    require_campaign_artifact_path,
     request_sets_by_cell,
     require_canonical_contract,
     sha256_bytes,
@@ -43,6 +44,7 @@ from competitive_common import (
     verify_campaign_matrix_binding,
     verify_campaign_request_binding,
 )
+from materialize_lane import verify_campaign_lane_binding_value
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
@@ -89,6 +91,46 @@ def _load_lane(path: Path) -> Mapping[str, Any]:
 
 def _load_matrix(path: Path) -> Mapping[str, Any]:
     return validate_matrix(load_json(path), str(path))
+
+
+def _claim_ready_lane_reason(
+    *,
+    root: Path,
+    lane: Mapping[str, Any],
+    lane_path: Path,
+    campaign_id: str,
+    source: Mapping[str, Any],
+    role: str,
+) -> str | None:
+    """Return one block reason when an executable lane is not claim-ready."""
+
+    if lane["availability"] != "available" or lane["command"].get("status") != "available":
+        return (
+            f"{role} lane {lane['lane_id']!r} is {lane['availability']}/"
+            f"{lane['command'].get('status')}, not executable"
+        )
+    try:
+        require_campaign_artifact_path(root, lane_path, f"{role} materialized lane path")
+    except ContractError as error:
+        return f"{role} lane is outside the declared campaign artifact workspace: {error}"
+    command = lane["command"]
+    argv = command.get("argv")
+    if command.get("required_placeholders") != [] or not isinstance(argv, list) or any(
+        "{" in str(token) or "}" in str(token) for token in argv
+    ):
+        return f"{role} lane command is not fully materialized"
+    materialization = lane.get("materialization")
+    if not isinstance(materialization, Mapping):
+        return f"{role} lane lacks a materialization receipt"
+    if materialization.get("campaign_id") != campaign_id:
+        return f"{role} lane materialization campaign differs from plan"
+    if materialization.get("source_git_revision") != source["git_revision"]:
+        return f"{role} lane materialization source differs from campaign source"
+    try:
+        verify_campaign_lane_binding_value(root=root, lane=lane)
+    except ContractError as error:
+        return f"{role} lane materialization receipt is not reproducible: {error}"
+    return None
 
 
 def _cell_catalog(root: Path, matrix_paths: Sequence[Path]) -> list[dict[str, Any]]:
@@ -250,12 +292,20 @@ def build_plan(
             "values": preflight_values,
             "script": canonical_preflight_script_receipt(root),
         }
-    for role, lane in (("riley", riley_lane), ("competitor", competitor_lane)):
-        if lane["availability"] != "available" or lane["command"].get("status") != "available":
-            blocked_reasons.append(
-                f"{role} lane {lane['lane_id']!r} is {lane['availability']}/"
-                f"{lane['command'].get('status')}, not executable"
-            )
+    for role, lane, lane_path in (
+        ("riley", riley_lane, riley_lane_path),
+        ("competitor", competitor_lane, competitor_lane_path),
+    ):
+        reason = _claim_ready_lane_reason(
+            root=root,
+            lane=lane,
+            lane_path=lane_path,
+            campaign_id=campaign_id,
+            source=source,
+            role=role,
+        )
+        if reason is not None:
+            blocked_reasons.append(reason)
     if source["git_dirty"]:
         blocked_reasons.append("source tree was dirty when the development-only plan was created")
     if blocked_reasons and require_executable_lanes:
@@ -414,7 +464,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             allow_dirty_source=arguments.allow_dirty_source,
             require_executable_lanes=arguments.require_executable_lanes,
         )
-        create_only_write(arguments.output.resolve(), canonical_json_bytes(plan))
+        output_path = require_campaign_artifact_path(
+            root,
+            arguments.output.absolute(),
+            "campaign plan output",
+        )
+        create_only_write(output_path, canonical_json_bytes(plan))
     except ContractError as error:
         print(f"run_campaign: {error}", file=sys.stderr)
         return 2

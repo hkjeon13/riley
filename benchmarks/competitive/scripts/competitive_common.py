@@ -39,12 +39,18 @@ REPORT_SCHEMA_VERSION = "riley.competitive.report.v1"
 CANONICAL_CONTRACT_RELATIVE_PATH = "benchmarks/competitive/contract-v1.json"
 CANONICAL_CONTRACT_ID = "riley-vllm-competitive-v1"
 CANONICAL_PREFLIGHT_RELATIVE_PATH = "benchmarks/scripts/preflight.sh"
+# Generated plans, materialized lane inputs/outputs, and raw journals must
+# stay out of the reviewed source tree.  This exact ignored
+# workspace is deliberately narrower than a generic ``campaigns/`` directory:
+# source cleanliness remains a claim gate for every other untracked or dirty
+# path in the checkout.
+CAMPAIGN_ARTIFACT_WORKSPACE_RELATIVE_PATH = "benchmarks/competitive/.campaign-work"
 CANONICAL_ASSET_SHA256: dict[str, str] = {
-    CANONICAL_CONTRACT_RELATIVE_PATH: "6ef30fb591a3421b8ffaef41e6ed6907d7308d90c72ee03955f9c083240cc931",
+    CANONICAL_CONTRACT_RELATIVE_PATH: "4852ae4711aa2e02331995533babea0a21db07205620ccfc7fe94be3d7fa4194",
     "benchmarks/competitive/matrices/diagnostic-sm89-bf16-v1.json": "7288245ac4dd5d6fecd89f57a03207449e9fbd2905e8bc873e1aae233419077a",
     "benchmarks/competitive/matrices/latency-sm89-bf16-v1.json": "03eb884c35b458b5e61526f039ec51212104797f105008a4049842ab7b048fe6",
     "benchmarks/competitive/matrices/serving-sm89-bf16-v1.json": "9b414dc177b097c65f4fd44c95cb5169b15a8a9aa139f36a50e0f5bc01d8ae34",
-    "benchmarks/competitive/lanes/riley.json": "47b88c6a235d8affa7aff739d1f460ded44c7f8a834d86f779dc7bc3d28e0eae",
+    "benchmarks/competitive/lanes/riley.json": "9035fa499d6dec60a29668199d754ff7d677b2c4794900a2fd98be0dbd4623fa",
     "benchmarks/competitive/lanes/vllm-current.json": "8b1ce0ac66c7a8f7631f126c59b33a4a13d48b9d5ffa332fafcb76e6056b1047",
 }
 CANONICAL_PREFLIGHT_SHA256 = "2371a6291b6b47b89e960867a1c3ae814ffc1e10115ea74eb02e0792db9f42e4"
@@ -561,6 +567,66 @@ def path_for_plan(root: Path, path: Path) -> str:
         raise ContractError(f"{path} must be inside repository root {root}") from error
 
 
+def campaign_artifact_workspace(root: Path) -> Path:
+    """Return the one declared ignored workspace without following a link.
+
+    The workspace is an execution-evidence boundary, not a generic temporary
+    directory.  A symlink at any existing component would weaken the
+    repository containment promise, so reject it before consumers read or
+    create an artifact below the workspace.
+    """
+
+    resolved_root = root.resolve()
+    workspace = resolved_root / CAMPAIGN_ARTIFACT_WORKSPACE_RELATIVE_PATH
+    cursor = resolved_root
+    for component in Path(CAMPAIGN_ARTIFACT_WORKSPACE_RELATIVE_PATH).parts:
+        cursor = cursor / component
+        if cursor.is_symlink():
+            raise ContractError("campaign artifact workspace must not be a symbolic link")
+    resolved_workspace = workspace.resolve(strict=False)
+    try:
+        resolved_workspace.relative_to(resolved_root)
+    except ValueError as error:  # defensive for unusual filesystem races
+        raise ContractError("campaign artifact workspace must stay inside repository root") from error
+    return workspace
+
+
+def require_campaign_artifact_path(root: Path, path: Path, label: str) -> Path:
+    """Require a path strictly below the campaign workspace without escape.
+
+    Explicit ``.``/``..`` components and a link escape are rejected.  The
+    returned path is physically resolved after the containment checks,
+    suitable for subsequent regular-file validation or create-only output.
+    """
+
+    resolved_root = root.resolve()
+    workspace = campaign_artifact_workspace(resolved_root)
+    raw = path if path.is_absolute() else resolved_root / path
+    if any(component in {".", ".."} for component in raw.parts):
+        raise ContractError(f"{label} must not contain dot path components")
+    if raw.is_symlink():
+        raise ContractError(f"{label} must not be a symbolic link")
+    # Normalize filesystem aliases outside the repository first (macOS often
+    # presents temporary paths as both /var and /private/var), then enforce
+    # the physical workspace boundary.  A link that escapes the workspace is
+    # therefore rejected rather than merely passing a lexical prefix check.
+    resolved = raw.resolve(strict=False)
+    resolved_workspace = workspace.resolve(strict=False)
+    try:
+        relative = resolved.relative_to(resolved_workspace)
+    except ValueError as error:
+        raise ContractError(
+            f"{label} must stay inside {CAMPAIGN_ARTIFACT_WORKSPACE_RELATIVE_PATH}"
+        ) from error
+    if not relative.parts:
+        raise ContractError(f"{label} must name a file below the campaign artifact workspace")
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError as error:
+        raise ContractError(f"{label} must stay inside repository root") from error
+    return resolved
+
+
 def create_only_write(path: Path, data: bytes) -> None:
     """Write exactly once without replacing a prior campaign artifact."""
 
@@ -569,7 +635,8 @@ def create_only_write(path: Path, data: bytes) -> None:
     if not path.parent.is_dir():
         raise ContractError(f"output parent does not exist: {path.parent}")
     try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags, 0o644)
     except OSError as error:
         raise ContractError(f"cannot create artifact {path}: {error}") from error
     try:
@@ -776,6 +843,7 @@ def validate_lane(value: Any, label: str = "lane") -> Mapping[str, Any]:
             "artifact_receipts",
             "parent_contract",
             "parent_asset",
+            "materialization",
         ),
     )
     if lane["schema_version"] != LANE_SCHEMA_VERSION:
@@ -819,8 +887,12 @@ def validate_lane(value: Any, label: str = "lane") -> Mapping[str, Any]:
             required=("status", "argv", "required_placeholders", "output_format"),
         )
         placeholders = _array(command["required_placeholders"], f"{label}.command.required_placeholders")
-        if not placeholders or len(placeholders) != len(set(placeholders)):
-            raise ContractError(f"{label}.command.required_placeholders must be non-empty and unique")
+        fully_materialized = lane["availability"] == "available" and "materialization" in lane
+        if (not fully_materialized and not placeholders) or len(placeholders) != len(set(placeholders)):
+            raise ContractError(
+                f"{label}.command.required_placeholders must be "
+                f"{'empty' if fully_materialized else 'non-empty'} and unique"
+            )
         for index, placeholder in enumerate(placeholders):
             validate_identifier(placeholder, f"{label}.command.required_placeholders[{index}]")
         _string(command["output_format"], f"{label}.command.output_format")
@@ -864,6 +936,41 @@ def validate_lane(value: Any, label: str = "lane") -> Mapping[str, Any]:
             )
     elif "artifact_receipts" in lane:
         raise ContractError(f"{label}.artifact_receipts require availability: available")
+    if "materialization" in lane:
+        materialization = _object(lane["materialization"], f"{label}.materialization")
+        expect_keys(
+            materialization,
+            f"{label}.materialization",
+            required=(
+                "schema_version",
+                "campaign_id",
+                "source_git_revision",
+                "immutable_input_path",
+                "immutable_input_sha256",
+                "expanded_argv_sha256",
+                "template_path",
+                "template_sha256",
+            ),
+        )
+        if materialization["schema_version"] != "riley.competitive.lane-materialization.v1":
+            raise ContractError(f"{label}.materialization.schema_version is unsupported")
+        validate_identifier(materialization["campaign_id"], f"{label}.materialization.campaign_id")
+        revision = _string(materialization["source_git_revision"], f"{label}.materialization.source_git_revision")
+        if not GIT_REVISION_RE.fullmatch(revision):
+            raise ContractError(f"{label}.materialization.source_git_revision must be full lowercase 40-hex")
+        _string(materialization["immutable_input_path"], f"{label}.materialization.immutable_input_path")
+        validate_sha256(
+            materialization["immutable_input_sha256"],
+            f"{label}.materialization.immutable_input_sha256",
+        )
+        validate_sha256(
+            materialization["expanded_argv_sha256"],
+            f"{label}.materialization.expanded_argv_sha256",
+        )
+        _string(materialization["template_path"], f"{label}.materialization.template_path")
+        validate_sha256(materialization["template_sha256"], f"{label}.materialization.template_sha256")
+        if lane["availability"] != "available":
+            raise ContractError(f"{label}.materialization requires availability: available")
     return lane
 
 

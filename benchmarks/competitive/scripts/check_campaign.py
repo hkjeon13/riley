@@ -12,6 +12,7 @@ emitted.
 from __future__ import annotations
 
 import argparse
+import stat
 import subprocess
 import sys
 from collections import defaultdict
@@ -37,6 +38,7 @@ from competitive_common import (
     load_preflight_receipt,
     matrix_cells,
     nearest_rank,
+    require_campaign_artifact_path,
     r7,
     request_sets_by_cell,
     request_workload_identity,
@@ -55,6 +57,8 @@ from competitive_common import (
     verify_canonical_preflight_script_receipt,
     workload_execution_receipt,
 )
+from materialize_lane import verify_campaign_lane_binding_value
+from raw_journal import JOURNAL_FIELDS, validate_append_only_chain
 
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
@@ -85,8 +89,9 @@ RAW_REQUIRED_FIELDS = (
     "failure_reason",
     "metrics",
     "requests",
+    *JOURNAL_FIELDS,
 )
-RAW_OPTIONAL_FIELDS = ("adapter_receipt_sha256",)
+RAW_OPTIONAL_FIELDS = ("preflight_receipt_sha256",)
 SUCCESS_METRIC_REQUIRED_FIELDS = (
     "output_tokens_per_second",
     "slo_goodput_tokens_per_second",
@@ -205,6 +210,71 @@ def _available_pinned_lane(lane: Mapping[str, Any], label: str) -> None:
         value = engine.get(field)
         if not isinstance(value, str) or not value:
             raise ComparabilityError(f"{label} lacks an immutable engine {field}")
+
+
+def _materialized_lane_claim_reasons(
+    lane: Mapping[str, Any],
+    *,
+    plan: Mapping[str, Any],
+    root: Path,
+    role: str,
+) -> list[str]:
+    """Return fail-closed reasons when a lane is not executable claim evidence."""
+
+    reasons: list[str] = []
+    label = f"{role} lane {lane.get('lane_id')!r}"
+    command = _mapping(lane.get("command"), f"{label}.command")
+    if command.get("required_placeholders") != []:
+        reasons.append(f"{label} command is not fully materialized")
+    argv = command.get("argv")
+    if not isinstance(argv, list) or any("{" in str(token) or "}" in str(token) for token in argv):
+        reasons.append(f"{label} command contains an unresolved placeholder")
+
+    materialization = lane.get("materialization")
+    if not isinstance(materialization, Mapping):
+        reasons.append(f"{label} lacks a materialization receipt")
+        return reasons
+    if materialization.get("campaign_id") != plan["campaign_id"]:
+        reasons.append(f"{label} materialization campaign differs from plan")
+    source = _mapping(plan["source"], "plan.source")
+    if materialization.get("source_git_revision") != source["git_revision"]:
+        reasons.append(f"{label} materialization source differs from plan")
+    try:
+        verify_campaign_lane_binding_value(root=root, lane=lane)
+    except ContractError as error:
+        reasons.append(f"{label} materialization receipt is not reproducible: {error}")
+    return reasons
+
+
+def _load_claim_lanes(
+    plan: Mapping[str, Any],
+    *,
+    root: Path,
+) -> dict[str, Mapping[str, Any]]:
+    """Load both immutable materialized lanes for raw environment binding."""
+
+    lanes = _mapping(plan["lanes"], "plan.lanes")
+    loaded: dict[str, Mapping[str, Any]] = {}
+    for role in ("riley", "competitor"):
+        receipt = _mapping(lanes[role], f"plan.lanes.{role}")
+        path = require_campaign_artifact_path(
+            root,
+            _relative_path(root, receipt["path"], f"plan.lanes.{role}.path"),
+            f"plan.lanes.{role}.path",
+        )
+        if sha256_file(path) != receipt["sha256"]:
+            raise ComparabilityError(f"{role} lane hash drifted after plan creation")
+        lane = validate_lane(load_json(path), str(path))
+        verify_campaign_lane_binding(root, path, lane)
+        try:
+            _available_pinned_lane(lane, f"{role} lane {lane['lane_id']!r}")
+        except ComparabilityError as error:
+            raise ComparabilityError(str(error)) from error
+        reasons = _materialized_lane_claim_reasons(lane, plan=plan, root=root, role=role)
+        if reasons:
+            raise ComparabilityError("; ".join(reasons))
+        loaded[role] = lane
+    return loaded
 
 
 def _validate_source(value: Any, label: str) -> Mapping[str, Any]:
@@ -549,6 +619,51 @@ def validate_plan(value: Any, *, root: Path) -> Mapping[str, Any]:
             if order != expected_orders[(run_index - 1) % len(expected_orders)]:
                 raise ContractError(f"cell {cell_id!r} has AB/BA schedule drift at run {run_index}")
 
+    # Sequence is part of the immutable thermal/AB-BA schedule, not an
+    # advisory label.  Re-derive the exact list ordering from the already
+    # pinned cell catalog so a hand-edited plan cannot shuffle cells, arms, or
+    # invocation sequence while retaining otherwise valid per-cell coverage.
+    expected_execution: list[dict[str, Any]] = []
+    expected_invocations: list[dict[str, Any]] = []
+    execution_sequence = 0
+    invocation_sequence = 0
+    for cell_entry in cells:
+        cell_id = str(cell_entry["cell"]["cell_id"])
+        for run_index in range(1, required_runs + 1):
+            order = expected_orders[(run_index - 1) % len(expected_orders)]
+            roles = ["riley", "competitor"] if order == "AB" else ["competitor", "riley"]
+            execution_sequence += 1
+            execution_id = f"{cell_id}:run-{run_index:02d}"
+            expected_execution.append(
+                {
+                    "execution_id": execution_id,
+                    "sequence": execution_sequence,
+                    "cell_id": cell_id,
+                    "run_index": run_index,
+                    "order": order,
+                    "lane_order": roles,
+                }
+            )
+            for position, role in zip(("A", "B"), roles, strict=True):
+                invocation_sequence += 1
+                expected_invocations.append(
+                    {
+                        "invocation_id": f"{execution_id}:{position}",
+                        "sequence": invocation_sequence,
+                        "execution_id": execution_id,
+                        "cell_id": cell_id,
+                        "run_index": run_index,
+                        "order": order,
+                        "position": position,
+                        "role": role,
+                        "lane_id": lane_ids[role],
+                    }
+                )
+    if canonical_json_bytes(execution) != canonical_json_bytes(expected_execution):
+        raise ComparabilityError("plan execution order/sequence drifts from immutable C01 schedule")
+    if canonical_json_bytes(invocations) != canonical_json_bytes(expected_invocations):
+        raise ComparabilityError("plan invocation order/sequence drifts from immutable C01 schedule")
+
     readiness = _mapping(plan["readiness"], "plan.readiness")
     expect_keys(readiness, "plan.readiness", required=("state", "blocked_reasons"))
     if readiness["state"] not in {"ready", "blocked"}:
@@ -599,7 +714,15 @@ def rederive_readiness(plan: Mapping[str, Any], *, root: Path) -> list[str]:
     lanes = _mapping(plan["lanes"], "plan.lanes")
     for role in ("riley", "competitor"):
         receipt = _mapping(lanes[role], f"plan.lanes.{role}")
-        path = _relative_path(root, receipt["path"], f"plan.lanes.{role}.path")
+        try:
+            path = require_campaign_artifact_path(
+                root,
+                _relative_path(root, receipt["path"], f"plan.lanes.{role}.path"),
+                f"plan.lanes.{role}.path",
+            )
+        except ContractError as error:
+            reasons.append(f"{role} lane is outside the declared campaign artifact workspace: {error}")
+            continue
         if sha256_file(path) != receipt["sha256"]:
             reasons.append(f"{role} lane hash drifted after plan creation")
             continue
@@ -609,6 +732,7 @@ def rederive_readiness(plan: Mapping[str, Any], *, root: Path) -> list[str]:
             _available_pinned_lane(lane, f"{role} lane {lane['lane_id']!r}")
         except ComparabilityError as error:
             reasons.append(str(error))
+        reasons.extend(_materialized_lane_claim_reasons(lane, plan=plan, root=root, role=role))
     return reasons
 
 
@@ -660,6 +784,7 @@ def validate_raw_row(
     invocation_by_id: Mapping[str, Mapping[str, Any]],
     cells_by_id: Mapping[str, Mapping[str, Any]],
     workloads_by_cell: Mapping[str, Mapping[str, Any]],
+    lanes_by_role: Mapping[str, Mapping[str, Any]],
 ) -> Mapping[str, Any]:
     row = _mapping(value, label)
     expect_keys(row, label, required=RAW_REQUIRED_FIELDS, optional=RAW_OPTIONAL_FIELDS)
@@ -708,6 +833,17 @@ def validate_raw_row(
     expect_keys(environment, f"{label}.environment", required=required_environment_keys)
     for key in required_environment_keys:
         _environment_scalar(environment[key], f"{label}.environment.{key}")
+    role = str(row["role"])
+    lane = lanes_by_role.get(role)
+    if lane is None:  # defensive: invocation validation above already closes this set.
+        raise ComparabilityError(f"{label}.role has no materialized lane receipt")
+    receipts = _mapping(lane["artifact_receipts"], f"{label}.planned_lane.artifact_receipts")
+    for field in ("executable_sha256", "dependency_lock_sha256"):
+        validate_sha256(environment[field], f"{label}.environment.{field}")
+        if environment[field] != receipts[field]:
+            raise ComparabilityError(
+                f"{label}.environment.{field} differs from the materialized {role} lane receipt"
+            )
     if row["phase"] != "measured":
         raise ComparabilityError(f"{label}.phase must be measured; warmups are never statistics")
     if row["status"] not in {"success", "failure"}:
@@ -726,6 +862,16 @@ def validate_raw_row(
         raise ContractError(f"{label}.requests must not be empty for success")
     for request_index, request in enumerate(requests):
         _validate_request(request, f"{label}.requests[{request_index}]")
+    _integer(row["adapter_sequence"], f"{label}.adapter_sequence", minimum=1)
+    previous_receipt = row["adapter_previous_receipt_sha256"]
+    if previous_receipt is not None:
+        validate_sha256(previous_receipt, f"{label}.adapter_previous_receipt_sha256")
+    validate_sha256(row["adapter_receipt_sha256"], f"{label}.adapter_receipt_sha256")
+    if "preflight_receipt_sha256" in row:
+        validate_sha256(row["preflight_receipt_sha256"], f"{label}.preflight_receipt_sha256")
+        preflight = _mapping(plan["preflight"], "plan.preflight")
+        if preflight["status"] != "passed" or row["preflight_receipt_sha256"] != preflight["sha256"]:
+            raise ComparabilityError(f"{label}.preflight_receipt_sha256 drifts from planned preflight")
     return row
 
 
@@ -1002,6 +1148,17 @@ def check_campaign(
     contract_sha256: str | None = None
     campaign_id: str | None = None
     try:
+        root = root.resolve()
+        plan_path = require_campaign_artifact_path(root, plan_path, "claim execution plan path")
+        if len(raw_paths) != 1:
+            raise ComparabilityError("claim raw evidence must come from exactly one JSONL journal")
+        raw_path = require_campaign_artifact_path(root, raw_paths[0], "claim raw evidence path")
+        try:
+            raw_metadata = raw_path.lstat()
+        except OSError as error:
+            raise ContractError(f"cannot inspect claim raw evidence path: {error}") from error
+        if raw_path.suffix != ".jsonl" or not stat.S_ISREG(raw_metadata.st_mode):
+            raise ComparabilityError("claim raw evidence must be exactly one regular JSONL journal")
         plan_sha256 = sha256_file(plan_path)
         unchecked_plan = load_json(plan_path)
         campaign_id = unchecked_plan.get("campaign_id") if isinstance(unchecked_plan, dict) else None
@@ -1017,6 +1174,7 @@ def check_campaign(
         readiness_reasons = rederive_readiness(plan, root=root)
         if readiness_reasons:
             raise ComparabilityError("campaign is not claim-ready: " + "; ".join(sorted(readiness_reasons)))
+        lanes_by_role = _load_claim_lanes(plan, root=root)
 
         request_path = _relative_path(root, plan["request_manifest"]["path"], "plan.request_manifest.path")
         if sha256_file(request_path) != plan["request_manifest"]["sha256"]:
@@ -1045,6 +1203,7 @@ def check_campaign(
             key for key in contract["required_environment_keys"] if key in same_campaign_fields
         ] or list(contract["required_environment_keys"])
         rows_by_invocation: dict[str, Mapping[str, Any]] = {}
+        raw_rows_in_append_order: list[tuple[Path, Mapping[str, Any]]] = []
         environment_fingerprints: set[tuple[Any, ...]] = set()
         semantic_failures: list[str] = []
         preflight_values = plan["preflight"]["values"] if plan["preflight"]["status"] == "passed" else None
@@ -1053,7 +1212,7 @@ def check_campaign(
             "compute_capability": "compute_capability",
             "driver_version": "driver_version",
         }
-        for path, line_number, raw_row in load_jsonl(raw_paths):
+        for path, line_number, raw_row in load_jsonl([raw_path]):
             label = f"{path}:{line_number}"
             row = validate_raw_row(
                 raw_row,
@@ -1064,11 +1223,13 @@ def check_campaign(
                 invocation_by_id=invocation_by_id,
                 cells_by_id=cells_by_id,
                 workloads_by_cell=workloads_by_cell,
+                lanes_by_role=lanes_by_role,
             )
             invocation_id = str(row["invocation_id"])
             if invocation_id in rows_by_invocation:
                 raise ComparabilityError(f"duplicate raw observation for invocation {invocation_id!r}")
             rows_by_invocation[invocation_id] = row
+            raw_rows_in_append_order.append((path, row))
             environment_fingerprints.add(tuple(row["environment"][key] for key in common_environment_keys))
             if preflight_values is not None:
                 for environment_key, receipt_key in preflight_environment_fields.items():
@@ -1088,6 +1249,18 @@ def check_campaign(
                         label,
                     )
                 )
+
+        ordered_invocations = [
+            str(item["invocation_id"])
+            for item in sorted(plan["invocations"], key=lambda item: int(item["sequence"]))
+        ]
+        # Journal fields are part of RAW_REQUIRED_FIELDS for every claim.  A
+        # legacy/imported JSONL without the one physical ordered chain is
+        # intentionally incomparable rather than eligible for passed/M5.
+        validate_append_only_chain(
+            [row for _path, row in raw_rows_in_append_order],
+            expected_invocation_ids=ordered_invocations,
+        )
 
         expected_invocations = set(invocation_by_id)
         received_invocations = set(rows_by_invocation)
@@ -1279,14 +1452,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     report = check_campaign(
-        plan_path=arguments.plan.resolve(),
-        raw_paths=[path.resolve() for path in arguments.raw],
+        plan_path=arguments.plan.absolute(),
+        raw_paths=[path.absolute() for path in arguments.raw],
         root=arguments.repo_root.resolve(),
     )
     encoded = canonical_json_bytes(report)
     if arguments.output is not None:
         try:
-            create_only_write(arguments.output.resolve(), encoded)
+            output_path = require_campaign_artifact_path(
+                arguments.repo_root.resolve(),
+                arguments.output.absolute(),
+                "claim report output",
+            )
+            create_only_write(output_path, encoded)
         except ContractError as error:
             print(f"check_campaign: {error}", file=sys.stderr)
             return 2

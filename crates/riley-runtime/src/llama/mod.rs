@@ -573,15 +573,15 @@ mod source_contract_tests {
     }
 
     #[test]
-    fn continuous_batch_hot_source_is_allocation_free_and_not_serial_dispatch() {
-        let source = include_str!("batch_executor.rs");
-        let begin = source
+    fn continuous_batch_dispatch_source_is_allocation_free_and_not_serial_dispatch() {
+        let facade = include_str!("batch_executor.rs");
+        let begin = facade
             .find("// HOT_BATCH_EXECUTE_BEGIN")
-            .expect("batch hot execute begin marker");
-        let end = source
+            .expect("batch facade hot execute begin marker");
+        let end = facade
             .find("// HOT_BATCH_EXECUTE_END")
-            .expect("batch hot execute end marker");
-        let hot = &source[begin..end];
+            .expect("batch facade hot execute end marker");
+        let facade_hot = &facade[begin..end];
 
         for forbidden in [
             "Vec::",
@@ -597,8 +597,40 @@ mod source_contract_tests {
             "for row in",
         ] {
             assert!(
+                !facade_hot.contains(forbidden),
+                "batch facade hot execute source contains forbidden token {forbidden:?}"
+            );
+        }
+        assert_eq!(
+            facade_hot.matches("dispatch_execute_packed(").count(),
+            1,
+            "batch facade must delegate one iteration to the dispatch boundary"
+        );
+
+        let source = include_str!("executor/dispatch.rs");
+        let begin = source
+            .find("pub(in crate::llama) fn execute_packed(")
+            .expect("execution dispatch remains explicit");
+        let end = source
+            .find("\n#[cfg(test)]")
+            .expect("execution dispatch ends before its unit tests");
+        let hot = &source[begin..end];
+        for forbidden in [
+            "Vec::",
+            "Box::",
+            "vec!",
+            ".collect(",
+            "String::",
+            "format!",
+            "allocate_device_buffer",
+            "allocate_pinned_host_buffer",
+            "PreparedLlamaForward::prepare",
+            ".execute(stream)",
+            "for row in",
+        ] {
+            assert!(
                 !hot.contains(forbidden),
-                "batch hot execute source contains forbidden token {forbidden:?}"
+                "execution dispatch source contains forbidden hot-path token {forbidden:?}"
             );
         }
         for required in [
@@ -628,15 +660,21 @@ mod source_contract_tests {
 
     #[test]
     fn absolute_rope_position_shape_is_shared_as_value_only_arithmetic() {
-        let source = include_str!("batch_executor.rs");
+        let facade = include_str!("batch_executor.rs");
+        let dispatch = include_str!("executor/dispatch.rs");
         assert!(
-            !source.contains("fn model_max_position("),
+            !facade.contains("fn model_max_position("),
             "RoPE position shape must not retain a CUDA-buffer helper in the batch owner"
         );
         assert_eq!(
-            source.matches("absolute_rope_position_count(").count(),
-            3,
-            "public query, metadata preflight, and fixed graph must share one RoPE shape helper"
+            facade.matches("absolute_rope_position_count(").count(),
+            2,
+            "public query and metadata preflight must retain one RoPE shape helper"
+        );
+        assert_eq!(
+            dispatch.matches("absolute_rope_position_count(").count(),
+            1,
+            "fixed graph execution must use the same RoPE shape helper through dispatch"
         );
     }
 
@@ -656,7 +694,7 @@ mod source_contract_tests {
     #[test]
     fn cold_zeroed_host_bytes_share_one_checked_allocator() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 1),
+            ("batch owner", include_str!("executor/owner.rs"), 1),
             ("batch buffers", include_str!("executor/buffers.rs"), 7),
             ("RoPE builders", include_str!("executor/rope.rs"), 3),
         ] {
@@ -675,7 +713,11 @@ mod source_contract_tests {
     #[test]
     fn executor_byte_lengths_share_one_typed_overflow_facade() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 1),
+            (
+                "execution dispatch",
+                include_str!("executor/dispatch.rs"),
+                1,
+            ),
             (
                 "batch allocation",
                 include_str!("executor/allocation.rs"),
@@ -742,7 +784,7 @@ mod source_contract_tests {
         assert!(helper.contains("self.validate_capacity(capacity)"));
 
         for (boundary, source) in [
-            ("batch owner", include_str!("batch_executor.rs")),
+            ("execution dispatch", include_str!("executor/dispatch.rs")),
             ("device views", include_str!("executor/device_views.rs")),
         ] {
             assert_eq!(
@@ -807,7 +849,12 @@ mod source_contract_tests {
     #[test]
     fn executor_usize_u64_conversions_share_one_typed_error_facade() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 11),
+            ("batch owner", include_str!("executor/owner.rs"), 2),
+            (
+                "execution dispatch",
+                include_str!("executor/dispatch.rs"),
+                14,
+            ),
             (
                 "batch allocation",
                 include_str!("executor/allocation.rs"),
@@ -815,7 +862,6 @@ mod source_contract_tests {
             ),
             ("batch buffers", include_str!("executor/buffers.rs"), 3),
             ("device views", include_str!("executor/device_views.rs"), 3),
-            ("output dispatch", include_str!("executor/dispatch.rs"), 5),
             ("output sizing", include_str!("executor/output.rs"), 3),
             ("RoPE scalar", include_str!("executor/rope.rs"), 1),
         ] {
@@ -833,7 +879,7 @@ mod source_contract_tests {
 
     #[test]
     fn cold_output_capacity_reuses_canonical_output_sizing() {
-        let source = include_str!("batch_executor.rs");
+        let source = include_str!("executor/owner.rs");
         let capacity_begin = source
             .find("let gathered_logits_capacity_bytes")
             .expect("cold gathered-logits capacity remains explicit");
@@ -872,37 +918,37 @@ mod source_contract_tests {
         let gemm_prepare = &forward[gemm_prepare_begin..];
         assert!(gemm_prepare.contains(".prepare_gemm_anchored(config, anchor)"));
 
-        let batch = include_str!("batch_executor.rs");
-        let prepare_variants = batch
+        let owner = include_str!("executor/owner.rs");
+        let prepare_variants = owner
             .find("let shape_variants = match prepare_shape_variants(")
             .expect("shape variants are cold-prepared");
-        let maximum_requirement = batch
+        let maximum_requirement = owner
             .find("let required_gemm_workspace_bytes = shape_variants.iter().fold(")
             .expect("all prepared shape requirements are reduced to one maximum");
-        let reconcile = batch
+        let reconcile = owner
             .find("forward.ensure_batch_shape_gemm_workspace(")
             .expect("the shared workspace is reconciled once during preparation");
-        let hot_begin = batch
-            .find("// HOT_BATCH_EXECUTE_BEGIN")
-            .expect("batch hot-path marker remains present");
+        let owner_complete = owner
+            .find("Ok(Self {")
+            .expect("owner is constructed only after shared workspace reconciliation");
         assert!(prepare_variants < maximum_requirement);
         assert!(maximum_requirement < reconcile);
-        assert!(reconcile < hot_begin);
+        assert!(reconcile < owner_complete);
         assert_eq!(
-            batch.matches("ensure_batch_shape_gemm_workspace(").count(),
+            owner.matches("ensure_batch_shape_gemm_workspace(").count(),
             1
         );
     }
 
     #[test]
     fn packed_metadata_transport_keeps_the_exact_synchronous_fallback() {
-        let source = include_str!("batch_executor.rs");
+        let source = include_str!("executor/dispatch.rs");
         let begin = source
-            .find("// HOT_BATCH_EXECUTE_BEGIN")
-            .expect("batch hot execute begin marker");
+            .find("pub(in crate::llama) fn execute_packed(")
+            .expect("execution dispatch remains explicit");
         let end = source
-            .find("// HOT_BATCH_EXECUTE_END")
-            .expect("batch hot execute end marker");
+            .find("fn execute_fixed_graph")
+            .expect("execution dispatch keeps the fixed graph separate");
         let hot = &source[begin..end];
 
         assert_eq!(
@@ -927,15 +973,14 @@ mod source_contract_tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn iteration_completion_guards_synchronous_and_packed_async_bodies() {
-        let source = include_str!("batch_executor.rs");
         let dispatch = include_str!("executor/dispatch.rs");
-        let begin = source
-            .find("// HOT_BATCH_EXECUTE_BEGIN")
-            .expect("batch hot execute begin marker");
-        let end = source
-            .find("// HOT_BATCH_EXECUTE_END")
-            .expect("batch hot execute end marker");
-        let hot = &source[begin..end];
+        let begin = dispatch
+            .find("pub(in crate::llama) fn execute_packed(")
+            .expect("execution dispatch remains explicit");
+        let end = dispatch
+            .find("fn execute_fixed_graph")
+            .expect("execution dispatch keeps the fixed graph separate");
+        let hot = &dispatch[begin..end];
         let pack_input = hot
             .find("pack_iteration_input(")
             .expect("packed host bytes are assembled before their pinned write");

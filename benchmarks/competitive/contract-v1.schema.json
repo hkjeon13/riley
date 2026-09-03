@@ -52,7 +52,7 @@
           "const": "benchmarks/competitive/contract-v1.json"
         },
         "sha256": {
-          "const": "6ef30fb591a3421b8ffaef41e6ed6907d7308d90c72ee03955f9c083240cc931"
+          "const": "4852ae4711aa2e02331995533babea0a21db07205620ccfc7fe94be3d7fa4194"
         },
         "schema_version": {
           "const": "riley.competitive.contract.v1"
@@ -121,9 +121,53 @@
         }
       }
     },
+    "laneMaterialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "campaign_id",
+        "source_git_revision",
+        "immutable_input_path",
+        "immutable_input_sha256",
+        "expanded_argv_sha256",
+        "template_path",
+        "template_sha256"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "riley.competitive.lane-materialization.v1"
+        },
+        "campaign_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_git_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "immutable_input_path": {
+          "$ref": "#/$defs/campaignArtifactPath"
+        },
+        "immutable_input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expanded_argv_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "template_path": {
+          "$ref": "#/$defs/manifestPath"
+        },
+        "template_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
     "repositoryPath": {
       "type": "string",
       "pattern": "^(?!/)(?!.*\\\\)(?!(?:.*/)?\\.{1,2}(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "campaignArtifactPath": {
+      "type": "string",
+      "pattern": "^benchmarks/competitive/\\.campaign-work/(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)*$"
     },
     "manifestPath": {
       "type": "string",
@@ -141,6 +185,8 @@
         "container_image_digest",
         "git_commit",
         "source_archive_sha256",
+        "executable_sha256",
+        "dependency_lock_sha256",
         "lane_command_sha256",
         "engine_version",
         "engine_revision",
@@ -1301,17 +1347,20 @@
             },
             "required_placeholders": {
               "type": "array",
-              "minItems": 1,
+              "minItems": 0,
               "uniqueItems": true,
               "items": {
                 "enum": [
                   "riley_executable",
                   "vllm_executable",
+                  "checkpoint_path",
                   "model_id",
                   "model_revision",
                   "dtype",
                   "host",
                   "port",
+                  "bind_address",
+                  "device_ordinal",
                   "result_dir",
                   "campaign_id",
                   "cell_id",
@@ -1347,6 +1396,9 @@
         },
         "parent_asset": {
           "$ref": "#/$defs/canonicalAssetReceipt"
+        },
+        "materialization": {
+          "$ref": "#/$defs/laneMaterialization"
         }
       },
       "allOf": [

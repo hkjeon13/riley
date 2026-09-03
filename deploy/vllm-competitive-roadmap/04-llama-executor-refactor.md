@@ -22,9 +22,11 @@ validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar c
 일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했으며, C04-29는
 absolute RoPE cold table shape preflight를 rope helper로 공유했다. C04-30은 host-only prepared
 executor configuration을 config helper로 분리했고, C04-31은 cold allocation-accounting을
-allocation helper로 분리한다. CUDA owner, KV,
-buffer orchestration, pinned-memory
-write/metadata transport, dispatch, output public API와 production default는 유지한다.
+allocation helper로 분리했다. 이어서 C04-A는 `owner.rs`에 cold CUDA resource의 단일 lifetime/close
+경계를, C04-B는 `dispatch.rs`에 그 resource를 빌리는 hot execution orchestration을, C04-C는
+`batch_executor.rs`에 기존 public API와 logical iteration state만 남기는 얇은 facade를 구현했다.
+CPU source/architecture 검증은 통과했지만, GPU correctness·allocation parity·before/after 성능 검증은
+아직 수행하지 않았다. 따라서 vLLM 우위나 성능 비회귀는 이 문서의 구현 완료로 주장하지 않는다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -32,15 +34,17 @@ write/metadata transport, dispatch, output public API와 production default는 �
 
 ## 1. 배경
 
-현재 `crates/riley-runtime/src/llama/batch_executor.rs`는 weight/KV ownership, shape bucket, GEMM plan, metadata transport, execution, output download, metric을 한 파일에서 다룬다. 여기에 graph capture와 여러 fused path를 직접 추가하면 lifetime 검토, rollback, test 영향 범위가 지나치게 커진다.
+분리 전 `crates/riley-runtime/src/llama/batch_executor.rs`는 weight/KV ownership, shape bucket, GEMM plan, metadata transport, execution, output download, metric을 한 파일에서 다뤘다. 현재는 cold CUDA resource lifetime/explicit close를 `executor/owner.rs`로, 그 resource를 빌리는 hot execution orchestration을 `executor/dispatch.rs`로 옮기고, `batch_executor.rs`에는 기존 public API와 logical iteration state를 남겼다. graph capture와 여러 fused path의 GPU correctness·allocation·성능 효과는 이 source-level 분리만으로 검증되지 않는다.
 
 이 PR은 성능 개선이나 production default 변경을 하지 않는다. public API, C ABI, CLI, output, allocation behavior를 유지한 채 내부 구조만 분리한다.
 
 ## 2. 목표 구조
 
 ```text
+crates/riley-runtime/src/llama/batch_executor.rs
+  # stable public API facade and logical iteration state
 crates/riley-runtime/src/llama/executor/
-  mod.rs                # public composition and stable facade
+  mod.rs                # internal composition
   config.rs             # host-only prepared executor configuration and validation
   allocation.rs         # cold scalar allocation-accounting/report
   owner.rs              # weights/KV/stream/workspace lifetime
@@ -443,6 +447,38 @@ resource ownership은 batch owner에 그대로 남으며, 기존 `riley_runtime:
 nominal type은 `batch_executor` facade reexport로 유지한다. source-boundary 및 nominal-type test만
 추가하는 CPU-only slice이며, CUDA allocation parity, GPU evidence 또는 performance improvement를
 주장하지 않는다.
+
+### C04-A — cold resource owner extraction (implemented)
+
+`llama/executor/owner.rs`의 `PreparedLlamaBatchOwner`가 uploaded forward owner, prepared
+shape-GEMM variant, paged KV, absolute RoPE table, metadata input, output workspace를 한
+resource lifetime 경계에서 소유한다. cold prepare의 rollback 순서와 explicit close의 first-error
+precedence도 이 owner에 모았다. facade는 resource를 복제하거나 close 순서를 독자적으로 결정하지
+않는다.
+
+### C04-B — borrowed hot dispatch orchestration (implemented)
+
+`llama/executor/dispatch.rs`는 C04-A owner의 prepared resource를 빌려 metadata transport,
+command-batch completion, fixed forward dispatch, output primitive을 수행한다. dispatch 자체는
+top-level resource lifetime·public output publication·final poison state를 소유하지 않으며, mutation
+가능 여부만 caller가 해석할 수 있는 disposition으로 반환한다.
+
+### C04-C — thin public batch facade (implemented)
+
+`batch_executor.rs`의 `PreparedLlamaBatchExecutor`는 기존 생성/실행/close public API와
+shape-history, output-ready/mode 같은 logical iteration state를 유지한다. owner를 통해 resource를
+prepare/close하고, borrowed dispatch 결과를 기존 poison/output contract에 맞춰 연결한다. Rust public
+path와 scheduler runtime adapter의 외부 계약은 이 분리에서 바꾸지 않았다.
+
+#### 현재 완료한 source/CPU 검증
+
+- `cargo check -p riley-runtime --tests`
+- `cargo test -p riley-runtime --lib source_contract_tests` (28 passed)
+- `cargo test -p riley-runtime --test architecture_boundary` (15 passed)
+
+이는 module dependency와 CPU-visible contract의 검증이다. C02-qualified candidate를 사용한 GPU
+correctness/token parity, allocation snapshot, GPU before/after 성능 비교와 vLLM 비교 campaign은
+별도 후속 절차이며 아직 완료로 기록하지 않는다.
 
 ## 6. Allocation 검증
 

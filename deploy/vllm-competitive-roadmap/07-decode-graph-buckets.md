@@ -1,6 +1,8 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-22는 opaque C06 registry-selection outcome만 기존 C06 metrics에 기록한다.
+**상태:** In progress — C07-35는 exact C05 primitive evidence를 cold C07 inventory에
+fail-closed로 매핑한다. 실제 model-owned full graph capture/replay, executor wiring,
+GPU parity와 performance promotion은 아직 없다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -319,6 +321,38 @@ request reconstruction/fact repair, metrics snapshot publication, graph owner/ha
 CUDA stream/capture/instantiate/replay 또는 executor mutation을 만들지 않는다. counter observation은
 graph-ready/capture-safe/prepared/runnable graph 또는 performance improvement를 뜻하지 않으며, actual
 execution은 계속 exact eager다.
+
+### C07-23~35 — exact H2D/owner/capture-evidence chain (implemented; no production replay)
+
+C07-23은 exact metadata H2D의 isolated GPU parity를 검증했다. C07-24~27은 selected
+full-graph identity와 C05 fixed-fill/H2D owner, exact slab provenance, selection replay를
+private cold boundary로 묶었지만 이를 production decode graph로 해석하지 않는다. C07-28은
+14개 pure-decode operation의 complete capability inventory를 만들고, C07-29~35는 다음의
+정확한 C05 primitive만 각 의미적으로 동일한 slot에 mapping한다.
+
+- metadata H2D
+- canonical BF16 RMSNorm
+- indexed BF16 RoPE
+- ragged paged BF16 K/V write
+- BF16 SiLU, gated multiply, residual add
+
+나머지 embedding, projection GEMM, attention, final norm, LM head, GPU greedy,
+completion boundary는 여전히 `Unknown`이다. 하나라도 `Unknown`이면 inventory aggregate도
+`Unknown`이고 C06는 eager를 유지한다.
+
+### C07-36 — grouped attention evidence의 실제 owner binding (not started)
+
+C05-19는 isolated grouped ragged paged-attention graph의 lifecycle/parity를 입증했지만,
+현재 executor는 모든 layer의 K/V cache를 하나의 parent allocation으로 보유하고 attention에는
+`layer_byte_offset` span만 빌려 준다. 반대로 C05-19 owner는 capture 동안 한 layer의 K/V
+pool allocation을 by-value로 독점 보유한다. 따라서 capability enum을 `Attention=Supported`로
+단순 매핑하면 parent allocation/layer-span ownership이 증명되지 않은 false admission이 된다.
+
+후속 slice는 (a) C05가 parent buffer와 exact immutable span을 함께 안전하게 보유하도록
+ownership ABI를 확장하거나, (b) executor의 per-layer K/V owner를 별도 fixed allocation으로
+준비한 뒤, QH/KVH/D64/page-16/packed metadata/layout/stream/parent-span을 typed binding으로
+모두 검증해야 한다. 그 전에는 `Attention`과 complete inventory를 `Unknown`으로 유지하며
+capture/replay/default-policy/performance claim을 추가하지 않는다.
 
 ## 1. 배경과 가설
 

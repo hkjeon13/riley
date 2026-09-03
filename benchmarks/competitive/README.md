@@ -91,28 +91,61 @@ dependency lock 및 executable/source/runtime/model/tokenizer hash receipt를 �
 시점에 lane file, preflight file과 script hash, current Git HEAD와 clean state를
 다시 읽어 readiness를 재계산한다.
 
+claim에 쓰는 생성물은 반드시 ignored
+`benchmarks/competitive/.campaign-work/<campaign-id>/` 아래에 둔다. 이 경로만
+plan, materialization input/lane, raw JSONL의 artifact workspace이며, 다른
+untracked/dirty source 파일은 여전히 clean Git 검사에서 거부된다. workspace 밖의
+plan/lane/raw path 또는 workspace를 탈출하는 symlink는 claim evidence가 될 수 없다.
+
 ## Runner input/output interface
 
 `scripts/run_campaign.py`는 remote engine을 직접 시작하지 않는 **plan-only**
-도구다. 즉, 현재 구현은 실행 전 immutable input, AB/BA 순서, source/lane/matrix
-hash를 `riley.competitive.execution-plan.v1` JSON으로 동결한다. remote executor는
-후속 adapter가 이 plan만 소비하도록 별도 구현해야 하며, plan을 실행 결과로
+도구다. 즉, 실행 전 immutable input, AB/BA 순서, source/lane/matrix hash를
+`riley.competitive.execution-plan.v1` JSON으로 동결한다. plan을 실행 결과로
 오인하면 안 된다.
+
+`scripts/materialize_lane.py`는 reviewed lane template과 외부 admission 단계가
+제공한 closed immutable input으로 campaign-local `available` lane을 create-only로
+만든다. version/revision/lock/artifact hash와 command placeholder가 모두 있어야
+하며, template에 없던 argv/environment option은 넣을 수 없다. materialized lane은
+campaign ID, source revision, immutable input **file** path/SHA-256, canonical
+expanded argv SHA-256 receipt를 보존한다. checker와 adapter는 reviewed template과
+그 input을 다시 materialize해 lane 전체를 대조하므로, command executable/model
+argv를 고친 뒤 plan을 다시 만들어도 fail-closed한다. plan은 그 lane 파일의 SHA-256을
+직접 pin한다.
+
+Riley template의 실제 launch contract는 `riley serve --model {checkpoint_path}
+--model-id {model_id} --bind {bind_address} --device {device_ordinal}`이다.
+`checkpoint_path`는 admission이 검증한 **local checkpoint directory**이고,
+`model_id`는 request manifest와 동일해야 하는 공개 API ID다. Riley CLI에는
+`--revision`, `--dtype`, `--host`, `--port` 옵션이 없으므로 template도 이를 만들지
+않는다. model revision/weights/tokenizer/dtype은 request manifest와 artifact/runtime
+receipt에서 계속 exact-bind되어야 하며, path만으로 identity를 대체할 수 없다.
+
+`scripts/execute_campaign.py`는 plan을 소비하는 **transport-agnostic adapter
+library**다. SSH, container, GPU engine을 구현하거나 자동 실행하지 않는다. 호출자는
+명시적으로 `InvocationExecutor`를 주입해야 하며, adapter는 plan이 가리킨 fully
+materialized lane의 argv만 전달한다. 시작 전 transport 오류만 retry할 수 있고,
+process가 만들어진 뒤 timeout/nonzero/close failure는 한 개의 terminal failure raw
+record가 된다. cleanup을 확인할 수 없거나 process/environment receipt를 얻기 전
+실패한 경우에는 row를 추측해 쓰지 않고 incomplete evidence로 남긴다.
 
 ```bash
 python3 benchmarks/competitive/scripts/run_campaign.py \
   --repo-root . \
   --contract <contract-v1.json> \
   --matrix <concrete-campaign-matrix.json> \
-  --riley-lane <riley-lane.json> \
-  --competitor-lane <vllm-current-lane.json> \
+  --riley-lane benchmarks/competitive/.campaign-work/<campaign-id>/riley-lane.json \
+  --competitor-lane benchmarks/competitive/.campaign-work/<campaign-id>/vllm-lane.json \
   --request-manifest <campaign-request-manifest.json> \
   --preflight-receipt <successful-preflight.stdout.txt> \
   --campaign-id <immutable-id> \
-  --output <new-execution-plan.json>
+  --output benchmarks/competitive/.campaign-work/<campaign-id>/plan.json
 ```
 
-기본값은 source tree가 clean이어야 하며, output은 create-only다. preflight receipt는
+기본값은 source tree가 clean이어야 하며, output은 create-only다. 생성 plan/lane input,
+lane output, raw journal은 위 `.campaign-work/<campaign-id>/`에 먼저 create-only로
+만들어야 한다. preflight receipt는
 reviewed `benchmarks/scripts/preflight.sh`의 성공한 `key=value` stdout이어야 하며,
 Git SHA, RTX 4090/sm89, driver, idle VRAM, 온도, clock/governor, staging 용량을
 다시 검증해 plan hash에 묶는다. `--allow-dirty-source`는 테스트/개발용 blocked plan만
@@ -169,8 +202,16 @@ contract profile을 sampling에 넣고 seed가 null이 아니어야 한다. mode
 manifest는 Tier S에 필요한 predeclared per-cell SLO profile도 담아야 하며, raw
 result가 그 policy를 공급하거나 바꾸면 안 된다.
 
-runner는 schema_version: riley.competitive.raw.v1을 가진 append-only raw JSONL
-record와 별도의 provenance, plan, preflight receipt를 쓴다. 각 raw record는
+adapter는 schema_version: riley.competitive.raw.v1을 가진 append-only raw JSONL
+record와 별도의 provenance, plan, preflight receipt를 쓴다. adapter-produced row는
+plan invocation 순서와 predecessor receipt를 hash-chain으로 묶고 fsync한다. checker는
+chain collision, partial write, reorder, plan-order drift를 `incomparable`로 거부한다.
+claim raw에는 `adapter_sequence`, `adapter_previous_receipt_sha256`,
+`adapter_receipt_sha256`가 **모든** row에 있고 정확히 하나의 ordered JSONL chain만
+있어야 한다. 따라서 legacy/import raw는 `passed`나 `partial-win`이 될 수 없다.
+각 row의 `environment.executable_sha256`와 `environment.dependency_lock_sha256`는
+해당 materialized lane artifact receipt와 정확히 같아야 한다.
+각 raw record는
 campaign, lane, expanded cell, independent run, order, request identity,
 environment receipt, success/failure, latency/resource metric, token mismatch
 count, terminal-event count를 식별한다.
