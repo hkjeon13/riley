@@ -16,6 +16,8 @@ mod gemm_policy;
 mod generation;
 #[path = "executor/graph.rs"]
 mod graph;
+#[allow(dead_code)] // G01 establishes CPU parent-span ownership before native C05-19 binding.
+mod graph_decode_attention_parent_binding;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
 #[cfg(feature = "cuda")]
