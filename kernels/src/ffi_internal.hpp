@@ -2350,6 +2350,9 @@ cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t,const void*,const void*,
 // Packed profile2 M1 decode: Q[576], K[192], V[192] are disjoint slices of one
 // retained output. Writes rotary Q and paged K/V for a validated position128..159.
 cudaError_t enqueue_compiled_packed_decode_rope_kv(cudaStream_t,const void*,const void*,const void*,void*,void*,void*,const void*,const void*,const void*) noexcept;
+// MODE6 packed M1 attention: Q[576], paged K/V and output[576]. The existing
+// metadata supplies inclusive position128..159 and the validated block map.
+cudaError_t enqueue_compiled_packed_decode_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
 
 }  // namespace riley_cuda_internal
 
