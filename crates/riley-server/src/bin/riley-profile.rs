@@ -57,9 +57,10 @@ source provenance (all required):
   --git-dirty false
   --executable-sha256 SHA256
   --implementation-id ID
-  --runtime-flag-name residual_rmsnorm|execution_completion|batch_shape_policy|metadata_transport|greedy_output|decode_fast_path|execution_graph_policy
+  --runtime-flag-name residual_rmsnorm|execution_completion|batch_shape_policy|metadata_transport|greedy_output|decode_fast_path|execution_graph_policy|graph_numerics
   --runtime-flag-value separate|fused|per-operation|iteration-batch|fixed-max|power-of-two|synchronous|packed-async|cpu-logits|gpu-token|fixed-sync-cpu|bucket-packed-gpu
-  --semantic-class E0
+  --semantic-class E0|VLLM_REFERENCE  VLLM_REFERENCE only for graph_numerics=vllm-smol-p128-v1
+  --prepare-only true|false          prepare/validate/close without any performance trial
   --correctness-gate-id ID
   --correctness-report-sha256 SHA256
 
@@ -81,6 +82,7 @@ workload (all required):
 ";
 
 const KNOWN_FLAGS: &[&str] = &[
+    "--prepare-only",
     "--model",
     "--prompts",
     "--output",
@@ -183,6 +185,7 @@ enum RuntimeSelection {
     GreedyOutput(GreedyOutputMode),
     DecodeFastPath(DecodeFastPathMode),
     ExecutionGraph(bool),
+    VllmSmolP128,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -262,6 +265,7 @@ struct Workload {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Options {
+    prepare_only: bool,
     model_path: PathBuf,
     prompts_path: PathBuf,
     output_path: Option<PathBuf>,
@@ -310,6 +314,7 @@ impl Options {
             ("greedy_output", "gpu-token") => {
                 Ok(RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken))
             }
+            ("graph_numerics", "vllm-smol-p128-v1") => Ok(RuntimeSelection::VllmSmolP128),
             ("execution_graph_policy", "disabled") => Ok(RuntimeSelection::ExecutionGraph(false)),
             ("execution_graph_policy", "require") => Ok(RuntimeSelection::ExecutionGraph(true)),
             ("decode_fast_path", "fixed-sync-cpu") => Ok(RuntimeSelection::DecodeFastPath(
@@ -338,6 +343,7 @@ impl Options {
             RuntimeSelection::GreedyOutput(_) => GPU_GREEDY_CORRECTNESS_GATE,
             RuntimeSelection::DecodeFastPath(_) => DECODE_FAST_PATH_CORRECTNESS_GATE,
             RuntimeSelection::ExecutionGraph(_) => "g04-full-decode-p128-o32",
+            RuntimeSelection::VllmSmolP128 => "g04-vllm-smol-p128-v1",
         };
         if self.source.correctness_gate_id != expected_correctness_gate {
             return Err(format!(
@@ -363,7 +369,8 @@ impl Options {
                 | RuntimeSelection::MetadataTransport(MetadataTransportMode::PackedAsync)
                 | RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
                 | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu)
-                | RuntimeSelection::ExecutionGraph(true),
+                | RuntimeSelection::ExecutionGraph(true)
+                | RuntimeSelection::VllmSmolP128,
             ) => Ok(()),
             _ => Err(
                 "runtime flag must bind baseline/candidate to separate/fused, \
@@ -385,8 +392,23 @@ impl Options {
         validate_sha256("--executable-sha256", &self.source.executable_sha256)?;
         validate_id("--implementation-id", &self.source.implementation_id)?;
         validate_id("--runtime-flag-name", &self.source.runtime_flag.name)?;
-        if self.source.semantic_class != "E0" {
-            return Err("--semantic-class must be E0".to_owned());
+        let expected_class = if matches!(self.runtime_selection()?, RuntimeSelection::VllmSmolP128)
+        {
+            "VLLM_REFERENCE"
+        } else {
+            "E0"
+        };
+        if self.source.semantic_class != expected_class {
+            return Err(format!(
+                "--semantic-class must be {expected_class} for this profile"
+            ));
+        }
+        if expected_class == "VLLM_REFERENCE"
+            && (self.workload.concurrency != 1
+                || self.workload.prompt_tokens != 128
+                || self.workload.output_tokens != 32)
+        {
+            return Err("vllm-smol-p128-v1 evidence requires c1/p128/o32".to_owned());
         }
         validate_id("--correctness-gate-id", &self.source.correctness_gate_id)?;
         validate_sha256(
@@ -541,6 +563,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
             | "bucket-packed-gpu"
             | "disabled"
             | "require"
+            | "vllm-smol-p128-v1"
     ) {
         return Err(
             "--runtime-flag-value requires a supported residual, completion, shape, metadata, or greedy-output mode"
@@ -553,6 +576,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
     };
 
     let options = Options {
+        prepare_only: match values.remove("--prepare-only").as_deref() {
+            None | Some("false") => false,
+            Some("true") => true,
+            _ => return Err("--prepare-only requires true or false".to_owned()),
+        },
         model_path: PathBuf::from(take_required(&mut values, "--model")?),
         prompts_path: PathBuf::from(take_required(&mut values, "--prompts")?),
         output_path: (output != "-").then(|| PathBuf::from(output)),
@@ -982,7 +1010,7 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
     let workload = &options.workload;
     let graph_lane = matches!(
         options.runtime_selection()?,
-        RuntimeSelection::ExecutionGraph(_)
+        RuntimeSelection::ExecutionGraph(_) | RuntimeSelection::VllmSmolP128
     );
     if graph_lane && workload.concurrency != 1 {
         return Err("full graph profile requires c1".to_owned());
@@ -1062,6 +1090,12 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
             .with_iteration_batch_completion()
             .with_fixed_maximum_shape()
             .with_packed_async_metadata(),
+        RuntimeSelection::VllmSmolP128 => executor
+            .with_vllm_smol_p128_graph()
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_packed_async_metadata()
+            .with_grouped_ragged_attention_heads(),
         RuntimeSelection::ExecutionGraph(_) => executor
             .with_separate_residual_norm()
             .with_iteration_batch_completion()
@@ -1079,6 +1113,7 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
         RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
             | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu)
             | RuntimeSelection::ExecutionGraph(_)
+            | RuntimeSelection::VllmSmolP128
     );
     Ok(NativeBenchmarkConfig {
         device_ordinal: options.environment.gpu.device_index,
@@ -1523,7 +1558,7 @@ fn run_profile(options: Options) -> Result<(), String> {
         .with_execution_graph_policy(
             if matches!(
                 options.runtime_selection()?,
-                RuntimeSelection::ExecutionGraph(true)
+                RuntimeSelection::ExecutionGraph(true) | RuntimeSelection::VllmSmolP128
             ) {
                 riley_runtime::llama::ExecutionGraphPolicy::Require
             } else {
@@ -1532,6 +1567,28 @@ fn run_profile(options: Options) -> Result<(), String> {
         )
         .map_err(|error| format!("native graph preparation failed: {error}"))?;
 
+    if options.prepare_only {
+        let requests = token_rows
+            .iter()
+            .cloned()
+            .map(PretokenizedBenchmarkRequest::new)
+            .collect();
+        let prepared = executor
+            .prepare_trial(requests, options.workload.output_tokens)
+            .map_err(|e| format!("trial preparation failed: {e}"))?;
+        drop(prepared);
+        let report = executor
+            .close()
+            .map_err(|e| format!("preparation cleanup failed: {e}"))?;
+        if !report.allocations_are_zero() || report.scheduler_completions() != 0 {
+            return Err("preparation cleanup was not idle".to_owned());
+        }
+        let receipt = serde_json::json!({"schema_version":"riley.native-profile-preparation.v1","prepared":true,"performance_trials":0,"source":options.source,"environment":options.environment,"workload":options.workload,"cleanup_allocations_zero":true});
+        let mut bytes = serde_json::to_vec_pretty(&receipt)
+            .map_err(|_| "cannot serialize preparation receipt".to_owned())?;
+        bytes.push(b'\n');
+        return write_output(options.output_path.as_deref(), &bytes);
+    }
     let measured = run_trials(&mut executor, &options, &token_rows);
     let cleanup = executor.close();
     let aggregate = match (measured, cleanup) {
@@ -1552,9 +1609,14 @@ fn run_profile(options: Options) -> Result<(), String> {
         }
     };
     let (trace, aggregate, requests) = aggregate.finish()?;
+    let matched_vllm = matches!(options.runtime_selection()?, RuntimeSelection::VllmSmolP128);
     let output_path = options.output_path;
     let evidence = Evidence {
-        schema_version: SCHEMA_VERSION,
+        schema_version: if matched_vllm {
+            "riley.vllm-profile-run.v1"
+        } else {
+            SCHEMA_VERSION
+        },
         role: options.role,
         pair_index: options.pair_index,
         run_id: options.run_id,
@@ -1705,6 +1767,41 @@ mod tests {
         assert_eq!(options.workload.measured_iterations, 30);
         assert_eq!(options.environment.gpu.device_index, 0);
         assert!(options.output_path.is_none());
+    }
+
+    #[test]
+    fn vllm_profile_has_distinct_semantics_and_prepare_only_mode() {
+        let mut args = valid_arguments("candidate", "execution_graph_policy", "require");
+        for (flag, value) in [
+            ("--runtime-flag-name", "graph_numerics"),
+            ("--runtime-flag-value", "vllm-smol-p128-v1"),
+            ("--semantic-class", "VLLM_REFERENCE"),
+            ("--correctness-gate-id", "g04-vllm-smol-p128-v1"),
+            ("--prompt-tokens", "128"),
+            ("--output-tokens", "32"),
+            ("--concurrency", "1"),
+        ] {
+            let i = args.iter().position(|x| x == flag).unwrap();
+            args[i + 1] = OsString::from(value);
+        }
+        args.extend([OsString::from("--prepare-only"), OsString::from("true")]);
+        let Command::Run(options) = parse_arguments(args.clone()).expect("matched profile") else {
+            panic!("run")
+        };
+        assert!(options.prepare_only);
+        assert!(
+            benchmark_config(&options)
+                .unwrap()
+                .executor
+                .vllm_smol_p128_graph()
+        );
+        let i = args.iter().position(|x| x == "--semantic-class").unwrap();
+        args[i + 1] = OsString::from("E0");
+        assert!(parse_arguments(args.clone()).is_err());
+        args[i + 1] = OsString::from("VLLM_REFERENCE");
+        let i = args.iter().position(|x| x == "--prompt-tokens").unwrap();
+        args[i + 1] = OsString::from("127");
+        assert!(parse_arguments(args).is_err());
     }
 
     #[test]

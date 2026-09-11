@@ -1,6 +1,19 @@
 //! Resource ownership for staged transfer, `SwiGLU` and MLP diagnostic graphs.
 use crate::{CudaDeviceBuffer, CudaPinnedHostBuffer, CudaPreparedGemm, CudaResult, CudaStream};
 
+/// Versioned arithmetic for the retained full decode graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum DecodeNumericalProfile {
+    /// Existing canonical graph arithmetic.
+    Canonical = 0,
+    /// Existing HF-compatible SmolLM2 graph arithmetic.
+    HuggingFaceSmolLm2 = 1,
+    /// SM89/CUDA13 SmolLM2-135M, P128 and at most 32 generated tokens.
+    /// Preserves vLLM 0.27.1 compiled/FlashAttention2 arithmetic for this bucket.
+    VllmSmolP128V1 = 2,
+}
+
 /// Owns the Rust parents of a recorded graph. Native handles point to independent
 /// CUDA allocations, never into the Rust container, so moving the container is safe.
 /// No parent access is exposed until native graph destruction succeeds.
@@ -720,6 +733,39 @@ impl BorrowedGraphResourceReservation<'_> {
         hf: bool,
         publish_logits: bool,
     ) -> CudaResult<()> {
+        self.record_decode_with_profile(
+            devices,
+            workspace,
+            weights,
+            plans,
+            staging,
+            geometry,
+            eps,
+            if hf {
+                DecodeNumericalProfile::HuggingFaceSmolLm2
+            } else {
+                DecodeNumericalProfile::Canonical
+            },
+            publish_logits,
+        )
+    }
+
+    /// Records an explicitly selected numerical contract; no cross-profile fallback.
+    /// # Errors
+    /// Rejects unsupported geometry, environment, parents or capture failure.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_decode_with_profile(
+        &mut self,
+        devices: [usize; 21],
+        workspace: Option<usize>,
+        weights: &[usize],
+        plans: [usize; 5],
+        staging: usize,
+        geometry: [u64; 4],
+        eps: &[f32],
+        profile: DecodeNumericalProfile,
+        publish_logits: bool,
+    ) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
             let bad =
@@ -772,7 +818,7 @@ impl BorrowedGraphResourceReservation<'_> {
                 staging.native_handle(),
                 geometry,
                 eps,
-                hf,
+                profile as u32,
                 publish_logits,
             )
         }
@@ -786,7 +832,7 @@ impl BorrowedGraphResourceReservation<'_> {
                 staging,
                 geometry,
                 eps,
-                hf,
+                profile as u32,
                 publish_logits,
             );
             Err(crate::CudaError::unavailable("record decode"))

@@ -17,7 +17,9 @@ mod graph;
 mod graph_resources;
 #[cfg(feature = "cuda")]
 pub use graph_resources::OwnedGraphResourceReservation;
-pub use graph_resources::{BorrowedGraphResourceParents, BorrowedGraphResourceReservation};
+pub use graph_resources::{
+    BorrowedGraphResourceParents, BorrowedGraphResourceReservation, DecodeNumericalProfile,
+};
 #[cfg(any(feature = "cuda", test))]
 mod hf_eager_allowlist;
 mod memory;

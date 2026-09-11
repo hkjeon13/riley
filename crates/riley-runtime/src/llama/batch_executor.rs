@@ -379,6 +379,12 @@ impl PreparedLlamaBatchExecutor {
         rows: &[LlamaBatchRow<'_>],
         stream: &mut CudaStream,
     ) -> LlamaBatchExecutorResult<()> {
+        if self.config.vllm_smol_p128_graph() {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "graph numerics",
+                reason: "vllm-smol-p128-v1 requires an owned graph",
+            });
+        }
         self.execute_output(rows, BatchOutputMode::Logits, stream)
     }
 

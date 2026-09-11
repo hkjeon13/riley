@@ -33,6 +33,7 @@ impl PreparedLlamaBatchExecutor {
         let owner = &mut self.owner;
         let f = &mut owner.forward;
         let profile = f.rms_norm_profile();
+        let vllm_profile = self.config.vllm_smol_p128_graph();
         if f.plan.sequence_length() != 1
             || owner.layout.head_dimension() != 64
             || !matches!(
@@ -133,7 +134,7 @@ impl PreparedLlamaBatchExecutor {
         })
         .map_err(cuda)?;
         graph
-            .record_decode(
+            .record_decode_with_profile(
                 std::array::from_fn(|i| base + i),
                 workspace,
                 &weights,
@@ -141,7 +142,13 @@ impl PreparedLlamaBatchExecutor {
                 0,
                 geometry,
                 &eps,
-                profile == LlamaRmsNormProfile::HuggingFaceSmolLm2,
+                if vllm_profile {
+                    riley_cuda::DecodeNumericalProfile::VllmSmolP128V1
+                } else if profile == LlamaRmsNormProfile::HuggingFaceSmolLm2 {
+                    riley_cuda::DecodeNumericalProfile::HuggingFaceSmolLm2
+                } else {
+                    riley_cuda::DecodeNumericalProfile::Canonical
+                },
                 publish_logits,
             )
             .map_err(cuda)?;
@@ -156,7 +163,15 @@ impl PreparedLlamaBatchExecutor {
         };
         let f = &self.owner.forward;
         let capacity = self.config.metadata().max_block_entries();
-        f.plan.sequence_length() == 1
+        (!self.config.vllm_smol_p128_graph()
+            || (f.rms_norm_profile() == LlamaRmsNormProfile::HuggingFaceSmolLm2
+                && f.plan.layers().len() == 30
+                && f.plan.dimensions().hidden_size() == 576
+                && f.plan.dimensions().intermediate_size() == 1536
+                && f.plan.dimensions().vocabulary_size() == 49152
+                && f.plan.dimensions().query_heads() == 9
+                && f.plan.dimensions().key_value_heads() == 3))
+            && f.plan.sequence_length() == 1
             && self.owner.layout.head_dimension() == 64
             && self.config.metadata().max_rows() == 1
             && capacity <= 4096
@@ -235,6 +250,11 @@ impl PreparedLlamaBatchExecutor {
         steps: u32,
         policy: ExecutionGraphPolicy,
     ) -> LlamaBatchExecutorResult<Vec<u32>> {
+        if self.config.vllm_smol_p128_graph() {
+            return Err(rejected(
+                "vllm-smol-p128-v1 requires the persistent owned executor",
+            ));
+        }
         use crate::llama::{LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRowKind};
         use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
         if self.is_poisoned() {
@@ -536,10 +556,14 @@ impl PreparedLlamaBatchExecutor {
         let f = &mut owner.forward;
         let dims = f.plan.dimensions();
         let capacity = self.config.metadata().max_block_entries() as u64;
-        let profile = match f.rms_norm_profile() {
-            LlamaRmsNormProfile::Canonical => 0_u32,
-            LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
-            _ => unreachable!(),
+        let profile = if self.config.vllm_smol_p128_graph() {
+            2_u32
+        } else {
+            match f.rms_norm_profile() {
+                LlamaRmsNormProfile::Canonical => 0_u32,
+                LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
+                _ => unreachable!(),
+            }
         };
         let mut digest = Sha256::new();
         digest.update(b"riley.full-decode.owner-content.v1\0");
@@ -692,6 +716,11 @@ impl PreparedLlamaBatchExecutor {
         }
         let ((major, minor), runtime, cublas) =
             native_identity.ok_or_else(|| rejected("missing native plan identity"))?;
+        if self.config.vllm_smol_p128_graph()
+            && (major != 8 || minor != 9 || runtime != 13000 || cublas != 130101)
+        {
+            return Err(rejected("vllm-smol-p128-v1 environment mismatch"));
+        }
         let device = GraphDeviceSignature::new(
             major,
             minor,
@@ -729,10 +758,10 @@ impl PreparedLlamaBatchExecutor {
                     GraphMetadataLayoutSignature::new(2, layout.finalize().into()),
                 ),
                 GraphImplementationSignature::new(
-                    GraphImplementationId::new(0xF001),
-                    GraphImplementationId::new(0xF001),
-                    GraphImplementationId::new(0xF001),
-                    GraphImplementationId::new(0xF001),
+                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
                     GraphGemmPlanSetId::new(1),
                     GraphReductionPolicyId::new(profile),
                 ),
@@ -1203,6 +1232,7 @@ pub struct OwnedLlamaDecodeExecutor {
     poisoned: bool,
     output_ready: bool,
     replays: u64,
+    vllm_smol_p128_graph: bool,
 }
 impl PreparedLlamaBatchExecutor {
     /// Whether this exact prepared owner supports a persistent single-row graph.
@@ -1225,6 +1255,7 @@ impl PreparedLlamaBatchExecutor {
         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
         let mut stream = context.create_stream().map_err(cuda)?;
         let (signature, device_bytes) = self.full_decode_signature(&mut stream)?;
+        let vllm_smol_p128_graph = self.config.vllm_smol_p128_graph();
         let vocabulary_size = self.vocabulary_size();
         let maximum_position_count = self.maximum_position_count()?;
         let config = self.config.metadata();
@@ -1278,10 +1309,38 @@ impl PreparedLlamaBatchExecutor {
             poisoned: false,
             output_ready: false,
             replays: 0,
+            vllm_smol_p128_graph,
         })
     }
 }
 impl OwnedLlamaDecodeExecutor {
+    /// Versioned request bounds, checked before any output is published.
+    /// # Errors
+    /// Rejects requests outside the explicitly selected numerical profile.
+    pub fn validate_request_shape(
+        &self,
+        prompt_tokens: usize,
+        output_tokens: usize,
+    ) -> LlamaBatchExecutorResult<()> {
+        if self.vllm_smol_p128_graph
+            && (prompt_tokens != 128 || output_tokens == 0 || output_tokens > 32)
+        {
+            return Err(rejected(
+                "vllm-smol-p128-v1 requires 128 prompt tokens and 1..32 output tokens",
+            ));
+        }
+        Ok(())
+    }
+    /// Stable arithmetic identity for request admission and evidence.
+    #[must_use]
+    pub const fn numerical_profile_id(&self) -> &'static str {
+        if self.vllm_smol_p128_graph {
+            "vllm-smol-p128-v1"
+        } else {
+            "existing"
+        }
+    }
+
     /// Exact metadata bounds retained from the original executor.
     #[must_use]
     pub fn metadata_config(&self) -> crate::llama::LlamaBatchMetadataConfig {
@@ -1332,6 +1391,9 @@ impl OwnedLlamaDecodeExecutor {
         }
         let token = packed.input_token_ids()[0];
         let pos = packed.position_ids()[0];
+        if self.vllm_smol_p128_graph && pos >= 160 {
+            return Err(rejected("vllm-smol-p128-v1 position exceeds 159"));
+        }
         if token as usize >= self.vocabulary_size || pos as usize >= self.maximum_position_count {
             return Err(rejected("owned graph token or position out of bounds"));
         }
@@ -1507,6 +1569,127 @@ mod owned_tests {
         assert_eq!(stats.pinned_host_live_allocations(), 0);
         println!(
             "G04_OWNED p128_o32=true full_logits_exact=true requests=3 cancelled_prefix=23 replays=341 captures=1 zero_allocations=true output_tokens={expected_tokens:?}"
+        );
+        context.close()?;
+        Ok(())
+    }
+    #[test]
+    #[ignore = "requires SmolLM2 checkpoint and CUDA"]
+    fn owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
+        let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
+        let prompt = model
+            .tokenizer()
+            .encode(&"Hello".repeat(128), riley_model::EncodeOptions::default())?;
+        assert_eq!(prompt.len(), 128);
+        let context = riley_cuda::CudaRuntime::initialize()?
+            .device(0)?
+            .create_context()?;
+        let mut stream = context.create_stream()?;
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16)?,
+            PreparedLlamaForwardConfig::default(),
+        )
+        .with_grouped_ragged_attention_heads()
+        .with_separate_residual_norm()
+        .with_iteration_batch_completion()
+        .with_packed_async_metadata();
+        let candidate = PreparedLlamaBatchExecutor::prepare(
+            &model,
+            &context,
+            &mut stream,
+            config.with_vllm_smol_p128_graph(),
+        )?;
+        let mut candidate = candidate.into_owned_decode_graph(&context)?;
+        assert_eq!(candidate.numerical_profile_id(), "vllm-smol-p128-v1");
+        assert!(candidate.validate_request_shape(127, 32).is_err());
+        assert!(candidate.validate_request_shape(129, 32).is_err());
+        assert!(candidate.validate_request_shape(128, 33).is_err());
+        candidate.validate_request_shape(128, 32)?;
+        let mut expected_tokens = Vec::new();
+        for (request, limit) in [159_usize, 23, 150, 159].into_iter().enumerate() {
+            // New requests reuse the same retained parents and fresh scheduler mappings.
+            let mapping: Vec<u32> = (0..16)
+                .map(|i| ((i * 7 + request * 3) % 16) as u32)
+                .collect();
+            let mut token = 504;
+            let mut tokens = Vec::new();
+            for position in 0..limit {
+                if position < 128 {
+                    token = prompt[position];
+                }
+                let live = position / 16 + 1;
+                let mut valid = vec![16; live];
+                valid[live - 1] = (position % 16 + 1) as u16;
+                let input = [token];
+                let rows = [LlamaBatchRow::new(
+                    (request + 1) as u64,
+                    if position < 128 {
+                        LlamaBatchRowKind::Prefill
+                    } else {
+                        LlamaBatchRowKind::Decode
+                    },
+                    &input,
+                    (position + 1) as u32,
+                    LlamaBatchBlockTable::new(
+                        crate::paged_kv::BLOCK_TABLE_V1_VERSION,
+                        &mapping[..live],
+                        &valid,
+                        (position + 1) as u32,
+                    ),
+                    Some(0),
+                )];
+                let before = context.allocation_stats()?;
+                candidate.execute(&rows)?;
+                assert_eq!(context.allocation_stats()?, before);
+                token = candidate.greedy_token()?;
+                if position >= 127 {
+                    tokens.push(token);
+                }
+            }
+            let reference = [
+                28, 339, 5248, 253, 1838, 3241, 282, 253, 1443, 929, 3156, 28, 198, 198, 504, 808,
+                2775, 339, 1277, 288, 1643, 314, 338, 339, 5248, 2045, 288, 1138, 346, 253, 1443,
+                282,
+            ];
+            assert_eq!(tokens.as_slice(), &reference[..tokens.len()]);
+            if limit == 159 {
+                assert_eq!(tokens.len(), 32);
+                if expected_tokens.is_empty() {
+                    expected_tokens = tokens;
+                } else {
+                    assert_eq!(tokens, expected_tokens);
+                }
+            }
+            let invalid = [u32::MAX];
+            let invalid_rows = [LlamaBatchRow::new(
+                99,
+                LlamaBatchRowKind::Prefill,
+                &invalid,
+                1,
+                LlamaBatchBlockTable::new(
+                    crate::paged_kv::BLOCK_TABLE_V1_VERSION,
+                    &mapping[..1],
+                    &[1],
+                    1,
+                ),
+                Some(0),
+            )];
+            assert!(candidate.execute(&invalid_rows).is_err());
+            assert!(
+                candidate.greedy_token().is_err(),
+                "invalid input must revoke old output"
+            );
+        }
+        assert_eq!(candidate.replay_count(), 491);
+        candidate.close()?;
+        stream.close()?;
+        let stats = context.allocation_stats()?;
+        assert_eq!(stats.device_live_allocations(), 0);
+        assert_eq!(stats.pinned_host_live_allocations(), 0);
+        println!(
+            "G04_VLLM_PROFILE p128_o32=true vllm_tokens_exact=true requests=4 cancelled_prefill=23 cancelled_output=23 replays=491 captures=1 live_allocation_deltas_zero=true output_tokens={expected_tokens:?}"
         );
         context.close()?;
         Ok(())

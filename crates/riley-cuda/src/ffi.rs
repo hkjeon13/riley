@@ -10708,7 +10708,7 @@ impl GraphResourcesHandle {
         staging: &PinnedHostBufferHandle,
         geometry: [u64; 4],
         eps: &[f32],
-        hf: bool,
+        profile: u32,
         publish_logits: bool,
     ) -> CudaResult<()> {
         if geometry[0] > 128
@@ -10739,7 +10739,7 @@ impl GraphResourcesHandle {
                 staging.as_ptr(),
                 geometry.as_ptr(),
                 eps.as_ptr(),
-                u32::from(hf),
+                profile,
                 u32::from(publish_logits),
                 &mut error,
             )

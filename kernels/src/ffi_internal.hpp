@@ -2323,6 +2323,13 @@ inline bool release_child(RileyCudaContext* context) noexcept {
   return false;
 }
 
+
+cudaError_t enqueue_compiled_norm(cudaStream_t,const void*,const void*,const void*,void*,void*,int) noexcept;
+cudaError_t enqueue_compiled_rope(cudaStream_t,const void*,const void*,void*,void*,const void*,const void*,const void*) noexcept;
+cudaError_t enqueue_compiled_swiglu(cudaStream_t,const void*,const void*,void*) noexcept;
+cudaError_t enqueue_compiled_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+cudaError_t enqueue_compiled_prefill_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
+cudaError_t enqueue_compiled_kv_write(cudaStream_t,const void*,const void*,void*,void*,const void*) noexcept;
 }  // namespace riley_cuda_internal
 
 #endif  // RILEY_CUDA_FFI_INTERNAL_HPP_

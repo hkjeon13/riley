@@ -2483,6 +2483,13 @@ mod cuda_backend {
             )
             .map_err(internal)?;
             use riley_runtime::llama::ExecutionGraphPolicy;
+            if resources.executor.config().vllm_smol_p128_graph()
+                && resources.execution_graph_policy != ExecutionGraphPolicy::Require
+            {
+                return Err(internal(
+                    "vllm-smol-p128-v1 requires an explicitly required graph",
+                ));
+            }
             let supported = resources.executor.supports_owned_decode_graph();
             if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {
                 return Err(internal(
@@ -2501,8 +2508,14 @@ mod cuda_backend {
                 (Some(resources.executor), None)
             };
             eprintln!(
-                "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={}",
-                use_graph, resources.execution_graph_policy, !use_graph, !use_graph
+                "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
+                use_graph,
+                resources.execution_graph_policy,
+                !use_graph,
+                !use_graph,
+                decode_graph
+                    .as_ref()
+                    .map_or("existing", |graph| graph.numerical_profile_id())
             );
             Ok(Self {
                 metadata: resources.metadata,
@@ -3105,6 +3118,13 @@ mod cuda_backend {
                     },
                 )
                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
+            if let Some(graph) = &self.decode_graph {
+                graph
+                    .validate_request_shape(prompt_token_ids.len(), request.max_new_tokens)
+                    .map_err(|_| {
+                        private_request_error("request is outside graph numerical profile bounds")
+                    })?;
+            }
             let total_tokens = prompt_token_ids
                 .len()
                 .checked_add(request.max_new_tokens)

@@ -980,6 +980,17 @@ mod cuda_executor {
             policy: riley_runtime::llama::ExecutionGraphPolicy,
         ) -> NativeBenchmarkResult<Self> {
             use riley_runtime::llama::ExecutionGraphPolicy;
+            if self
+                .executor
+                .as_ref()
+                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
+                && policy != ExecutionGraphPolicy::Require
+            {
+                return Err(invalid(
+                    "graph numerics",
+                    "vllm-smol-p128-v1 requires an explicitly required graph",
+                ));
+            }
             if policy == ExecutionGraphPolicy::Disabled {
                 return Ok(self);
             }
@@ -1041,6 +1052,25 @@ mod cuda_executor {
                 .as_ref()
                 .ok_or(NativeBenchmarkError::Terminal)?;
             ensure_scheduler_idle(scheduler)?;
+            if self
+                .executor
+                .as_ref()
+                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
+            {
+                return Err(invalid(
+                    "graph numerics",
+                    "owned graph preparation is required before trials",
+                ));
+            }
+            if let Some(graph) = &self.decode_graph {
+                for request in &requests {
+                    graph
+                        .validate_request_shape(request.prompt_token_ids().len(), output_tokens)
+                        .map_err(|_| {
+                            invalid("graph numerics", "request outside numerical profile bounds")
+                        })?;
+                }
+            }
             PreparedNativeBenchmarkTrial::prepare(
                 requests,
                 output_tokens,

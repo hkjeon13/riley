@@ -27,6 +27,8 @@ add_library(riley_cuda_native STATIC
     src/fixed37_attention.cu
     src/fixed37_primitives.cu
     src/gemm.cu
+    src/graph_numerics_precise.cu
+    src/graph_numerics.cu
     src/graph_resources.cu
     src/graph.cu
     src/host_runtime.cu
@@ -136,3 +138,5 @@ install(TARGETS riley_cuda_native
 install(FILES include/riley_cuda.h
     DESTINATION include
 )
+
+set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
