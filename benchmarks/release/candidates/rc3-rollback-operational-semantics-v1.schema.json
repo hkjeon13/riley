@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-rollback-operational-semantics-v1.schema.json",
+  "title": "Riley RC3 rollback held-FD operational semantics v1",
+  "description": "An in-memory diagnostic from caller-held raw evidence FDs. A passed result means only that narrowly defined raw operational facts agreed; the FDs do not prove prior finalizer normal-return lineage, and this schema never proves host deployment rollback, frozen-candidate status, Gate E, promotion, qualification, or durable producer success.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "candidate_id",
+    "bindings",
+    "raw_manifest",
+    "rollback_v3_manifest",
+    "atomic_transaction_session",
+    "derived_facts",
+    "checks",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-rollback-operational-semantics.v1"},
+    "status": {"const": "passed"},
+    "qualification_status": {"const": "not-run"},
+    "authority": {"const": "raw-operational-semantics-only"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "bindings": {"$ref": "#/$defs/bindings"},
+    "raw_manifest": {"$ref": "#/$defs/v4ManifestDescriptor"},
+    "rollback_v3_manifest": {"$ref": "#/$defs/v3ManifestDescriptor"},
+    "atomic_transaction_session": {"$ref": "#/$defs/atomicTransactionDescriptor"},
+    "derived_facts": {"$ref": "#/$defs/derivedFacts"},
+    "checks": {
+      "type": "array",
+      "prefixItems": [
+        {"$ref": "#/$defs/heldFdRawTopologyReplayCheck"},
+        {"$ref": "#/$defs/candidateRollbackProcessIdentityDistinctCheck"},
+        {"$ref": "#/$defs/candidateRollbackGpuIdentityEqualCheck"},
+        {"$ref": "#/$defs/candidateRollbackListenerPortDistinctCheck"},
+        {"$ref": "#/$defs/candidateSourceResponseAuditIdentityCheck"},
+        {"$ref": "#/$defs/rollbackGenerationResponseIdDistinctCheck"},
+        {"$ref": "#/$defs/candidateShutdownDrainedCheck"},
+        {"$ref": "#/$defs/isolatedArtifactInodeExchangeCheck"},
+        {"$ref": "#/$defs/v4RawClosureCrossBindingCheck"}
+      ],
+      "items": false
+    },
+    "reason_codes": {"const": []}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 16777216}
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": {"$ref": "#/$defs/sha256"},
+        "base_release_candidate_report_sha256": {"$ref": "#/$defs/sha256"},
+        "configuration_profile": {"const": "stable-default"},
+        "configuration_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "v4ManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "rollback-v4-candidate-source-manifest.json"}}}
+      ]
+    },
+    "v3ManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "rollback-v3-candidate-source-manifest.json"}}}
+      ]
+    },
+    "atomicTransactionDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "rollback-v3-atomic-transaction/session.json"}}}
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "server_pid",
+        "server_start_ticks",
+        "listener_port",
+        "listener_inode",
+        "gpu_index",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "server_pid": {"type": "integer", "minimum": 1},
+        "server_start_ticks": {"type": "integer", "minimum": 1},
+        "listener_port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "listener_inode": {"type": "integer", "minimum": 1},
+        "gpu_index": {"type": "integer", "minimum": 0},
+        "gpu_uuid": {"type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$"}
+      }
+    },
+    "completionId": {
+      "type": "string",
+      "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}$"
+    },
+    "derivedFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_target",
+        "rollback_target",
+        "candidate_source_response_id",
+        "rollback_generation_response_id",
+        "candidate_shutdown_drained",
+        "isolated_artifact_exchange"
+      ],
+      "properties": {
+        "candidate_target": {"$ref": "#/$defs/target"},
+        "rollback_target": {"$ref": "#/$defs/target"},
+        "candidate_source_response_id": {"$ref": "#/$defs/completionId"},
+        "rollback_generation_response_id": {"$ref": "#/$defs/completionId"},
+        "candidate_shutdown_drained": {"const": true},
+        "isolated_artifact_exchange": {"const": true}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "passed": {"const": true}
+      }
+    },
+    "heldFdRawTopologyReplayCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "held-fd-raw-topology-replay"}}}
+      ]
+    },
+    "candidateRollbackProcessIdentityDistinctCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-rollback-process-identity-distinct"}}}
+      ]
+    },
+    "candidateRollbackGpuIdentityEqualCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-rollback-gpu-identity-equal"}}}
+      ]
+    },
+    "candidateRollbackListenerPortDistinctCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-rollback-listener-port-distinct"}}}
+      ]
+    },
+    "candidateSourceResponseAuditIdentityCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-source-response-audit-identity"}}}
+      ]
+    },
+    "rollbackGenerationResponseIdDistinctCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "rollback-generation-response-id-distinct"}}}
+      ]
+    },
+    "candidateShutdownDrainedCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-shutdown-drained"}}}
+      ]
+    },
+    "isolatedArtifactInodeExchangeCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "isolated-artifact-inode-exchange"}}}
+      ]
+    },
+    "v4RawClosureCrossBindingCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "v4-raw-closure-cross-binding"}}}
+      ]
+    }
+  }
+}

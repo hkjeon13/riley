@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/soak-v2-receipt-v1.schema.json",
+  "title": "Riley C02 extended soak-v2 semantic receipt v1",
+  "description": "Closed C02 full-duration soak contract. A raw receipt carries no passed/status assertion: a CPU-only verifier replays the Gate E deterministic raw archive and validates the source-controlled v2 scenario trace before producing the separate freeze-declared semantic check report.",
+  "oneOf": [
+    { "$ref": "#/$defs/scenarioContract" },
+    { "$ref": "#/$defs/inputReceipt" },
+    { "$ref": "#/$defs/scenarioTrace" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "scenarioContractEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "duration_seconds",
+        "minimum_requests",
+        "cancellation_percent",
+        "minimum_kv_utilization_percent",
+        "maximum_kv_utilization_percent",
+        "minimum_capacity_rejections",
+        "minimum_exact_backend_fallbacks",
+        "required_backend_events",
+        "minimum_model_load_unload_cycles"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+        "kind": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$" },
+        "duration_seconds": { "type": "integer", "minimum": 1 },
+        "minimum_requests": { "type": "integer", "minimum": 1 },
+        "cancellation_percent": { "enum": [0, 10, 50] },
+        "minimum_kv_utilization_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "maximum_kv_utilization_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "minimum_capacity_rejections": { "type": "integer", "minimum": 0 },
+        "minimum_exact_backend_fallbacks": { "type": "integer", "minimum": 0 },
+        "required_backend_events": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "minimum_model_load_unload_cycles": { "type": "integer", "minimum": 0, "maximum": 1024 }
+      }
+    },
+    "scenarioContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "contract_id",
+        "base_gate_contract_id",
+        "total_duration_seconds",
+        "maximum_interval_seconds",
+        "scenarios"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.c02-soak-v2-scenario-contract.v1" },
+        "contract_id": { "const": "c02-soak-v2-full-duration-v1" },
+        "base_gate_contract_id": { "const": "pr16-release-soak-v1" },
+        "total_duration_seconds": { "const": 52200 },
+        "maximum_interval_seconds": { "const": 300 },
+        "scenarios": {
+          "type": "array",
+          "minItems": 18,
+          "maxItems": 18,
+          "items": { "$ref": "#/$defs/scenarioContractEntry" }
+        }
+      }
+    },
+    "gateESoak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_archive", "correctness_golden", "native_correctness_report"],
+      "properties": {
+        "report": { "$ref": "#/$defs/descriptor" },
+        "raw_archive": { "$ref": "#/$defs/descriptor" },
+        "correctness_golden": { "$ref": "#/$defs/descriptor" },
+        "native_correctness_report": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "inputReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "bindings",
+        "scenario_contract",
+        "gate_e_soak",
+        "scenario_trace"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-receipt.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "scenario_contract": { "$ref": "#/$defs/descriptor" },
+        "gate_e_soak": { "$ref": "#/$defs/gateESoak" },
+        "scenario_trace": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "lifecycleCycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle", "events"],
+      "properties": {
+        "cycle": { "type": "integer", "minimum": 1 },
+        "events": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "enum": [
+              "model-load-requested",
+              "model-ready",
+              "model-unload-requested",
+              "model-unloaded"
+            ]
+          }
+        }
+      }
+    },
+    "intervalObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elapsed_seconds",
+        "rss_bytes",
+        "pinned_bytes",
+        "vram_bytes",
+        "kv_blocks",
+        "request_states",
+        "terminal_events_total"
+      ],
+      "properties": {
+        "elapsed_seconds": { "type": "integer", "minimum": 0 },
+        "rss_bytes": { "type": "integer", "minimum": 1 },
+        "pinned_bytes": { "type": "integer", "minimum": 0 },
+        "vram_bytes": { "type": "integer", "minimum": 1 },
+        "kv_blocks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["free", "reserved", "active"],
+          "properties": {
+            "free": { "type": "integer", "minimum": 0 },
+            "reserved": { "type": "integer", "minimum": 0 },
+            "active": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "request_states": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["active", "completed", "cancelled", "capacity_rejections"],
+          "properties": {
+            "active": { "type": "integer", "minimum": 0 },
+            "completed": { "type": "integer", "minimum": 0 },
+            "cancelled": { "type": "integer", "minimum": 0 },
+            "capacity_rejections": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "terminal_events_total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scenarioResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "started_monotonic_ns",
+        "ended_monotonic_ns",
+        "observed_duration_seconds",
+        "attempted_requests",
+        "completed_requests",
+        "cancelled_requests",
+        "capacity_rejections",
+        "terminal_events",
+        "max_kv_utilization_percent",
+        "exact_backend_fallbacks",
+        "backend_events",
+        "model_lifecycle_cycles",
+        "interval_observations"
+      ],
+      "properties": {
+        "scenario_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+        "started_monotonic_ns": { "type": "integer", "minimum": 1 },
+        "ended_monotonic_ns": { "type": "integer", "minimum": 1 },
+        "observed_duration_seconds": { "type": "integer", "minimum": 1 },
+        "attempted_requests": { "type": "integer", "minimum": 1 },
+        "completed_requests": { "type": "integer", "minimum": 0 },
+        "cancelled_requests": { "type": "integer", "minimum": 0 },
+        "capacity_rejections": { "type": "integer", "minimum": 0 },
+        "terminal_events": { "type": "integer", "minimum": 1 },
+        "max_kv_utilization_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "exact_backend_fallbacks": { "type": "integer", "minimum": 0 },
+        "backend_events": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "model_lifecycle_cycles": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/lifecycleCycle" }
+        },
+        "interval_observations": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/intervalObservation" }
+        }
+      }
+    },
+    "scenarioTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "bindings",
+        "scenario_contract",
+        "gate_e_soak_raw_sha256",
+        "scenario_results"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-scenario-trace.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "scenario_contract": { "$ref": "#/$defs/descriptor" },
+        "gate_e_soak_raw_sha256": { "$ref": "#/$defs/sha256" },
+        "scenario_results": {
+          "type": "array",
+          "minItems": 18,
+          "maxItems": 18,
+          "items": { "$ref": "#/$defs/scenarioResult" }
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {
+          "enum": [
+            "freeze-binding",
+            "gate-e-replay",
+            "stable-default-arm-binding",
+            "source-contract-binding",
+            "gate-e-soak-binding",
+            "gate-e-soak-raw-archive-replay",
+            "soak-v2-trace-binding",
+            "full-duration-scenario-inventory",
+            "cancellation-rate-semantics",
+            "kv-capacity-semantics",
+            "exact-backend-fallback-semantics",
+            "repeated-model-lifecycle-semantics"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "passed",
+        "candidate_id",
+        "freeze_sha256",
+        "base_release_candidate_report",
+        "scenario_contract",
+        "receipt",
+        "bindings",
+        "gate_e_soak_report",
+        "gate_e_soak_raw_archive",
+        "correctness_golden",
+        "native_correctness_report",
+        "scenario_trace",
+        "scenario_results",
+        "checks",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-check.v1" },
+        "status": { "enum": ["passed", "failed", "incomparable"] },
+        "passed": { "type": "boolean" },
+        "candidate_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/candidateId" }] },
+        "freeze_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "base_release_candidate_report": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "scenario_contract": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "receipt": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "bindings": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/bindings" }] },
+        "gate_e_soak_report": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "gate_e_soak_raw_archive": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "correctness_golden": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "native_correctness_report": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "scenario_trace": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "scenario_results": {
+          "type": "array",
+          "maxItems": 18,
+          "items": { "$ref": "#/$defs/scenarioResult" }
+        },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "passed": { "const": true },
+              "candidate_id": { "$ref": "#/$defs/candidateId" },
+              "freeze_sha256": { "$ref": "#/$defs/sha256" },
+              "base_release_candidate_report": { "$ref": "#/$defs/descriptor" },
+              "scenario_contract": { "$ref": "#/$defs/descriptor" },
+              "receipt": { "$ref": "#/$defs/descriptor" },
+              "bindings": { "$ref": "#/$defs/bindings" },
+              "gate_e_soak_report": { "$ref": "#/$defs/descriptor" },
+              "gate_e_soak_raw_archive": { "$ref": "#/$defs/descriptor" },
+              "correctness_golden": { "$ref": "#/$defs/descriptor" },
+              "native_correctness_report": { "$ref": "#/$defs/descriptor" },
+              "scenario_trace": { "$ref": "#/$defs/descriptor" },
+              "scenario_results": { "minItems": 18, "maxItems": 18 },
+              "checks": { "minItems": 12, "maxItems": 12 },
+              "reason_codes": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "passed": { "const": false },
+              "reason_codes": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-runtime-oci-inputs-v1.schema.json",
+  "title": "Reconstructed runtime OCI inputs v1",
+  "description": "A source-only, per-reconstruction closure for one already-captured OCI image-layout tar and raw runtime image inspect response. This is not a reconstructed baseline, source, bundle, build-invocation, independence, rollback, or qualification receipt. The accompanying Python verifier owns cross-file OCI digest, size, platform, and raw-image-ID bindings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "capture_scope",
+    "reconstruction_id",
+    "archive_format",
+    "platform",
+    "image_id",
+    "content_binding",
+    "source_binding",
+    "bundle_binding",
+    "build_invocation_binding",
+    "independence_binding",
+    "image_inspect",
+    "archive",
+    "layout",
+    "index",
+    "manifest",
+    "config"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.reconstructed-runtime-oci-inputs.v1"
+    },
+    "status": {
+      "const": "prepared"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "capture_scope": {
+      "const": "single-runtime-oci-layout-content-binding"
+    },
+    "reconstruction_id": {
+      "enum": [
+        "a",
+        "b"
+      ]
+    },
+    "archive_format": {
+      "const": "oci-image-layout-tar.v1"
+    },
+    "platform": {
+      "$ref": "#/$defs/platform"
+    },
+    "image_id": {
+      "$ref": "#/$defs/ociDigest"
+    },
+    "content_binding": {
+      "const": "validated"
+    },
+    "source_binding": {
+      "const": "not-established"
+    },
+    "bundle_binding": {
+      "const": "not-established"
+    },
+    "build_invocation_binding": {
+      "const": "not-established"
+    },
+    "independence_binding": {
+      "const": "not-established"
+    },
+    "image_inspect": {
+      "$ref": "#/$defs/imageInspectDescriptor"
+    },
+    "archive": {
+      "$ref": "#/$defs/archiveDescriptor"
+    },
+    "layout": {
+      "$ref": "#/$defs/layoutDescriptor"
+    },
+    "index": {
+      "$ref": "#/$defs/indexDescriptor"
+    },
+    "manifest": {
+      "$ref": "#/$defs/manifestDescriptor"
+    },
+    "config": {
+      "$ref": "#/$defs/configDescriptor"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "allOf": [
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "ociDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "allOf": [
+        {
+          "not": {
+            "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "imageInspectDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/docker-image-inspect.json"
+            }
+          }
+        }
+      ]
+    },
+    "archiveDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/oci-image-layout.tar"
+            }
+          }
+        }
+      ]
+    },
+    "layoutDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/oci-layout"
+            }
+          }
+        }
+      ]
+    },
+    "indexDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/index.json"
+            }
+          }
+        }
+      ]
+    },
+    "manifestDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/manifest.json"
+            }
+          }
+        }
+      ]
+    },
+    "configDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "runtime-image/config.json"
+            }
+          }
+        }
+      ]
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture"
+      ],
+      "properties": {
+        "os": {
+          "const": "linux"
+        },
+        "architecture": {
+          "const": "amd64"
+        }
+      }
+    }
+  }
+}

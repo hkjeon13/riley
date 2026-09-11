@@ -1,0 +1,456 @@
+#include "ffi_internal.hpp"
+
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+
+namespace {
+
+using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::CaptureDomainControlLease;
+using riley_cuda_internal::clear_error;
+using riley_cuda_internal::internal_error;
+using riley_cuda_internal::release_capture_domain_smoke_fill;
+using riley_cuda_internal::release_child;
+using riley_cuda_internal::retain_child;
+using riley_cuda_internal::runtime_error;
+using riley_cuda_internal::same_context;
+using riley_cuda_internal::set_error;
+using riley_cuda_internal::try_begin_capture_domain_smoke_fill;
+using riley_cuda_internal::validation_error;
+
+constexpr uint32_t kThreadsPerBlock = 256;
+constexpr uint64_t kMaximumGridX = static_cast<uint64_t>(INT_MAX);
+
+// A pending fill can later make CUDA calls from its Rust Drop path. Keep its
+// global/domain admission token from before the first create-time CUDA entry
+// until ownership is transferred to the native smoke buffer. Every early
+// return then releases exactly the reservation it acquired, while a
+// successfully created buffer releases it only when close consumes that
+// buffer.
+class SmokeCaptureAdmissionLease final {
+ public:
+  explicit SmokeCaptureAdmissionLease(RileyCudaCaptureDomain* domain) noexcept
+      : domain_(domain), held_(false) {}
+
+  SmokeCaptureAdmissionLease(const SmokeCaptureAdmissionLease&) = delete;
+  SmokeCaptureAdmissionLease& operator=(const SmokeCaptureAdmissionLease&) =
+      delete;
+
+  ~SmokeCaptureAdmissionLease() noexcept {
+    if (held_) {
+      (void)release_capture_domain_smoke_fill(domain_);
+    }
+  }
+
+  bool acquire() noexcept {
+    if (!try_begin_capture_domain_smoke_fill(domain_)) {
+      return false;
+    }
+    held_ = true;
+    return true;
+  }
+
+  void transfer_to_buffer() noexcept { held_ = false; }
+
+ private:
+  RileyCudaCaptureDomain* domain_;
+  bool held_;
+};
+
+__global__ void smoke_fill_f32(float* output, uint64_t element_count,
+                               float value) {
+  const uint64_t index = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  if (index < element_count) {
+    output[index] = value;
+  }
+}
+
+RileyCudaStatus prior_launch_error(RileyCudaErrorInfo* error,
+                                       const char* operation) noexcept {
+  const cudaError_t prior = cudaGetLastError();
+  if (prior == cudaSuccess) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  return runtime_error(prior, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       operation);
+}
+
+void free_buffer_after_failed_create(RileyCudaContext* context,
+                                     float* device_data) noexcept {
+  if (device_data == nullptr) {
+    return;
+  }
+  CurrentContext cleanup(context);
+  RileyCudaErrorInfo ignored{};
+  ignored.struct_size = sizeof(ignored);
+  if (cleanup.enter(&ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                    "cleanup smoke buffer after create") ==
+      RILEY_CUDA_STATUS_SUCCESS) {
+    (void)cudaFree(device_data);
+    (void)cleanup.leave(RILEY_CUDA_STATUS_SUCCESS, &ignored,
+                        RILEY_CUDA_ERROR_STAGE_CLOSE,
+                        "cleanup smoke buffer after create");
+  }
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_smoke_buffer_create(
+    RileyCudaContext* context, uint64_t element_count,
+    RileyCudaSmokeBuffer** out_buffer,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (out_buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "create smoke buffer",
+                            "out_buffer is null");
+  }
+  *out_buffer = nullptr;
+  if (context == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "create smoke buffer", "context is null");
+  }
+  if (element_count > SIZE_MAX / sizeof(float)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "create smoke buffer",
+                            "element_count overflows host size_t byte length");
+  }
+  // Even an empty pending fill owns a safe-Rust Drop path that enters the
+  // CUDA context to release its native child. Reserve every pending token
+  // before retain/allocation/context entry so a capture cannot race any part
+  // of SmokeHandle creation on this or another device.
+  SmokeCaptureAdmissionLease capture_admission(context->capture_domain);
+  if (!capture_admission.acquire()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "create smoke buffer",
+        "the CUDA primary context has an active graph capture or broad control operation");
+  }
+  if (!retain_child(context)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          "create smoke buffer",
+                          "context child-resource counter overflow");
+  }
+
+  void* buffer_storage = std::calloc(1, sizeof(RileyCudaSmokeBuffer));
+  if (buffer_storage == nullptr) {
+    (void)release_child(context);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, "create smoke buffer",
+                     "host allocation failed");
+  }
+  auto* buffer = new (buffer_storage) RileyCudaSmokeBuffer{
+      context, nullptr, element_count, false, true, nullptr};
+
+  CurrentContext scope(context);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CREATE, "create smoke buffer");
+  if (status == RILEY_CUDA_STATUS_SUCCESS && element_count != 0) {
+    const size_t bytes = static_cast<size_t>(element_count) * sizeof(float);
+    void* allocation = nullptr;
+    const cudaError_t allocation_result = cudaMalloc(&allocation, bytes);
+    buffer->device_data = static_cast<float*>(allocation);
+    status = runtime_error(allocation_result, error,
+                           RILEY_CUDA_ERROR_STAGE_CREATE,
+                           "allocate smoke device buffer");
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                       "create smoke buffer");
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    free_buffer_after_failed_create(context, buffer->device_data);
+    buffer->~RileyCudaSmokeBuffer();
+    std::free(buffer);
+    (void)release_child(context);
+    return status;
+  }
+  // From here native close owns the one token acquired above. Do this only
+  // after all create-time CUDA work and rollback paths are complete.
+  capture_admission.transfer_to_buffer();
+  *out_buffer = buffer;
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+extern "C" RileyCudaStatus riley_cuda_smoke_fill_launch(
+    RileyCudaSmokeBuffer* buffer, RileyCudaStream* stream, float value,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (buffer == nullptr || stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "buffer or stream is null");
+  }
+  if (!same_context(buffer->owner, stream->owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "buffer and stream belong to different contexts");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "stream has an active asynchronous use");
+  }
+  if (buffer->in_flight) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "buffer already has an in-flight operation");
+  }
+  if (!buffer->capture_admission_held) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                          "launch smoke fill",
+                          "smoke buffer lacks capture-domain admission");
+  }
+  if (buffer->element_count == 0) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  const uint64_t block_count =
+      (buffer->element_count + kThreadsPerBlock - 1) / kThreadsPerBlock;
+  if (block_count == 0 || block_count > kMaximumGridX) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "element_count exceeds the supported grid range");
+  }
+
+  CurrentContext scope(buffer->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, "launch smoke fill");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_error(error, "observe prior CUDA launch error");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    smoke_fill_f32<<<static_cast<uint32_t>(block_count), kThreadsPerBlock, 0,
+                     stream->stream>>>(buffer->device_data,
+                                      buffer->element_count, value);
+    status = runtime_error(cudaGetLastError(), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           "launch smoke fill");
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      // Commit native ownership before context restoration: a failed pop must
+      // never make an enqueued kernel look idle to close/drop paths.
+      buffer->in_flight = true;
+      buffer->launch_stream = stream->stream;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       "launch smoke fill");
+  return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_smoke_copy_to_host(
+    RileyCudaSmokeBuffer* buffer, RileyCudaStream* stream,
+    float* host_output, uint64_t host_element_capacity,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (buffer == nullptr || stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "buffer or stream is null");
+  }
+  if (!same_context(buffer->owner, stream->owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "buffer and stream belong to different contexts");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "stream has an active asynchronous use");
+  }
+  if (host_element_capacity < buffer->element_count) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "host output is smaller than element_count");
+  }
+  if (buffer->element_count != 0 && host_output == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "host output is null");
+  }
+  if (buffer->element_count == 0) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (!buffer->in_flight) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "smoke fill has not been launched");
+  }
+  if (buffer->launch_stream != stream->stream) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "copy must use the stream that launched the fill");
+  }
+
+  CurrentContext scope(buffer->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+      "synchronize smoke fill before host copy");
+  uint32_t leave_stage = RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t synchronize_result = cudaStreamSynchronize(stream->stream);
+    status = runtime_error(synchronize_result, error,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           "complete smoke fill before host copy");
+    if (synchronize_result == cudaSuccess) {
+      // Completion is true even if restoring the caller's context later fails.
+      buffer->in_flight = false;
+      buffer->launch_stream = nullptr;
+    }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    // The originating non-default stream is complete, so a synchronous copy
+    // cannot retain the caller-owned host pointer beyond this ABI call. This
+    // avoids pageable-host lifetime ambiguity if an async enqueue reports a
+    // deferred earlier CUDA error after taking a side effect.
+    leave_stage = RILEY_CUDA_ERROR_STAGE_COPY;
+    const size_t bytes =
+        static_cast<size_t>(buffer->element_count) * sizeof(float);
+    status = runtime_error(
+        cudaMemcpy(host_output, buffer->device_data, bytes,
+                   cudaMemcpyDeviceToHost),
+        error, RILEY_CUDA_ERROR_STAGE_COPY,
+        "copy completed smoke buffer to host");
+  }
+  status = scope.leave(status, error, leave_stage,
+                       "copy smoke buffer to host");
+  return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_smoke_buffer_close(
+    RileyCudaSmokeBuffer** buffer,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            "close smoke buffer", "buffer pointer is null");
+  }
+  if (*buffer == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*buffer)->owner == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            "close smoke buffer", "buffer owner is null");
+  }
+  // An in-flight close performs cudaDeviceSynchronize, which is a
+  // context-wide control even when the pending fill moved to another host
+  // thread. An already synchronized buffer has no such control transition.
+  const bool requires_context_control = (*buffer)->in_flight;
+  const CaptureDomainControlLease capture_control(
+      requires_context_control ? (*buffer)->owner->capture_domain : nullptr);
+  if (requires_context_control && !capture_control.active()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, "close smoke buffer",
+        "the CUDA primary context has an active graph capture or broad control operation");
+  }
+  CurrentContext scope((*buffer)->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close smoke buffer");
+  bool resource_consumed = false;
+  bool free_attempted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS && (*buffer)->in_flight) {
+    status = runtime_error(cudaDeviceSynchronize(), error,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           "synchronize in-flight smoke buffer before close");
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      (*buffer)->in_flight = false;
+      (*buffer)->launch_stream = nullptr;
+    }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      (*buffer)->device_data != nullptr) {
+    free_attempted = true;
+    const cudaError_t free_result = cudaFree((*buffer)->device_data);
+    status = runtime_error(free_result, error,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE,
+                           "free smoke device buffer");
+    // cudaFree may return a deferred asynchronous error after consuming the
+    // allocation. Discard ownership after the single attempt; retaining it
+    // would permit a retry to double-free. A genuine free failure leaks safely.
+    (*buffer)->device_data = nullptr;
+  }
+  if ((*buffer)->device_data == nullptr && !(*buffer)->in_flight &&
+      (status == RILEY_CUDA_STATUS_SUCCESS || free_attempted)) {
+    resource_consumed = true;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                       "close smoke buffer");
+  if (resource_consumed) {
+    RileyCudaContext* owner = (*buffer)->owner;
+    const bool release_capture_admission = (*buffer)->capture_admission_held;
+    (*buffer)->~RileyCudaSmokeBuffer();
+    std::free(*buffer);
+    *buffer = nullptr;
+    if (release_capture_admission &&
+        !release_capture_domain_smoke_fill(owner->capture_domain) &&
+        status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                              "close smoke buffer",
+                              "capture-domain pending smoke counter underflow");
+    }
+    if (!release_child(owner) && status == RILEY_CUDA_STATUS_SUCCESS) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            "close smoke buffer",
+                            "context child-resource counter underflow");
+    }
+  }
+  return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_smoke_invalid_launch(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch intentionally invalid smoke kernel",
+                            "stream is null");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        "launch intentionally invalid smoke kernel",
+        "stream has an active asynchronous use");
+  }
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      "launch intentionally invalid smoke kernel");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_error(error, "observe prior CUDA launch error");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    smoke_fill_f32<<<0, kThreadsPerBlock, 0, stream->stream>>>(nullptr, 0, 0.0F);
+    const cudaError_t launch_result = cudaGetLastError();
+    if (launch_result == cudaSuccess) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                              "launch intentionally invalid smoke kernel",
+                              "CUDA accepted a zero-sized launch grid");
+    } else {
+      status = runtime_error(launch_result, error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                             "launch intentionally invalid smoke kernel");
+    }
+  }
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                     "launch intentionally invalid smoke kernel");
+}

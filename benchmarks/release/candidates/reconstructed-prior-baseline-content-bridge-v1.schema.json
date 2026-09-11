@@ -1,0 +1,433 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-prior-baseline-content-bridge-v1.schema.json",
+  "title": "Reconstructed prior baseline content bridge v1",
+  "description": "A create-only, cross-root bridge that replays a v2 reconstructed baseline, reviewed RC2 source inputs v1, and two runtime OCI inputs v1 closures. It upgrades only the raw OCI content binding in this bridge receipt; it does not establish source-to-image, bundle-to-image, build-invocation, runtime-capture independence, rollback, freeze, or qualification bindings. The v2 checker report remains opaque-content/not-validated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "baseline",
+    "source_inputs",
+    "runtime_oci_inputs",
+    "binding_status",
+    "not_established"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.reconstructed-prior-baseline-content-bridge.v1"
+    },
+    "status": {
+      "const": "bound"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "authority": {
+      "const": "cross-root-content-bridge-only"
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "source_inputs": {
+      "$ref": "#/$defs/sourceInputs"
+    },
+    "runtime_oci_inputs": {
+      "$ref": "#/$defs/runtimeOciInputs"
+    },
+    "binding_status": {
+      "$ref": "#/$defs/bindingStatus"
+    },
+    "not_established": {
+      "$ref": "#/$defs/notEstablished"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "gitSha1": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "ociDigest": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4398046511104
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag_name",
+        "tag_object",
+        "tag_target",
+        "archive"
+      ],
+      "properties": {
+        "tag_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tag_object": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "tag_target": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "archive": {
+          "$ref": "#/$defs/descriptor"
+        }
+      }
+    },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag_ref",
+        "tag_object_sha1",
+        "target_commit_sha1"
+      ],
+      "properties": {
+        "tag_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tag_object_sha1": {
+          "$ref": "#/$defs/gitSha1"
+        },
+        "target_commit_sha1": {
+          "$ref": "#/$defs/gitSha1"
+        }
+      }
+    },
+    "baselineArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_image_inspect_raw",
+        "oci",
+        "image_id"
+      ],
+      "properties": {
+        "runtime_image_inspect_raw": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "oci": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "archive",
+            "layout",
+            "manifest"
+          ],
+          "properties": {
+            "archive": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "layout": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "manifest": {
+              "$ref": "#/$defs/descriptor"
+            }
+          }
+        },
+        "image_id": {
+          "$ref": "#/$defs/ociDigest"
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "baseline_id",
+        "source",
+        "reproductions"
+      ],
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "baseline_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "reproductions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "a",
+            "b"
+          ],
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/baselineArm"
+            },
+            "b": {
+              "$ref": "#/$defs/baselineArm"
+            }
+          }
+        }
+      }
+    },
+    "sourceInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt",
+        "expected_source_archive_sha256",
+        "git_identity",
+        "source"
+      ],
+      "properties": {
+        "receipt": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/descriptor"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "reconstructed-rc2-source-inputs.json"
+                }
+              }
+            }
+          ]
+        },
+        "expected_source_archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "git_identity": {
+          "$ref": "#/$defs/gitIdentity"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        }
+      }
+    },
+    "runtimeOciArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt",
+        "reconstruction_id",
+        "image_id",
+        "image_inspect",
+        "archive",
+        "layout",
+        "index",
+        "manifest",
+        "config"
+      ],
+      "properties": {
+        "receipt": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/descriptor"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "reconstructed-runtime-oci-inputs.json"
+                }
+              }
+            }
+          ]
+        },
+        "reconstruction_id": {
+          "enum": [
+            "a",
+            "b"
+          ]
+        },
+        "image_id": {
+          "$ref": "#/$defs/ociDigest"
+        },
+        "image_inspect": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "archive": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "layout": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "index": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "manifest": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "config": {
+          "$ref": "#/$defs/descriptor"
+        }
+      }
+    },
+    "runtimeOciInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "a",
+        "b"
+      ],
+      "properties": {
+        "a": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/runtimeOciArm"
+            },
+            {
+              "properties": {
+                "reconstruction_id": {
+                  "const": "a"
+                }
+              }
+            }
+          ]
+        },
+        "b": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/runtimeOciArm"
+            },
+            {
+              "properties": {
+                "reconstruction_id": {
+                  "const": "b"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "bindingStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v2_report_source_archive_content_binding",
+        "v2_report_oci_archive_content_binding",
+        "source_archive_content_binding",
+        "oci_archive_content_binding",
+        "oci_a_b_content_equality"
+      ],
+      "properties": {
+        "v2_report_source_archive_content_binding": {
+          "const": "not-validated"
+        },
+        "v2_report_oci_archive_content_binding": {
+          "const": "not-validated"
+        },
+        "source_archive_content_binding": {
+          "const": "reviewed-source-inputs-v1-replayed"
+        },
+        "oci_archive_content_binding": {
+          "const": "validated-via-runtime-oci-inputs-v1"
+        },
+        "oci_a_b_content_equality": {
+          "const": "validated"
+        }
+      }
+    },
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_build_invocation_binding",
+        "bundle_to_runtime_image_binding",
+        "source_to_runtime_image_binding",
+        "runtime_capture_independence_binding",
+        "rollback_binding",
+        "freeze_binding",
+        "qualification"
+      ],
+      "properties": {
+        "runtime_build_invocation_binding": {
+          "const": "not-established"
+        },
+        "bundle_to_runtime_image_binding": {
+          "const": "not-established"
+        },
+        "source_to_runtime_image_binding": {
+          "const": "not-established"
+        },
+        "runtime_capture_independence_binding": {
+          "const": "not-established"
+        },
+        "rollback_binding": {
+          "const": "not-established"
+        },
+        "freeze_binding": {
+          "const": "not-established"
+        },
+        "qualification": {
+          "const": "not-run"
+        }
+      }
+    }
+  }
+}

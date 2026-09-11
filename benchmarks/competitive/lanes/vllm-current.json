@@ -1,0 +1,47 @@
+{
+  "$schema": "../contract-v1.schema.json",
+  "schema_version": "riley.competitive.lane.v1",
+  "lane_id": "vllm-current",
+  "role": "baseline",
+  "availability": "campaign-pin-required",
+  "engine": {
+    "name": "vllm",
+    "backend": "vllm",
+    "pin_status": "campaign-pinned-required",
+    "version": null,
+    "revision": null,
+    "dependency_lock_sha256": null
+  },
+  "command": {
+    "status": "campaign-pin-required",
+    "argv": [
+      "{vllm_executable}",
+      "serve",
+      "{model_id}",
+      "--revision",
+      "{model_revision}",
+      "--dtype",
+      "bfloat16",
+      "--host",
+      "{host}",
+      "--port",
+      "{port}"
+    ],
+    "required_placeholders": [
+      "vllm_executable",
+      "model_id",
+      "model_revision",
+      "host",
+      "port"
+    ],
+    "output_format": "riley.competitive.raw.v1"
+  },
+  "artifact_requirements": [
+    "executable_sha256",
+    "source_or_wheel_sha256",
+    "dependency_lock_sha256",
+    "runtime_options_sha256",
+    "model_identity",
+    "tokenizer_identity"
+  ]
+}

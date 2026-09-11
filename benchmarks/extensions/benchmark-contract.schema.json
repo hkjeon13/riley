@@ -1,0 +1,440 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/extension-benchmark-contract-v1.schema.json",
+  "title": "riley extension benchmark contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "extension_id",
+    "status",
+    "track",
+    "semantic_class",
+    "proposal_path",
+    "deploy_document_path",
+    "reference_path",
+    "reference_sha256",
+    "fallback_path",
+    "fallback_sha256",
+    "runtime_flag",
+    "primary_metric",
+    "required_metrics",
+    "quality_or_error_metric",
+    "workloads",
+    "comparison_environment",
+    "measurement",
+    "class_gate"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "../benchmark-contract.schema.json"
+    },
+    "schema_version": {
+      "const": "riley.extension-benchmark-contract.v1"
+    },
+    "extension_id": {
+      "$ref": "#/$defs/extensionId"
+    },
+    "status": {
+      "const": "approved-for-implementation"
+    },
+    "track": {
+      "$ref": "#/$defs/track"
+    },
+    "semantic_class": {
+      "$ref": "#/$defs/semanticClass"
+    },
+    "proposal_path": {
+      "type": "string",
+      "pattern": "^deploy/extensions/proposals/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.json$"
+    },
+    "deploy_document_path": {
+      "type": "string",
+      "pattern": "^deploy/extensions/plans/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.md$"
+    },
+    "reference_path": {
+      "$ref": "#/$defs/repositoryPath"
+    },
+    "reference_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "fallback_path": {
+      "$ref": "#/$defs/repositoryPath"
+    },
+    "fallback_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "runtime_flag": {
+      "type": "string",
+      "pattern": "^RILEY_EXPERIMENTAL_[A-Z0-9_]+$"
+    },
+    "primary_metric": {
+      "$ref": "#/$defs/performanceMetricPath"
+    },
+    "required_metrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/performanceMetricPath"}
+    },
+    "quality_or_error_metric": {
+      "$ref": "#/$defs/qualityMetricPath"
+    },
+    "workloads": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/workloadArtifact"
+      }
+    },
+    "comparison_environment": {
+      "$ref": "#/$defs/comparisonEnvironment"
+    },
+    "measurement": {
+      "$ref": "#/$defs/measurement"
+    },
+    "class_gate": {
+      "oneOf": [
+        {"$ref": "#/$defs/referenceGate"},
+        {"$ref": "#/$defs/e0Gate"},
+        {"$ref": "#/$defs/e1Gate"},
+        {"$ref": "#/$defs/a1Gate"},
+        {"$ref": "#/$defs/m1Gate"}
+      ]
+    }
+  },
+  "allOf": [
+    {"$ref": "#/$defs/trackSemanticClassRules"},
+    {"$ref": "#/$defs/metricCompatibilityRules"},
+    {
+      "if": {"properties": {"semantic_class": {"const": "reference"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/referenceGate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "E0"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/e0Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "E1"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/e1Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "A1"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/a1Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "M1"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/m1Gate"}}}
+    }
+  ],
+  "$defs": {
+    "extensionId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+    },
+    "semanticClass": {
+      "enum": ["reference", "E0", "E1", "A1", "M1"]
+    },
+    "track": {
+      "enum": [
+        "quantization",
+        "low-rank-weight-compression",
+        "kv-compression",
+        "prefix-cache",
+        "kv-offload-prefetch",
+        "query-aware-kv-selection",
+        "moe",
+        "mamba-ssm",
+        "multimodal",
+        "speculative-decoding",
+        "jacobi-lookahead"
+      ]
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+    },
+    "performanceMetricPath": {
+      "enum": [
+        "metrics.batch_wall_ms",
+        "metrics.cpu_utilization_percent",
+        "metrics.gpu_utilization_percent",
+        "metrics.model_load_ms",
+        "metrics.output_tokens_per_second",
+        "metrics.peak_vram_bytes",
+        "quantization.gemm_throughput_tflops",
+        "quantization.kv_bytes",
+        "quantization.transform_runtime_ms",
+        "quantization.weight_bytes",
+        "requests[].end_to_end_ms",
+        "requests[].mean_tpot_ms",
+        "requests[].ttft_ms",
+        "sparse_attention.page_bound_time_ms",
+        "sparse_attention.page_metadata_bytes",
+        "sparse_attention.exact_fallback_rate",
+        "sparse_attention.selected_pages",
+        "sparse_attention.total_pages",
+        "speculative.acceptance_rate",
+        "speculative.accepted_tokens_per_verify",
+        "speculative.draft_latency_ms",
+        "speculative.lookahead",
+        "speculative.rejected_suffix_tokens",
+        "speculative.rollback_count",
+        "speculative.target_calls_per_output_token",
+        "speculative.verification_latency_ms"
+      ]
+    },
+    "qualityMetricPath": {
+      "enum": [
+        "failure_count",
+        "sparse_attention.omitted_mass_bound"
+      ]
+    },
+    "repositoryPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\\\)(?!(?:.*/)?\\.{1,2}(?:/|$))(?!(?:.*/)?(?:\\.git|\\.gitignore|\\.gitattributes|\\.gitmodules|\\.mailmap)(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "workloadArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/repositoryPath"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "samplingConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "strategy", "temperature", "top_p", "top_k", "seed", "ignore_eos", "fixed_output_length"],
+      "properties": {
+        "id": {"$ref": "#/$defs/nonEmptyString"},
+        "strategy": {"enum": ["greedy", "sampling"]},
+        "temperature": {"type": ["number", "null"], "minimum": 0},
+        "top_p": {"type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 1},
+        "top_k": {"type": ["integer", "null"], "minimum": 1},
+        "seed": {"type": ["integer", "null"], "minimum": 0},
+        "ignore_eos": {"type": "boolean"},
+        "fixed_output_length": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"strategy": {"const": "greedy"}}, "required": ["strategy"]},
+          "then": {
+            "properties": {
+              "temperature": {"type": "null"},
+              "top_p": {"type": "null"},
+              "top_k": {"type": "null"},
+              "seed": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"strategy": {"const": "sampling"}}, "required": ["strategy"]},
+          "then": {
+            "properties": {
+              "temperature": {"type": "number", "exclusiveMinimum": 0},
+              "seed": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      ]
+    },
+    "comparisonEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gpu_count", "gpu", "driver", "cuda", "model_id", "model_revision", "dtype", "concurrency", "prompt_tokens", "output_tokens", "sampling_configs", "warm_states"],
+      "properties": {
+        "gpu_count": {"const": 1},
+        "gpu": {"$ref": "#/$defs/nonEmptyString"},
+        "driver": {"$ref": "#/$defs/nonEmptyString"},
+        "cuda": {"$ref": "#/$defs/nonEmptyString"},
+        "model_id": {"$ref": "#/$defs/nonEmptyString"},
+        "model_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "dtype": {"$ref": "#/$defs/nonEmptyString"},
+        "concurrency": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+        "prompt_tokens": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+        "output_tokens": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+        "sampling_configs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/samplingConfig"}},
+        "warm_states": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"enum": ["cold", "warm"]},
+          "allOf": [
+            {"contains": {"const": "cold"}},
+            {"contains": {"const": "warm"}}
+          ]
+        }
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dtype", "atol", "rtol"],
+      "properties": {
+        "dtype": {"$ref": "#/$defs/nonEmptyString"},
+        "atol": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "rtol": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+      }
+    },
+    "errorBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "unit", "maximum"],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/qualityMetricPath",
+          "$comment": "The CI checker additionally requires this value to equal quality_or_error_metric. Draft 2020-12 cannot express arbitrary sibling-value equality."
+        },
+        "unit": {"const": "fraction"},
+        "maximum": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independent_process_runs",
+        "measured_iterations_per_run",
+        "required_statistics",
+        "end_to_end",
+        "fallback_comparison",
+        "environment_dimensions"
+      ],
+      "properties": {
+        "independent_process_runs": {"type": "integer", "minimum": 5},
+        "measured_iterations_per_run": {"type": "integer", "minimum": 5},
+        "required_statistics": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"enum": ["median", "p95", "p99"]},
+          "allOf": [
+            {"contains": {"const": "median"}},
+            {"contains": {"const": "p95"}}
+          ]
+        },
+        "end_to_end": {"const": true},
+        "fallback_comparison": {"const": true},
+        "environment_dimensions": {
+          "type": "array",
+          "minItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["gpu", "driver", "cuda", "model_id", "model_revision", "dtype", "concurrency", "prompt_output_lengths", "sampling", "warm_state"]
+          }
+        }
+      }
+    },
+    "trackSemanticClassRules": {
+      "allOf": [
+        {"if": {"properties": {"track": {"const": "quantization"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1"]}}}},
+        {"if": {"properties": {"track": {"const": "low-rank-weight-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "prefix-cache"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-offload-prefetch"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "query-aware-kv-selection"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "moe"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "mamba-ssm"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0"]}}}},
+        {"if": {"properties": {"track": {"const": "multimodal"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "speculative-decoding"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "E1"]}}}},
+        {"if": {"properties": {"track": {"const": "jacobi-lookahead"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1", "M1"]}}}}
+      ]
+    },
+    "metricCompatibilityRules": {
+      "allOf": [
+        {
+          "if": {"properties": {"semantic_class": {"enum": ["reference", "E0"]}}, "required": ["semantic_class"]},
+          "then": {"properties": {"quality_or_error_metric": {"const": "failure_count"}}}
+        },
+        {
+          "if": {"properties": {"semantic_class": {"const": "A1"}}, "required": ["semantic_class"]},
+          "then": {
+            "properties": {
+              "track": {"const": "query-aware-kv-selection"},
+              "quality_or_error_metric": {"enum": ["sparse_attention.omitted_mass_bound"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"semantic_class": {"enum": ["E1", "M1"]}}, "required": ["semantic_class"]},
+          "then": false
+        }
+      ]
+    },
+    "referenceGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "behavioral_parity", "token_parity", "stable_fallback", "lifetime_resource_regression"],
+      "properties": {
+        "kind": {"const": "reference"},
+        "behavioral_parity": {"const": true},
+        "token_parity": {"const": true},
+        "stable_fallback": {"const": true},
+        "lifetime_resource_regression": {"const": true}
+      }
+    },
+    "e0Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference_parity", "dtype_tolerances", "extreme_value_cases", "token_level_regression"],
+      "properties": {
+        "kind": {"const": "E0"},
+        "reference_parity": {"const": true},
+        "dtype_tolerances": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/tolerance"}},
+        "extreme_value_cases": {"const": true},
+        "token_level_regression": {"const": true}
+      }
+    },
+    "e1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "distribution_contract", "statistical_test", "rng_isolation", "rng_snapshot_restore", "greedy_exact", "fixed_seed_definition"],
+      "properties": {
+        "kind": {"const": "E1"},
+        "distribution_contract": {"$ref": "#/$defs/nonEmptyString"},
+        "statistical_test": {"$ref": "#/$defs/nonEmptyString"},
+        "rng_isolation": {"const": true},
+        "rng_snapshot_restore": {"const": true},
+        "greedy_exact": {"const": true},
+        "fixed_seed_definition": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "a1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "error_budget", "exact_fallback", "opt_in", "usage_disclosure", "quality_latency_curve"],
+      "properties": {
+        "kind": {"const": "A1"},
+        "error_budget": {"$ref": "#/$defs/errorBudget"},
+        "exact_fallback": {"const": true},
+        "opt_in": {"const": true},
+        "usage_disclosure": {"const": true},
+        "quality_latency_curve": {"const": true}
+      }
+    },
+    "m1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "research_track", "calibration_or_training_provenance", "production_core_isolated", "opt_in", "usage_disclosure", "quality_latency_curve"],
+      "properties": {
+        "kind": {"const": "M1"},
+        "research_track": {"$ref": "#/$defs/nonEmptyString"},
+        "calibration_or_training_provenance": {"$ref": "#/$defs/nonEmptyString"},
+        "production_core_isolated": {"const": true},
+        "opt_in": {"const": true},
+        "usage_disclosure": {"const": true},
+        "quality_latency_curve": {"const": true}
+      }
+    }
+  }
+}

@@ -1,0 +1,769 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-qualification.schema.json",
+  "title": "RC3 candidate-bound qualification envelope v1",
+  "description": "Closed schemas for a frozen RC3 candidate and the CPU-only qualification report. A frozen candidate declares future output paths but never pre-asserts their hashes or pass status. Each C02 gate must use its own semantic receipt schema; the retired generic receipt envelope is deliberately not accepted.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/frozenCandidate"
+    },
+    {
+      "$ref": "#/$defs/qualificationReport"
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "imageId": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "nonEmptyText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+    },
+    "futureOutputPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        }
+      }
+    },
+    "resolvedOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "modelBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_revision",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_revision",
+        "tokenizer_files_sha256"
+      ],
+      "properties": {
+        "model_id": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "model_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "weights_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tokenizer_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "tokenizer_files_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "environment",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyText"
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096,
+            "pattern": "^[^\\r\\n]*$"
+          },
+          "propertyNames": {
+            "pattern": "^[A-Z_][A-Z0-9_]*$"
+          }
+        },
+        "configuration_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_revision",
+        "archive_sha256",
+        "cargo_lock_sha256",
+        "extension_registry_sha256",
+        "correctness_golden_sha256"
+      ],
+      "properties": {
+        "git_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "cargo_lock_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "extension_registry_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "correctness_golden_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_sha256",
+        "bundle_sha256",
+        "image_id",
+        "cuda_c_abi_version"
+      ],
+      "properties": {
+        "binary_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "image_id": {
+          "$ref": "#/$defs/imageId"
+        },
+        "cuda_c_abi_version": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+){0,2}$"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reproducible",
+        "cuda",
+        "optimization"
+      ],
+      "properties": {
+        "reproducible": {
+          "$ref": "#/$defs/imageId"
+        },
+        "cuda": {
+          "$ref": "#/$defs/imageId"
+        },
+        "optimization": {
+          "$ref": "#/$defs/imageId"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rustc",
+        "nvcc",
+        "driver",
+        "cuda_runtime",
+        "cuda_toolkit",
+        "cublas"
+      ],
+      "properties": {
+        "rustc": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "nvcc": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "driver": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "cuda_runtime": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "cuda_toolkit": {
+          "$ref": "#/$defs/nonEmptyText"
+        },
+        "cublas": {
+          "$ref": "#/$defs/nonEmptyText"
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "smollm2",
+        "qwen"
+      ],
+      "properties": {
+        "smollm2": {
+          "$ref": "#/$defs/modelBinding"
+        },
+        "qwen": {
+          "$ref": "#/$defs/modelBinding"
+        }
+      }
+    },
+    "arms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stable_default",
+        "max_performance_exact"
+      ],
+      "properties": {
+        "stable_default": {
+          "$ref": "#/$defs/arm"
+        },
+        "max_performance_exact": {
+          "$ref": "#/$defs/arm"
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_sha256",
+        "bundle_sha256",
+        "image_id"
+      ],
+      "properties": {
+        "binary_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "image_id": {
+          "$ref": "#/$defs/imageId"
+        }
+      }
+    },
+    "outputPaths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "final_release_candidate_manifest",
+        "final_release_candidate",
+        "receipts"
+      ],
+      "properties": {
+        "final_release_candidate_manifest": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "final_release_candidate": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "receipts": {
+          "$ref": "#/$defs/futureReceiptPaths"
+        }
+      }
+    },
+    "futureReceiptPaths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startup_configuration",
+        "qwen_multistep",
+        "routing",
+        "fault_extension",
+        "soak_v2",
+        "rollback"
+      ],
+      "properties": {
+        "startup_configuration": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "qwen_multistep": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "routing": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "fault_extension": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "soak_v2": {
+          "$ref": "#/$defs/futureOutputPath"
+        },
+        "rollback": {
+          "$ref": "#/$defs/futureOutputPath"
+        }
+      }
+    },
+    "resolvedReceiptOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startup_configuration",
+        "qwen_multistep",
+        "routing",
+        "fault_extension",
+        "soak_v2",
+        "rollback"
+      ],
+      "properties": {
+        "startup_configuration": {
+          "$ref": "#/$defs/resolvedOutput"
+        },
+        "qwen_multistep": {
+          "$ref": "#/$defs/resolvedOutput"
+        },
+        "routing": {
+          "$ref": "#/$defs/resolvedOutput"
+        },
+        "fault_extension": {
+          "$ref": "#/$defs/resolvedOutput"
+        },
+        "soak_v2": {
+          "$ref": "#/$defs/resolvedOutput"
+        },
+        "rollback": {
+          "$ref": "#/$defs/resolvedOutput"
+        }
+      }
+    },
+    "baseGateEEvidenceHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cuda_fault",
+        "cuda_fault_raw",
+        "native_correctness_report",
+        "native_correctness_raw",
+        "optimization_correctness",
+        "optimization_correctness_raw",
+        "performance",
+        "performance_raw",
+        "python_free_e2e",
+        "python_free_e2e_correctness_golden_raw",
+        "python_free_e2e_raw",
+        "reliability_soak",
+        "reliability_soak_raw",
+        "reproducible_build_a_raw",
+        "reproducible_build_b_raw",
+        "reproducible_build_native_manifest_raw"
+      ],
+      "properties": {
+        "cuda_fault": { "$ref": "#/$defs/sha256" },
+        "cuda_fault_raw": { "$ref": "#/$defs/sha256" },
+        "native_correctness_report": { "$ref": "#/$defs/sha256" },
+        "native_correctness_raw": { "$ref": "#/$defs/sha256" },
+        "optimization_correctness": { "$ref": "#/$defs/sha256" },
+        "optimization_correctness_raw": { "$ref": "#/$defs/sha256" },
+        "performance": { "$ref": "#/$defs/sha256" },
+        "performance_raw": { "$ref": "#/$defs/sha256" },
+        "python_free_e2e": { "$ref": "#/$defs/sha256" },
+        "python_free_e2e_correctness_golden_raw": { "$ref": "#/$defs/sha256" },
+        "python_free_e2e_raw": { "$ref": "#/$defs/sha256" },
+        "reliability_soak": { "$ref": "#/$defs/sha256" },
+        "reliability_soak_raw": { "$ref": "#/$defs/sha256" },
+        "reproducible_build_a_raw": { "$ref": "#/$defs/sha256" },
+        "reproducible_build_b_raw": { "$ref": "#/$defs/sha256" },
+        "reproducible_build_native_manifest_raw": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "frozenCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "status",
+        "created_at_utc",
+        "source",
+        "release",
+        "images",
+        "toolchain",
+        "models",
+        "arms",
+        "rollback",
+        "outputs",
+        "required_gates"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "riley.rc3-qualification-candidate.v1"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/candidateId"
+        },
+        "status": {
+          "const": "frozen"
+        },
+        "created_at_utc": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "release": {
+          "$ref": "#/$defs/release"
+        },
+        "images": {
+          "$ref": "#/$defs/images"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/toolchain"
+        },
+        "models": {
+          "$ref": "#/$defs/models"
+        },
+        "arms": {
+          "$ref": "#/$defs/arms"
+        },
+        "rollback": {
+          "$ref": "#/$defs/rollback"
+        },
+        "outputs": {
+          "$ref": "#/$defs/outputPaths"
+        },
+        "required_gates": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "startup_configuration"
+            },
+            {
+              "const": "qwen_multistep"
+            },
+            {
+              "const": "routing"
+            },
+            {
+              "const": "fault_extension"
+            },
+            {
+              "const": "soak_v2"
+            },
+            {
+              "const": "rollback"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "gateReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "gate",
+        "status",
+        "passed",
+        "candidate_id",
+        "bindings",
+        "evidence"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "riley.rc3-qualification-receipt.v1"
+        },
+        "gate": {
+          "enum": [
+            "startup_configuration",
+            "qwen_multistep",
+            "routing",
+            "fault_extension",
+            "soak_v2",
+            "rollback"
+          ]
+        },
+        "status": {
+          "const": "passed"
+        },
+        "passed": {
+          "const": true
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/candidateId"
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "freeze_sha256",
+            "base_release_candidate_report_sha256",
+            "configuration_profile",
+            "configuration_sha256"
+          ],
+          "properties": {
+            "freeze_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "base_release_candidate_report_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "configuration_profile": {
+              "const": "stable-default"
+            },
+            "configuration_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/resolvedOutput"
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "passed"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "qualificationReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "candidate_manifest_sha256",
+        "status",
+        "qualified",
+        "final_release_candidate_manifest",
+        "final_release_candidate",
+        "gate_e_evidence_sha256",
+        "receipts",
+        "checks",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "riley.rc3-qualification-report.v1"
+        },
+        "candidate_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/candidateId"
+            }
+          ]
+        },
+        "candidate_manifest_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "incomparable",
+            "error"
+          ]
+        },
+        "qualified": {
+          "type": "boolean"
+        },
+        "final_release_candidate_manifest": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/resolvedOutput"
+            }
+          ]
+        },
+        "final_release_candidate": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/resolvedOutput"
+            }
+          ]
+        },
+        "gate_e_evidence_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/baseGateEEvidenceHashes"
+            }
+          ]
+        },
+        "receipts": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/resolvedReceiptOutputs"
+            }
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "qualified": {
+                "const": true
+              },
+              "candidate_id": {
+                "$ref": "#/$defs/candidateId"
+              },
+              "candidate_manifest_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "final_release_candidate_manifest": {
+                "$ref": "#/$defs/resolvedOutput"
+              },
+              "final_release_candidate": {
+                "$ref": "#/$defs/resolvedOutput"
+              },
+              "gate_e_evidence_sha256": {
+                "$ref": "#/$defs/baseGateEEvidenceHashes"
+              },
+              "receipts": {
+                "$ref": "#/$defs/resolvedReceiptOutputs"
+              },
+              "reason_codes": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "qualified": {
+                "const": false
+              },
+              "reason_codes": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

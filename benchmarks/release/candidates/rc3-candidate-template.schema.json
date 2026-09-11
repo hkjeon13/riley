@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-candidate-template.schema.json",
+  "title": "Unfilled RC3 qualification candidate template",
+  "description": "A deliberately non-runnable template. It contains the frozen-candidate field layout with null evidence values and is never valid checker input.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "template_only",
+    "status",
+    "candidate_id",
+    "created_at_utc",
+    "source",
+    "release",
+    "images",
+    "toolchain",
+    "models",
+    "arms",
+    "rollback",
+    "outputs",
+    "required_gates"
+  ],
+  "properties": {
+    "$schema": {"const": "rc3-candidate-template.schema.json"},
+    "schema_version": {"const": "riley.rc3-qualification-candidate.v1"},
+    "template_only": {"const": true},
+    "status": {"const": "template"},
+    "candidate_id": {"type": "null"},
+    "created_at_utc": {"type": "null"},
+    "source": {"$ref": "#/$defs/templateSource"},
+    "release": {"$ref": "#/$defs/templateRelease"},
+    "images": {"$ref": "#/$defs/templateImages"},
+    "toolchain": {"$ref": "#/$defs/templateToolchain"},
+    "models": {"$ref": "#/$defs/templateModels"},
+    "arms": {"$ref": "#/$defs/templateArms"},
+    "rollback": {"$ref": "#/$defs/templateRollback"},
+    "outputs": {"$ref": "#/$defs/templateOutputs"},
+    "required_gates": {"$ref": "#/$defs/gates"}
+  },
+  "$defs": {
+    "nullField": {"type": "null"},
+    "templateSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git_revision", "archive_sha256", "cargo_lock_sha256", "extension_registry_sha256", "correctness_golden_sha256"],
+      "properties": {
+        "git_revision": {"$ref": "#/$defs/nullField"},
+        "archive_sha256": {"$ref": "#/$defs/nullField"},
+        "cargo_lock_sha256": {"$ref": "#/$defs/nullField"},
+        "extension_registry_sha256": {"$ref": "#/$defs/nullField"},
+        "correctness_golden_sha256": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary_sha256", "bundle_sha256", "image_id", "cuda_c_abi_version"],
+      "properties": {
+        "binary_sha256": {"$ref": "#/$defs/nullField"},
+        "bundle_sha256": {"$ref": "#/$defs/nullField"},
+        "image_id": {"$ref": "#/$defs/nullField"},
+        "cuda_c_abi_version": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateImages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reproducible", "cuda", "optimization"],
+      "properties": {
+        "reproducible": {"$ref": "#/$defs/nullField"},
+        "cuda": {"$ref": "#/$defs/nullField"},
+        "optimization": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateToolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rustc", "nvcc", "driver", "cuda_runtime", "cuda_toolkit", "cublas"],
+      "properties": {
+        "rustc": {"$ref": "#/$defs/nullField"},
+        "nvcc": {"$ref": "#/$defs/nullField"},
+        "driver": {"$ref": "#/$defs/nullField"},
+        "cuda_runtime": {"$ref": "#/$defs/nullField"},
+        "cuda_toolkit": {"$ref": "#/$defs/nullField"},
+        "cublas": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_revision", "tokenizer_files_sha256"],
+      "properties": {
+        "model_id": {"$ref": "#/$defs/nullField"},
+        "model_revision": {"$ref": "#/$defs/nullField"},
+        "config_sha256": {"$ref": "#/$defs/nullField"},
+        "weights_sha256": {"$ref": "#/$defs/nullField"},
+        "tokenizer_revision": {"$ref": "#/$defs/nullField"},
+        "tokenizer_files_sha256": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateModels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["smollm2", "qwen"],
+      "properties": {
+        "smollm2": {"$ref": "#/$defs/templateModel"},
+        "qwen": {"$ref": "#/$defs/templateModel"}
+      }
+    },
+    "templateArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "environment", "configuration_sha256"],
+      "properties": {
+        "argv": {"$ref": "#/$defs/nullField"},
+        "environment": {"$ref": "#/$defs/nullField"},
+        "configuration_sha256": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templateArms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable_default", "max_performance_exact"],
+      "properties": {
+        "stable_default": {"$ref": "#/$defs/templateArm"},
+        "max_performance_exact": {"$ref": "#/$defs/templateArm"}
+      }
+    },
+    "templateRollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary_sha256", "bundle_sha256", "image_id"],
+      "properties": {
+        "binary_sha256": {"$ref": "#/$defs/nullField"},
+        "bundle_sha256": {"$ref": "#/$defs/nullField"},
+        "image_id": {"$ref": "#/$defs/nullField"}
+      }
+    },
+    "templatePath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {"path": {"$ref": "#/$defs/nullField"}}
+    },
+    "templateReceipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startup_configuration", "qwen_multistep", "routing", "fault_extension", "soak_v2", "rollback"],
+      "properties": {
+        "startup_configuration": {"$ref": "#/$defs/templatePath"},
+        "qwen_multistep": {"$ref": "#/$defs/templatePath"},
+        "routing": {"$ref": "#/$defs/templatePath"},
+        "fault_extension": {"$ref": "#/$defs/templatePath"},
+        "soak_v2": {"$ref": "#/$defs/templatePath"},
+        "rollback": {"$ref": "#/$defs/templatePath"}
+      }
+    },
+    "templateOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["final_release_candidate_manifest", "final_release_candidate", "receipts"],
+      "properties": {
+        "final_release_candidate_manifest": {"$ref": "#/$defs/templatePath"},
+        "final_release_candidate": {"$ref": "#/$defs/templatePath"},
+        "receipts": {"$ref": "#/$defs/templateReceipts"}
+      }
+    },
+    "gates": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "startup_configuration"},
+        {"const": "qwen_multistep"},
+        {"const": "routing"},
+        {"const": "fault_extension"},
+        {"const": "soak_v2"},
+        {"const": "rollback"}
+      ],
+      "items": false
+    }
+  }
+}

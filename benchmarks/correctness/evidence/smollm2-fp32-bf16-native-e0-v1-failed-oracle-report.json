@@ -1,0 +1,1492 @@
+{
+  "bindings": {
+    "config_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+    "dependency_lock_sha256": "101d21486780e57492b3053149c0a594fcf2859d1955854250bd644b6fdaff30",
+    "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    "environment_sha256": "c7094e51a0f040c08ce440351d5acf54452754820d1129c13a6d377fa377bccc",
+    "gate_manifest_sha256": "eb9c58936a098c023b7b3e8864ba0872e84557fc3f5856a8b70078b26a219b3f",
+    "git_revision": "8ab7490bfdf9efd1d7c7d831204b8e67c0c7c5b9",
+    "git_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lane_manifest_sha256": "e84ddc2ee30d5734b7490b36d95350b4c51379a57580d9665987ffa7fdabe645",
+    "matrix_sha256": "e080d2d6e34d372fb6c4d3ec097cf868b41edea8c548061ad4bc4c6091bb761a",
+    "model_id": "HuggingFaceTB/SmolLM2-135M",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "prompts_sha256": "709612e45d735888b240951d51b979b7ded1e87ef6cae9296f0b1250647255d2",
+    "tokenizer_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1"
+  },
+  "cases": [
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999981408673957,
+            "max_abs": 0.2256336212158203,
+            "max_relative": 0.023953841999173164,
+            "mean_abs": 0.055416282277216546,
+            "mean_relative": 0.0026106980638008225
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.999993108888038,
+            "max_abs": 0.1990642547607422,
+            "max_relative": 0.10017585754394531,
+            "mean_abs": 0.04130978462732552,
+            "mean_relative": 0.0040921060464395925
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999858320259609,
+            "max_abs": 0.2709846496582031,
+            "max_relative": 0.07838320732116699,
+            "mean_abs": 0.007399384841076224,
+            "mean_relative": 0.004708400919245019
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-00",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999970804475657,
+            "max_abs": 0.29623985290527344,
+            "max_relative": 0.03664613515138626,
+            "mean_abs": 0.07585490091363074,
+            "mean_relative": 0.003962368324825703
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999855452000997,
+            "max_abs": 0.3178234100341797,
+            "max_relative": 0.27611470222473145,
+            "mean_abs": 0.10319537324297319,
+            "mean_relative": 0.01148087226418514
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999883981859473,
+            "max_abs": 0.15758705139160156,
+            "max_relative": 0.0842735767364502,
+            "mean_abs": 0.007039934635751403,
+            "mean_relative": 0.004433060162814125
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-01",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999955937458876,
+            "max_abs": 0.314727783203125,
+            "max_relative": 0.023508600890636444,
+            "mean_abs": 0.08647793804554264,
+            "mean_relative": 0.004475940413073796
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999916935764047,
+            "max_abs": 0.30001068115234375,
+            "max_relative": 0.21126747131347656,
+            "mean_abs": 0.06931270366961446,
+            "mean_relative": 0.005103216973037095
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.999987329378686,
+            "max_abs": 0.1932353973388672,
+            "max_relative": 0.07627838850021362,
+            "mean_abs": 0.00528140985396577,
+            "mean_relative": 0.0037438651827758906
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-02",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999979695295448,
+            "max_abs": 0.31790924072265625,
+            "max_relative": 0.01790315844118595,
+            "mean_abs": 0.050768235703496124,
+            "mean_relative": 0.002179642477412276
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999615715992173,
+            "max_abs": 0.307405948638916,
+            "max_relative": 0.2425374984741211,
+            "mean_abs": 0.045208520234155,
+            "mean_relative": 0.014559820544062782
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999867354514878,
+            "max_abs": 0.25110816955566406,
+            "max_relative": 0.10792330652475357,
+            "mean_abs": 0.007215764030705587,
+            "mean_relative": 0.004564058454902061
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-0128-03",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999944173076998,
+            "max_abs": 0.4220924377441406,
+            "max_relative": 0.026398062705993652,
+            "mean_abs": 0.06529148233248823,
+            "mean_relative": 0.0027479856487965305
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9993335185812436,
+            "max_abs": 0.5316667556762695,
+            "max_relative": 0.43880653381347656,
+            "mean_abs": 0.12389120107764029,
+            "mean_relative": 0.06638118698511598
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999879204370338,
+            "max_abs": 0.23414993286132812,
+            "max_relative": 0.07819106429815292,
+            "mean_abs": 0.0068919941731767015,
+            "mean_relative": 0.004370014642029282
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-04",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999969717380016,
+            "max_abs": 0.46982765197753906,
+            "max_relative": 0.023826148360967636,
+            "mean_abs": 0.21589047743434855,
+            "mean_relative": 0.008403730569055337
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9998414735765015,
+            "max_abs": 0.38105010986328125,
+            "max_relative": 0.35486936569213867,
+            "mean_abs": 0.12845378770604535,
+            "mean_relative": 0.04209999992443917
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999879639631077,
+            "max_abs": 0.19744491577148438,
+            "max_relative": 0.06135392189025879,
+            "mean_abs": 0.005271142906186317,
+            "mean_relative": 0.0036399006516001533
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-05",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.999998283194735,
+            "max_abs": 0.2814292907714844,
+            "max_relative": 0.02479473315179348,
+            "mean_abs": 0.09560313555505218,
+            "mean_relative": 0.003917435516794957
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.99995645895054,
+            "max_abs": 0.2286834716796875,
+            "max_relative": 0.19847869873046875,
+            "mean_abs": 0.051008337060920894,
+            "mean_relative": 0.01820195563811192
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999871736558659,
+            "max_abs": 0.28185272216796875,
+            "max_relative": 0.07434603571891785,
+            "mean_abs": 0.006647451487512828,
+            "mean_relative": 0.004346263267739257
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-06",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999965822803948,
+            "max_abs": 0.2652587890625,
+            "max_relative": 0.038250431418418884,
+            "mean_abs": 0.059484867300852784,
+            "mean_relative": 0.0025600266687384157
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999917957914695,
+            "max_abs": 0.4340019226074219,
+            "max_relative": 0.20052146911621094,
+            "mean_abs": 0.15557024741428904,
+            "mean_relative": 0.010229526497873837
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999882006183143,
+            "max_abs": 0.18677711486816406,
+            "max_relative": 0.06924097239971161,
+            "mean_abs": 0.006948467263807995,
+            "mean_relative": 0.004423878141743962
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-0128-07",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999975231133373,
+            "max_abs": 0.2889823913574219,
+            "max_relative": 0.01487731747329235,
+            "mean_abs": 0.04832055206658955,
+            "mean_relative": 0.0019183484538970086
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9998897267883632,
+            "max_abs": 0.3074808120727539,
+            "max_relative": 0.22998332977294922,
+            "mean_abs": 0.046197405657949275,
+            "mean_relative": 0.02315242362551193
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999892318368133,
+            "max_abs": 0.2498321533203125,
+            "max_relative": 0.07833981513977051,
+            "mean_abs": 0.005713224855350221,
+            "mean_relative": 0.0038101997586651656
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-1024-00",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999979244733929,
+            "max_abs": 0.5934486389160156,
+            "max_relative": 0.028287190943956375,
+            "mean_abs": 0.284477318872329,
+            "mean_relative": 0.007136234306618361
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9997711560583753,
+            "max_abs": 0.3815891742706299,
+            "max_relative": 0.33782172203063965,
+            "mean_abs": 0.07012145998730072,
+            "mean_relative": 0.03439786002273413
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999885905428587,
+            "max_abs": 0.20684051513671875,
+            "max_relative": 0.11426892876625061,
+            "mean_abs": 0.006722059491033229,
+            "mean_relative": 0.004238108800250344
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-1024-01",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.999997266554462,
+            "max_abs": 0.2645416259765625,
+            "max_relative": 0.012631746008992195,
+            "mean_abs": 0.05727548593138702,
+            "mean_relative": 0.0025360304767712756
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999871667122994,
+            "max_abs": 0.3496732711791992,
+            "max_relative": 0.3407573699951172,
+            "mean_abs": 0.13104304638303196,
+            "mean_relative": 0.011348885050284438
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999881686338258,
+            "max_abs": 0.3159923553466797,
+            "max_relative": 0.07798075675964355,
+            "mean_abs": 0.006303697513877025,
+            "mean_relative": 0.0040150819532293325
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-1024-02",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999981745131657,
+            "max_abs": 0.35419273376464844,
+            "max_relative": 0.01179821789264679,
+            "mean_abs": 0.07417011089031034,
+            "mean_relative": 0.002347679247738613
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.999960153911306,
+            "max_abs": 0.44186973571777344,
+            "max_relative": 0.29923462867736816,
+            "mean_abs": 0.1356414089247361,
+            "mean_relative": 0.022358828965059297
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999880118565824,
+            "max_abs": 0.27748870849609375,
+            "max_relative": 0.08774566650390625,
+            "mean_abs": 0.00481258776679362,
+            "mean_relative": 0.0033725986459198416
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-1024-03",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999969729563365,
+            "max_abs": 0.2503528594970703,
+            "max_relative": 0.020224465057253838,
+            "mean_abs": 0.04564803134609482,
+            "mean_relative": 0.002061227370048883
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999937645970782,
+            "max_abs": 0.2585411071777344,
+            "max_relative": 0.10670089721679688,
+            "mean_abs": 0.045834575789437317,
+            "mean_relative": 0.002997388081742172
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999875130948183,
+            "max_abs": 0.2638206481933594,
+            "max_relative": 0.08621343970298767,
+            "mean_abs": 0.006488630231546703,
+            "mean_relative": 0.004183864526661412
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-1024-04",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999982189225375,
+            "max_abs": 0.3821983337402344,
+            "max_relative": 0.016187574714422226,
+            "mean_abs": 0.1351412106717591,
+            "mean_relative": 0.004689792660115612
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999868384989029,
+            "max_abs": 0.3269519805908203,
+            "max_relative": 0.30800390243530273,
+            "mean_abs": 0.08410048470492863,
+            "mean_relative": 0.007580494882223867
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999886911676292,
+            "max_abs": 0.21143531799316406,
+            "max_relative": 0.10096541047096252,
+            "mean_abs": 0.00674078122076575,
+            "mean_relative": 0.004249914904110707
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-1024-05",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999964437211663,
+            "max_abs": 0.5555992126464844,
+            "max_relative": 0.01957937330007553,
+            "mean_abs": 0.07585324191313125,
+            "mean_relative": 0.002505496225900286
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999748734492918,
+            "max_abs": 0.6641397476196289,
+            "max_relative": 0.5163111686706543,
+            "mean_abs": 0.16194342783031365,
+            "mean_relative": 0.014179383232117046
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999884587159495,
+            "max_abs": 0.2206878662109375,
+            "max_relative": 0.06666749715805054,
+            "mean_abs": 0.004613974191062908,
+            "mean_relative": 0.0033251920411599798
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-1024-06",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999963906355718,
+            "max_abs": 0.42008209228515625,
+            "max_relative": 0.02083911933004856,
+            "mean_abs": 0.10439525962746406,
+            "mean_relative": 0.003838598070622524
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9998553634005837,
+            "max_abs": 0.5807793140411377,
+            "max_relative": 0.5615730285644531,
+            "mean_abs": 0.26740237647148507,
+            "mean_relative": 0.04980955050351721
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999884389206346,
+            "max_abs": 0.20969009399414062,
+            "max_relative": 0.06867064535617828,
+            "mean_abs": 0.006175033855249189,
+            "mean_relative": 0.003987549140395329
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-1024-07",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999934936291468,
+            "max_abs": 0.4406280517578125,
+            "max_relative": 0.022822966799139977,
+            "mean_abs": 0.08350138545664976,
+            "mean_relative": 0.003407028417239374
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9996781644182499,
+            "max_abs": 0.4142141342163086,
+            "max_relative": 0.3524606227874756,
+            "mean_abs": 0.0744542562024435,
+            "mean_relative": 0.03814659073659608
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999878988521925,
+            "max_abs": 0.32286643981933594,
+            "max_relative": 0.08976924419403076,
+            "mean_abs": 0.006211159976318332,
+            "mean_relative": 0.00410464561577946
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-00",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999980921219206,
+            "max_abs": 0.3672809600830078,
+            "max_relative": 0.021943645551800728,
+            "mean_abs": 0.09504131793309097,
+            "mean_relative": 0.0029749081183038004
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9989470262284611,
+            "max_abs": 0.4577827453613281,
+            "max_relative": 0.43514883518218994,
+            "mean_abs": 0.18185120660443013,
+            "mean_relative": 0.0913803850186498
+          },
+          "pass": false
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999887254012809,
+            "max_abs": 0.24576950073242188,
+            "max_relative": 0.1133192852139473,
+            "mean_abs": 0.00678009649375571,
+            "mean_relative": 0.004286953901074108
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-01",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.999998747950988,
+            "max_abs": 0.2944450378417969,
+            "max_relative": 0.011182636022567749,
+            "mean_abs": 0.044398766049804785,
+            "mean_relative": 0.001297416154686718
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9996710658703623,
+            "max_abs": 0.32118844985961914,
+            "max_relative": 0.2845483422279358,
+            "mean_abs": 0.08763488372430099,
+            "mean_relative": 0.04377512674952407
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999894408331395,
+            "max_abs": 0.2638053894042969,
+            "max_relative": 0.09042108058929443,
+            "mean_abs": 0.005524235500908464,
+            "mean_relative": 0.0036635319436543797
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-02",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999980423038505,
+            "max_abs": 0.2980194091796875,
+            "max_relative": 0.013122519478201866,
+            "mean_abs": 0.05162491816008489,
+            "mean_relative": 0.0017365953292086793
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999805661385904,
+            "max_abs": 0.3034656047821045,
+            "max_relative": 0.251572847366333,
+            "mean_abs": 0.06290991864292057,
+            "mean_relative": 0.009354074417882814
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.999988870871606,
+            "max_abs": 0.2222118377685547,
+            "max_relative": 0.07856142520904541,
+            "mean_abs": 0.0056769920881308954,
+            "mean_relative": 0.003869479952193806
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-4096-03",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999928374178825,
+            "max_abs": 0.44109344482421875,
+            "max_relative": 0.027966950088739395,
+            "mean_abs": 0.08080394307850251,
+            "mean_relative": 0.0033212039959882155
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9981769830865559,
+            "max_abs": 0.51531982421875,
+            "max_relative": 0.4596881866455078,
+            "mean_abs": 0.21236470755926953,
+            "mean_relative": 0.11840520191704308
+          },
+          "pass": false
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999877592416097,
+            "max_abs": 0.30617713928222656,
+            "max_relative": 0.11045593023300171,
+            "mean_abs": 0.0065776366636569605,
+            "mean_relative": 0.004275338959251058
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-04",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999985005857072,
+            "max_abs": 0.32448577880859375,
+            "max_relative": 0.019859163090586662,
+            "mean_abs": 0.0497479368786351,
+            "mean_relative": 0.001627806699725593
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.99989152961885,
+            "max_abs": 0.2659952640533447,
+            "max_relative": 0.2381277084350586,
+            "mean_abs": 0.05160242788861069,
+            "mean_relative": 0.024056068833157973
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999894056645684,
+            "max_abs": 0.2573223114013672,
+            "max_relative": 0.11807345598936081,
+            "mean_abs": 0.0065419440276768765,
+            "mean_relative": 0.004141435149291433
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-05",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999976574308057,
+            "max_abs": 0.4329719543457031,
+            "max_relative": 0.027324488386511803,
+            "mean_abs": 0.13256728416757704,
+            "mean_relative": 0.00481744697361093
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999439774577942,
+            "max_abs": 0.304290771484375,
+            "max_relative": 0.27039599418640137,
+            "mean_abs": 0.0618923062744822,
+            "mean_relative": 0.01876036881730744
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999891603120448,
+            "max_abs": 0.22216415405273438,
+            "max_relative": 0.08836382627487183,
+            "mean_abs": 0.005143397045308085,
+            "mean_relative": 0.0035764989071137543
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "perf-4096-06",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999991669465226,
+            "max_abs": 0.22725296020507812,
+            "max_relative": 0.009482946246862411,
+            "mean_abs": 0.04620457700608919,
+            "mean_relative": 0.001394881519689745
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999423367182064,
+            "max_abs": 0.2437286376953125,
+            "max_relative": 0.22891223430633545,
+            "mean_abs": 0.06636171777214865,
+            "mean_relative": 0.023335773273811228
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999878824432982,
+            "max_abs": 0.30168914794921875,
+            "max_relative": 0.1088266521692276,
+            "mean_abs": 0.006294810012580736,
+            "mean_relative": 0.004116952026835036
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "perf-4096-07",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.999970140646769,
+            "max_abs": 0.6789588928222656,
+            "max_relative": 0.081157386302948,
+            "mean_abs": 0.15672507630370092,
+            "mean_relative": 0.01018291271807669
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9991663240394926,
+            "max_abs": 0.9995942115783691,
+            "max_relative": 0.8856968879699707,
+            "mean_abs": 0.4706034637565608,
+            "mean_relative": 0.108705663163704
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999907815238415,
+            "max_abs": 0.14772987365722656,
+            "max_relative": 0.04005831480026245,
+            "mean_abs": 0.006235259753157152,
+            "mean_relative": 0.0040213144097990434
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "correct-short-en",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999980334666185,
+            "max_abs": 0.23627853393554688,
+            "max_relative": 0.04847079515457153,
+            "mean_abs": 0.04035065681697839,
+            "mean_relative": 0.002251537203701567
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9995159073892418,
+            "max_abs": 0.40249061584472656,
+            "max_relative": 0.3334484100341797,
+            "mean_abs": 0.1997552476338266,
+            "mean_relative": 0.08727669245318263
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999883203806011,
+            "max_abs": 0.13306617736816406,
+            "max_relative": 0.06610208749771118,
+            "mean_abs": 0.007156531597809088,
+            "mean_relative": 0.004613366144142217
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "correct-short-ko",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999962074580824,
+            "max_abs": 0.23398590087890625,
+            "max_relative": 0.024833492934703827,
+            "mean_abs": 0.04398815953391022,
+            "mean_relative": 0.0026039088716622496
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999833874712245,
+            "max_abs": 0.385467529296875,
+            "max_relative": 0.26880455017089844,
+            "mean_abs": 0.17789062308050538,
+            "mean_relative": 0.017667141113112923
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999883014024983,
+            "max_abs": 0.1903705596923828,
+            "max_relative": 0.05037820339202881,
+            "mean_abs": 0.005083362954927132,
+            "mean_relative": 0.003610930450895894
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "correct-numbers-symbols-code",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999976350467803,
+            "max_abs": 0.5137977600097656,
+            "max_relative": 0.02629067748785019,
+            "mean_abs": 0.13746507589913173,
+            "mean_relative": 0.005471520444506828
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999800921852694,
+            "max_abs": 0.3627943992614746,
+            "max_relative": 0.2221546173095703,
+            "mean_abs": 0.04495590619868987,
+            "mean_relative": 0.008171643688176078
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999894148095596,
+            "max_abs": 0.19212913513183594,
+            "max_relative": 0.061693012714385986,
+            "mean_abs": 0.0053717777557812,
+            "mean_relative": 0.003663602615857098
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "correct-long-repeat",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9999979526047792,
+            "max_abs": 0.40488433837890625,
+            "max_relative": 0.022815147414803505,
+            "mean_abs": 0.1757374020974171,
+            "mean_relative": 0.00693384571460139
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9999720405548062,
+            "max_abs": 0.3323383331298828,
+            "max_relative": 0.2624979019165039,
+            "mean_abs": 0.1034821772276094,
+            "mean_relative": 0.019632759575699755
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999881980106023,
+            "max_abs": 0.33776283264160156,
+            "max_relative": 0.10502003133296967,
+            "mean_abs": 0.006504665998082525,
+            "mean_relative": 0.004155888059418403
+          },
+          "pass": false
+        }
+      },
+      "pass": false,
+      "prompt_id": "correct-near-context-limit",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.998937362025939,
+            "max_abs": 4.346452713012695,
+            "max_relative": 0.5014806389808655,
+            "mean_abs": 0.5223633168837599,
+            "mean_relative": 0.04059854641364647
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.999291779802433,
+            "max_abs": 5.089509963989258,
+            "max_relative": 0.8915401697158813,
+            "mean_abs": 1.0011133210985765,
+            "mean_relative": 0.05682365262516126
+          },
+          "pass": true
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999971367309431,
+            "max_abs": 0.02618265151977539,
+            "max_relative": 0.01149645447731018,
+            "mean_abs": 0.002677071040832541,
+            "mean_relative": 0.0022795728427366965
+          },
+          "pass": true
+        }
+      },
+      "pass": true,
+      "prompt_id": "correct-empty",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": 17,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    },
+    {
+      "numeric": {
+        "final_log_probs": {
+          "metrics": {
+            "cosine_similarity": 0.9998745799066544,
+            "max_abs": 1.4144268035888672,
+            "max_relative": 0.1488124281167984,
+            "mean_abs": 0.3228353964004782,
+            "mean_relative": 0.01755677712823277
+          },
+          "pass": true
+        },
+        "final_logits": {
+          "metrics": {
+            "cosine_similarity": 0.9997283630222902,
+            "max_abs": 2.1918411254882812,
+            "max_relative": 1.0180343389511108,
+            "mean_abs": 0.6925064362985722,
+            "mean_relative": 0.05288537983397134
+          },
+          "pass": false
+        },
+        "first_layer_hidden": {
+          "metrics": {
+            "cosine_similarity": 0.9999898856845354,
+            "max_abs": 0.0819244384765625,
+            "max_relative": 0.029375404119491577,
+            "mean_abs": 0.0067803374549839646,
+            "mean_relative": 0.004676459602739176
+          },
+          "pass": true
+        }
+      },
+      "pass": false,
+      "prompt_id": "correct-early-eos",
+      "semantic_self_check": {
+        "cross_cache_exact_window": 16,
+        "cross_cache_exact_window_match": true,
+        "cross_cache_first_divergence_step": null,
+        "divergence_metadata_recomputed": true,
+        "pass": true,
+        "top_1_matches_cache_paths": true,
+        "top_k_metadata_tensor_derived": true
+      }
+    }
+  ],
+  "created_at": "2026-08-24T16:28:09Z",
+  "e0_candidate_evidence": false,
+  "gate_id": "smollm2-hf-fp32-bf16-calibration-v1",
+  "inputs": {
+    "bf16_manifest_sha256": "e173a6128747d5ba1e2195f7fce51855539e319c860007e9d56b32e43f98ecfe",
+    "bf16_sidecar_sha256": "598bf7255c5aab1ff6701784992b22e55ee4d85e4247dd8fe2cafa49f1a49b66",
+    "fp32_manifest_sha256": "d4cd9cf8c5c9325467d067a10a332ad58eecbe51af56295dd388529c97ef5af8",
+    "fp32_sidecar_sha256": "95fac531e9a08b5f8c184441078829ce2c4bea2a286525035b95205a4bca891a"
+  },
+  "report_kind": "hf-oracle-calibration",
+  "roles": {
+    "bf16": "numeric-calibration-and-semantic-oracle-self-check",
+    "fp32": "numeric-reference"
+  },
+  "schema_version": "1.0.0",
+  "status": "fail",
+  "summary": {
+    "aggregate_numeric": {
+      "final_log_probs": {
+        "metrics": {
+          "cosine_similarity": 0.998937362025939,
+          "max_abs": 4.346452713012695,
+          "max_relative": 0.5014806389808655,
+          "mean_abs": 0.5223633168837599,
+          "mean_relative": 0.04059854641364647
+        },
+        "pass": true
+      },
+      "final_logits": {
+        "metrics": {
+          "cosine_similarity": 0.9981769830865559,
+          "max_abs": 5.089509963989258,
+          "max_relative": 1.0180343389511108,
+          "mean_abs": 1.0011133210985765,
+          "mean_relative": 0.11840520191704308
+        },
+        "pass": false
+      },
+      "first_layer_hidden": {
+        "metrics": {
+          "cosine_similarity": 0.9999858320259609,
+          "max_abs": 0.33776283264160156,
+          "max_relative": 0.11807345598936081,
+          "mean_abs": 0.007399384841076224,
+          "mean_relative": 0.004708400919245019
+        },
+        "pass": false
+      }
+    },
+    "case_count": 31,
+    "failure_count": 12,
+    "numeric_pass": false,
+    "semantic_self_check_pass": true
+  },
+  "thresholds": {
+    "final_log_probs": {
+      "cosine_min": 0.9988,
+      "max_abs_max": 4.8,
+      "max_relative_max": 0.56,
+      "mean_abs_max": 0.6,
+      "mean_relative_max": 0.047
+    },
+    "final_logits": {
+      "cosine_min": 0.999,
+      "max_abs_max": 5.6,
+      "max_relative_max": 1.0,
+      "mean_abs_max": 1.15,
+      "mean_relative_max": 0.125
+    },
+    "first_layer_hidden": {
+      "cosine_min": 0.99998,
+      "max_abs_max": 0.3,
+      "max_relative_max": 0.09,
+      "mean_abs_max": 0.0085,
+      "mean_relative_max": 0.0055
+    }
+  }
+}

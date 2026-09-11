@@ -1,0 +1,95 @@
+{
+  "$schema": "../benchmark-contract.schema.json",
+  "schema_version": "riley.extension-benchmark-contract.v1",
+  "extension_id": "prefix-cache-v1",
+  "status": "approved-for-implementation",
+  "track": "prefix-cache",
+  "semantic_class": "reference",
+  "proposal_path": "deploy/extensions/proposals/prefix-cache-v1.json",
+  "deploy_document_path": "deploy/extensions/plans/prefix-cache-v1.md",
+  "reference_path": "benchmarks/reference/smollm2-135m-bf16.json",
+  "reference_sha256": "57b41e8faf7cc044e9eeb235011109224cb6cddfd19719920641a1662cc41fd3",
+  "fallback_path": "crates/riley-runtime/src/paged_kv.rs",
+  "fallback_sha256": "aaa9eacc472e5055bdbbea4919cef0d8bcacc3dd5916a5e9885ff007c9b4c838",
+  "runtime_flag": "RILEY_EXPERIMENTAL_PREFIX_CACHE_V1",
+  "primary_metric": "requests[].ttft_ms",
+  "required_metrics": [
+    "metrics.output_tokens_per_second",
+    "metrics.peak_vram_bytes",
+    "requests[].ttft_ms"
+  ],
+  "quality_or_error_metric": "failure_count",
+  "workloads": [
+    {
+      "path": "benchmarks/reference/smollm2-135m-bf16.json",
+      "sha256": "57b41e8faf7cc044e9eeb235011109224cb6cddfd19719920641a1662cc41fd3"
+    }
+  ],
+  "comparison_environment": {
+    "gpu_count": 1,
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "driver": "580.173.02",
+    "cuda": "13.0",
+    "model_id": "HuggingFaceTB/SmolLM2-135M",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bf16",
+    "concurrency": [
+      1,
+      8,
+      32
+    ],
+    "prompt_tokens": [
+      128,
+      1024,
+      4096
+    ],
+    "output_tokens": [
+      16
+    ],
+    "sampling_configs": [
+      {
+        "id": "greedy-fixed-16",
+        "strategy": "greedy",
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "seed": null,
+        "ignore_eos": true,
+        "fixed_output_length": true
+      }
+    ],
+    "warm_states": [
+      "cold",
+      "warm"
+    ]
+  },
+  "measurement": {
+    "independent_process_runs": 5,
+    "measured_iterations_per_run": 5,
+    "required_statistics": [
+      "median",
+      "p95"
+    ],
+    "end_to_end": true,
+    "fallback_comparison": true,
+    "environment_dimensions": [
+      "gpu",
+      "driver",
+      "cuda",
+      "model_id",
+      "model_revision",
+      "dtype",
+      "concurrency",
+      "prompt_output_lengths",
+      "sampling",
+      "warm_state"
+    ]
+  },
+  "class_gate": {
+    "kind": "reference",
+    "behavioral_parity": true,
+    "token_parity": true,
+    "stable_fallback": true,
+    "lifetime_resource_regression": true
+  }
+}

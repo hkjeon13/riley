@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/c02-raw-scenario-capture-v2.schema.json",
+  "title": "Riley C02 native fallback raw scenario capture v2",
+  "description": "Nonsemantic source-session contract produced by capture_c02_raw_soak_scenarios_v1.py for the closed public temperature-1 fallback arm. A retained capture-incomplete.json makes this session nonterminal; only a later v5 terminal binder may replay it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "capture_status", "qualification_status", "endpoint", "contract", "runtime_identity", "target", "scenarios"],
+  "properties": {
+    "schema_version": {"const": "riley.c02-raw-scenario-capture.v2"},
+    "capture_status": {"const": "captured"},
+    "qualification_status": {"const": "not-run"},
+    "endpoint": {"type": "string", "pattern": "^http://127\\.0\\.0\\.1:(?:102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])/v1/completions$"},
+    "contract": {"$ref": "#/$defs/descriptor"},
+    "runtime_identity": {"$ref": "#/$defs/runtimeIdentity"},
+    "target": {"$ref": "#/$defs/captureTarget"},
+    "scenarios": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/scenario"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "relativePath": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+    "descriptor": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "byte_length"], "properties": {"path": {"$ref": "#/$defs/relativePath"}, "sha256": {"$ref": "#/$defs/sha256"}, "byte_length": {"type": "integer", "minimum": 1, "maximum": 16777216}}},
+    "runtimeIdentity": {"type": "object", "additionalProperties": false, "required": ["configuration_profile", "configuration_sha256"], "properties": {"configuration_profile": {"const": "max-performance-exact"}, "configuration_sha256": {"$ref": "#/$defs/sha256"}}},
+    "captureTarget": {"type": "object", "additionalProperties": false, "required": ["server_pid", "server_start_ticks", "listener_port", "listener_inode"], "properties": {"server_pid": {"type": "integer", "minimum": 1}, "server_start_ticks": {"type": "integer", "minimum": 1}, "listener_port": {"type": "integer", "minimum": 1024, "maximum": 65535}, "listener_inode": {"type": "integer", "minimum": 1}}},
+    "process": {"type": "object", "additionalProperties": false, "required": ["pre_stat", "post_stat", "final_stat"], "properties": {"pre_stat": {"$ref": "#/$defs/descriptor"}, "post_stat": {"$ref": "#/$defs/descriptor"}, "final_stat": {"$ref": "#/$defs/descriptor"}}},
+    "listener": {"type": "object", "additionalProperties": false, "required": ["address", "port", "socket_inode", "pre_proc_net_tcp", "post_proc_net_tcp", "pre_server_fd_sockets", "post_server_fd_sockets", "final_proc_net_tcp", "final_server_fd_sockets"], "properties": {"address": {"const": "127.0.0.1"}, "port": {"type": "integer", "minimum": 1024, "maximum": 65535}, "socket_inode": {"type": "integer", "minimum": 1}, "pre_proc_net_tcp": {"$ref": "#/$defs/descriptor"}, "post_proc_net_tcp": {"$ref": "#/$defs/descriptor"}, "pre_server_fd_sockets": {"$ref": "#/$defs/descriptor"}, "post_server_fd_sockets": {"$ref": "#/$defs/descriptor"}, "final_proc_net_tcp": {"$ref": "#/$defs/descriptor"}, "final_server_fd_sockets": {"$ref": "#/$defs/descriptor"}}},
+    "scenario": {"type": "object", "additionalProperties": false, "required": ["scenario_id", "target", "process", "listener", "request_ledger", "runtime_event_log", "generation_audit_index", "fallback_event_log"], "properties": {"scenario_id": {"const": "exact-backend-fallback"}, "target": {"$ref": "#/$defs/captureTarget"}, "process": {"$ref": "#/$defs/process"}, "listener": {"$ref": "#/$defs/listener"}, "request_ledger": {"$ref": "#/$defs/descriptor"}, "runtime_event_log": {"$ref": "#/$defs/descriptor"}, "generation_audit_index": {"$ref": "#/$defs/descriptor"}, "fallback_event_log": {"$ref": "#/$defs/descriptor"}}}
+  }
+}

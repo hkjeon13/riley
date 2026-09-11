@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-rollback-finalizer-receipt-v1.schema.json",
+  "title": "Riley RC3 rollback finalizer normal-return receipt v1",
+  "description": "A private same-stack raw receipt emitted only after the fixed v3/v4 finalizer returns normally. It binds the full raw finalizer closure but never proves host rollback, lifecycle success, freeze, Gate E, semantic qualification, or a durable success inference from a later path replay.",
+  "oneOf": [
+    {"$ref": "#/$defs/receipt"},
+    {"$ref": "#/$defs/completion"}
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 4398046511104}
+      }
+    },
+    "rootJsonLeaf": {
+      "type": "string",
+      "minLength": 6,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.json$"
+    },
+    "rootManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"$ref": "#/$defs/rootJsonLeaf"}}}
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": {"$ref": "#/$defs/sha256"},
+        "base_release_candidate_report_sha256": {"$ref": "#/$defs/sha256"},
+        "configuration_profile": {"const": "stable-default"},
+        "configuration_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "processEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre_stat", "post_stat", "pre_tcp", "post_tcp", "pre_fd_sockets", "post_fd_sockets", "status", "gpu_selection", "gpu_compute_apps"],
+      "properties": {
+        "pre_stat": {"$ref": "#/$defs/descriptor"},
+        "post_stat": {"$ref": "#/$defs/descriptor"},
+        "pre_tcp": {"$ref": "#/$defs/descriptor"},
+        "post_tcp": {"$ref": "#/$defs/descriptor"},
+        "pre_fd_sockets": {"$ref": "#/$defs/descriptor"},
+        "post_fd_sockets": {"$ref": "#/$defs/descriptor"},
+        "status": {"$ref": "#/$defs/descriptor"},
+        "gpu_selection": {"$ref": "#/$defs/descriptor"},
+        "gpu_compute_apps": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "httpExchange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request", "response_head", "response_body"],
+      "properties": {
+        "request": {"$ref": "#/$defs/descriptor"},
+        "response_head": {"$ref": "#/$defs/descriptor"},
+        "response_body": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "phaseTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "listener_port", "listener_inode", "gpu_index", "gpu_uuid"],
+      "properties": {
+        "server_pid": {"type": "integer", "minimum": 1},
+        "server_start_ticks": {"type": "integer", "minimum": 1},
+        "listener_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "listener_inode": {"type": "integer", "minimum": 1},
+        "gpu_index": {"type": "integer", "minimum": 0},
+        "gpu_uuid": {"type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$"}
+      }
+    },
+    "phaseWithoutGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capture_name", "target", "process_evidence", "health", "generation"],
+      "properties": {
+        "capture_name": {"const": "candidate-phase"},
+        "target": {"$ref": "#/$defs/phaseTarget"},
+        "process_evidence": {"$ref": "#/$defs/processEvidence"},
+        "health": {"$ref": "#/$defs/httpExchange"},
+        "generation": {"const": null}
+      }
+    },
+    "phaseWithGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capture_name", "target", "process_evidence", "health", "generation"],
+      "properties": {
+        "capture_name": {"const": "rollback-phase"},
+        "target": {"$ref": "#/$defs/phaseTarget"},
+        "process_evidence": {"$ref": "#/$defs/processEvidence"},
+        "health": {"$ref": "#/$defs/httpExchange"},
+        "generation": {"$ref": "#/$defs/httpExchange"}
+      }
+    },
+    "staticPreparation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconstructed_baseline", "freeze", "base_release_candidate_report", "configuration"],
+      "properties": {
+        "reconstructed_baseline": {"$ref": "#/$defs/descriptor"},
+        "freeze": {"$ref": "#/$defs/descriptor"},
+        "base_release_candidate_report": {"$ref": "#/$defs/descriptor"},
+        "configuration": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "configBridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "startup_artifact", "endpoint_observation"],
+      "properties": {
+        "endpoint": {"$ref": "#/$defs/descriptor"},
+        "startup_artifact": {"$ref": "#/$defs/descriptor"},
+        "endpoint_observation": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "sourceCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "contract", "scenario_id", "request_ledger", "request", "response_head", "response_body", "runtime_event_log", "generation_audit_index", "audit_completion_marker"],
+      "properties": {
+        "session": {"$ref": "#/$defs/descriptor"},
+        "contract": {"$ref": "#/$defs/descriptor"},
+        "scenario_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "request_ledger": {"$ref": "#/$defs/descriptor"},
+        "request": {"$ref": "#/$defs/descriptor"},
+        "response_head": {"$ref": "#/$defs/descriptor"},
+        "response_body": {"$ref": "#/$defs/descriptor"},
+        "runtime_event_log": {"$ref": "#/$defs/descriptor"},
+        "generation_audit_index": {"$ref": "#/$defs/descriptor"},
+        "audit_completion_marker": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "shutdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "completion_marker"],
+      "properties": {
+        "artifact": {"$ref": "#/$defs/descriptor"},
+        "completion_marker": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "candidateSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consumed_paths", "config_bridge", "candidate_phase", "source_capture", "shutdown"],
+      "properties": {
+        "consumed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relativePath"}
+        },
+        "config_bridge": {"$ref": "#/$defs/configBridge"},
+        "candidate_phase": {"$ref": "#/$defs/phaseWithoutGeneration"},
+        "source_capture": {"$ref": "#/$defs/sourceCapture"},
+        "shutdown": {"$ref": "#/$defs/shutdown"}
+      }
+    },
+    "atomicTransaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "preparation_session", "atomic_switch_session"],
+      "properties": {
+        "session": {"$ref": "#/$defs/descriptor"},
+        "preparation_session": {"$ref": "#/$defs/descriptor"},
+        "atomic_switch_session": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "finalizerOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v4_manifest", "v3_manifest", "bind_request"],
+      "properties": {
+        "v4_manifest": {
+          "allOf": [
+            {"$ref": "#/$defs/rootManifestDescriptor"},
+            {"properties": {"path": {"const": "rollback-v4-candidate-source-manifest.json"}}}
+          ]
+        },
+        "v3_manifest": {
+          "allOf": [
+            {"$ref": "#/$defs/rootManifestDescriptor"},
+            {"properties": {"path": {"const": "rollback-v3-candidate-source-manifest.json"}}}
+          ]
+        },
+        "bind_request": {
+          "allOf": [
+            {"$ref": "#/$defs/rootManifestDescriptor"},
+            {"properties": {"path": {"const": "rollback-v3-candidate-source-bind-request.json"}}}
+          ]
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "qualification_status", "authority", "candidate_id", "bindings", "finalizer_outputs", "static_preparation", "candidate_source", "rollback_phase", "atomic_transaction", "reason_codes"],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-rollback-finalizer-receipt.v1"},
+        "status": {"const": "completed"},
+        "qualification_status": {"const": "not-run"},
+        "authority": {"const": "raw-finalizer-normal-return-only"},
+        "candidate_id": {"$ref": "#/$defs/candidateId"},
+        "bindings": {"$ref": "#/$defs/bindings"},
+        "finalizer_outputs": {"$ref": "#/$defs/finalizerOutputs"},
+        "static_preparation": {"$ref": "#/$defs/staticPreparation"},
+        "candidate_source": {"$ref": "#/$defs/candidateSource"},
+        "rollback_phase": {"$ref": "#/$defs/phaseWithGeneration"},
+        "atomic_transaction": {"$ref": "#/$defs/atomicTransaction"},
+        "reason_codes": {"const": []}
+      }
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-rollback-finalizer-receipt-complete.v1"},
+        "artifact_filename": {"const": "rollback-finalizer-receipt-v1.json"},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

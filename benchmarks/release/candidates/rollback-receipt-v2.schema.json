@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rollback-receipt-v2.schema.json",
+  "title": "Riley C02 rollback raw-provenance v2",
+  "description": "Versioned raw evidence binding for a future rollback semantic checker. v1 self-authored worker/model/timeline assertions are deliberately not part of this input.",
+  "oneOf": [
+    { "$ref": "#/$defs/rawManifest" },
+    { "$ref": "#/$defs/provenanceReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 16777216 }
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "targetTuple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "gpu_index", "gpu_uuid"],
+      "properties": {
+        "server_pid": { "type": "integer", "minimum": 1 },
+        "server_start_ticks": { "type": "integer", "minimum": 1 },
+        "gpu_index": { "type": "integer", "minimum": 0 },
+        "gpu_uuid": { "type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$" }
+      }
+    },
+    "serverPhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index"],
+      "properties": {
+        "target": { "$ref": "#/$defs/targetTuple" },
+        "observation_session": { "$ref": "#/$defs/descriptor" },
+        "request_ledger": { "$ref": "#/$defs/descriptor" },
+        "runtime_event_log": { "$ref": "#/$defs/descriptor" },
+        "generation_audit_index": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "candidatePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index", "shutdown_artifact", "shutdown_marker"],
+      "properties": {
+        "target": { "$ref": "#/$defs/targetTuple" },
+        "observation_session": { "$ref": "#/$defs/descriptor" },
+        "request_ledger": { "$ref": "#/$defs/descriptor" },
+        "runtime_event_log": { "$ref": "#/$defs/descriptor" },
+        "generation_audit_index": { "$ref": "#/$defs/descriptor" },
+        "shutdown_artifact": { "$ref": "#/$defs/descriptor" },
+        "shutdown_marker": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary", "bundle", "image_inspect"],
+      "properties": {
+        "binary": { "$ref": "#/$defs/descriptor" },
+        "bundle": { "$ref": "#/$defs/descriptor" },
+        "image_inspect": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "atomicSwitch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript"],
+      "properties": {
+        "pre_active_stat": { "$ref": "#/$defs/descriptor" },
+        "post_active_stat": { "$ref": "#/$defs/descriptor" },
+        "candidate_staged_stat": { "$ref": "#/$defs/descriptor" },
+        "rollback_staged_stat": { "$ref": "#/$defs/descriptor" },
+        "rename_transcript": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "rawManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "candidate", "rollback", "candidate_artifacts", "rollback_artifacts", "atomic_switch"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-rollback-raw-provenance.v2" },
+        "capture_status": { "const": "captured" },
+        "qualification_status": { "const": "not-run" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "candidate": { "$ref": "#/$defs/candidatePhase" },
+        "rollback": { "$ref": "#/$defs/serverPhase" },
+        "candidate_artifacts": { "$ref": "#/$defs/artifacts" },
+        "rollback_artifacts": { "$ref": "#/$defs/artifacts" },
+        "atomic_switch": { "$ref": "#/$defs/atomicSwitch" }
+      }
+    },
+    "boundCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bound"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "bound": { "const": true }
+      }
+    },
+    "provenanceReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "qualification_status", "candidate_id", "bindings", "raw_manifest", "targets", "checks", "reason_codes"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-rollback-provenance-check.v2" },
+        "status": { "const": "bound" },
+        "qualification_status": { "const": "not-run" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "raw_manifest": { "$ref": "#/$defs/descriptor" },
+        "targets": { "type": "array", "minItems": 2, "maxItems": 2 },
+        "checks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/boundCheck" } },
+        "reason_codes": { "const": [] }
+      }
+    }
+  }
+}

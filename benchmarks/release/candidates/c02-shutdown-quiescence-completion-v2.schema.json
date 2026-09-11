@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-shutdown-quiescence-completion-v2.schema.json",
+  "title": "Riley C02 shutdown quiescence completion marker v2",
+  "description": "A create-only, nonhidden `<artifact_filename>.complete` marker written only after the shutdown-v2 artifact has been fsynced. The marker binds the exact artifact bytes. A shutdown JSON leaf without this matching marker is incomplete evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+  "properties": {
+    "schema_version": { "const": "riley.c02-shutdown-quiescence-complete.v2" },
+    "artifact_filename": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,240}\\.json$",
+      "description": "A nonhidden direct-child JSON leaf. The 246-byte maximum leaves room for the required `.complete` marker within a 255-byte POSIX filename."
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    }
+  }
+}

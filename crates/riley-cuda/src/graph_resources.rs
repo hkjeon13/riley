@@ -1,0 +1,795 @@
+//! Resource ownership for staged transfer, `SwiGLU` and MLP diagnostic graphs.
+use crate::{CudaDeviceBuffer, CudaPinnedHostBuffer, CudaPreparedGemm, CudaResult, CudaStream};
+
+/// Owns the Rust parents of a recorded graph. Native handles point to independent
+/// CUDA allocations, never into the Rust container, so moving the container is safe.
+/// No parent access is exposed until native graph destruction succeeds.
+#[cfg(feature = "cuda")]
+pub struct OwnedGraphResourceReservation<P> {
+    native: crate::ffi::GraphResourcesHandle,
+    parents: P,
+}
+
+#[cfg(feature = "cuda")]
+impl<P> OwnedGraphResourceReservation<P> {
+    /// Records using an exclusive, scoped borrow and retains the entire owner.
+    /// # Errors
+    /// Returns the recording error without publishing a partially prepared owner.
+    pub fn prepare<E>(
+        mut parents: P,
+        record: impl for<'a> FnOnce(&'a mut P) -> Result<BorrowedGraphResourceReservation<'a>, E>,
+    ) -> Result<Self, E> {
+        let BorrowedGraphResourceReservation {
+            native,
+            parents: borrowed,
+        } = record(&mut parents)?;
+        drop(borrowed);
+        Ok(Self { native, parents })
+    }
+
+    /// Stages fresh input and waits for completion; errors never expose output.
+    /// # Errors
+    /// Returns validation or CUDA errors from the retained native graph.
+    pub fn replay_transfer(&mut self, input: &[u8]) -> CudaResult<()> {
+        self.native.replay_transfer(input)
+    }
+
+    /// Reads only a successfully completed replay.
+    /// # Errors
+    /// Returns an error for stale, failed, or incorrectly sized output.
+    pub fn read_transfer(&mut self, output: &mut [u8]) -> CudaResult<()> {
+        self.native.read_transfer(output)
+    }
+
+    /// Returns parents only after the native reservation has been released.
+    /// # Errors
+    /// Unknown completion retains native parent protection and returns an error.
+    pub fn close(mut self) -> CudaResult<P> {
+        self.native.close()?;
+        Ok(self.parents)
+    }
+}
+
+/// Exclusive actual parents retained until reservation close or Drop.
+/// Resource registration does not validate operator aliases or a decode DAG.
+pub struct BorrowedGraphResourceParents<'a> {
+    /// Exact stream reserved for future recording.
+    pub stream: &'a mut CudaStream,
+    /// Physical device allocations, including immutable weights and workspace.
+    pub devices: Vec<&'a mut CudaDeviceBuffer>,
+    /// Actual pinned metadata and result parents.
+    pub pinned: Vec<&'a mut CudaPinnedHostBuffer>,
+    /// Actual selected GEMM plans, preserving their algorithms and policies.
+    pub plans: Vec<&'a mut CudaPreparedGemm>,
+}
+
+/// A thread-confined native ledger, optionally holding a staged diagnostic graph.
+pub struct BorrowedGraphResourceReservation<'a> {
+    // Native releases first, while every borrowed parent is still alive.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphResourcesHandle,
+    #[allow(dead_code)]
+    parents: BorrowedGraphResourceParents<'a>,
+}
+impl<'a> BorrowedGraphResourceReservation<'a> {
+    /// Reserves all parents atomically with rollback on a busy resource.
+    /// # Errors
+    /// Rejects foreign contexts, busy resources, unsupported plans or capacity.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))] // CUDA owns parents through close.
+    pub fn reserve(parents: BorrowedGraphResourceParents<'a>) -> CudaResult<Self> {
+        #[cfg(feature = "cuda")]
+        {
+            let devices: Vec<_> = parents.devices.iter().map(|b| b.native_handle()).collect();
+            let pinned: Vec<_> = parents.pinned.iter().map(|b| b.native_handle()).collect();
+            let plans: Vec<_> = parents
+                .plans
+                .iter()
+                .map(|p| p.graph_resource_handle())
+                .collect::<CudaResult<_>>()?;
+            let native = crate::ffi::GraphResourcesHandle::reserve(
+                &parents.stream.native,
+                &devices,
+                &pinned,
+                &plans,
+            )?;
+            Ok(Self { native, parents })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = parents;
+            Err(crate::CudaError::unavailable(
+                "reserve aggregate graph resources",
+            ))
+        }
+    }
+    /// Releases the ledger before ending the exclusive parent borrows.
+    /// # Errors
+    /// Returns an error if native release cannot be established.
+    pub fn close(mut self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self;
+            Ok(())
+        }
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records H2D → device copy → D2H using indices into retained parents.
+    /// This transport probe does not admit model operators or full decode replay.
+    /// # Errors
+    /// Rejects invalid indices, aliases, sizes, membership or native graph errors.
+    pub fn record_transfer(
+        &mut self,
+        input: usize,
+        first: usize,
+        second: usize,
+        output: usize,
+    ) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad = || {
+                crate::CudaError::invalid_argument(
+                    "record aggregate transfer",
+                    "parent index out of range",
+                )
+            };
+            let input = self.parents.pinned.get(input).ok_or_else(bad)?;
+            let output = self.parents.pinned.get(output).ok_or_else(bad)?;
+            let first = self.parents.devices.get(first).ok_or_else(bad)?;
+            let second = self.parents.devices.get(second).ok_or_else(bad)?;
+            self.native.record_transfer(
+                input.native_handle(),
+                first.native_handle(),
+                second.native_handle(),
+                output.native_handle(),
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (input, first, second, output);
+            Err(crate::CudaError::unavailable("record aggregate transfer"))
+        }
+    }
+    /// Stages fresh input and synchronously executes the retained staged graph.
+    /// # Errors
+    /// Rejects stale state or wrong size; CUDA failures retain native protection.
+    pub fn replay_transfer(&mut self, source: &[u8]) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.replay_transfer(source)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = source;
+            Err(crate::CudaError::unavailable("replay aggregate transfer"))
+        }
+    }
+    /// Copies output only after a successful, completed replay.
+    /// # Errors
+    /// Rejects missing completion, failed replay or wrong output size.
+    pub fn read_transfer(&mut self, output: &mut [u8]) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.read_transfer(output)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = output;
+            Err(crate::CudaError::unavailable("read aggregate transfer"))
+        }
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records two eager BF16 kernels with staged input/output on actual parents.
+    /// Device indices are [gate, up, activated, product]. The pinned parent must
+    /// fit all four arrays. This is a diagnostic subgraph, not full model replay.
+    /// # Errors
+    /// Rejects invalid parent indices, aliases, sizes, leases or graph state.
+    pub fn record_swiglu(&mut self, devices: [usize; 4], staging: usize) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad =
+                || crate::CudaError::invalid_argument("record SwiGLU", "parent index out of range");
+            let gate = self.parents.devices.get(devices[0]).ok_or_else(bad)?;
+            let up = self.parents.devices.get(devices[1]).ok_or_else(bad)?;
+            let activated = self.parents.devices.get(devices[2]).ok_or_else(bad)?;
+            let product = self.parents.devices.get(devices[3]).ok_or_else(bad)?;
+            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            self.native.record_swiglu(
+                gate.native_handle(),
+                up.native_handle(),
+                activated.native_handle(),
+                product.native_handle(),
+                staging.native_handle(),
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (devices, staging);
+            Err(crate::CudaError::unavailable("record SwiGLU"))
+        }
+    }
+}
+
+#[cfg(all(test, feature = "cuda"))]
+mod swiglu_gpu_tests {
+    use super::*;
+    use crate::{
+        CudaBufferSpan, CudaBufferSpanMut, CudaDType, CudaRuntime, GatedMultiplyParams, SiluParams,
+        gated_multiply, silu,
+    };
+
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn swiglu_chain_matches_eager_across_sizes_and_fresh_inputs() -> CudaResult<()> {
+        let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
+        let mut stream = context.create_stream()?;
+        let empty = context.allocation_stats()?;
+        for elements in [1_u64, 257, 1536] {
+            let bytes = elements * 2;
+            let mut gate = context.allocate_device_buffer(bytes)?;
+            let mut up = context.allocate_device_buffer(bytes)?;
+            let mut activated = context.allocate_device_buffer(bytes)?;
+            let mut product = context.allocate_device_buffer(bytes)?;
+            let mut staging = context.allocate_pinned_host_buffer(bytes * 4 + 64)?;
+            let mut eager_gate = context.allocate_device_buffer(bytes)?;
+            let mut eager_up = context.allocate_device_buffer(bytes)?;
+            let mut eager_activated = context.allocate_device_buffer(bytes)?;
+            let mut eager_product = context.allocate_device_buffer(bytes)?;
+            let mut eager_staging = context.allocate_pinned_host_buffer(bytes * 4)?;
+            let mut eager_stream = context.create_stream()?;
+            let expected_stats = context.allocation_stats()?;
+            staging.write(0, &vec![0xa5; (bytes * 4 + 64) as usize])?;
+            for cycle in 0..2 {
+                let mut graph =
+                    BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents {
+                        stream: &mut stream,
+                        devices: vec![&mut gate, &mut up, &mut activated, &mut product],
+                        pinned: vec![&mut staging],
+                        plans: vec![],
+                    })?;
+                assert!(graph.record_swiglu([0, 1, 2, 99], 0).is_err());
+                assert!(graph.record_swiglu([0, 0, 2, 3], 0).is_err());
+                graph.record_swiglu([0, 1, 2, 3], 0)?;
+                let mut output = vec![0; (bytes * 2) as usize];
+                assert!(graph.read_transfer(&mut output).is_err());
+                for step in 0..32_u32 {
+                    // Finite, signed BF16 values; vary every input on one retained exec.
+                    let payload: Vec<u8> = (0..elements * 2)
+                        .flat_map(|i| {
+                            let value = ((i % 97) as f32 - 48.0 + step as f32) / 8.0;
+                            ((value.to_bits() >> 16) as u16).to_le_bytes()
+                        })
+                        .collect();
+                    eager_gate.upload_from_slice(
+                        0,
+                        &payload[..bytes as usize],
+                        &mut eager_staging,
+                        &mut eager_stream,
+                    )?;
+                    eager_up.upload_from_slice(
+                        0,
+                        &payload[bytes as usize..],
+                        &mut eager_staging,
+                        &mut eager_stream,
+                    )?;
+                    silu(
+                        &mut SiluParams {
+                            input: CudaBufferSpan::new(&eager_gate, CudaDType::BF16, 0, bytes)?,
+                            output: CudaBufferSpanMut::new(
+                                &mut eager_activated,
+                                CudaDType::BF16,
+                                0,
+                                bytes,
+                            )?,
+                            element_count: elements,
+                        },
+                        &mut eager_stream,
+                    )?;
+                    gated_multiply(
+                        &mut GatedMultiplyParams {
+                            activated_gate: CudaBufferSpan::new(
+                                &eager_activated,
+                                CudaDType::BF16,
+                                0,
+                                bytes,
+                            )?,
+                            up: CudaBufferSpan::new(&eager_up, CudaDType::BF16, 0, bytes)?,
+                            output: CudaBufferSpanMut::new(
+                                &mut eager_product,
+                                CudaDType::BF16,
+                                0,
+                                bytes,
+                            )?,
+                            element_count: elements,
+                        },
+                        &mut eager_stream,
+                    )?;
+                    let mut expected = vec![0; output.len()];
+                    eager_activated.download_to_slice(
+                        0,
+                        &mut expected[..bytes as usize],
+                        &mut eager_staging,
+                        &mut eager_stream,
+                    )?;
+                    eager_product.download_to_slice(
+                        0,
+                        &mut expected[bytes as usize..],
+                        &mut eager_staging,
+                        &mut eager_stream,
+                    )?;
+                    graph.replay_transfer(&payload)?;
+                    graph.read_transfer(&mut output)?;
+                    assert_eq!(output, expected, "elements={elements} step={step}");
+                    assert!(
+                        graph
+                            .replay_transfer(&payload[..payload.len() - 1])
+                            .is_err()
+                    );
+                    assert!(graph.read_transfer(&mut output).is_err());
+                }
+                if cycle == 0 {
+                    graph.close()?;
+                } else {
+                    drop(graph);
+                }
+                assert_eq!(&staging.to_vec()?[(bytes * 4) as usize..], &[0xa5; 64]);
+                assert_eq!(context.allocation_stats()?, expected_stats);
+            }
+            eager_stream.close()?;
+            eager_staging.close()?;
+            eager_product.close()?;
+            eager_activated.close()?;
+            eager_up.close()?;
+            eager_gate.close()?;
+            staging.close()?;
+            product.close()?;
+            activated.close()?;
+            up.close()?;
+            gate.close()?;
+            assert_eq!(context.allocation_stats()?, empty);
+        }
+        stream.close()?;
+        assert!(context.allocation_stats()?.is_zero());
+        context.close()?;
+        Ok(())
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records staged M=1 gate/up GEMMs, `SiLU`, multiply, down GEMM and residual.
+    /// Device slots: input, residual, gate, up, activated, product, down, output,
+    /// gate weight, up weight, down weight. Plans: intermediate and down.
+    /// # Errors
+    /// Rejects absent/aliased parents, mismatched geometry, plan policy or capture errors.
+    pub fn record_mlp(
+        &mut self,
+        devices: [usize; 11],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+    ) -> CudaResult<()> {
+        self.record_mlp_with_norm(devices, workspace, plans, staging, None, None)
+    }
+    /// Records post-attention `RMSNorm` followed by the MLP chain.
+    /// `norm` contains the norm weight index, epsilon and HF profile selection.
+    /// # Errors
+    /// Rejects invalid parent indices, norm geometry/profile or capture failure.
+    pub fn record_norm_mlp(
+        &mut self,
+        devices: [usize; 11],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (usize, f32, bool),
+    ) -> CudaResult<()> {
+        self.record_mlp_with_norm(devices, workspace, plans, staging, Some(norm), None)
+    }
+    /// Records attention output projection and residual before norm and MLP.
+    /// `projection` contains the output weight index and selected plan index.
+    /// # Errors
+    /// Rejects invalid parents, unsupported geometry or capture failure.
+    pub fn record_layer_tail(
+        &mut self,
+        devices: [usize; 11],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (usize, f32, bool),
+        projection: (usize, usize),
+    ) -> CudaResult<()> {
+        self.record_mlp_with_norm(
+            devices,
+            workspace,
+            plans,
+            staging,
+            Some(norm),
+            Some(projection),
+        )
+    }
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::unused_self))] // CUDA uses the retained owner.
+    fn record_mlp_with_norm(
+        &mut self,
+        devices: [usize; 11],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: Option<(usize, f32, bool)>,
+        projection: Option<(usize, usize)>,
+    ) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad = || {
+                crate::CudaError::invalid_argument("record MLP graph", "parent index out of range")
+            };
+            let get = |index: usize| {
+                self.parents
+                    .devices
+                    .get(index)
+                    .map(|b| b.native_handle())
+                    .ok_or_else(bad)
+            };
+            let d = [
+                get(devices[0])?,
+                get(devices[1])?,
+                get(devices[2])?,
+                get(devices[3])?,
+                get(devices[4])?,
+                get(devices[5])?,
+                get(devices[6])?,
+                get(devices[7])?,
+                get(devices[8])?,
+                get(devices[9])?,
+                get(devices[10])?,
+            ];
+            let workspace = workspace.map(get).transpose()?;
+            let intermediate = self
+                .parents
+                .plans
+                .get(plans[0])
+                .ok_or_else(bad)?
+                .graph_resource_handle()?;
+            let down = self
+                .parents
+                .plans
+                .get(plans[1])
+                .ok_or_else(bad)?
+                .graph_resource_handle()?;
+            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            let norm = norm
+                .map(|(index, epsilon, hf)| {
+                    get(index).map(|weight| (weight, epsilon, u32::from(hf)))
+                })
+                .transpose()?;
+            let projection = projection
+                .map(|(weight, plan)| -> CudaResult<_> {
+                    Ok((
+                        get(weight)?,
+                        self.parents
+                            .plans
+                            .get(plan)
+                            .ok_or_else(bad)?
+                            .graph_resource_handle()?,
+                    ))
+                })
+                .transpose()?;
+            self.native.record_mlp_with_tail(
+                d,
+                workspace,
+                intermediate,
+                down,
+                staging.native_handle(),
+                norm,
+                projection,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (devices, workspace, plans, staging, norm, projection);
+            Err(crate::CudaError::unavailable("record MLP graph"))
+        }
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records input norm then Q/K/V with selected M=1 plans.
+    /// Slots: input, norm, Q, K, V, norm weight, Q/K/V weights.
+    /// # Errors
+    /// Rejects missing parents, aliases, invalid profile/geometry or capture failure.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::unused_self))]
+    pub fn record_norm_qkv(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+    ) -> CudaResult<()> {
+        self.record_qkv_impl(devices, workspace, plans, staging, norm, None, None)
+    }
+    /// Records norm/QKV and indexed D64 `RoPE` with fresh replay positions.
+    /// Extra parents are rotated Q/K, cos, sin and the packed positions parent.
+    /// # Errors
+    /// Rejects invalid parent indices, geometry, profile or capture failure.
+    pub fn record_qkv_rope(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+        rope: ([usize; 5], u64),
+    ) -> CudaResult<()> {
+        self.record_qkv_impl(devices, workspace, plans, staging, norm, Some(rope), None)
+    }
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::unused_self))]
+    // Geometry: layers, layer, physical block count, physical block, logical block, valid prefix.
+    #[allow(clippy::too_many_arguments)] // Explicit retained parent groups and fixed cache binding.
+    fn record_qkv_impl(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+        rope: Option<([usize; 5], u64)>,
+        caches: Option<([usize; 2], [u64; 6])>,
+    ) -> CudaResult<()> {
+        self.record_attention_impl(devices, workspace, plans, staging, norm, rope, caches, None)
+    }
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::unused_self))]
+    #[allow(clippy::too_many_arguments)]
+    fn record_attention_impl(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+        rope: Option<([usize; 5], u64)>,
+        caches: Option<([usize; 2], [u64; 6])>,
+        attention: Option<(usize, [u64; 4])>,
+    ) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad =
+                || crate::CudaError::invalid_argument("norm QKV", "parent index out of range");
+            let get = |i: usize| {
+                self.parents
+                    .devices
+                    .get(i)
+                    .map(|d| d.native_handle())
+                    .ok_or_else(bad)
+            };
+            let d = [
+                get(devices[0])?,
+                get(devices[1])?,
+                get(devices[2])?,
+                get(devices[3])?,
+                get(devices[4])?,
+                get(devices[5])?,
+                get(devices[6])?,
+                get(devices[7])?,
+                get(devices[8])?,
+            ];
+            let w = workspace.map(get).transpose()?;
+            let q = self
+                .parents
+                .plans
+                .get(plans[0])
+                .ok_or_else(bad)?
+                .graph_resource_handle()?;
+            let kv = self
+                .parents
+                .plans
+                .get(plans[1])
+                .ok_or_else(bad)?
+                .graph_resource_handle()?;
+            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            let rope = rope
+                .map(|(ids, offset)| -> CudaResult<_> {
+                    Ok((
+                        [
+                            get(ids[0])?,
+                            get(ids[1])?,
+                            get(ids[2])?,
+                            get(ids[3])?,
+                            get(ids[4])?,
+                        ],
+                        offset,
+                    ))
+                })
+                .transpose()?;
+            let caches = caches
+                .map(|(ids, geometry)| -> CudaResult<_> {
+                    Ok(([get(ids[0])?, get(ids[1])?], geometry))
+                })
+                .transpose()?;
+            let attention = attention
+                .map(|(output, fields)| -> CudaResult<_> { Ok((get(output)?, fields)) })
+                .transpose()?;
+            self.native.record_attention_impl(
+                d,
+                w,
+                [q, kv],
+                staging.native_handle(),
+                norm.0,
+                norm.1,
+                rope,
+                caches,
+                attention,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (
+                devices, workspace, plans, staging, norm, rope, caches, attention,
+            );
+            Err(crate::CudaError::unavailable("record norm QKV"))
+        }
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records QKV/RoPE and KV write to a fixed logical/physical block.
+    /// Cache geometry is layers, layer, physical blocks, physical, logical, valid prefix.
+    /// # Errors
+    /// Rejects invalid parents, mapping geometry or capture failure.
+    #[allow(clippy::too_many_arguments)] // Explicit retained parent groups and fixed cache binding.
+    pub fn record_qkv_kv(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+        rope: ([usize; 5], u64),
+        caches: ([usize; 2], [u64; 6]),
+    ) -> CudaResult<()> {
+        self.record_qkv_impl(
+            devices,
+            workspace,
+            plans,
+            staging,
+            norm,
+            Some(rope),
+            Some(caches),
+        )
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records norm/QKV/RoPE/KV write and one-block grouped attention.
+    /// # Errors
+    /// Rejects unsupported mapping, parent geometry, field overlaps or capture errors.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_attention_chain(
+        &mut self,
+        devices: [usize; 9],
+        workspace: Option<usize>,
+        plans: [usize; 2],
+        staging: usize,
+        norm: (f32, bool),
+        rope: ([usize; 5], u64),
+        caches: ([usize; 2], [u64; 6]),
+        attention: (usize, [u64; 4]),
+    ) -> CudaResult<()> {
+        self.record_attention_impl(
+            devices,
+            workspace,
+            plans,
+            staging,
+            norm,
+            Some(rope),
+            Some(caches),
+            Some(attention),
+        )
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Captures a full single-row, D64 canonical Llama model using retained parents.
+    /// Devices: token, hidden, norm, projection, rotary-Q, context, raw-K, raw-V,
+    /// rotary-K, gate, up, activated, product, logits, embedding-report, K/V pools,
+    /// cos, sin, metadata, argmax. Plans: hidden, KV, intermediate, down, head.
+    /// Weights: embedding, final norm, head, then nine weights per layer:
+    /// input norm, Q, K, V, O, post norm, gate, up, down. Geometry: layers,
+    /// physical blocks, block capacity, vocabulary. Epsilons: final, then two per layer.
+    /// Replay uses an exact-sized payload: token/position u32, [0,live_blocks] u32,
+    /// capacity physical u32s, capacity valid u16s, aligned zero row-slot u32.
+    /// The rest is padding. Size is max(metadata length, 40 + optional vocab*2).
+    /// Output is optional BF16 logits, argmax token/status (8 bytes), embedding report (32 bytes).
+    /// # Errors
+    /// Rejects unsupported geometry/profile, invalid parents, or capture failures.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_decode(
+        &mut self,
+        devices: [usize; 21],
+        workspace: Option<usize>,
+        weights: &[usize],
+        plans: [usize; 5],
+        staging: usize,
+        geometry: [u64; 4],
+        eps: &[f32],
+        hf: bool,
+        publish_logits: bool,
+    ) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad =
+                || crate::CudaError::invalid_argument("record decode", "parent index out of range");
+            let devices = devices
+                .iter()
+                .map(|&i| {
+                    self.parents
+                        .devices
+                        .get(i)
+                        .map(|d| d.native_handle())
+                        .ok_or_else(bad)
+                })
+                .collect::<CudaResult<Vec<_>>>()?;
+            let workspace = workspace
+                .map(|i| {
+                    self.parents
+                        .devices
+                        .get(i)
+                        .map(|d| d.native_handle())
+                        .ok_or_else(bad)
+                })
+                .transpose()?;
+            let weights = weights
+                .iter()
+                .map(|&i| {
+                    self.parents
+                        .devices
+                        .get(i)
+                        .map(|d| d.native_handle())
+                        .ok_or_else(bad)
+                })
+                .collect::<CudaResult<Vec<_>>>()?;
+            let plans = plans
+                .iter()
+                .map(|&i| {
+                    self.parents
+                        .plans
+                        .get(i)
+                        .ok_or_else(bad)?
+                        .graph_resource_handle()
+                })
+                .collect::<CudaResult<Vec<_>>>()?;
+            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            self.native.record_decode(
+                devices.try_into().map_err(|_| bad())?,
+                workspace,
+                &weights,
+                plans.try_into().map_err(|_| bad())?,
+                staging.native_handle(),
+                geometry,
+                eps,
+                hf,
+                publish_logits,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (
+                devices,
+                workspace,
+                weights,
+                plans,
+                staging,
+                geometry,
+                eps,
+                hf,
+                publish_logits,
+            );
+            Err(crate::CudaError::unavailable("record decode"))
+        }
+    }
+}

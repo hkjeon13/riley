@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/qwen-multistep-receipt-v2.schema.json",
+  "title": "Riley C02 Qwen public/audit multi-step receipt v2",
+  "description": "Closed v2 C02 proof contract. Native public request/response/SSE bytes and their matching create-only C02 audit records are separately descriptor-bound. v1 uses a synthetic token-event transcript and is intentionally not accepted as v2 evidence.",
+  "oneOf": [
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/qwenGolden" },
+    { "$ref": "#/$defs/qwenWire" },
+    { "$ref": "#/$defs/caseManifest" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{40}$" },
+        { "not": { "const": "0000000000000000000000000000000000" } }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^qwen-[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "serverRequestId": {
+      "type": "string",
+      "pattern": "^cmpl-[A-Za-z0-9_-]{1,128}$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "modelIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_revision", "tokenizer_files_sha256"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^\\S(?:[^\\r\\n]*\\S)?$" },
+        "model_revision": { "$ref": "#/$defs/gitRevision" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "weights_sha256": { "$ref": "#/$defs/sha256" },
+        "tokenizer_revision": { "$ref": "#/$defs/gitRevision" },
+        "tokenizer_files_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "tokenId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "tokenIds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/tokenId" }
+    },
+    "tokenPiece": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token_id", "text"],
+      "properties": {
+        "token_id": { "$ref": "#/$defs/tokenId" },
+        "text": { "type": "string", "maxLength": 1048576 }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "temperature", "top_p"],
+      "properties": {
+        "mode": { "const": "greedy" },
+        "temperature": { "const": 0 },
+        "top_p": { "const": 1 }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": { "type": "integer", "minimum": 1 },
+        "completion_tokens": { "type": "integer", "minimum": 4 },
+        "total_tokens": { "type": "integer", "minimum": 5 }
+      }
+    },
+    "goldenCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "prompt_token_ids", "max_tokens", "sampling", "expected_committed_output_tokens", "finish_reason"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "prompt_token_ids": { "$ref": "#/$defs/tokenIds" },
+        "max_tokens": { "type": "integer", "minimum": 4, "maximum": 4096 },
+        "sampling": { "$ref": "#/$defs/sampling" },
+        "expected_committed_output_tokens": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/tokenPiece" }
+        },
+        "finish_reason": { "const": "length" }
+      }
+    },
+    "qwenGolden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "golden_id", "model", "cases"],
+      "properties": {
+        "schema_version": { "const": "riley.qwen-multistep-golden.v2" },
+        "golden_id": { "const": "qwen2.5-0.5b-instruct-bf16-c02-audit-v2" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "cases": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/goldenCase" } }
+      }
+    },
+    "semanticMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "enum": ["system", "user"] },
+        "content": { "type": "string", "minLength": 1, "maxLength": 65536 }
+      }
+    },
+    "wireCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "reference_case", "messages", "rendered_prompt", "prompt_sha256"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "reference_case": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+        "messages": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/semanticMessage" } },
+        "rendered_prompt": { "type": "string", "minLength": 1, "maxLength": 1048576 },
+        "prompt_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "qwenWire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "golden", "reference", "cases"],
+      "properties": {
+        "schema_version": { "const": "riley.qwen-multistep-wire.v2" },
+        "golden": { "$ref": "#/$defs/descriptor" },
+        "reference": { "$ref": "#/$defs/descriptor" },
+        "cases": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/wireCase" } }
+      }
+    },
+    "modeCapture": {
+      "type": "object",
+      "description": "Each descriptor hashes raw captured bytes. request_body is the exact public POST JSON; response_headers is raw HTTP headers; response_body is either public JSON or raw SSE; audit_record is riley.c02-generation-audit.v1 JSON.",
+      "additionalProperties": false,
+      "required": ["request_body", "response_headers", "response_body", "audit_record"],
+      "properties": {
+        "request_body": { "$ref": "#/$defs/descriptor" },
+        "response_headers": { "$ref": "#/$defs/descriptor" },
+        "response_body": { "$ref": "#/$defs/descriptor" },
+        "audit_record": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "non_stream", "stream"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "non_stream": { "$ref": "#/$defs/modeCapture" },
+        "stream": { "$ref": "#/$defs/modeCapture" }
+      }
+    },
+    "caseManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "candidate_id", "bindings", "model", "golden", "wire", "cases"],
+      "properties": {
+        "schema_version": { "const": "riley.qwen-multistep-cases.v2" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "golden": { "$ref": "#/$defs/descriptor" },
+        "wire": { "$ref": "#/$defs/descriptor" },
+        "cases": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/case" } }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "passed", "candidate_id", "bindings", "model", "golden_id", "golden", "wire", "case_manifest"],
+      "properties": {
+        "schema_version": { "const": "riley.qwen-multistep-receipt.v2" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "golden_id": { "const": "qwen2.5-0.5b-instruct-bf16-c02-audit-v2" },
+        "golden": { "$ref": "#/$defs/descriptor" },
+        "wire": { "$ref": "#/$defs/descriptor" },
+        "case_manifest": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "prompt_token_ids_sha256", "prompt_sha256", "output_token_ids_sha256", "output_token_pieces_sha256", "generated_text_sha256", "finish_reason", "non_stream_request_id", "stream_request_id", "non_stream", "stream"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "prompt_token_ids_sha256": { "$ref": "#/$defs/sha256" },
+        "prompt_sha256": { "$ref": "#/$defs/sha256" },
+        "output_token_ids_sha256": { "$ref": "#/$defs/sha256" },
+        "output_token_pieces_sha256": { "$ref": "#/$defs/sha256" },
+        "generated_text_sha256": { "$ref": "#/$defs/sha256" },
+        "finish_reason": { "const": "length" },
+        "non_stream_request_id": { "$ref": "#/$defs/serverRequestId" },
+        "stream_request_id": { "$ref": "#/$defs/serverRequestId" },
+        "non_stream": { "$ref": "#/$defs/modeCapture" },
+        "stream": { "$ref": "#/$defs/modeCapture" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "passed", "candidate_id", "freeze_sha256", "base_release_candidate_report", "bindings", "golden", "wire", "receipt", "case_manifest", "model", "cases", "checks", "reason_codes"],
+      "properties": {
+        "schema_version": { "const": "riley.qwen-multistep-check.v2" },
+        "status": { "enum": ["passed", "failed", "incomparable"] },
+        "passed": { "type": "boolean" },
+        "candidate_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/candidateId" }] },
+        "freeze_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "base_release_candidate_report": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "bindings": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/bindings" }] },
+        "golden": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "wire": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "receipt": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "case_manifest": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/descriptor" }] },
+        "model": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/modelIdentity" }] },
+        "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "passed": { "const": true },
+              "candidate_id": { "$ref": "#/$defs/candidateId" },
+              "freeze_sha256": { "$ref": "#/$defs/sha256" },
+              "base_release_candidate_report": { "$ref": "#/$defs/descriptor" },
+              "bindings": { "$ref": "#/$defs/bindings" },
+              "golden": { "$ref": "#/$defs/descriptor" },
+              "wire": { "$ref": "#/$defs/descriptor" },
+              "receipt": { "$ref": "#/$defs/descriptor" },
+              "case_manifest": { "$ref": "#/$defs/descriptor" },
+              "model": { "$ref": "#/$defs/modelIdentity" },
+              "cases": { "minItems": 3, "maxItems": 3 },
+              "reason_codes": { "maxItems": 0 }
+            }
+          },
+          "else": { "properties": { "passed": { "const": false }, "reason_codes": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

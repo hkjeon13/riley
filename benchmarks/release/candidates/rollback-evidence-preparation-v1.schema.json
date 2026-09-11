@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rollback-evidence-preparation-v1.schema.json",
+  "title": "Riley RC3 rollback static evidence preparation v1",
+  "description": "Closed raw static preparation evidence for a pre-existing reviewed reconstructed RC2 baseline. It records immutable input snapshots only; it does not prove a freeze, runtime configuration observation, rollback, lifecycle action, or qualification. Filesystem mode, inode, no-follow FD, completion-pair, lock, and digest replay invariants are enforced by prepare_rc3_rollback_evidence_v1.py rather than JSON Schema.",
+  "oneOf": [
+    {"$ref": "#/$defs/session"},
+    {"$ref": "#/$defs/incompleteMarker"},
+    {"$ref": "#/$defs/completionMarker"}
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 8388608}
+      }
+    },
+    "snapshotIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "inode", "mode", "nlink"],
+      "properties": {
+        "device": {"type": "integer", "minimum": 0},
+        "inode": {"type": "integer", "minimum": 0},
+        "mode": {"const": 384},
+        "nlink": {"const": 1}
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "reconstructedBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "baseline_id", "tag_name", "target_commit_sha1"],
+      "properties": {
+        "manifest": {"$ref": "#/$defs/descriptor"},
+        "baseline_id": {"const": "reconstructed-riley-0.1.0-rc2"},
+        "tag_name": {"const": "riley-0.1.0-rc2"},
+        "target_commit_sha1": {"const": "6093006ec2b01b784b01ba278296b676f2dfd03a"}
+      }
+    },
+    "bindingSnapshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze", "base_release_candidate_report", "configuration"],
+      "properties": {
+        "freeze": {
+          "allOf": [
+            {"$ref": "#/$defs/descriptor"},
+            {"properties": {"path": {"const": "rollback-v3-evidence-inputs/freeze.raw"}}}
+          ]
+        },
+        "base_release_candidate_report": {
+          "allOf": [
+            {"$ref": "#/$defs/descriptor"},
+            {"properties": {"path": {"const": "rollback-v3-evidence-inputs/base-release-candidate-report.raw"}}}
+          ]
+        },
+        "configuration": {
+          "allOf": [
+            {"$ref": "#/$defs/descriptor"},
+            {"properties": {"path": {"const": "rollback-v3-evidence-inputs/stable-default-configuration.raw"}}}
+          ]
+        }
+      }
+    },
+    "snapshotIdentities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze", "base_release_candidate_report", "configuration"],
+      "properties": {
+        "freeze": {"$ref": "#/$defs/snapshotIdentity"},
+        "base_release_candidate_report": {"$ref": "#/$defs/snapshotIdentity"},
+        "configuration": {"$ref": "#/$defs/snapshotIdentity"}
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "capture_status",
+        "qualification_status",
+        "authority",
+        "candidate_id",
+        "configuration_profile",
+        "reconstructed_baseline",
+        "binding_input_snapshots",
+        "snapshot_identities"
+      ],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-rollback-evidence-preparation.v1"},
+        "capture_status": {"const": "captured"},
+        "qualification_status": {"const": "not-run"},
+        "authority": {"const": "raw-static-preparation-only"},
+        "candidate_id": {"$ref": "#/$defs/candidateId"},
+        "configuration_profile": {"const": "stable-default"},
+        "reconstructed_baseline": {"$ref": "#/$defs/reconstructedBaseline"},
+        "binding_input_snapshots": {"$ref": "#/$defs/bindingSnapshots"},
+        "snapshot_identities": {"$ref": "#/$defs/snapshotIdentities"}
+      }
+    },
+    "incompleteMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capture_status", "qualification_status"],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-rollback-evidence-preparation-incomplete.v1"},
+        "capture_status": {"const": "incomplete"},
+        "qualification_status": {"const": "not-run"}
+      }
+    },
+    "completionMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capture_status", "qualification_status", "session_sha256", "session_byte_length"],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-rollback-evidence-preparation-complete.v1"},
+        "capture_status": {"const": "captured"},
+        "qualification_status": {"const": "not-run"},
+        "session_sha256": {"$ref": "#/$defs/sha256"},
+        "session_byte_length": {"type": "integer", "minimum": 1, "maximum": 8388608}
+      }
+    }
+  }
+}

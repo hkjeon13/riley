@@ -1,0 +1,925 @@
+#!/usr/bin/env python3
+"""CPU-only adversarial tests for optimizer raw-evidence replay."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import io
+import json
+import struct
+import sys
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from check_optimization_evidence import (  # noqa: E402
+    BASE_ENVIRONMENT,
+    CHECKSUM_FILE,
+    COMMAND_LOG_FILES,
+    COMMAND_TEST_BINARIES,
+    COMPILE_LOG_FILES,
+    EXPECTED_COMMANDS,
+    EXPECTED_FIXED37_FIXTURE_SHA256,
+    EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+    EXPECTED_TOKENS,
+    FIXED37_PARITY_RE,
+    FIXED37_PRODUCTION_BATCH_GATE_ID,
+    GATE_ID,
+    INPUT_FILES,
+    LOG_FILES,
+    RAW_FILES,
+    RECEIPT_FILE,
+    RECEIPT_VERSION,
+    REPORT_FILE,
+    TEST_BINARIES,
+    TEST_SUBJECTS,
+    OptimizationEvidenceError,
+    _json,
+    load_raw_evidence_archive,
+    produce,
+    replay_raw_evidence,
+)
+import write_optimization_execution_evidence as writer_contract  # noqa: E402
+from release_common import canonical_json_bytes  # noqa: E402
+from test_release import fixture_elf  # noqa: E402
+
+
+REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
+SOURCE_SHA256 = hashlib.sha256(b"source.tar").hexdigest()
+BUILD_IMAGE_ID = "sha256:" + hashlib.sha256(b"builder image").hexdigest()
+
+
+def digest(contents: bytes) -> str:
+    return hashlib.sha256(contents).hexdigest()
+
+
+def executable_fixture_elf() -> bytes:
+    binary = bytearray(fixture_elf())
+    struct.pack_into("<Q", binary, 24, 0x400040)
+    return bytes(binary)
+
+
+SUMMARY = (
+    "test result: ok. {passed} passed; 0 failed; {ignored} ignored; "
+    "0 measured; {filtered} filtered out; finished in 0.01s\n"
+)
+
+
+class Fixture:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.evidence = root / "evidence"
+        self.evidence.mkdir()
+        self.report_path = root / "report.json"
+        self.profile_binary = root / "riley-profile"
+        self.counter = 0
+
+        self.profile_binary.write_bytes(
+            executable_fixture_elf()
+            + b"\0pr15-iteration-command-batch-exact-v1\0per-operation\0iteration-batch\0"
+        )
+        self.profile_binary.chmod(0o755)
+        binary_markers = {
+            "host-runtime-gpu-test": (
+                "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
+                "pr16-command-batch-lifecycle",
+            ),
+            "primitives-gpu-test": (
+                "command_batch_releases_multi_primitive_resource_ledger_after_validation_error",
+                "pr16-command-batch-resource-ledger",
+            ),
+            "llama-batch-gpu-test": (
+                "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
+                "pr15-execution-completion-parity",
+            ),
+            "fixed37-production-batch-gpu-test": (
+                "fixed37_production_batch_growing_prefix_matches_golden_exactly",
+                FIXED37_PRODUCTION_BATCH_GATE_ID,
+                EXPECTED_FIXED37_FIXTURE_SHA256,
+                EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+            ),
+        }
+        for name, markers in binary_markers.items():
+            (self.evidence / name).write_bytes(
+                executable_fixture_elf()
+                + b"\0"
+                + b"\0".join(marker.encode() for marker in markers)
+                + b"\0"
+            )
+
+        self.compile_logs = self._compile_logs()
+        for command_id, name in COMPILE_LOG_FILES.items():
+            (self.evidence / name).write_bytes(self.compile_logs[command_id])
+
+        self.logs = self._logs()
+        for test_id, name in LOG_FILES.items():
+            (self.evidence / name).write_bytes(self.logs[test_id])
+        self.report = self._report()
+        self._write_report()
+        self.receipt = self._receipt()
+        self._write_receipt()
+
+    @staticmethod
+    def _compile_logs() -> dict[str, bytes]:
+        result: dict[str, bytes] = {}
+        for specification in TEST_SUBJECTS.values():
+            executable = (
+                f"{specification['target_dir']}/debug/deps/"
+                f"{specification['cargo_test_target']}-fixture"
+            )
+            events = [
+                {
+                    "reason": "compiler-artifact",
+                    "package_id": f"path+file:///workspace#{specification['package']}@0.1.0",
+                    "manifest_path": f"/workspace/crates/{specification['package']}/Cargo.toml",
+                    "target": {
+                        "kind": ["test"],
+                        "crate_types": ["bin"],
+                        "name": specification["cargo_test_target"],
+                        "src_path": f"/workspace/tests/{specification['cargo_test_target']}.rs",
+                        "edition": "2024",
+                        "doc": False,
+                        "doctest": False,
+                        "test": True,
+                    },
+                    "profile": {"test": True},
+                    "features": ["cuda"],
+                    "filenames": [executable],
+                    "executable": executable,
+                    "fresh": False,
+                },
+                {"reason": "build-finished", "success": True},
+            ]
+            result[specification["compile_command_id"]] = b"".join(
+                (
+                    json.dumps(event, sort_keys=True, separators=(",", ":"))
+                    + "\n"
+                ).encode("utf-8")
+                for event in events
+            )
+        return result
+
+    def _logs(self) -> dict[str, bytes]:
+        compile_log = (
+            "rustc 1.85.0 (fixture)\n"
+            "cargo 1.85.0 (fixture)\n"
+            "Cuda compilation tools, release 12.8, V12.8.93\n"
+            "Finished `release` profile [optimized + debuginfo]\n"
+            "test native_symbols_link_without_device_initialization ... ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=0)
+            + "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
+            "error: failed to run custom build command for `riley-cuda v0.1.0`\n"
+            "Caused by:\n"
+            "  process didn't exit successfully: "
+            "`/tmp/riley-invalid-cuda-target/debug/build/"
+            "riley-cuda-fixture/build-script-build` (exit status: 1)\n"
+            "error: riley-cuda native build failed: "
+            "CUDAToolkit_ROOT=/definitely/missing/riley-cuda is not a directory\n"
+            "artifact=target/release/riley\n"
+            "artifact=target/release/riley-profile\n"
+            "Python-free CUDA production/profile compile, C ABI link, tensor memory, "
+            "version, and dependency smoke passed\n"
+        ).encode()
+        workspace_targets = "".join(
+            "Running unittests "
+            f"src/fixture_{index}.rs (target/debug/deps/fixture-{index})\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=0)
+            for index in range(20)
+        )
+        workspace = (
+            "Finished `test` profile [unoptimized + debuginfo]\n"
+            "test command_batch_proxy_is_one_shot_and_drop_restores_stream_use ... ignored\n"
+            "test command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... ignored\n"
+            "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ... ignored\n"
+            "test fixed37_production_batch_growing_prefix_matches_golden_exactly ... ignored\n"
+            + workspace_targets
+        ).encode()
+        lifecycle = (
+            "Running tests/host_runtime_gpu.rs (target/debug/deps/host_runtime_gpu-fixture)\n"
+            "running 1 test\n"
+            "test command_batch_proxy_is_one_shot_and_drop_restores_stream_use ... "
+            "pr16-command-batch-lifecycle schema_version=1 one_shot_finish=true "
+            "drop_restores_stream=true status=passed\n"
+            "ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=7)
+            + "\n"
+        ).encode()
+        ledger = (
+            "Running tests/primitives_gpu.rs (target/debug/deps/primitives_gpu-fixture)\n"
+            "running 1 test\n"
+            "test command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... "
+            "pr16-command-batch-resource-ledger schema_version=1 "
+            "validation_fail_closed=true queued_chain_raw_byte_mismatches=0 "
+            "cuda_live_allocation_delta=0 stream_reuse_after_finish=true "
+            "owner_close_live_allocation_count=0 status=passed\n"
+            "ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=5)
+            + "\n"
+        ).encode()
+        token_text = ", ".join(str(value) for value in EXPECTED_TOKENS)
+        parity = (
+            "Running tests/llama_batch_gpu.rs (target/debug/deps/llama_batch_gpu-fixture)\n"
+            "running 1 test\n"
+            "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ... "
+            "pr15-execution-completion-parity schema_version=1 decode_steps=16 "
+            "committed_iterations=16 raw_logit_mismatches=0 token_id_mismatches=0 "
+            "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
+            f"generated_token_ids=[{token_text}] status=passed\n"
+            "ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=9)
+            + "\n"
+        ).encode()
+        fixed37 = (
+            "Running tests/llama_batch_gpu.rs (target/debug/deps/llama_batch_gpu-fixture)\n"
+            "running 1 test\n"
+            "test fixed37_production_batch_growing_prefix_matches_golden_exactly ... "
+            f"{FIXED37_PRODUCTION_BATCH_GATE_ID} schema_version=1 "
+            f"fixture_sha256={EXPECTED_FIXED37_FIXTURE_SHA256} "
+            f"generated_token_ids_sha256={EXPECTED_FIXED37_TOKEN_IDS_SHA256} "
+            "cases=31 compared_steps=481 exact_window=16 "
+            "fixed_profile=fixed-contiguous-37-balanced-v1 "
+            "canonical_profile=canonical-v1 residual_rmsnorm=separate "
+            "execution_completion=iteration-batch "
+            "fixed_prefill_raw_logit_mismatches=0 "
+            "fixed_cached_growing_token_id_mismatches=0 "
+            "fixed_cached_growing_cosine_min=0.9979035305495393 "
+            "fixed_cached_growing_max_abs_max=5.852936458587647 "
+            "fixed_cached_growing_mean_abs_max=1.151280319263363 "
+            "fixed_cached_growing_worst_cosine=0.999 "
+            "fixed_cached_growing_worst_max_abs=1.0 "
+            "fixed_cached_growing_worst_mean_abs=0.25 "
+            "fixed_cached_growing_threshold_violations=0 "
+            "fixed_golden_token_id_mismatches=0 "
+            "canonical_golden_token_id_mismatches=0 "
+            "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
+            "status=passed\n"
+            "ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=9)
+            + "\n"
+        ).encode()
+        return {
+            "cuda-compile-only": compile_log,
+            "workspace-all-features-all-targets": workspace,
+            "command-batch-lifecycle": lifecycle,
+            "command-batch-resource-ledger": ledger,
+            "smollm2-multi-step-greedy-exact": parity,
+            "fixed37-production-batch-e0": fixed37,
+        }
+
+    def _report(self) -> dict[str, object]:
+        tests: list[dict[str, object]] = [
+            {
+                "id": "cuda-compile-only",
+                "result": "passed",
+                "log_sha256": digest(self.logs["cuda-compile-only"]),
+            },
+            {
+                "id": "workspace-all-features-all-targets",
+                "result": "passed",
+                "log_sha256": digest(self.logs["workspace-all-features-all-targets"]),
+            },
+            {
+                "id": "command-batch-lifecycle",
+                "result": "passed",
+                "one_shot_finish": True,
+                "drop_restores_stream": True,
+                "log_sha256": digest(self.logs["command-batch-lifecycle"]),
+            },
+            {
+                "id": "command-batch-resource-ledger",
+                "result": "passed",
+                "validation_fail_closed": True,
+                "queued_chain_raw_byte_mismatches": 0,
+                "cuda_live_allocation_delta": 0,
+                "stream_reuse_after_finish": True,
+                "owner_close_live_allocation_count": 0,
+                "log_sha256": digest(self.logs["command-batch-resource-ledger"]),
+            },
+            {
+                "id": "smollm2-multi-step-greedy-exact",
+                "result": "passed",
+                "decode_steps": 16,
+                "committed_iterations": 16,
+                "raw_logit_mismatches": 0,
+                "generated_token_ids": EXPECTED_TOKENS,
+                "token_id_mismatches": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
+                "log_sha256": digest(self.logs["smollm2-multi-step-greedy-exact"]),
+            },
+            {
+                "id": "fixed37-production-batch-e0",
+                "result": "passed",
+                "gate_id": FIXED37_PRODUCTION_BATCH_GATE_ID,
+                "fixture_sha256": EXPECTED_FIXED37_FIXTURE_SHA256,
+                "generated_token_ids_sha256": EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+                "cases": 31,
+                "compared_steps": 481,
+                "exact_window": 16,
+                "fixed_profile": "fixed-contiguous-37-balanced-v1",
+                "canonical_profile": "canonical-v1",
+                "residual_rmsnorm": "separate",
+                "execution_completion": "iteration-batch",
+                "fixed_prefill_raw_logit_mismatches": 0,
+                "fixed_cached_growing_token_id_mismatches": 0,
+                "fixed_cached_growing_cosine_min": 0.997_903_530_549_539_3,
+                "fixed_cached_growing_max_abs_max": 5.852_936_458_587_647,
+                "fixed_cached_growing_mean_abs_max": 1.151_280_319_263_363,
+                "fixed_cached_growing_worst_cosine": 0.999,
+                "fixed_cached_growing_worst_max_abs": 1.0,
+                "fixed_cached_growing_worst_mean_abs": 0.25,
+                "fixed_cached_growing_threshold_violations": 0,
+                "fixed_golden_token_id_mismatches": 0,
+                "canonical_golden_token_id_mismatches": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
+                "compile_command_id": "compile-fixed37-production-batch-e0",
+                "execute_command_id": "fixed37-production-batch-e0",
+                "compile_log_sha256": digest(
+                    self.compile_logs["compile-fixed37-production-batch-e0"]
+                ),
+                "test_binary_sha256": digest(
+                    (self.evidence / "fixed37-production-batch-gpu-test").read_bytes()
+                ),
+                "log_sha256": digest(self.logs["fixed37-production-batch-e0"]),
+            },
+        ]
+        return {
+            "schema_version": 1,
+            "gate_id": GATE_ID,
+            "recorded_at_utc": "2026-08-26T00:00:00Z",
+            "status": "passed",
+            "semantic_class": "E0",
+            "source": {
+                "git_commit": REVISION,
+                "git_dirty": False,
+                "archive_sha256": SOURCE_SHA256,
+            },
+            "build": {
+                "container_image_sha256": BUILD_IMAGE_ID.removeprefix("sha256:"),
+                "network": "none",
+                "cargo_locked": True,
+                "cargo_offline": True,
+                "rustc": "1.85.0",
+                "cuda_toolkit": "12.8.93",
+                "cuda_architecture": "89",
+            },
+            "gpu": {
+                "model": "NVIDIA GeForce RTX 4090",
+                "uuid": "GPU-fixture",
+                "pci_bus_id": "00000000:01:00.0",
+                "compute_capability": "8.9",
+                "vram_mib": 24564,
+                "driver_version": "580.173.02",
+            },
+            "model": {
+                "model_id": "HuggingFaceTB/SmolLM2-135M",
+                "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+                "dtype": "bf16",
+                "manifest_sha256": hashlib.sha256(b"manifest").hexdigest(),
+                "weights_sha256": hashlib.sha256(b"weights").hexdigest(),
+                "tokenizer_sha256": hashlib.sha256(b"tokenizer").hexdigest(),
+            },
+            "implementations": {
+                "baseline": "per-operation",
+                "candidate": "iteration-batch",
+                "residual_rmsnorm": "separate",
+                "rollback": "--execution-completion per-operation",
+            },
+            "tests": tests,
+        }
+
+    def _receipt(self) -> dict[str, object]:
+        commands = []
+        for command_id, argv in EXPECTED_COMMANDS.items():
+            environment = dict(BASE_ENVIRONMENT)
+            if command_id in {
+                "smollm2-multi-step-greedy-exact",
+                "fixed37-production-batch-e0",
+            }:
+                environment["RILEY_REAL_CHECKPOINT"] = "/model"
+            commands.append(
+                {
+                    "id": command_id,
+                    "argv": list(argv),
+                    "environment": environment,
+                    "exit_code": 0,
+                    "log": COMMAND_LOG_FILES[command_id],
+                    "test_binary": COMMAND_TEST_BINARIES[command_id],
+                }
+            )
+        return {
+            "schema_version": RECEIPT_VERSION,
+            "status": "completed",
+            "source": copy.deepcopy(self.report["source"]),
+            "build": copy.deepcopy(self.report["build"]),
+            "gpu": copy.deepcopy(self.report["gpu"]),
+            "model": copy.deepcopy(self.report["model"]),
+            "profile_binary_sha256": digest(self.profile_binary.read_bytes()),
+            "subjects": {
+                name: {
+                    "sha256": digest((self.evidence / name).read_bytes()),
+                    "size": (self.evidence / name).stat().st_size,
+                    "cargo_test_target": TEST_SUBJECTS[name][
+                        "cargo_test_target"
+                    ],
+                    "cargo_executable_path": (
+                        f"{TEST_SUBJECTS[name]['target_dir']}/debug/deps/"
+                        f"{TEST_SUBJECTS[name]['cargo_test_target']}-fixture"
+                    ),
+                    "cargo_executable_sha256": digest(
+                        (self.evidence / name).read_bytes()
+                    ),
+                    "copied_executable_path": f"/evidence/{name}",
+                    "compile_command_id": TEST_SUBJECTS[name][
+                        "compile_command_id"
+                    ],
+                    "execute_command_id": TEST_SUBJECTS[name][
+                        "execute_command_id"
+                    ],
+                }
+                for name in TEST_SUBJECTS
+            },
+            "commands": commands,
+        }
+
+    def _write_report(self) -> None:
+        self.report_path.write_bytes(canonical_json_bytes(self.report))
+
+    def _write_receipt(self) -> None:
+        (self.evidence / RECEIPT_FILE).write_bytes(canonical_json_bytes(self.receipt))
+
+    def refresh_log(self, test_id: str, contents: bytes) -> None:
+        self.logs[test_id] = contents
+        (self.evidence / LOG_FILES[test_id]).write_bytes(contents)
+        for test in self.report["tests"]:  # type: ignore[index]
+            if test["id"] == test_id:
+                test["log_sha256"] = digest(contents)
+        self._write_report()
+
+    def produce(self) -> tuple[dict[str, object], Path]:
+        self.counter += 1
+        raw = self.root / f"raw-{self.counter}.tar"
+        result = produce(
+            self.evidence,
+            report=self.report_path,
+            source_revision=REVISION,
+            source_archive_sha256=SOURCE_SHA256,
+            build_image_id=BUILD_IMAGE_ID,
+            profile_binary=self.profile_binary,
+            raw_evidence=raw,
+        )
+        return result, raw
+
+    def replay(self, raw: Path, **overrides: object) -> dict[str, object]:
+        arguments: dict[str, object] = {
+            "report": self.report_path,
+            "source_revision": REVISION,
+            "source_archive_sha256": SOURCE_SHA256,
+            "build_image_id": BUILD_IMAGE_ID,
+            "profile_binary": self.profile_binary,
+        }
+        arguments.update(overrides)
+        return replay_raw_evidence(raw, **arguments)  # type: ignore[arg-type]
+
+
+class OptimizationEvidenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.fixture = Fixture(Path(self.temporary.name))
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_valid_evidence_is_deterministic_and_replays(self) -> None:
+        first, first_raw = self.fixture.produce()
+        second, second_raw = self.fixture.produce()
+        self.assertEqual(first, second)
+        self.assertEqual(first_raw.read_bytes(), second_raw.read_bytes())
+        self.assertEqual(self.fixture.replay(first_raw), first)
+        files, raw_sha = load_raw_evidence_archive(first_raw)
+        self.assertEqual(set(files), RAW_FILES)
+        self.assertEqual(raw_sha, digest(first_raw.read_bytes()))
+        self.assertEqual(first["profile_binary_sha256"], digest(self.fixture.profile_binary.read_bytes()))
+
+    def test_writer_and_replay_contracts_match(self) -> None:
+        self.assertEqual(RECEIPT_VERSION, writer_contract.RECEIPT_VERSION)
+        self.assertEqual(COMPILE_LOG_FILES, writer_contract.COMPILE_LOG_FILES)
+        self.assertEqual(TEST_SUBJECTS, writer_contract.TEST_SUBJECTS)
+        self.assertEqual(BASE_ENVIRONMENT, writer_contract.BASE_ENVIRONMENT)
+        observed = {
+            command_id: {
+                "argv": argv,
+                "log": COMMAND_LOG_FILES[command_id],
+                "test_binary": COMMAND_TEST_BINARIES[command_id],
+            }
+            for command_id, argv in EXPECTED_COMMANDS.items()
+        }
+        self.assertEqual(observed, writer_contract.EXPECTED_COMMANDS)
+        self.assertEqual(list(EXPECTED_COMMANDS), writer_contract.COMMAND_ORDER)
+
+    def test_overflowing_json_float_is_rejected(self) -> None:
+        with self.assertRaisesRegex(OptimizationEvidenceError, "non-finite"):
+            _json(b'{"value":1e309}', "fixture")
+
+    def test_utf16_json_is_rejected(self) -> None:
+        with self.assertRaisesRegex(OptimizationEvidenceError, "strict UTF-8"):
+            _json('{"value":1}'.encode("utf-16"), "fixture")
+
+    def test_empty_synthetic_logs_are_rejected(self) -> None:
+        self.fixture.refresh_log("command-batch-lifecycle", b"\n")
+        with self.assertRaisesRegex(OptimizationEvidenceError, "marker|Cargo test summary"):
+            self.fixture.produce()
+
+    def test_missing_semantic_marker_is_rejected_even_when_hash_matches(self) -> None:
+        contents = self.fixture.logs["command-batch-resource-ledger"].replace(
+            b"validation_fail_closed=true", b"validation_fail_closed=false"
+        )
+        self.fixture.refresh_log("command-batch-resource-ledger", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "must contain exactly one"):
+            self.fixture.produce()
+
+    def test_parity_mismatch_is_derived_from_raw_log(self) -> None:
+        contents = self.fixture.logs["smollm2-multi-step-greedy-exact"].replace(
+            b"raw_logit_mismatches=0", b"raw_logit_mismatches=1"
+        )
+        self.fixture.refresh_log("smollm2-multi-step-greedy-exact", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed E0 result"):
+            self.fixture.produce()
+
+    def test_fixed37_marker_fields_are_derived_from_raw_log(self) -> None:
+        original = self.fixture.logs["fixed37-production-batch-e0"]
+        mutations = (
+            (b"fixture_sha256=8733", b"fixture_sha256=9733"),
+            (b"generated_token_ids_sha256=9e38", b"generated_token_ids_sha256=8e38"),
+            (b"cases=31", b"cases=30"),
+            (b"compared_steps=481", b"compared_steps=480"),
+            (b"exact_window=16", b"exact_window=15"),
+            (
+                b"fixed_profile=fixed-contiguous-37-balanced-v1",
+                b"fixed_profile=canonical-v1",
+            ),
+            (b"canonical_profile=canonical-v1", b"canonical_profile=unreviewed-v1"),
+            (b"residual_rmsnorm=separate", b"residual_rmsnorm=fused"),
+            (b"execution_completion=iteration-batch", b"execution_completion=per-operation"),
+            (
+                b"fixed_prefill_raw_logit_mismatches=0",
+                b"fixed_prefill_raw_logit_mismatches=1",
+            ),
+            (
+                b"fixed_cached_growing_token_id_mismatches=0",
+                b"fixed_cached_growing_token_id_mismatches=1",
+            ),
+            (
+                b"fixed_cached_growing_cosine_min=0.9979035305495393",
+                b"fixed_cached_growing_cosine_min=0.997",
+            ),
+            (
+                b"fixed_cached_growing_worst_cosine=0.999",
+                b"fixed_cached_growing_worst_cosine=0.900",
+            ),
+            (
+                b"fixed_cached_growing_threshold_violations=0",
+                b"fixed_cached_growing_threshold_violations=1",
+            ),
+            (
+                b"fixed_golden_token_id_mismatches=0",
+                b"fixed_golden_token_id_mismatches=1",
+            ),
+            (
+                b"canonical_golden_token_id_mismatches=0",
+                b"canonical_golden_token_id_mismatches=1",
+            ),
+            (b"cuda_live_allocation_delta=0", b"cuda_live_allocation_delta=1"),
+            (
+                b"owner_close_live_allocation_count=0",
+                b"owner_close_live_allocation_count=1",
+            ),
+        )
+        for old, new in mutations:
+            with self.subTest(field=old.decode().split("=")[0]):
+                changed = original.replace(old, new, 1)
+                self.assertNotEqual(changed, original)
+                self.fixture.refresh_log("fixed37-production-batch-e0", changed)
+                with self.assertRaisesRegex(
+                    OptimizationEvidenceError,
+                    "closed fixed37 production-batch marker|reviewed production-batch E0 result|immutable E0 bounds",
+                ):
+                    self.fixture.produce()
+                self.fixture.refresh_log("fixed37-production-batch-e0", original)
+
+    def test_fixed37_marker_must_occur_once(self) -> None:
+        original = self.fixture.logs["fixed37-production-batch-e0"]
+        marker = FIXED37_PARITY_RE.search(original.decode("utf-8"))
+        self.assertIsNotNone(marker)
+        self.fixture.refresh_log(
+            "fixed37-production-batch-e0",
+            original + marker.group(0).encode("utf-8") + b"\n",
+        )
+        with self.assertRaisesRegex(
+            OptimizationEvidenceError, "one closed fixed37 production-batch marker"
+        ):
+            self.fixture.produce()
+
+    def test_exact_llama_batch_filtered_count_is_nine(self) -> None:
+        for test_id in (
+            "smollm2-multi-step-greedy-exact",
+            "fixed37-production-batch-e0",
+        ):
+            with self.subTest(test_id=test_id):
+                original = self.fixture.logs[test_id]
+                changed = original.replace(b"9 filtered out", b"6 filtered out", 1)
+                self.assertNotEqual(changed, original)
+                self.fixture.refresh_log(test_id, changed)
+                with self.assertRaisesRegex(
+                    OptimizationEvidenceError, "exact passing libtest summary"
+                ):
+                    self.fixture.produce()
+                self.fixture.refresh_log(test_id, original)
+
+    def test_failed_workspace_summary_is_rejected(self) -> None:
+        contents = self.fixture.logs["workspace-all-features-all-targets"].replace(
+            b"0 failed", b"1 failed", 1
+        )
+        self.fixture.refresh_log("workspace-all-features-all-targets", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "failed Cargo test summary"):
+            self.fixture.produce()
+
+    def test_workspace_requires_distinct_test_target_headings(self) -> None:
+        contents = self.fixture.logs["workspace-all-features-all-targets"]
+        for index in range(1, 20):
+            contents = contents.replace(
+                f"src/fixture_{index}.rs (target/debug/deps/fixture-{index})".encode(),
+                b"src/fixture_0.rs (target/debug/deps/fixture-0)",
+            )
+        self.fixture.refresh_log("workspace-all-features-all-targets", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "distinct Cargo"):
+            self.fixture.produce()
+
+    def test_failure_marker_after_exact_test_is_rejected(self) -> None:
+        contents = self.fixture.logs["command-batch-lifecycle"] + b"error: test failed\n"
+        self.fixture.refresh_log("command-batch-lifecycle", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "failing test-run marker"):
+            self.fixture.produce()
+
+    def test_exact_gpu_log_requires_libtest_terminal_blank_line(self) -> None:
+        contents = self.fixture.logs["command-batch-lifecycle"].removesuffix(b"\n")
+        self.fixture.refresh_log("command-batch-lifecycle", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "does not end"):
+            self.fixture.produce()
+
+    def test_compile_log_allows_only_the_one_expected_negative_process(self) -> None:
+        contents = (
+            self.fixture.logs["cuda-compile-only"]
+            + b"process didn't exit successfully: unrelated command\n"
+        )
+        self.fixture.refresh_log("cuda-compile-only", contents)
+        with self.assertRaisesRegex(
+            OptimizationEvidenceError,
+            "unexpected count of Cargo process-failure markers",
+        ):
+            self.fixture.produce()
+
+    def test_test_binary_bytes_must_match_subject_receipt(self) -> None:
+        path = self.fixture.evidence / "host-runtime-gpu-test"
+        path.write_bytes(path.read_bytes() + b"tamper")
+        with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
+    def test_subject_provenance_must_bind_compile_and_execute_commands(self) -> None:
+        subject = self.fixture.receipt["subjects"]["host-runtime-gpu-test"]  # type: ignore[index]
+        subject["execute_command_id"] = "command-batch-resource-ledger"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
+    def test_fixed37_subject_provenance_is_not_interchangeable(self) -> None:
+        subject = self.fixture.receipt["subjects"][  # type: ignore[index]
+            "fixed37-production-batch-gpu-test"
+        ]
+        subject["compile_command_id"] = "compile-smollm2-multi-step-greedy-exact"
+        subject["execute_command_id"] = "smollm2-multi-step-greedy-exact"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
+    def test_compile_log_must_bind_one_fresh_cargo_executable(self) -> None:
+        command_id = "compile-command-batch-lifecycle"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        contents = path.read_bytes().replace(
+            b"host_runtime_gpu-fixture", b"host_runtime_gpu-substitute", 1
+        )
+        path.write_bytes(contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "compiler-artifact"):
+            self.fixture.produce()
+
+    def test_fixed37_compile_log_must_bind_its_separate_fresh_executable(self) -> None:
+        command_id = "compile-fixed37-production-batch-e0"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        contents = path.read_bytes().replace(
+            b"fixed37-production-batch-e0/debug/deps/llama_batch_gpu-fixture",
+            b"iteration-parity/debug/deps/llama_batch_gpu-fixture",
+        )
+        self.assertNotEqual(contents, path.read_bytes())
+        path.write_bytes(contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "compiler-artifact"):
+            self.fixture.produce()
+
+    def test_compile_log_failure_after_artifact_is_rejected(self) -> None:
+        command_id = "compile-command-batch-resource-ledger"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        path.write_bytes(path.read_bytes() + b"error: could not compile fixture\n")
+        with self.assertRaisesRegex(OptimizationEvidenceError, "failing Cargo marker"):
+            self.fixture.produce()
+
+    def test_test_binary_must_be_elf_with_embedded_test_marker(self) -> None:
+        path = self.fixture.evidence / "host-runtime-gpu-test"
+        path.write_bytes(b"not an ELF but has command_batch_proxy_is_one_shot_and_drop_restores_stream_use")
+        self.fixture.receipt = self.fixture._receipt()
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "valid Linux x86_64"):
+            self.fixture.produce()
+
+    def test_fixed37_binary_must_embed_test_gate_and_fixture_markers(self) -> None:
+        path = self.fixture.evidence / "fixed37-production-batch-gpu-test"
+        path.write_bytes(
+            path.read_bytes().replace(
+                b"fixed37_production_batch_growing_prefix_matches_golden_exactly",
+                b"fixed37_production_batch_growing_prefix_matches_unreviewed",
+            )
+        )
+        self.fixture.report = self.fixture._report()
+        self.fixture._write_report()
+        self.fixture.receipt = self.fixture._receipt()
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed test marker"):
+            self.fixture.produce()
+
+    def test_profile_binary_substitution_is_rejected(self) -> None:
+        _, raw = self.fixture.produce()
+        substitute = self.fixture.root / "substitute"
+        substitute.write_bytes(
+            executable_fixture_elf()
+            + b"\0pr15-iteration-command-batch-exact-v1\0per-operation\0iteration-batch\0substitute"
+        )
+        with self.assertRaisesRegex(OptimizationEvidenceError, "profile binary differs"):
+            self.fixture.replay(raw, profile_binary=substitute)
+
+    def test_command_exit_receipt_must_be_zero(self) -> None:
+        self.fixture.receipt["commands"][2]["exit_code"] = 1  # type: ignore[index]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_command_argv_receipt_is_closed(self) -> None:
+        self.fixture.receipt["commands"][0]["argv"] = ["true"]  # type: ignore[index]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_command_toolchain_environment_is_exact(self) -> None:
+        commands = self.fixture.receipt["commands"]  # type: ignore[assignment]
+        commands[1]["environment"]["RUSTUP_TOOLCHAIN"] = (
+            "stable-x86_64-unknown-linux-gnu"
+        )
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_direct_execution_receipt_names_copied_elf(self) -> None:
+        command = next(
+            row
+            for row in self.fixture.receipt["commands"]  # type: ignore[index]
+            if row["id"] == "command-batch-lifecycle"
+        )
+        command["argv"][0] = "cargo"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_fixed37_direct_execution_receipt_is_exact(self) -> None:
+        command = next(
+            row
+            for row in self.fixture.receipt["commands"]  # type: ignore[index]
+            if row["id"] == "fixed37-production-batch-e0"
+        )
+        command["argv"][1] = "unreviewed_test"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_command_order_is_closed(self) -> None:
+        commands = self.fixture.receipt["commands"]  # type: ignore[index]
+        commands[0], commands[1] = commands[1], commands[0]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "execution order"):
+            self.fixture.produce()
+
+    def test_zero_entry_test_binary_is_rejected(self) -> None:
+        path = self.fixture.evidence / "host-runtime-gpu-test"
+        path.write_bytes(
+            fixture_elf()
+            + b"\0command_batch_proxy_is_one_shot_and_drop_restores_stream_use"
+            + b"\0pr16-command-batch-lifecycle\0"
+        )
+        self.fixture.receipt = self.fixture._receipt()
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "executable Linux x86-64"):
+            self.fixture.produce()
+
+    def test_source_and_build_image_are_external_bindings(self) -> None:
+        _, raw = self.fixture.produce()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "source"):
+            self.fixture.replay(raw, source_archive_sha256="f" * 64)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "build image"):
+            self.fixture.replay(raw, build_image_id="sha256:" + "e" * 64)
+
+    def test_raw_payload_tampering_breaks_internal_checksums(self) -> None:
+        _, raw = self.fixture.produce()
+        contents = raw.read_bytes()
+        marker = b"one_shot_finish=true"
+        self.assertIn(marker, contents)
+        raw.write_bytes(contents.replace(marker, b"one_shot_finish=fals", 1))
+        with self.assertRaisesRegex(OptimizationEvidenceError, "digest mismatch"):
+            self.fixture.replay(raw)
+
+    def test_trailing_tar_record_is_rejected(self) -> None:
+        _, raw = self.fixture.produce()
+        raw.write_bytes(raw.read_bytes() + b"\0" * 10240)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "end-of-archive padding"):
+            load_raw_evidence_archive(raw)
+
+    def test_noncanonical_metadata_is_rejected(self) -> None:
+        _, raw = self.fixture.produce()
+        files, _ = load_raw_evidence_archive(raw)
+        changed = self.fixture.root / "changed.tar"
+        with tarfile.open(changed, "w", format=tarfile.USTAR_FORMAT) as archive:
+            for name in sorted(files):
+                member = tarfile.TarInfo(name)
+                member.size = len(files[name])
+                member.mode = 0o755 if name in TEST_BINARIES.values() else 0o644
+                member.uid = 1
+                member.gid = 0
+                member.uname = "root"
+                member.gname = "root"
+                member.mtime = 0
+                archive.addfile(member, io.BytesIO(files[name]))
+        with self.assertRaisesRegex(OptimizationEvidenceError, "non-canonical metadata"):
+            load_raw_evidence_archive(changed)
+
+    def test_evidence_directory_rejects_extra_and_symlink(self) -> None:
+        (self.fixture.evidence / "extra").write_text("pass")
+        with self.assertRaisesRegex(OptimizationEvidenceError, "closed input inventory"):
+            self.fixture.produce()
+        (self.fixture.evidence / "extra").unlink()
+        target = self.fixture.evidence / RECEIPT_FILE
+        target.unlink()
+        target.symlink_to(LOG_FILES["cuda-compile-only"])
+        with self.assertRaisesRegex(OptimizationEvidenceError, "regular file"):
+            self.fixture.produce()
+
+    def test_fixed37_log_is_a_required_closed_input(self) -> None:
+        (self.fixture.evidence / LOG_FILES["fixed37-production-batch-e0"]).unlink()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "closed input inventory"):
+            self.fixture.produce()
+
+    def test_submitted_report_must_equal_embedded_canonical_report(self) -> None:
+        _, raw = self.fixture.produce()
+        self.fixture.report["recorded_at_utc"] = "2026-08-26T00:00:01Z"
+        self.fixture._write_report()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "exact submitted report"):
+            self.fixture.replay(raw)
+
+
+class RemoteOptimizationRunnerStaticTests(unittest.TestCase):
+    def test_host_packaging_uses_clean_python_310_compatibility_runner(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        contents = (root / "ci/run_remote_optimization_evidence.sh").read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "run_release_python() {",
+            "PATH=/usr/bin:/bin",
+            "PYTHONHASHSEED=0",
+            "PYTHONNOUSERSITE=1",
+            "PYTHONDONTWRITEBYTECODE=1",
+            '"${repository_root}/ci/release/run_release_python.py"',
+            'run_release_python "${repository_root}/ci/release/'
+            'write_optimization_execution_evidence.py"',
+            'run_release_python "${repository_root}/ci/release/'
+            'check_optimization_evidence.py"',
+        ):
+            self.assertIn(marker, contents)
+        self.assertNotIn(
+            '/usr/bin/python3 "${repository_root}/ci/release/'
+            'check_optimization_evidence.py"',
+            contents,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

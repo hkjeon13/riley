@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-runtime-assembly-capture-v1.schema.json",
+  "title": "Reconstructed runtime assembly capture v1",
+  "description": "A source-only, per-arm structural binding for a pre-existing raw USTAR runtime-image build capture. The Python verifier replays held reviewed source, PR16 reproducibility and OCI input roots, validates the static source-free recipe, canonical context, closed build invocation, raw image/OCI equality, and a never-started container filesystem against the selected bundle. This is not an A/B-independence, runtime execution, GPU, rollback, freeze, historical-distribution, or qualification receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "capture_scope",
+    "baseline_id",
+    "reconstruction_id",
+    "platform",
+    "source_inputs",
+    "reproducibility_inputs",
+    "runtime_oci_inputs",
+    "assembly_recipe",
+    "capture",
+    "binding_status",
+    "not_established"
+  ],
+  "properties": {
+    "schema_version": { "const": "riley.reconstructed-runtime-assembly-capture.v1" },
+    "status": { "const": "bound" },
+    "qualification_status": { "const": "not-run" },
+    "authority": { "const": "raw-runtime-assembly-capture-structural-only" },
+    "capture_scope": { "const": "single-arm-source-free-runtime-assembly-and-never-started-container-capture" },
+    "baseline_id": { "const": "reconstructed-riley-0.1.0-rc2" },
+    "reconstruction_id": { "enum": ["a", "b"] },
+    "platform": { "$ref": "#/$defs/platform" },
+    "source_inputs": { "$ref": "#/$defs/sourceInputs" },
+    "reproducibility_inputs": { "$ref": "#/$defs/reproInputs" },
+    "runtime_oci_inputs": { "$ref": "#/$defs/runtimeOciInputs" },
+    "assembly_recipe": { "$ref": "#/$defs/assemblyRecipe" },
+    "capture": { "$ref": "#/$defs/capture" },
+    "binding_status": { "$ref": "#/$defs/bindingStatus" },
+    "not_established": { "$ref": "#/$defs/notEstablished" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "imageId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+    },
+    "gitSha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "not": { "const": "0000000000000000000000000000000000000000" }
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 137438953472 }
+      }
+    },
+    "captureMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "byte_length"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 0, "maximum": 137438953472 }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": { "os": { "const": "linux" }, "architecture": { "const": "amd64" } }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag_name", "tag_object", "tag_target", "archive"],
+      "properties": {
+        "tag_name": { "const": "riley-0.1.0-rc2" },
+        "tag_object": { "$ref": "#/$defs/descriptor" },
+        "tag_target": { "$ref": "#/$defs/descriptor" },
+        "archive": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag_ref", "tag_object_sha1", "target_commit_sha1"],
+      "properties": {
+        "tag_ref": { "const": "refs/tags/riley-0.1.0-rc2" },
+        "tag_object_sha1": { "const": "a3f5203c3a72122e9da818c1e441c2a789f7aa8c" },
+        "target_commit_sha1": { "$ref": "#/$defs/gitSha1" }
+      }
+    },
+    "sourceInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "expected_source_archive_sha256", "git_identity", "source"],
+      "properties": {
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "expected_source_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "git_identity": { "$ref": "#/$defs/gitIdentity" },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "reproducibilityContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "gate_id", "source_revision", "source_date_epoch", "build_image_id", "platform", "network", "independent_clean_containers"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "gate_id": { "const": "pr16-release-build-reproducibility-v1" },
+        "source_revision": { "$ref": "#/$defs/gitSha1" },
+        "source_date_epoch": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "build_image_id": { "$ref": "#/$defs/imageId" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "network": { "const": "none" },
+        "independent_clean_containers": { "const": 2 }
+      }
+    },
+    "selectedBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconstruction_id", "evidence_build_id", "binary", "bundle"],
+      "properties": {
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "evidence_build_id": { "enum": ["A", "B"] },
+        "binary": { "$ref": "#/$defs/descriptor" },
+        "bundle": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "reproInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "reproducibility_contract", "selected_build"],
+      "properties": {
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "reproducibility_contract": { "$ref": "#/$defs/reproducibilityContract" },
+        "selected_build": { "$ref": "#/$defs/selectedBuild" }
+      }
+    },
+    "runtimeOciInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "reconstruction_id", "image_id", "image_inspect", "archive", "layout", "index", "manifest", "config"],
+      "properties": {
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "image_id": { "$ref": "#/$defs/imageId" },
+        "image_inspect": { "$ref": "#/$defs/descriptor" },
+        "archive": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "byte_length": { "maximum": 8589934591 } } }
+          ]
+        },
+        "layout": { "$ref": "#/$defs/descriptor" },
+        "index": { "$ref": "#/$defs/descriptor" },
+        "manifest": { "$ref": "#/$defs/descriptor" },
+        "config": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "assemblyRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normalized_instructions_sha256", "pinned_runtime"],
+      "properties": {
+        "normalized_instructions_sha256": { "const": "d80d657db557f9af62734aebef3527fcf46a0227de1f9ac1cacbbf0c70751114" },
+        "pinned_runtime": { "const": "nvidia/cuda:12.8.1-runtime-ubuntu22.04@sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd" }
+      }
+    },
+    "captureMembers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["SHA256SUMS", "build.iid", "build.log", "capture-completion.json", "capture-invocation.json", "container-inspect.json", "container-opt-riley.tar", "context.tar", "image-inspect.json", "oci-export-invocation.json", "oci-image-layout.tar"],
+      "properties": {
+        "SHA256SUMS": { "$ref": "#/$defs/captureMember" },
+        "build.iid": { "$ref": "#/$defs/captureMember" },
+        "build.log": { "$ref": "#/$defs/captureMember" },
+        "capture-completion.json": { "$ref": "#/$defs/captureMember" },
+        "capture-invocation.json": { "$ref": "#/$defs/captureMember" },
+        "container-inspect.json": { "$ref": "#/$defs/captureMember" },
+        "container-opt-riley.tar": {
+          "allOf": [
+            { "$ref": "#/$defs/captureMember" },
+            { "properties": { "byte_length": { "maximum": 2147483648 } } }
+          ]
+        },
+        "context.tar": {
+          "allOf": [
+            { "$ref": "#/$defs/captureMember" },
+            { "properties": { "byte_length": { "maximum": 3221225472 } } }
+          ]
+        },
+        "image-inspect.json": { "$ref": "#/$defs/captureMember" },
+        "oci-export-invocation.json": { "$ref": "#/$defs/captureMember" },
+        "oci-image-layout.tar": {
+          "allOf": [
+            { "$ref": "#/$defs/captureMember" },
+            { "properties": { "byte_length": { "maximum": 8589934591 } } }
+          ]
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dockerfile_normalized_instructions_sha256", "binary", "bundle"],
+      "properties": {
+        "dockerfile_normalized_instructions_sha256": { "const": "d80d657db557f9af62734aebef3527fcf46a0227de1f9ac1cacbbf0c70751114" },
+        "binary": { "$ref": "#/$defs/captureMember" },
+        "bundle": { "$ref": "#/$defs/captureMember" }
+      }
+    },
+    "runtimeTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "entry_count", "byte_length"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "entry_count": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 1073741824 }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "members", "context", "image_id", "container_id", "runtime_tree"],
+      "properties": {
+        "archive": {
+          "allOf": [
+            { "$ref": "#/$defs/descriptor" },
+            { "properties": { "path": { "const": "runtime-assembly-capture/assembly-capture.tar" }, "byte_length": { "maximum": 14025769984 } } }
+          ]
+        },
+        "members": { "$ref": "#/$defs/captureMembers" },
+        "context": { "$ref": "#/$defs/context" },
+        "image_id": { "$ref": "#/$defs/imageId" },
+        "container_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" }
+        },
+        "runtime_tree": { "$ref": "#/$defs/runtimeTree" }
+      }
+    },
+    "bindingStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_inputs", "reproducibility_inputs", "assembly_recipe", "canonical_context", "runtime_build_invocation", "runtime_oci_content", "created_container_filesystem"],
+      "properties": {
+        "source_inputs": { "const": "replayed-reviewed-rc2-source-inputs-v1" },
+        "reproducibility_inputs": { "const": "replayed-pr16-release-build-reproducibility-v1" },
+        "assembly_recipe": { "const": "validated-static-source-free-recipe-v1" },
+        "canonical_context": { "const": "validated" },
+        "runtime_build_invocation": { "const": "raw-record-structurally-validated-v1" },
+        "runtime_oci_content": { "const": "validated-via-runtime-oci-inputs-v1" },
+        "created_container_filesystem": { "const": "raw-record-structurally-validated-never-started-v1" }
+      }
+    },
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_build_execution", "container_filesystem_capture_provenance", "bundle_to_runtime_image", "source_to_runtime_image", "runtime_capture_independence", "a_b_runtime_image_equality", "rollback", "freeze", "qualification", "service_execution", "gpu_execution", "historical_distribution"],
+      "properties": {
+        "runtime_build_execution": { "const": "not-established" },
+        "container_filesystem_capture_provenance": { "const": "not-established" },
+        "bundle_to_runtime_image": { "const": "not-established" },
+        "source_to_runtime_image": { "const": "not-established" },
+        "runtime_capture_independence": { "const": "not-established" },
+        "a_b_runtime_image_equality": { "const": "not-established" },
+        "rollback": { "const": "not-established" },
+        "freeze": { "const": "not-established" },
+        "qualification": { "const": "not-run" },
+        "service_execution": { "const": "not-run" },
+        "gpu_execution": { "const": "not-run" },
+        "historical_distribution": { "const": "not-attested" }
+      }
+    }
+  }
+}

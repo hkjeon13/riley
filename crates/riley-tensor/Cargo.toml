@@ -1,0 +1,22 @@
+[package]
+name = "riley-tensor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Tensor metadata boundary for Riley"
+readme = "README.md"
+
+[features]
+default = []
+cuda = ["dep:riley-cuda", "riley-cuda/cuda"]
+
+[dependencies]
+riley-core = { path = "../riley-core" }
+riley-cuda = { path = "../riley-cuda", optional = true }
+
+[lints]
+workspace = true

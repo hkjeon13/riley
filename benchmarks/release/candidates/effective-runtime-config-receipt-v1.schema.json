@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/effective-runtime-config-receipt-v1.schema.json",
+  "title": "Riley effective runtime configuration receipt v1",
+  "description": "Closed C02 contract for canonical /v1/config payloads, their create-only startup artifacts, and a CPU-only dual-arm verification report. Raw endpoint/startup evidence contains only launch-time candidate/profile/configuration identity and effective runtime facts, so a frozen candidate can publish it after cold prepare before the future Gate E report exists. The post-capture semantic report alone binds the frozen-manifest and Gate E decision hashes. The effective_config object has exactly the ten C02 dimensions; every value is effective after CLI/default resolution, never merely requested input. Stable-default is the promotion profile, but max-performance-exact evidence is separately mandatory and replayed.",
+  "oneOf": [
+    { "$ref": "#/$defs/endpointPayload" },
+    { "$ref": "#/$defs/startupArtifact" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "implementationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "runtimeConfigIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "configuration_profile": { "enum": ["stable-default", "max-performance-exact"] },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "batchShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "buckets"],
+      "properties": {
+        "policy": { "enum": ["fixed-max", "power-of-two"] },
+        "buckets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "attentionBackend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefill", "decode"],
+      "properties": {
+        "prefill": { "$ref": "#/$defs/implementationId" },
+        "decode": { "$ref": "#/$defs/implementationId" }
+      }
+    },
+    "experimentalFlags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 1024,
+        "pattern": "^[^\\r\\n]*$"
+      },
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      }
+    },
+    "fallbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cross_profile_fallback", "runtime_selection"],
+      "properties": {
+        "cross_profile_fallback": { "const": "forbidden" },
+        "runtime_selection": { "enum": ["exact-fallback-allowed", "fail-closed"] }
+      }
+    },
+    "kvGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "block_tokens", "physical_blocks"],
+      "properties": {
+        "layout": { "enum": ["contiguous", "paged"] },
+        "block_tokens": { "type": "integer", "minimum": 1 },
+        "physical_blocks": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "effectiveConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_completion_mode",
+        "batch_shape",
+        "metadata_transport",
+        "sampling_backend",
+        "attention_backend",
+        "gemm_reduction_policy",
+        "experimental_flags",
+        "fallback_policy",
+        "batch_token_budget",
+        "kv_geometry"
+      ],
+      "properties": {
+        "execution_completion_mode": { "enum": ["per-operation", "iteration-batch"] },
+        "batch_shape": { "$ref": "#/$defs/batchShape" },
+        "metadata_transport": { "enum": ["synchronous", "packed-async"] },
+        "sampling_backend": { "enum": ["cpu", "gpu-greedy"] },
+        "attention_backend": { "$ref": "#/$defs/attentionBackend" },
+        "gemm_reduction_policy": { "$ref": "#/$defs/implementationId" },
+        "experimental_flags": { "$ref": "#/$defs/experimentalFlags" },
+        "fallback_policy": { "$ref": "#/$defs/fallbackPolicy" },
+        "batch_token_budget": { "type": "integer", "minimum": 1 },
+        "kv_geometry": { "$ref": "#/$defs/kvGeometry" }
+      }
+    },
+    "endpointPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "runtime_identity",
+        "effective_config",
+        "effective_config_sha256"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.effective-runtime-config.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "runtime_identity": { "$ref": "#/$defs/runtimeConfigIdentity" },
+        "effective_config": { "$ref": "#/$defs/effectiveConfig" },
+        "effective_config_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "startupArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "created_at_utc",
+        "candidate_id",
+        "endpoint_path",
+        "runtime_identity",
+        "endpoint_payload_sha256",
+        "endpoint_payload"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.effective-runtime-config-startup-artifact.v1" },
+        "created_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "endpoint_path": { "const": "/v1/config" },
+        "runtime_identity": { "$ref": "#/$defs/runtimeConfigIdentity" },
+        "endpoint_payload_sha256": { "$ref": "#/$defs/sha256" },
+        "endpoint_payload": { "$ref": "#/$defs/endpointPayload" }
+      }
+    },
+    "resolvedInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "armEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration_profile",
+        "configuration_sha256",
+        "endpoint_payload",
+        "startup_artifact",
+        "effective_config_sha256"
+      ],
+      "properties": {
+        "configuration_profile": { "enum": ["stable-default", "max-performance-exact"] },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" },
+        "endpoint_payload": { "$ref": "#/$defs/resolvedInput" },
+        "startup_artifact": { "$ref": "#/$defs/resolvedInput" },
+        "effective_config_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "configurationArms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable-default", "max-performance-exact"],
+      "properties": {
+        "stable-default": {
+          "allOf": [
+            { "$ref": "#/$defs/armEvidence" },
+            { "properties": { "configuration_profile": { "const": "stable-default" } } }
+          ]
+        },
+        "max-performance-exact": {
+          "allOf": [
+            { "$ref": "#/$defs/armEvidence" },
+            { "properties": { "configuration_profile": { "const": "max-performance-exact" } } }
+          ]
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "passed",
+        "candidate_id",
+        "freeze_sha256",
+        "base_release_candidate_report",
+        "stable_promotion_profile",
+        "arms",
+        "checks",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.effective-runtime-config-check.v1" },
+        "status": { "enum": ["passed", "failed", "incomparable"] },
+        "passed": { "type": "boolean" },
+        "candidate_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/candidateId" }] },
+        "freeze_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "base_release_candidate_report": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/resolvedInput" }] },
+        "stable_promotion_profile": { "oneOf": [{ "type": "null" }, { "const": "stable-default" }] },
+        "arms": {
+          "oneOf": [
+            { "type": "object", "maxProperties": 0 },
+            { "$ref": "#/$defs/configurationArms" }
+          ]
+        },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "passed": { "const": true },
+              "candidate_id": { "$ref": "#/$defs/candidateId" },
+              "freeze_sha256": { "$ref": "#/$defs/sha256" },
+              "base_release_candidate_report": { "$ref": "#/$defs/resolvedInput" },
+              "stable_promotion_profile": { "const": "stable-default" },
+              "arms": { "$ref": "#/$defs/configurationArms" },
+              "reason_codes": { "maxItems": 0 }
+            }
+          },
+          "else": { "properties": { "passed": { "const": false }, "reason_codes": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}

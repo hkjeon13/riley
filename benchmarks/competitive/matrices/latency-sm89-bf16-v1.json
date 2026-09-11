@@ -1,0 +1,318 @@
+{
+  "$schema": "../contract-v1.schema.json",
+  "schema_version": "riley.competitive.matrix.v1",
+  "matrix_id": "latency-sm89-bf16-v1",
+  "tier": "C",
+  "measurement_mode": "mixed-separated",
+  "hardware_requirement": {
+    "gpu_count": 1,
+    "gpu_architecture": "sm89",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "dtype": "bf16",
+    "execution_host_requirement": "remote-gpu-host-required"
+  },
+  "model": {
+    "identity_status": "campaign-pinned-required",
+    "architecture": "dense-decoder",
+    "dtype": "bf16",
+    "model_slots": [
+      {
+        "slot_id": "dense-0-5b",
+        "parameter_count_billions_min": 0.4,
+        "parameter_count_billions_max": 0.6,
+        "family_compatibility": [
+          "llama",
+          "qwen"
+        ]
+      },
+      {
+        "slot_id": "dense-1-3b",
+        "parameter_count_billions_min": 1,
+        "parameter_count_billions_max": 3,
+        "family_compatibility": [
+          "llama",
+          "qwen"
+        ]
+      },
+      {
+        "slot_id": "dense-7-8b",
+        "parameter_count_billions_min": 7,
+        "parameter_count_billions_max": 8,
+        "family_compatibility": [
+          "llama",
+          "qwen"
+        ]
+      }
+    ],
+    "prohibited_features": [
+      "moe",
+      "multimodal",
+      "multi-gpu",
+      "multi-lora",
+      "quantization",
+      "speculative-decoding"
+    ],
+    "campaign_manifest_requirements": [
+      "model_id",
+      "model_revision",
+      "model_weights_sha256",
+      "tokenizer_revision",
+      "tokenizer_files_sha256",
+      "model_config_sha256",
+      "architecture_signature_sha256"
+    ]
+  },
+  "preflight": {
+    "fresh_process_per_independent_run": true,
+    "clean_git_required": true,
+    "thermal_stabilization_required": true,
+    "exclusive_gpu_required": true,
+    "warmup_excluded_from_measurements": true
+  },
+  "cells": [
+    {
+      "cell_id": "tier-c-primary-engine-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-greedy",
+      "required_for": [
+        "m4",
+        "m5"
+      ],
+      "measurement_mode": "engine-only",
+      "warm_state": "warm",
+      "sampling": "greedy",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": true,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1
+        ],
+        "prompt_tokens": [
+          128
+        ],
+        "requested_output_tokens": [
+          32
+        ]
+      }
+    },
+    {
+      "cell_id": "tier-c-engine-warm-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-greedy",
+      "required_for": [
+        "m4",
+        "m5"
+      ],
+      "measurement_mode": "engine-only",
+      "warm_state": "warm",
+      "sampling": "greedy",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": false,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "prompt_tokens": [
+          128,
+          1024,
+          4096
+        ],
+        "requested_output_tokens": [
+          32,
+          128,
+          512
+        ]
+      }
+    },
+    {
+      "cell_id": "tier-c-http-warm-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-greedy",
+      "required_for": [
+        "m4",
+        "m5"
+      ],
+      "measurement_mode": "http-streaming",
+      "warm_state": "warm",
+      "sampling": "greedy",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": false,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "prompt_tokens": [
+          128,
+          1024,
+          4096
+        ],
+        "requested_output_tokens": [
+          32,
+          128,
+          512
+        ]
+      }
+    },
+    {
+      "cell_id": "tier-c-engine-warm-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-seeded",
+      "required_for": [
+        "m4",
+        "m5"
+      ],
+      "measurement_mode": "engine-only",
+      "warm_state": "warm",
+      "sampling": "seeded-top-p-v1",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": false,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "prompt_tokens": [
+          128,
+          1024,
+          4096
+        ],
+        "requested_output_tokens": [
+          32,
+          128,
+          512
+        ]
+      }
+    },
+    {
+      "cell_id": "tier-c-http-warm-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-seeded",
+      "required_for": [
+        "m4",
+        "m5"
+      ],
+      "measurement_mode": "http-streaming",
+      "warm_state": "warm",
+      "sampling": "seeded-top-p-v1",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": false,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "prompt_tokens": [
+          128,
+          1024,
+          4096
+        ],
+        "requested_output_tokens": [
+          32,
+          128,
+          512
+        ]
+      }
+    },
+    {
+      "cell_id": "tier-c-http-cold-{model_slot}-c{concurrency}-p{prompt_tokens}-o{requested_output_tokens}-greedy",
+      "required_for": [
+        "m4"
+      ],
+      "measurement_mode": "http-streaming",
+      "warm_state": "cold",
+      "sampling": "greedy",
+      "eos_policy": "ignore-eos",
+      "cache_policy": "cache-off",
+      "arrival_mode": "closed-loop",
+      "arrival_schedule_id": "closed-loop-v1",
+      "client_behavior": "normal",
+      "cancellation_rate_percent": 0,
+      "slo_profile_id": null,
+      "primary": false,
+      "template": true,
+      "axes": {
+        "model_slot": [
+          "dense-0-5b",
+          "dense-1-3b",
+          "dense-7-8b"
+        ],
+        "concurrency": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "prompt_tokens": [
+          128,
+          1024,
+          4096
+        ],
+        "requested_output_tokens": [
+          32,
+          128,
+          512
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "contract_version": "1.0.0",
+  "lane_id": "riley-native",
+  "implementation_id": "riley-native",
+  "reference_implementation": "hf-transformers-eager",
+  "runtime_dependency_class": "native-production",
+  "semantic_class": "E0",
+  "availability": "contract-only",
+  "dependency_manifest": null,
+  "engine": {
+    "name": "riley",
+    "version": null,
+    "revision": "riley-native-contract-v3",
+    "backend": "native-cuda",
+    "dependencies": {}
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "max_context_tokens": 8192
+  },
+  "dtype": "bf16",
+  "sampling_id": "greedy",
+  "commands": {
+    "golden_fixture": {
+      "status": "not-required",
+      "argv": null
+    },
+    "serve": {
+      "status": "contract-only",
+      "argv": [
+        "riley",
+        "serve",
+        "--model",
+        "HuggingFaceTB/SmolLM2-135M",
+        "--revision",
+        "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+        "--dtype",
+        "bf16"
+      ]
+    },
+    "benchmark": {
+      "status": "contract-only",
+      "argv": [
+        "riley",
+        "benchmark",
+        "--matrix",
+        "benchmarks/matrix.yaml",
+        "--prompts",
+        "benchmarks/prompts.jsonl",
+        "--result-dir",
+        "{result_dir}",
+        "--run-index",
+        "{independent_run_index}",
+        "--run-id",
+        "{run_id}",
+        "--warm-state",
+        "{warm_state}",
+        "--concurrency",
+        "{concurrency}",
+        "--prompt-tokens",
+        "{prompt_tokens}",
+        "--output-tokens",
+        "{output_tokens}"
+      ],
+      "output_contract": "benchmarks/schemas/result.schema.json"
+    }
+  },
+  "dependency_policy": {
+    "allowed": [
+      "rust-release-binary",
+      "native-cuda-library",
+      "cuda-driver",
+      "cuda-runtime",
+      "nvidia-libraries",
+      "model-artifact",
+      "tokenizer-artifact"
+    ],
+    "forbidden": [
+      "python",
+      "pytorch",
+      "transformers",
+      "python-subprocess",
+      "triton-python-jit"
+    ]
+  }
+}
