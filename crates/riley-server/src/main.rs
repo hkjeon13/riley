@@ -1005,6 +1005,15 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
+    // Full graph kernels use the reviewed exact grouped-head implementation.
+    // Select it explicitly before deriving effective runtime facts; Disabled
+    // preserves the established CLI defaults.
+    let executor =
+        if options.execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled {
+            executor.with_grouped_ragged_attention_heads()
+        } else {
+            executor
+        };
     let model_id = options
         .model_id
         .unwrap_or_else(|| model.provenance().source_model().to_owned());
