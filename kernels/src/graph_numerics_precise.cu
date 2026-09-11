@@ -187,3 +187,46 @@ cudaError_t enqueue_compiled_packed_decode_rope_kv(
  compiled_packed_decode_rope_kv<<<2,256,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)qo,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(const float*)cos,(const float*)sin,(const uint32_t*)metadata);return cudaGetLastError();
 }
 } // namespace riley_cuda_internal
+
+// Fixed P128 prefill: populate all 16 MMA rows instead of duplicating one row.
+// Each output retains the original depth order and BF16 chunk-round sequence.
+// The unchanged M1 and row-parallel kernels above remain available as oracles.
+template<int N,int K,int Interval,int Warps>
+__global__ void gemm_prefill_m16(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,const uint32_t* position){
+ static_assert(N%(8*Warps)==0&&K%16==0,"fixed M16 projection geometry");
+ if(*position!=127)return;
+ const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
+ const int row=blockIdx.y*16+g,next_row=row+8,base=(blockIdx.x*Warps+warp)*8;
+ float d[4]={},total[4]={};
+ for(int depth=0;depth<K;depth+=16){
+  uint32_t a0=pack(x[row*K+depth+2*t],x[row*K+depth+2*t+1]);
+  uint32_t a1=pack(x[next_row*K+depth+2*t],x[next_row*K+depth+2*t+1]);
+  uint32_t a2=pack(x[row*K+depth+2*t+8],x[row*K+depth+2*t+9]);
+  uint32_t a3=pack(x[next_row*K+depth+2*t+8],x[next_row*K+depth+2*t+9]);
+  uint32_t b=pack(w[(base+g)*K+depth+2*t],w[(base+g)*K+depth+2*t+1]),bb=pack(w[(base+g)*K+depth+2*t+8],w[(base+g)*K+depth+2*t+9]);
+  asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};": "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]):"r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b),"r"(bb));
+  if constexpr(Interval>0){
+   if((depth+16)%Interval==0||depth+16==K){for(int j=0;j<4;++j){total[j]+=__bfloat162float(__float2bfloat16_rn(d[j]));d[j]=0.;}}
+  }
+ }
+ if constexpr(Interval>0)for(int j=0;j<4;++j)d[j]=total[j];
+ y[row*N+base+2*t]=__float2bfloat16_rn(d[0]);
+ y[row*N+base+2*t+1]=__float2bfloat16_rn(d[1]);
+ y[next_row*N+base+2*t]=__float2bfloat16_rn(d[2]);
+ y[next_row*N+base+2*t+1]=__float2bfloat16_rn(d[3]);
+}
+
+namespace riley_cuda_internal {
+template<int N,int K,int Interval,int Warps>
+cudaError_t launch_compiled_prefill_m16(cudaStream_t s,const void* x,const void* w,void* y,const void* position) noexcept {
+ gemm_prefill_m16<N,K,Interval,Warps><<<dim3(N/(8*Warps),8),32*Warps,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,(const uint32_t*)position);return cudaGetLastError();
+}
+cudaError_t enqueue_compiled_prefill_m16_gemm(cudaStream_t s,const void* x,const void* w,void* y,int n,int k,int interval,const void* position) noexcept {
+ if(n==576&&k==576&&interval==192)return launch_compiled_prefill_m16<576,576,192,2>(s,x,w,y,position);
+ if(n==192&&k==576&&interval==192)return launch_compiled_prefill_m16<192,576,192,1>(s,x,w,y,position);
+ if(n==576&&k==576&&interval==128)return launch_compiled_prefill_m16<576,576,128,2>(s,x,w,y,position);
+ if(n==1536&&k==576&&interval==0)return launch_compiled_prefill_m16<1536,576,0,4>(s,x,w,y,position);
+ if(n==576&&k==1536&&interval==320)return launch_compiled_prefill_m16<576,1536,320,2>(s,x,w,y,position);
+ return cudaErrorInvalidValue;
+}
+} // namespace riley_cuda_internal

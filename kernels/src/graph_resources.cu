@@ -971,6 +971,7 @@ static RileyCudaStatus record_decode_impl(
         if(profile==2&&prefill){
           const int ns[7]={576,192,192,576,1536,1536,576};const int ks[7]={576,576,576,576,576,576,1536};const int chunks[7]={192,192,192,128,0,0,320};
           const size_t inputs[7]={2,2,2,5,2,2,12};const size_t weight_ids[7]={1,2,3,4,6,7,8};
+          if(batched&&packed_buffers!=nullptr)return kernel(enqueue_compiled_prefill_m16_gemm(r->stream->stream,buffer(inputs[j]),weights[weight_ids[j]]->device_data,buffer(out),ns[j],ks[j],chunks[j],static_cast<uint8_t*>(d[19]->device_data)+4));
           return kernel(enqueue_compiled_prefill_gemm_rows(r->stream->stream,buffer(inputs[j]),weights[weight_ids[j]]->device_data,buffer(out),ns[j],ks[j],chunks[j],static_cast<uint8_t*>(d[19]->device_data)+4,rows));
         }
         return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");

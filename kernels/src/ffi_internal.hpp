@@ -2346,6 +2346,9 @@ cudaError_t enqueue_compiled_rope_rows(cudaStream_t,const void*,const void*,void
 cudaError_t enqueue_compiled_swiglu_rows(cudaStream_t,const void*,const void*,void*,uint32_t) noexcept;
 cudaError_t enqueue_compiled_attention_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
 cudaError_t enqueue_compiled_prefill_gemm_rows(cudaStream_t,const void*,const void*,void*,int,int,int,const void*,uint32_t) noexcept;
+// Fixed 128-row profile2 prefill at inclusive position127. Only the five
+// supported (N,K,round interval) shapes are accepted; buffers remain row-major.
+cudaError_t enqueue_compiled_prefill_m16_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
 cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,uint32_t) noexcept;
 // Packed profile2 M1 decode: Q[576], K[192], V[192] are disjoint slices of one
 // retained output. Writes rotary Q and paged K/V for a validated position128..159.
