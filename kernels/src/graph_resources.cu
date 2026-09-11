@@ -24,6 +24,10 @@ struct RileyCudaGraphResources {
   RileyCudaStream* stream = nullptr;
   cudaGraph_t graph = nullptr;
   cudaGraphExec_t exec = nullptr;
+  // The fixed-P128 arithmetic profile has two stage DAGs under this one ledger.
+  // They share every parent and are only replayed sequentially on this stream.
+  cudaGraph_t prefill_graph = nullptr;
+  cudaGraphExec_t prefill_exec = nullptr;
   RileyCudaPinnedHostBuffer* input = nullptr;
   RileyCudaPinnedHostBuffer* output = nullptr;
   uint64_t transfer_bytes = 0;
@@ -177,7 +181,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
   if ((*resources)->completion_unknown)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
-  if ((*resources)->graph != nullptr || (*resources)->exec != nullptr) {
+  if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
+      (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr) {
     CaptureDomainControlLease admission((*resources)->owner->capture_domain);
     if (!admission.active())
       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -195,6 +200,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
       status = runtime_error(cudaGraphDestroy((*resources)->graph), error,
                              RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->graph = nullptr;
+      else (*resources)->completion_unknown = true;
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->prefill_exec != nullptr) {
+      status = runtime_error(cudaGraphExecDestroy((*resources)->prefill_exec), error,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+      if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_exec = nullptr;
+      else (*resources)->completion_unknown = true;
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->prefill_graph != nullptr) {
+      status = runtime_error(cudaGraphDestroy((*resources)->prefill_graph), error,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+      if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
       else (*resources)->completion_unknown = true;
     }
     status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
@@ -287,6 +304,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   if (r->exec == nullptr || source == nullptr || bytes != r->transfer_bytes)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
+  auto selected_exec = r->exec;
   if(r->decode_capacity!=0){
     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
     const uint64_t capacity=r->decode_capacity,pos=u32(4),live=pos/16+1;
@@ -300,6 +318,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
           return reject(error,"decode block mapping invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
         for(uint64_t j=0;j<i;++j) if(u32(16+4*i)==u32(16+4*j)) return reject(error,"decode duplicate physical block",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
       }else if(valid!=0||u32(16+4*i)!=0) return reject(error,"decode padding invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+    }
+    // P128 is a fixed numerical contract. Select from this replay's validated
+    // host metadata, never from a position value frozen during CUDA capture.
+    if(r->vllm_smol_p128){
+      if(r->prefill_exec==nullptr || r->prefill_graph==nullptr)
+        return reject(error,"P128 stage graph is not prepared");
+      selected_exec=pos<128?r->prefill_exec:r->exec;
     }
   }
   if (r->rope_table_positions != 0) {
@@ -325,7 +350,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     std::memcpy(host+16,&valid,2); std::memcpy(host+20,&slot,4);
   }
   r->completion_unknown = true;
-  auto launched = cudaGraphLaunch(r->exec, r->stream->stream);
+  auto launched = cudaGraphLaunch(selected_exec, r->stream->stream);
   // Synchronize even on launch error; that is the only authority to release
   // possibly submitted work. A failed synchronization intentionally pins owners.
   auto completed = cudaStreamSynchronize(r->stream->stream);
@@ -847,7 +872,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
   if(status==RILEY_CUDA_STATUS_SUCCESS) status=bind_reserved_gemm_state(plans[4],r->stream,d[2],w[2],d[13],d[21],&states[layers*7],error);
   if(status!=RILEY_CUDA_STATUS_SUCCESS){release_states();return status;}
   std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,static_cast<size_t>(transfer));
-  status=record_reserved_sequence(r,staging,transfer,[&]() noexcept {
+  auto record_stage = [&](bool prefill) noexcept {
+    return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
     auto* host=static_cast<uint8_t*>(staging->host_data);
     auto copy=[&](void* dst,const void* src,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(dst,src,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"decode transfer");};
     auto kernel=[&](cudaError_t e){return runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"decode kernel");};
@@ -857,13 +883,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
     for(uint64_t l=0;l<layers&&s==RILEY_CUDA_STATUS_SUCCESS;++l){
       auto* weights=w+3+9*l;
       auto gemm=[&](size_t j,size_t out){
-        auto status=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");
-        if(status==RILEY_CUDA_STATUS_SUCCESS&&profile==2){
+        if(profile==2&&prefill){
           const int ns[7]={576,192,192,576,1536,1536,576};const int ks[7]={576,576,576,576,576,576,1536};const int chunks[7]={192,192,192,128,0,0,320};
           const size_t inputs[7]={2,2,2,5,2,2,12};const size_t weight_ids[7]={1,2,3,4,6,7,8};
-          status=kernel(enqueue_compiled_prefill_gemm(r->stream->stream,d[inputs[j]]->device_data,weights[weight_ids[j]]->device_data,d[out]->device_data,ns[j],ks[j],chunks[j],static_cast<uint8_t*>(d[19]->device_data)+4));
+          return kernel(enqueue_compiled_prefill_gemm(r->stream->stream,d[inputs[j]]->device_data,weights[weight_ids[j]]->device_data,d[out]->device_data,ns[j],ks[j],chunks[j],static_cast<uint8_t*>(d[19]->device_data)+4));
         }
-        return status;
+        return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");
       };
       if(profile==2){if(l==0)s=kernel(enqueue_compiled_norm(r->stream->stream,d[1]->device_data,nullptr,weights[0]->device_data,nullptr,d[2]->device_data,0));}else s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,weights[0]->device_data,d[2]->device_data,h/2,eps[1+2*l],profile));
       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(0,3);
@@ -893,7 +918,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
     if(s==RILEY_CUDA_STATUS_SUCCESS) s=copy(host+transfer+logits_output,d[20]->device_data,sizeof(RileyCudaBf16ArgmaxResult),cudaMemcpyDeviceToHost);
     if(s==RILEY_CUDA_STATUS_SUCCESS) s=copy(host+transfer+logits_output+sizeof(RileyCudaBf16ArgmaxResult),d[14]->device_data,sizeof(RileyCudaEmbeddingErrorReport),cudaMemcpyDeviceToHost);
     return s;
-  },error);
+    },error);
+  };
+  if(profile==2){
+    status=record_stage(true);
+    if(status==RILEY_CUDA_STATUS_SUCCESS){
+      // Keep the first pair owned even if the second capture fails. close() must
+      // destroy both pairs before releasing any shared parent or plan lease.
+      r->prefill_graph=r->graph;r->prefill_exec=r->exec;
+      r->graph=nullptr;r->exec=nullptr;
+    }
+  }
+  if(status==RILEY_CUDA_STATUS_SUCCESS) status=record_stage(false);
+  if(status!=RILEY_CUDA_STATUS_SUCCESS) r->terminal=true;
   release_states();
   if(status==RILEY_CUDA_STATUS_SUCCESS){r->vllm_smol_p128=profile==2;r->decode_capacity=capacity;r->decode_physical=physical;r->decode_vocab=vocab;r->rope_table_positions=d[17]->byte_len/128;r->rope_payload_position_offset=4;}
   return status;

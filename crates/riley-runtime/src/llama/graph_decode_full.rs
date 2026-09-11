@@ -1,4 +1,7 @@
 //! Full M=1 model capture on actual executor weights, plans, scratch and KV parents.
+#[cfg(all(test, feature = "cuda"))]
+#[path = "graph_decode_stage_parity_gpu.rs"]
+mod stage_parity_gpu;
 use super::PreparedLlamaBatchExecutor;
 use crate::llama::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResult, cuda_error,
@@ -758,10 +761,10 @@ impl PreparedLlamaBatchExecutor {
                     GraphMetadataLayoutSignature::new(2, layout.finalize().into()),
                 ),
                 GraphImplementationSignature::new(
-                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
+                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
                     GraphGemmPlanSetId::new(1),
                     GraphReductionPolicyId::new(profile),
                 ),
@@ -1207,8 +1210,10 @@ mod tests {
 }
 
 // The owned session retains the original scheduler KV pool and selected plans.
-// One-token prefill uses the same position-indexed operators as decode; host
-// sampling, stop processing, cancellation and KV allocation remain outside it.
+// A single owned registry slot identifies the complete retained graph bundle.
+// The fixed-P128 profile validates the scheduler stage against fresh position
+// metadata below; native dispatch selects the corresponding stage DAG. Generic
+// partial-prefill registry eligibility remains unchanged.
 struct FullDecodeParents {
     executor: PreparedLlamaBatchExecutor,
     stream: CudaStream,
@@ -1391,6 +1396,16 @@ impl OwnedLlamaDecodeExecutor {
         }
         let token = packed.input_token_ids()[0];
         let pos = packed.position_ids()[0];
+        if self.vllm_smol_p128_graph
+            && rows[0].kind()
+                != if pos < 128 {
+                    crate::llama::LlamaBatchRowKind::Prefill
+                } else {
+                    crate::llama::LlamaBatchRowKind::Decode
+                }
+        {
+            return Err(rejected("P128 graph stage differs from scheduler row kind"));
+        }
         if self.vllm_smol_p128_graph && pos >= 160 {
             return Err(rejected("vllm-smol-p128-v1 position exceeds 159"));
         }
@@ -1641,6 +1656,25 @@ mod owned_tests {
                     Some(0),
                 )];
                 let before = context.allocation_stats()?;
+                if matches!(position, 0 | 127 | 128 | 158) {
+                    let wrong_stage = [LlamaBatchRow::new(
+                        (request + 1) as u64,
+                        if position < 128 {
+                            LlamaBatchRowKind::Decode
+                        } else {
+                            LlamaBatchRowKind::Prefill
+                        },
+                        &input,
+                        (position + 1) as u32,
+                        rows[0].block_table(),
+                        Some(0),
+                    )];
+                    let replays = candidate.replay_count();
+                    assert!(candidate.execute(&wrong_stage).is_err());
+                    assert!(candidate.greedy_token().is_err());
+                    assert_eq!(candidate.replay_count(), replays);
+                    assert_eq!(context.allocation_stats()?, before);
+                }
                 candidate.execute(&rows)?;
                 assert_eq!(context.allocation_stats()?, before);
                 token = candidate.greedy_token()?;
@@ -1684,12 +1718,22 @@ mod owned_tests {
         }
         assert_eq!(candidate.replay_count(), 491);
         candidate.close()?;
+        let mut drop_stream = context.create_stream()?;
+        let drop_candidate = PreparedLlamaBatchExecutor::prepare(
+            &model,
+            &context,
+            &mut drop_stream,
+            config.with_vllm_smol_p128_graph(),
+        )?
+        .into_owned_decode_graph(&context)?;
+        drop(drop_candidate);
+        drop_stream.close()?;
         stream.close()?;
         let stats = context.allocation_stats()?;
         assert_eq!(stats.device_live_allocations(), 0);
         assert_eq!(stats.pinned_host_live_allocations(), 0);
         println!(
-            "G04_VLLM_PROFILE p128_o32=true vllm_tokens_exact=true requests=4 cancelled_prefill=23 cancelled_output=23 replays=491 captures=1 live_allocation_deltas_zero=true output_tokens={expected_tokens:?}"
+            "G04_VLLM_PROFILE p128_o32=true vllm_tokens_exact=true requests=4 cancelled_prefill=23 cancelled_output=23 replays=491 captures=2 shared_owner=true stage_mismatch_rejected=true live_allocation_deltas_zero=true output_tokens={expected_tokens:?}"
         );
         context.close()?;
         Ok(())
