@@ -1201,6 +1201,7 @@ pub struct OwnedLlamaDecodeExecutor {
     payload: Vec<u8>,
     output: Vec<u8>,
     poisoned: bool,
+    output_ready: bool,
     replays: u64,
 }
 impl PreparedLlamaBatchExecutor {
@@ -1275,6 +1276,7 @@ impl PreparedLlamaBatchExecutor {
             payload: vec![0; transfer],
             output: vec![0; transfer],
             poisoned: false,
+            output_ready: false,
             replays: 0,
         })
     }
@@ -1303,7 +1305,7 @@ impl OwnedLlamaDecodeExecutor {
     /// Exact device argmax from the last successful execution.
     #[must_use]
     pub fn greedy_token(&self) -> LlamaBatchExecutorResult<u32> {
-        if self.poisoned || self.replays == 0 {
+        if self.poisoned || !self.output_ready {
             return Err(LlamaBatchExecutorError::OutputNotReady);
         }
         let offset = self.vocabulary_size * 2;
@@ -1319,6 +1321,7 @@ impl OwnedLlamaDecodeExecutor {
         &mut self,
         rows: &[crate::llama::LlamaBatchRow<'_>],
     ) -> LlamaBatchExecutorResult<&[u8]> {
+        self.output_ready = false;
         if self.poisoned {
             return Err(LlamaBatchExecutorError::Poisoned);
         }
@@ -1366,6 +1369,7 @@ impl OwnedLlamaDecodeExecutor {
             return Err(rejected("owned graph output status failed"));
         }
         self.poisoned = false;
+        self.output_ready = true;
         self.replays = self.replays.saturating_add(1);
         Ok(&self.output[..logits])
     }
@@ -1474,6 +1478,25 @@ mod owned_tests {
                 }
             }
             baseline.close()?;
+            let invalid = [u32::MAX];
+            let invalid_rows = [LlamaBatchRow::new(
+                99,
+                LlamaBatchRowKind::Prefill,
+                &invalid,
+                1,
+                LlamaBatchBlockTable::new(
+                    crate::paged_kv::BLOCK_TABLE_V1_VERSION,
+                    &mapping[..1],
+                    &[1],
+                    1,
+                ),
+                Some(0),
+            )];
+            assert!(candidate.execute(&invalid_rows).is_err());
+            assert!(
+                candidate.greedy_token().is_err(),
+                "invalid input must revoke old output"
+            );
         }
         assert_eq!(candidate.replay_count(), 341);
         candidate.close()?;
