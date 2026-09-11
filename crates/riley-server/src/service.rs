@@ -13,6 +13,10 @@ use std::error;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
@@ -36,6 +40,7 @@ use crate::openai::{
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
+#[cfg(not(unix))]
 const CONNECTION_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const DISCONNECT_PEEK_TIMEOUT: Duration = Duration::from_millis(1);
@@ -554,12 +559,95 @@ pub struct ServerHandle {
     stopping: Arc<AtomicBool>,
     backend: Arc<dyn CompletionBackend>,
     shutdown_grace: Duration,
+    listener_wakeup: ListenerWakeup,
     listener_thread: Option<JoinHandle<()>>,
     worker_threads: Vec<JoinHandle<()>>,
     connections: Arc<ConnectionRegistry>,
     observations: Arc<ObservationBuffer>,
     metrics: Arc<ServiceMetrics>,
     joined: bool,
+}
+
+/// The wake socket is separate from the TCP backlog. Closing its sole writer
+/// is persistent readiness, including when shutdown precedes the first wait.
+struct ListenerWakeup {
+    #[cfg(unix)]
+    socket: Option<UnixStream>,
+}
+
+struct ListenerReadiness {
+    #[cfg(unix)]
+    socket: UnixStream,
+}
+
+impl ListenerWakeup {
+    fn wake(&mut self) {
+        #[cfg(unix)]
+        drop(self.socket.take());
+    }
+}
+
+impl ListenerReadiness {
+    fn pair() -> io::Result<(Self, ListenerWakeup)> {
+        #[cfg(unix)]
+        {
+            let (receiver, sender) = UnixStream::pair()?;
+            Ok((
+                Self { socket: receiver },
+                ListenerWakeup {
+                    socket: Some(sender),
+                },
+            ))
+        }
+        #[cfg(not(unix))]
+        {
+            Ok((Self {}, ListenerWakeup {}))
+        }
+    }
+
+    /// Returns false on shutdown or a terminal descriptor condition. Both
+    /// descriptors remain owned for the entire wait; no raw fd escapes it.
+    #[cfg(unix)]
+    #[allow(unsafe_code)] // poll only borrows the two live, locally owned descriptors.
+    fn wait(&self, listener: &TcpListener) -> io::Result<bool> {
+        let mut descriptors = [
+            libc::pollfd {
+                fd: listener.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: self.socket.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
+        loop {
+            // SAFETY: the initialized array is writable for exactly two pollfd
+            // entries, and both borrowed sockets outlive this blocking call.
+            let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, -1) };
+            if ready < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if ready != 0 {
+                // Give shutdown priority even if the TCP backlog is readable.
+                return Ok(
+                    descriptors[1].revents == 0 && descriptors[0].revents & libc::POLLIN != 0
+                );
+            }
+        }
+    }
+
+    // Preserve the existing bounded fallback on platforms without Unix poll.
+    #[cfg(not(unix))]
+    fn wait(&self, _listener: &TcpListener) -> io::Result<bool> {
+        thread::sleep(CONNECTION_POLL_INTERVAL);
+        Ok(true)
+    }
 }
 
 /// C02-only shutdown evidence returned after every service and backend thread
@@ -773,6 +861,7 @@ impl ServerHandle {
         // unbounded join.
         self.joined = true;
         self.stopping.store(true, Ordering::Release);
+        self.listener_wakeup.wake();
         self.backend.begin_shutdown();
         let deadline = Instant::now()
             .checked_add(self.shutdown_grace)
@@ -925,6 +1014,7 @@ pub fn start_server_with_c02_metrics(
     let listener = TcpListener::bind(config.bind_address)?;
     listener.set_nonblocking(true)?;
     let local_address = listener.local_addr()?;
+    let (listener_readiness, listener_wakeup) = ListenerReadiness::pair()?;
     let stopping = Arc::new(AtomicBool::new(false));
     let connection_capacity = config
         .worker_threads
@@ -983,6 +1073,7 @@ pub fn start_server_with_c02_metrics(
         .spawn(move || {
             listener_loop(
                 &listener,
+                &listener_readiness,
                 &connection_sender,
                 &listener_stopping,
                 &listener_connections,
@@ -996,6 +1087,7 @@ pub fn start_server_with_c02_metrics(
         stopping,
         backend,
         shutdown_grace: config.shutdown_grace,
+        listener_wakeup,
         listener_thread: Some(listener_thread),
         worker_threads,
         connections,
@@ -1019,6 +1111,7 @@ pub fn start_server(
 
 fn listener_loop(
     listener: &TcpListener,
+    readiness: &ListenerReadiness,
     sender: &SyncSender<ConnectionJob>,
     stopping: &AtomicBool,
     connections: &ConnectionRegistry,
@@ -1028,14 +1121,19 @@ fn listener_loop(
     while !stopping.load(Ordering::Acquire) {
         match listener.accept() {
             Ok((mut stream, _peer)) => {
+                // Accepted sockets inherit nonblocking mode on some platforms.
+                // Workers must wait for request bytes under the read deadline,
+                // even when readiness wakes us before the client writes them.
+                if stream.set_nonblocking(false).is_err()
+                    || stream.set_write_timeout(Some(write_timeout)).is_err()
+                {
+                    let _ = stream.shutdown(Shutdown::Both);
+                    continue;
+                }
                 if stopping.load(Ordering::Acquire) {
                     let _ = write_api_error(&mut stream, &ApiError::ShuttingDown);
                     let _ = stream.shutdown(Shutdown::Both);
                     break;
-                }
-                if stream.set_write_timeout(Some(write_timeout)).is_err() {
-                    let _ = stream.shutdown(Shutdown::Both);
-                    continue;
                 }
                 let _ = stream.set_nodelay(true);
                 let Ok(registry_slot) = connections.register(&stream) else {
@@ -1064,7 +1162,9 @@ fn listener_loop(
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(CONNECTION_POLL_INTERVAL);
+                if !matches!(readiness.wait(listener), Ok(true)) {
+                    break;
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => break,
@@ -1084,10 +1184,13 @@ fn worker_loop(
     config: ServerConfig,
 ) {
     loop {
+        // The listener owns the only sender. Once explicitly woken for
+        // shutdown, its exit disconnects the queue and wakes every idle worker.
+        // The mutex guard is released before a received job is processed.
         let job_result = receiver
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .recv_timeout(CONNECTION_POLL_INTERVAL);
+            .recv();
         match job_result {
             Ok(mut job) => {
                 if stopping.load(Ordering::Acquire) {
@@ -1108,8 +1211,7 @@ fn worker_loop(
                 }
                 connections.unregister(job.registry_slot);
             }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(_) => break,
         }
     }
 }
@@ -2688,6 +2790,64 @@ mod tests {
         response
     }
 
+    /// CPU-only transport diagnostic. Keep this opt-in: wall-clock results are
+    /// evidence for a matched before/after run, never a timing assertion in CI.
+    #[test]
+    #[ignore = "prints loopback transport latency; run alone in release mode"]
+    fn loopback_transport_timing() {
+        const WARMUP: usize = 20;
+        const SAMPLES: usize = 200;
+        let backend = TestBackend::new([]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend;
+        let server = start_server(test_config(), backend_trait).expect("start timing server");
+        let streaming_request =
+            post_body(br#"{"model":"fixture-model","prompt":"transport timing","stream":true}"#);
+        for (workload, request) in [
+            (
+                "healthz",
+                &b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n"[..],
+            ),
+            ("completion_sse", streaming_request.as_slice()),
+        ] {
+            for _ in 0..WARMUP {
+                assert_eq!(
+                    response_status(&send_request(server.local_address(), request)),
+                    200
+                );
+            }
+            let mut elapsed_us = Vec::with_capacity(SAMPLES);
+            for _ in 0..SAMPLES {
+                let started = Instant::now();
+                let response = send_request(server.local_address(), request);
+                elapsed_us.push(started.elapsed().as_secs_f64() * 1_000_000.0);
+                assert_eq!(response_status(&response), 200);
+                if workload == "completion_sse" {
+                    assert!(response.ends_with(b"data: [DONE]\n\n"));
+                }
+            }
+            let mean_us = elapsed_us.iter().sum::<f64>()
+                / f64::from(u32::try_from(SAMPLES).expect("sample count fits u32"));
+            elapsed_us.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                json!({
+                    "diagnostic": "loopback_transport_timing_v1",
+                    "workload": workload,
+                    "warmup": WARMUP,
+                    "samples": SAMPLES,
+                    "concurrency": 1,
+                    "connections_per_request": 1,
+                    "mean_us": mean_us,
+                    "p50_us": elapsed_us[SAMPLES / 2 - 1],
+                    "p95_us": elapsed_us[SAMPLES * 95 / 100 - 1],
+                    "p99_us": elapsed_us[SAMPLES * 99 / 100 - 1],
+                    "sorted_elapsed_us": elapsed_us,
+                })
+            );
+        }
+        server.shutdown().expect("shutdown timing server");
+    }
+
     fn response_status(response: &[u8]) -> u16 {
         let head_end = response
             .windows(4)
@@ -3267,6 +3427,87 @@ mod tests {
         );
         assert_eq!(response_status(&response), 200);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn accepted_connection_waits_for_delayed_request_bytes() {
+        let backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let server = start_server(test_config(), backend).expect("start server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect client");
+        client
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("set read deadline");
+        wait_until(|| {
+            server
+                .connections
+                .slots
+                .lock()
+                .expect("connection registry")
+                .iter()
+                .any(Option::is_some)
+        });
+        // Deliberately leave an accepted socket idle before sending the head.
+        // Readiness must not turn this into an immediate WouldBlock/HTTP 408.
+        thread::sleep(Duration::from_millis(20));
+        client
+            .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("write delayed request");
+        let mut response = Vec::new();
+        client
+            .read_to_end(&mut response)
+            .expect("read delayed response");
+        assert_eq!(response_status(&response), 200);
+        server.shutdown().expect("shutdown after delayed request");
+    }
+
+    #[test]
+    fn shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections() {
+        for idle_time in [Duration::ZERO, Duration::from_millis(20)] {
+            let backend = TestBackend::new([]);
+            let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+            let mut config = test_config();
+            config.bind_address = SocketAddr::from(([0, 0, 0, 0], 0));
+            config.worker_threads = 8;
+            config.shutdown_grace = Duration::from_millis(200);
+            let mut server = start_server(config, backend_trait).expect("start idle server");
+            thread::sleep(idle_time);
+            server
+                .shutdown_inner()
+                .expect("join idle threads within global grace");
+            assert!(server.listener_thread.is_none());
+            assert!(server.worker_threads.is_empty());
+            assert!(backend.shutdown_called.load(Ordering::Acquire));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn listener_shutdown_wakeup_persists_and_takes_priority_over_backlog() {
+        for pending_connection in [false, true] {
+            let listener = std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                .expect("bind listener");
+            listener.set_nonblocking(true).expect("set listener mode");
+            let pending_client = pending_connection.then(|| {
+                TcpStream::connect(listener.local_addr().expect("listener address"))
+                    .expect("queue TCP connection")
+            });
+            let (readiness, mut wakeup) = super::ListenerReadiness::pair().expect("wake pair");
+            wakeup.wake();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let waiter = thread::spawn(move || {
+                sender
+                    .send(readiness.wait(&listener))
+                    .expect("publish readiness");
+            });
+            assert!(
+                !receiver
+                    .recv_timeout(TEST_TIMEOUT)
+                    .expect("persistent shutdown wake")
+                    .expect("wait for listener readiness")
+            );
+            waiter.join().expect("join readiness waiter");
+            drop(pending_client);
+        }
     }
 
     #[test]
