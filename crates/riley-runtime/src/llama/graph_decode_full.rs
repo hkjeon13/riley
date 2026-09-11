@@ -650,7 +650,7 @@ impl PreparedLlamaBatchExecutor {
             return Err(rejected("packed decode requires P128 prefill"));
         }
         let implementation = if packed.is_some() {
-            0xF106
+            0xF107
         } else if batched_prefill {
             0xF103
         } else if self.config.vllm_smol_p128_graph() {

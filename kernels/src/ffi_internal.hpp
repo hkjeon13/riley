@@ -2356,6 +2356,9 @@ cudaError_t enqueue_compiled_packed_decode_rope_kv(cudaStream_t,const void*,cons
 // MODE6 packed M1 attention: Q[576], paged K/V and output[576]. The existing
 // metadata supplies inclusive position128..159 and the validated block map.
 cudaError_t enqueue_compiled_packed_decode_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+// Same MODE6 contract; two warps partition independent QK/PV work while
+// retaining each score/output MMA chain and the original denominator order.
+cudaError_t enqueue_compiled_packed_decode_attention_two_warp(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
 
 }  // namespace riley_cuda_internal
 
