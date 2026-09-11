@@ -449,3 +449,33 @@ CUDA 빌드/GPU 실행은 미수행. 전체 graph qualification 승격 없음.
 - 원격 CUDA 빌드 및 GPU 17, CPU 281 통과. SmolLM2 L30/canonical L2/L3의 64-token logits/KV 및 17-token prompt 후 48-token 생성 유지. model-loader 6파일 보존.
 - 다음은 serve 요청/취소/완료 및 scheduler KV lifecycle 연결. 기본 서버 전환·다중 bucket 확대·성능 측정 미실행.
 - [검증 기록](../../benchmarks/results/20260911-g03-registry/README.md).
+
+### 2026-09-11 G04 실행 경계
+
+single-token full graph의 실제 부모 소유권을 서버 worker와 scheduler KV lifetime에
+연결했다. c1/p128/o32 전체 logits E0, HTTP 취소/재사용/종료, release 정책 선택과
+engine-only prepare/close 검증이 통과했다. 기존 C07 전체 capability 또는 vLLM 경쟁
+qualification을 일괄 승격하지 않는다. vLLM token mismatch, CUDA runtime 차이,
+현재 preflight 실패가 남아 있으며 성능 캠페인은 미실행이다. 상세 증거는
+`benchmarks/results/20260911-g04-measurement-readiness/README.md`에 있다.
+
+## 2026-09-11 G04 qualification follow-up
+
+The M=1 batch owner now reserves a native reference dense-prefill plan that
+is never dispatched, removing its unused CUDA 12.8-only cuBLASLt dependency.
+The real paged-attention path and canonical HF rounding remain unchanged.
+CUDA 13 release linking now supplies the Linux C++ ABI runtime explicitly.
+The 341-replay p128/o32 owner test passes on CUDA 12.8 and 13 with the same
+32 tokens; CUDA 13 release HTTP and CPU/GPU sampling lifecycle checks pass.
+This qualifies the tested SmolLM2 c1 path only, not general dense prefill
+on CUDA 13 or M4/M5.
+
+A separate exact preflight environment,
+`rtx4090-ubuntu22-driver580-20260911-v2`, binds the observed 67185594368-byte
+RAM snapshot; v1 remains unchanged/default and all GPU exclusivity gates remain.
+Cross-engine token equivalence and exclusive-GPU preflight still fail.
+An isolated norm-rounding experiment matches vLLM eager for 32 tokens, but
+vLLM default compiled execution differs from eager too. That numerical change
+was NOT applied to the candidate or used to waive the default-vLLM token gate.
+Evidence: `benchmarks/results/20260911-g04-qualification-followup/`.
+Performance campaign has not been executed.

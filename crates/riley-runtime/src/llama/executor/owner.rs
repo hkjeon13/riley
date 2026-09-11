@@ -268,12 +268,22 @@ impl PreparedLlamaBatchOwner {
         }
 
         let metadata = PreparedLlamaBatchMetadata::prepare(bounds)?;
+        // The batch dispatcher uses paged attention exclusively; the dense
+        // forward owner's prefill plan is never dispatched. For M=1 reserve
+        // the native reference plan explicitly, avoiding an unused cuBLASLt
+        // prefill dependency (and its separate CUDA-version qualification).
+        // This does not change the paged attention reduction implementation.
+        let forward_config = if bounds.max_input_tokens() == 1 {
+            config.forward().with_reference_attention()
+        } else {
+            config.forward()
+        };
         let mut forward = PreparedLlamaForward::prepare(
             model,
             context,
             stream,
             bounds.max_input_tokens(),
-            config.forward(),
+            forward_config,
         )?;
         let shape_variants = match prepare_shape_variants(
             model,

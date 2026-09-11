@@ -53,7 +53,7 @@ CANONICAL_ASSET_SHA256: dict[str, str] = {
     "benchmarks/competitive/lanes/riley.json": "9035fa499d6dec60a29668199d754ff7d677b2c4794900a2fd98be0dbd4623fa",
     "benchmarks/competitive/lanes/vllm-current.json": "8b1ce0ac66c7a8f7631f126c59b33a4a13d48b9d5ffa332fafcb76e6056b1047",
 }
-CANONICAL_PREFLIGHT_SHA256 = "2371a6291b6b47b89e960867a1c3ae814ffc1e10115ea74eb02e0792db9f42e4"
+CANONICAL_PREFLIGHT_SHA256 = "442c5e8a65b1cf9a0abb5c20c375aa6b022f8766a347bda5f12b83dbfd9553df"
 
 # `benchmarks/scripts/preflight.sh` emits this closed receipt.  C01 accepts
 # the complete snapshot only: accepting a hand-selected subset would let a
@@ -107,6 +107,14 @@ PREFLIGHT_EXACT_VALUES = {
     "cpu_governor_policy_count": "24",
     "clock_synchronized": "yes",
     "staging_minimum_bytes": str(20 * 1024**3),
+}
+PREFLIGHT_ENVIRONMENTS = {
+    PREFLIGHT_EXACT_VALUES["environment_id"]: PREFLIGHT_EXACT_VALUES,
+    "rtx4090-ubuntu22-driver580-20260911-v2": {
+        **PREFLIGHT_EXACT_VALUES,
+        "environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+        "ram_bytes": "67185594368",
+    },
 }
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -471,7 +479,10 @@ def load_preflight_receipt(path: Path, source: Mapping[str, Any]) -> dict[str, s
         raise ContractError("preflight source receipt must contain a full lowercase Git revision")
     if values["git_revision"] != revision:
         raise ContractError(f"{path}: preflight Git revision differs from campaign source")
-    for key, expected in PREFLIGHT_EXACT_VALUES.items():
+    expected_environment = PREFLIGHT_ENVIRONMENTS.get(values["environment_id"])
+    if expected_environment is None:
+        raise ContractError(f"{path}: unsupported preflight environment ID")
+    for key, expected in expected_environment.items():
         if values[key] != expected:
             raise ContractError(f"{path}: preflight {key} must be {expected!r}")
     integer_limits = {

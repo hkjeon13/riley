@@ -500,3 +500,40 @@
 - 원격 CUDA 빌드 및 GPU 17, CPU 281 통과. SmolLM2 L30/canonical L2/L3의 64-token logits/KV 및 17-token prompt 후 48-token 생성 유지. model-loader 6파일 보존.
 - 다음은 serve 요청/취소/완료 및 scheduler KV lifecycle 연결. 기본 서버 전환·다중 bucket 확대·성능 측정 미실행.
 - [검증 기록](../../benchmarks/results/20260911-g03-registry/README.md).
+
+## 2026-09-11 G04 — 서버 연결과 후보 고정, 교차 qualification 차단
+
+- 명시 승인 범위를 서버/engine-only 연결, SmolLM2 c1/p128/o32, release 확인,
+  clean snapshot, vLLM 실행 가능성 및 측정 계획 생성까지 연속 수행했다.
+- owned full graph 341 replay의 모든 logits가 eager와 정확히 일치했다.
+  HTTP CPU/GPU greedy 취소·재사용·shutdown/zero-allocation 및 release 정책별 검증 통과.
+- frozen snapshot: `2cfd76c27ad1f25f5f41cfea93c2d3f5420e8a9b`.
+  원래 checkout은 commit/push하지 않았고 model 변경 6개는 보존했다.
+- **측정 준비 완료나 경쟁 qualification 통과는 아니다.** 동일 입력에서 vLLM과
+  9번째 토큰부터 달랐고, CUDA Runtime도 12.8/13.0으로 다르다. CUDA 13 별도 빌드는
+  기존 reviewed HF prefill 환경 계약에서 실행 거부됐다.
+- 기존 preflight는 RAM 4096-byte 차이로 실패했으며 다른 Blender GPU 작업도 남아 있다.
+- 성능 캠페인은 실행하지 않았다. 계획의 측정 명령은 미통과 gate를 이유로 차단한다.
+- 증거: `benchmarks/results/20260911-g04-measurement-readiness/README.md`,
+  `verification.json`, `parity.json`, `candidate.json`, `measurement-plan.json`.
+
+## 2026-09-11 G04 qualification follow-up
+
+The M=1 batch owner now reserves a native reference dense-prefill plan that
+is never dispatched, removing its unused CUDA 12.8-only cuBLASLt dependency.
+The real paged-attention path and canonical HF rounding remain unchanged.
+CUDA 13 release linking now supplies the Linux C++ ABI runtime explicitly.
+The 341-replay p128/o32 owner test passes on CUDA 12.8 and 13 with the same
+32 tokens; CUDA 13 release HTTP and CPU/GPU sampling lifecycle checks pass.
+This qualifies the tested SmolLM2 c1 path only, not general dense prefill
+on CUDA 13 or M4/M5.
+
+A separate exact preflight environment,
+`rtx4090-ubuntu22-driver580-20260911-v2`, binds the observed 67185594368-byte
+RAM snapshot; v1 remains unchanged/default and all GPU exclusivity gates remain.
+Cross-engine token equivalence and exclusive-GPU preflight still fail.
+An isolated norm-rounding experiment matches vLLM eager for 32 tokens, but
+vLLM default compiled execution differs from eager too. That numerical change
+was NOT applied to the candidate or used to waive the default-vLLM token gate.
+Evidence: `benchmarks/results/20260911-g04-qualification-followup/`.
+Performance campaign has not been executed.

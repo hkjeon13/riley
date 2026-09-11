@@ -1,5 +1,17 @@
 # Baseline environment v1
 
+## September 11 host snapshot
+
+The explicit `RILEY_PREFLIGHT_ENVIRONMENT_ID=rtx4090-ubuntu22-driver580-20260911-v2`
+profile records the same hardware/OS/driver with `/proc/meminfo` MemTotal
+`65610932` KiB (`67185594368` bytes), one OS-visible page below v1. The reason
+for that boot-time accounting difference has not been established. This is a
+new exact snapshot, not a RAM tolerance or a claim that v1 passed. v1 remains
+the default. Both profiles retain all GPU exclusivity, memory, temperature,
+clock, disk, source cleanliness and driver checks. A campaign must use one
+environment identity throughout; historical v1 and new v2 receipts cannot be
+mixed in a matched comparison.
+
 이 문서는 첫 release까지 비교 기준으로 사용하는 primary 환경을 고정한다. 실제 측정 row는 이 문서의 값과 실행 직전 `nvidia-smi` snapshot을 함께 기록한다.
 
 ## Gate A 상태 출처

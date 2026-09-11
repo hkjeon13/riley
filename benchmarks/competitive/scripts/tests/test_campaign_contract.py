@@ -667,6 +667,19 @@ class CampaignCheckerTests(unittest.TestCase):
                 {"git_revision": "d" * 40},
             )
 
+    def test_september_preflight_identity_does_not_accept_v1_ram(self) -> None:
+        original = self.fixture.preflight_path.read_text()
+        updated = original.replace("rtx4090-ubuntu22-driver580-v1",
+                                    "rtx4090-ubuntu22-driver580-20260911-v2")
+        self.fixture.preflight_path.write_text(updated)
+        with self.assertRaisesRegex(competitive_common.ContractError, "ram_bytes"):
+            competitive_common.load_preflight_receipt(
+                self.fixture.preflight_path, {"git_revision": "d" * 40})
+        self.fixture.preflight_path.write_text(updated.replace("67185598464", "67185594368"))
+        values = competitive_common.load_preflight_receipt(
+            self.fixture.preflight_path, {"git_revision": "d" * 40})
+        self.assertEqual(values["ram_bytes"], "67185594368")
+
     def _write_plan_and_rebind_raw(self, plan: dict[str, object]) -> None:
         self.fixture.plan = plan
         _write_json(self.fixture.plan_path, plan)

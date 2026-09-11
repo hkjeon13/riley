@@ -90,6 +90,7 @@ class PreflightTests(unittest.TestCase):
         kernel_release: str = "6.8.0-138-generic",
         ram_kib: int = 65_610_936,
         compute_query_ok: bool = True,
+        environment_id: str = "rtx4090-ubuntu22-driver580-v1",
     ) -> subprocess.CompletedProcess[str]:
         tools = root / "fake-bin"
         tools.mkdir()
@@ -153,6 +154,7 @@ class PreflightTests(unittest.TestCase):
                 "RILEY_CPU_GOVERNOR_ROOT": str(governor_root),
                 "RILEY_HOST_ROOT": str(host_root),
                 "RILEY_PREFLIGHT_OUTPUT_ROOT": str(staging),
+                "RILEY_PREFLIGHT_ENVIRONMENT_ID": environment_id,
             }
         )
         return subprocess.run(
@@ -189,6 +191,20 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(values["clock_synchronized"], "yes")
         self.assertEqual(values["staging_available_bytes"], str(30 * 1024**3))
         self.assertEqual(values["staging_minimum_bytes"], str(20 * 1024**3))
+
+    def test_september_snapshot_requires_its_exact_identity(self) -> None:
+        snapshot = "rtx4090-ubuntu22-driver580-20260911-v2"
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run(Path(directory), environment_id=snapshot, ram_kib=65_610_932)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("environment_id=" + snapshot, result.stdout)
+        self.assertIn("ram_bytes=67185594368", result.stdout)
+        for identity, ram in [(snapshot, 65_610_936), (snapshot, 65_610_931),
+                              ("rtx4090-ubuntu22-driver580-v1", 65_610_932),
+                              ("arbitrary-host", 65_610_932)]:
+            with self.subTest(identity=identity, ram=ram), tempfile.TemporaryDirectory() as directory:
+                result = self._run(Path(directory), environment_id=identity, ram_kib=ram)
+                self.assertNotEqual(result.returncode, 0)
 
     def test_primary_environment_checks_fail_closed(self) -> None:
         cases = {
