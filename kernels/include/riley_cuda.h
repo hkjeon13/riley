@@ -2660,6 +2660,19 @@ RileyCudaStatus riley_cuda_graph_resources_record_decode(
     uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
     const float*, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
+// Profile2 P128 prefill and M1 decode under the same retained resource ledger.
+// Additional parents[12]: hidden,norm,projection,rotaryQ,context,rawK,rawV,
+// rotaryK,gate,up,residualFP32,product. Exact byte sizes are 128 times
+// [1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072].
+// Metadata appends {magic=0x50313238,rows,tokens[128]} after the legacy layout.
+// rows128 requires last_position127 and base token==tokens127; rows1 requires
+// positions128..159 and all appended token slots zero. Every parent is reserved.
+RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
+    const float*, uint32_t, uint32_t, RileyCudaDeviceBuffer* const*,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_graph_resources_record_attention_chain(
     RileyCudaGraphResources*,RileyCudaDeviceBuffer* const*,RileyCudaGemmPlan*,RileyCudaGemmPlan*,
     RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,

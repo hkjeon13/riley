@@ -1015,7 +1015,9 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
     if graph_lane && workload.concurrency != 1 {
         return Err("full graph profile requires c1".to_owned());
     }
-    let batch_token_budget = if graph_lane {
+    let batch_token_budget = if options.runtime_selection()? == RuntimeSelection::VllmSmolP128 {
+        128
+    } else if graph_lane {
         1
     } else {
         CANONICAL_BATCH_TOKEN_BUDGET
@@ -1789,12 +1791,10 @@ mod tests {
             panic!("run")
         };
         assert!(options.prepare_only);
-        assert!(
-            benchmark_config(&options)
-                .unwrap()
-                .executor
-                .vllm_smol_p128_graph()
-        );
+        let config = benchmark_config(&options).unwrap();
+        assert!(config.executor.vllm_smol_p128_batched_prefill());
+        assert_eq!(config.scheduler.iteration_token_budget, 128);
+        assert_eq!(config.scheduler.max_prefill_chunk_tokens, 128);
         let i = args.iter().position(|x| x == "--semantic-class").unwrap();
         args[i + 1] = OsString::from("E0");
         assert!(parse_arguments(args.clone()).is_err());

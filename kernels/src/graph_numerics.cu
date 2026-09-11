@@ -116,3 +116,14 @@ namespace riley_cuda_internal {
 cudaError_t enqueue_compiled_attention(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* metadata) noexcept {
  auto* m=(const uint8_t*)metadata;attention<<<dim3(1,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,1,160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();}
 }
+
+namespace riley_cuda_internal {
+// The attention kernel already treats blockIdx.x as a row and uses
+// count=(last_position+1)-rows+row+1 for the causal prefix. Only its launch
+// geometry changes; the reduction and tensor-core accumulation stay intact.
+cudaError_t enqueue_compiled_attention_rows(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* metadata,uint32_t rows) noexcept {
+ if(rows==0||rows>128)return cudaErrorInvalidValue;
+ if(rows==1)return enqueue_compiled_attention(s,q,k,v,out,metadata);
+ auto* m=(const uint8_t*)metadata;attention<<<dim3(rows,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,static_cast<int>(rows),160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();
+}
+} // namespace riley_cuda_internal

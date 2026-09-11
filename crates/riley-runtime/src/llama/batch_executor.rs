@@ -139,7 +139,13 @@ impl PreparedLlamaBatchExecutor {
         let bounds = config.metadata();
         let owner = PreparedLlamaBatchOwner::prepare(model, context, stream, config)?;
         shape_history.retain_prepared_variants(
-            owner.forward.plan.sequence_length(),
+            // The P128 graph has separate row scratch; its maximum admission
+            // bucket is independent of the retained M=1 decode GEMM plans.
+            if config.vllm_smol_p128_batched_prefill() {
+                bounds.max_input_tokens()
+            } else {
+                owner.forward.plan.sequence_length()
+            },
             |dense_rows| {
                 owner
                     .shape_variants
@@ -414,6 +420,15 @@ impl PreparedLlamaBatchExecutor {
         output_mode_requested: BatchOutputMode,
         stream: &mut CudaStream,
     ) -> LlamaBatchExecutorResult<()> {
+        if self.config.vllm_smol_p128_graph() {
+            self.output_ready = false;
+            self.output_count = 0;
+            self.owner.forward.output_ready = false;
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "graph numerics",
+                reason: "vllm-smol-p128-v1 requires an owned graph",
+            });
+        }
         if self.is_poisoned() {
             return Err(LlamaBatchExecutorError::Poisoned);
         }

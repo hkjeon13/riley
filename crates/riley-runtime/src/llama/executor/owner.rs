@@ -260,6 +260,16 @@ impl PreparedLlamaBatchOwner {
             });
         }
         let bounds = config.metadata();
+        if config.vllm_smol_p128_graph()
+            && (bounds.max_rows() != 1
+                || !matches!(bounds.max_input_tokens(), 1 | 128)
+                || config.shape_policy() != super::shape::LlamaBatchShapePolicy::FixedMaximum)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1 metadata",
+                reason: "owned profile requires fixed maximum, one sequence and a 1 or 128 token budget",
+            });
+        }
         if bounds.max_input_tokens() > spec.max_sequence_length() {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "max_input_tokens",
@@ -273,18 +283,18 @@ impl PreparedLlamaBatchOwner {
         // the native reference plan explicitly, avoiding an unused cuBLASLt
         // prefill dependency (and its separate CUDA-version qualification).
         // This does not change the paged attention reduction implementation.
-        let forward_config = if bounds.max_input_tokens() == 1 {
+        let forward_rows = if config.vllm_smol_p128_batched_prefill() {
+            1
+        } else {
+            bounds.max_input_tokens()
+        };
+        let forward_config = if forward_rows == 1 {
             config.forward().with_reference_attention()
         } else {
             config.forward()
         };
-        let mut forward = PreparedLlamaForward::prepare(
-            model,
-            context,
-            stream,
-            bounds.max_input_tokens(),
-            forward_config,
-        )?;
+        let mut forward =
+            PreparedLlamaForward::prepare(model, context, stream, forward_rows, forward_config)?;
         let shape_variants = match prepare_shape_variants(
             model,
             context,

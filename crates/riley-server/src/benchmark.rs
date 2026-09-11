@@ -1524,6 +1524,16 @@ mod cuda_executor {
             )
         })?;
         let metadata = config.executor.metadata();
+        if config.executor.vllm_smol_p128_batched_prefill()
+            && (scheduler.max_active_sequences != 1
+                || scheduler.iteration_token_budget != 128
+                || scheduler.max_prefill_chunk_tokens != 128)
+        {
+            return Err(invalid(
+                "P128 graph scheduler",
+                "requires one sequence and complete 128-token prefill scheduling",
+            ));
+        }
         if scheduler.overload_policy != OverloadPolicy::RejectImmediately {
             return Err(invalid(
                 "overload_policy",

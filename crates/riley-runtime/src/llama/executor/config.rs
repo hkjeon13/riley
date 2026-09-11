@@ -167,6 +167,12 @@ impl PreparedLlamaBatchExecutorConfig {
         self.vllm_smol_p128_graph
     }
 
+    /// Captures all 128 prompt tokens together while retaining M=1 decode plans.
+    #[must_use]
+    pub const fn vllm_smol_p128_batched_prefill(self) -> bool {
+        self.vllm_smol_p128_graph && self.metadata.max_input_tokens() == 128
+    }
+
     #[must_use]
     pub const fn metadata(self) -> LlamaBatchMetadataConfig {
         self.metadata
@@ -435,5 +441,21 @@ mod graph_numerical_profile_tests {
         );
         assert!(!normalize_prepared_config(c).vllm_smol_p128_graph());
         assert!(normalize_prepared_config(c.with_vllm_smol_p128_graph()).vllm_smol_p128_graph());
+    }
+
+    #[test]
+    fn batched_prefill_requires_explicit_profile_and_exact_p128_capacity() {
+        for tokens in [1, 2, 127, 128, 129] {
+            let config = PreparedLlamaBatchExecutorConfig::new(
+                LlamaBatchMetadataConfig::new(1, tokens, 16, 1, 16).unwrap(),
+                PreparedLlamaForwardConfig::default(),
+            );
+            assert!(!config.vllm_smol_p128_batched_prefill());
+            assert_eq!(
+                normalize_prepared_config(config.with_vllm_smol_p128_graph())
+                    .vllm_smol_p128_batched_prefill(),
+                tokens == 128
+            );
+        }
     }
 }

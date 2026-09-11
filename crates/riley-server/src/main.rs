@@ -914,6 +914,14 @@ fn run_serve(
     if options.prefill_chunk_tokens > options.batch_token_budget {
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
+    if options.vllm_smol_p128_graph
+        && (options.max_active_sequences != 1
+            || !matches!(options.batch_token_budget, 1 | 128)
+            || options.prefill_chunk_tokens != options.batch_token_budget
+            || options.batch_shape_policy != BatchShapePolicyMode::FixedMaximum)
+    {
+        return Err("vllm-smol-p128-v1 requires one active sequence, fixed-max shape, and matching batch/prefill budgets of 1 or 128".to_owned());
+    }
     if options.batch_token_budget < options.max_active_sequences {
         return Err(
             "--batch-token-budget must permit at least one token per active sequence".to_owned(),

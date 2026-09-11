@@ -10696,6 +10696,20 @@ unsafe extern "C" {
         publish_logits: u32,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_record_decode_prefill128(
+        owner: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        geometry: *const u64,
+        eps: *const f32,
+        profile: u32,
+        publish_logits: u32,
+        prefill: *const *mut RawDeviceBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
 }
 impl GraphResourcesHandle {
     #[allow(clippy::too_many_arguments)]
@@ -10710,7 +10724,14 @@ impl GraphResourcesHandle {
         eps: &[f32],
         profile: u32,
         publish_logits: bool,
+        prefill: Option<[&DeviceBufferHandle; 12]>,
     ) -> CudaResult<()> {
+        if prefill.is_some() && profile != 2 {
+            return Err(CudaError::invalid_argument(
+                "record decode with P128 prefill",
+                "P128 prefill requires numerical profile 2",
+            ));
+        }
         if geometry[0] > 128
             || weights.len() as u64 != 3 + 9 * geometry[0]
             || eps.len() as u64 != 1 + 2 * geometry[0]
@@ -10727,22 +10748,40 @@ impl GraphResourcesHandle {
         raw[21] = workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr);
         let weights: Vec<_> = weights.iter().map(|d| d.as_ptr()).collect();
         let plans = plans.map(GemmPlanHandle::as_ptr);
+        let prefill = prefill.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
         let mut error = ErrorInfo::new();
         // SAFETY: fixed descriptor lengths above; all handles live under retained parents.
         let status = unsafe {
-            riley_cuda_graph_resources_record_decode(
-                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
-                raw.as_ptr(),
-                weights.as_ptr(),
-                weights.len() as u64,
-                plans.as_ptr(),
-                staging.as_ptr(),
-                geometry.as_ptr(),
-                eps.as_ptr(),
-                profile,
-                u32::from(publish_logits),
-                &mut error,
-            )
+            if let Some(prefill) = prefill.as_ref() {
+                riley_cuda_graph_resources_record_decode_prefill128(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    prefill.as_ptr(),
+                    &mut error,
+                )
+            } else {
+                riley_cuda_graph_resources_record_decode(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    &mut error,
+                )
+            }
         };
         status_result(status, "record decode", &error)
     }

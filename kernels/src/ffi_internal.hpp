@@ -1087,6 +1087,7 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
 cudaError_t enqueue_decode_embedding(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t) noexcept;
+cudaError_t enqueue_decode_embedding_rows(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t, uint64_t) noexcept;
 cudaError_t enqueue_decode_kv_attention(cudaStream_t, const void*, const void*, const void*, void*, void*, void*, const void*, uint64_t, uint64_t, uint64_t, uint64_t) noexcept;
 cudaError_t enqueue_decode_argmax(cudaStream_t, const void*, void*, uint64_t) noexcept;
 cudaError_t enqueue_bound_attention(cudaStream_t stream,const void* query,const void* key,
@@ -2330,6 +2331,18 @@ cudaError_t enqueue_compiled_swiglu(cudaStream_t,const void*,const void*,void*) 
 cudaError_t enqueue_compiled_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
 cudaError_t enqueue_compiled_prefill_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
 cudaError_t enqueue_compiled_kv_write(cudaStream_t,const void*,const void*,void*,void*,const void*) noexcept;
+// Row-parallel profile-2 prefill. rows is 1..128; every BF16 row is contiguous.
+// Norm residual mode 1 writes FP32[rows][576]; mode 2 consumes that layout.
+// RoPE/GEMM take a device pointer to the inclusive last position. Attention/KV
+// take the existing prefix: last position at byte 4, block IDs at byte 16.
+// The aggregate owner validates positions, physical maps and buffer extents.
+cudaError_t enqueue_compiled_norm_rows(cudaStream_t,const void*,const void*,const void*,void*,void*,int,uint32_t) noexcept;
+cudaError_t enqueue_compiled_rope_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,const void*,const void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_swiglu_rows(cudaStream_t,const void*,const void*,void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_attention_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_prefill_gemm_rows(cudaStream_t,const void*,const void*,void*,int,int,int,const void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,uint32_t) noexcept;
+
 }  // namespace riley_cuda_internal
 
 #endif  // RILEY_CUDA_FFI_INTERNAL_HPP_

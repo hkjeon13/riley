@@ -766,6 +766,49 @@ impl BorrowedGraphResourceReservation<'_> {
         profile: DecodeNumericalProfile,
         publish_logits: bool,
     ) -> CudaResult<()> {
+        self.record_decode_with_profile_and_prefill(
+            devices,
+            workspace,
+            weights,
+            plans,
+            staging,
+            geometry,
+            eps,
+            profile,
+            publish_logits,
+            None,
+        )
+    }
+
+    /// Records an optional P128 prefill graph alongside the retained M1 decode graph.
+    /// Prefill indices select twelve separately reserved parents in this order:
+    /// hidden, norm, projection, rotary Q, context, raw K, raw V, rotary K,
+    /// gate, up, FP32 residual, product. Their byte sizes are 128 times
+    /// `[1152, 1152, 1152, 1152, 1152, 384, 384, 384, 3072, 3072, 2304, 3072]`.
+    /// Only `VllmSmolP128V1` accepts prefill parents. Native validation checks
+    /// exact geometry, nonaliasing and the shared reservation before capture.
+    /// # Errors
+    /// Rejects an incompatible profile, missing parents or invalid native capture.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_decode_with_profile_and_prefill(
+        &mut self,
+        devices: [usize; 21],
+        workspace: Option<usize>,
+        weights: &[usize],
+        plans: [usize; 5],
+        staging: usize,
+        geometry: [u64; 4],
+        eps: &[f32],
+        profile: DecodeNumericalProfile,
+        publish_logits: bool,
+        prefill: Option<[usize; 12]>,
+    ) -> CudaResult<()> {
+        if prefill.is_some() && profile != DecodeNumericalProfile::VllmSmolP128V1 {
+            return Err(crate::CudaError::invalid_argument(
+                "record decode with P128 prefill",
+                "P128 prefill requires VllmSmolP128V1",
+            ));
+        }
         #[cfg(feature = "cuda")]
         {
             let bad =
@@ -810,6 +853,22 @@ impl BorrowedGraphResourceReservation<'_> {
                 })
                 .collect::<CudaResult<Vec<_>>>()?;
             let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            let prefill = prefill
+                .map(|indices| -> CudaResult<_> {
+                    indices
+                        .iter()
+                        .map(|&index| {
+                            self.parents
+                                .devices
+                                .get(index)
+                                .map(|buffer| buffer.native_handle())
+                                .ok_or_else(bad)
+                        })
+                        .collect::<CudaResult<Vec<_>>>()?
+                        .try_into()
+                        .map_err(|_| bad())
+                })
+                .transpose()?;
             self.native.record_decode(
                 devices.try_into().map_err(|_| bad())?,
                 workspace,
@@ -820,6 +879,7 @@ impl BorrowedGraphResourceReservation<'_> {
                 eps,
                 profile as u32,
                 publish_logits,
+                prefill,
             )
         }
         #[cfg(not(feature = "cuda"))]
@@ -834,6 +894,7 @@ impl BorrowedGraphResourceReservation<'_> {
                 eps,
                 profile as u32,
                 publish_logits,
+                prefill,
             );
             Err(crate::CudaError::unavailable("record decode"))
         }

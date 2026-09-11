@@ -1,5 +1,8 @@
 //! Full M=1 model capture on actual executor weights, plans, scratch and KV parents.
 #[cfg(all(test, feature = "cuda"))]
+#[path = "graph_decode_prefill_parity_gpu.rs"]
+mod prefill_parity_gpu;
+#[cfg(all(test, feature = "cuda"))]
 #[path = "graph_decode_stage_parity_gpu.rs"]
 mod stage_parity_gpu;
 use super::PreparedLlamaBatchExecutor;
@@ -12,6 +15,22 @@ use riley_cuda::{
     BorrowedGraphResourceParents, BorrowedGraphResourceReservation, CudaDeviceBuffer,
     CudaPinnedHostBuffer, CudaStream,
 };
+const PREFILL128_MAGIC: u32 = 0x5031_3238;
+const PREFILL128_METADATA_BYTES: usize = 520;
+const PREFILL128_SCRATCH_BYTES: [u64; 12] = [
+    128 * 1152,
+    128 * 1152,
+    128 * 1152,
+    128 * 1152,
+    128 * 1152,
+    128 * 384,
+    128 * 384,
+    128 * 384,
+    128 * 3072,
+    128 * 3072,
+    128 * 2304,
+    128 * 3072,
+];
 fn rejected(reason: &'static str) -> LlamaBatchExecutorError {
     LlamaBatchExecutorError::InvalidConfiguration {
         field: "full decode graph",
@@ -30,6 +49,33 @@ impl PreparedLlamaBatchExecutor {
         capacity: u64,
         publish_logits: bool,
     ) -> LlamaBatchExecutorResult<BorrowedGraphResourceReservation<'a>> {
+        self.prepare_full_decode_with_prefill(
+            stream,
+            metadata,
+            result,
+            staging,
+            capacity,
+            publish_logits,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_full_decode_with_prefill<'a>(
+        &'a mut self,
+        stream: &'a mut CudaStream,
+        metadata: &'a mut CudaDeviceBuffer,
+        result: &'a mut CudaDeviceBuffer,
+        staging: &'a mut CudaPinnedHostBuffer,
+        capacity: u64,
+        publish_logits: bool,
+        prefill: Option<&'a mut Vec<CudaDeviceBuffer>>,
+    ) -> LlamaBatchExecutorResult<BorrowedGraphResourceReservation<'a>> {
+        if prefill.as_ref().is_some_and(|buffers| buffers.len() != 12)
+            || prefill.is_some() != self.config.vllm_smol_p128_batched_prefill()
+        {
+            return Err(rejected("prefill parents differ from configured topology"));
+        }
         if self.owner.poisoned || self.owner.forward.is_poisoned() {
             return Err(rejected("healthy owner required"));
         }
@@ -115,6 +161,11 @@ impl PreparedLlamaBatchExecutor {
             devices.push(w);
             i
         });
+        let prefill_indices = prefill.map(|buffers| {
+            let first = devices.len();
+            devices.extend(buffers.iter_mut());
+            std::array::from_fn(|i| first + i)
+        });
         let plans = [
             &mut f.gemms.hidden,
             &mut f.gemms.key_value,
@@ -137,7 +188,7 @@ impl PreparedLlamaBatchExecutor {
         })
         .map_err(cuda)?;
         graph
-            .record_decode_with_profile(
+            .record_decode_with_profile_and_prefill(
                 std::array::from_fn(|i| base + i),
                 workspace,
                 &weights,
@@ -153,6 +204,7 @@ impl PreparedLlamaBatchExecutor {
                     riley_cuda::DecodeNumericalProfile::Canonical
                 },
                 publish_logits,
+                prefill_indices,
             )
             .map_err(cuda)?;
         Ok(graph)
@@ -177,6 +229,8 @@ impl PreparedLlamaBatchExecutor {
             && f.plan.sequence_length() == 1
             && self.owner.layout.head_dimension() == 64
             && self.config.metadata().max_rows() == 1
+            && (self.config.metadata().max_input_tokens() == 1
+                || self.config.vllm_smol_p128_batched_prefill())
             && capacity <= 4096
             && self.owner.layout.physical_block_count() <= 4096
             && !f.plan.layers().is_empty()
@@ -559,6 +613,14 @@ impl PreparedLlamaBatchExecutor {
         let f = &mut owner.forward;
         let dims = f.plan.dimensions();
         let capacity = self.config.metadata().max_block_entries() as u64;
+        let batched_prefill = self.config.vllm_smol_p128_batched_prefill();
+        let implementation = if batched_prefill {
+            0xF103
+        } else if self.config.vllm_smol_p128_graph() {
+            0xF102
+        } else {
+            0xF001
+        };
         let profile = if self.config.vllm_smol_p128_graph() {
             2_u32
         } else {
@@ -702,9 +764,28 @@ impl PreparedLlamaBatchExecutor {
                 .ok_or_else(|| rejected("footprint overflow"))?;
             digest.update(buffer.byte_len().to_le_bytes());
         }
-        let metadata_bytes = ((16 + 6 * capacity + 3) & !3) + 4;
+        let legacy_metadata_bytes = ((16 + 6 * capacity + 3) & !3) + 4;
+        let metadata_bytes = legacy_metadata_bytes
+            + if batched_prefill {
+                PREFILL128_METADATA_BYTES as u64
+            } else {
+                0
+            };
+        if batched_prefill {
+            digest.update(PREFILL128_MAGIC.to_le_bytes());
+            for size in PREFILL128_SCRATCH_BYTES {
+                digest.update(size.to_le_bytes());
+                device_bytes = device_bytes
+                    .checked_add(size)
+                    .ok_or_else(|| rejected("prefill footprint overflow"))?;
+            }
+        }
         let mut layout = Sha256::new();
         layout.update(b"riley.full-decode.packed-token-position-blocks-slot.v1\0");
+        if batched_prefill {
+            layout.update(b"prefill128-v1\0");
+            layout.update(PREFILL128_MAGIC.to_le_bytes());
+        }
         for v in [
             capacity,
             owner.layout.physical_block_count() as u64,
@@ -712,7 +793,7 @@ impl PreparedLlamaBatchExecutor {
             8,
             16,
             16 + 4 * capacity,
-            metadata_bytes - 4,
+            legacy_metadata_bytes - 4,
             40,
         ] {
             layout.update(v.to_le_bytes());
@@ -758,13 +839,16 @@ impl PreparedLlamaBatchExecutor {
                     (capacity * 16) as u32,
                     16,
                     1,
-                    GraphMetadataLayoutSignature::new(2, layout.finalize().into()),
+                    GraphMetadataLayoutSignature::new(
+                        if batched_prefill { 3 } else { 2 },
+                        layout.finalize().into(),
+                    ),
                 ),
                 GraphImplementationSignature::new(
-                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
-                    GraphImplementationId::new(if profile == 2 { 0xF102 } else { 0xF001 }),
+                    GraphImplementationId::new(implementation),
+                    GraphImplementationId::new(implementation),
+                    GraphImplementationId::new(implementation),
+                    GraphImplementationId::new(implementation),
                     GraphGemmPlanSetId::new(1),
                     GraphReductionPolicyId::new(profile),
                 ),
@@ -1220,6 +1304,7 @@ struct FullDecodeParents {
     metadata: CudaDeviceBuffer,
     result: CudaDeviceBuffer,
     staging: CudaPinnedHostBuffer,
+    prefill: Vec<CudaDeviceBuffer>,
 }
 
 /// Persistent, thread-confined M=1 graph session on the executor's actual KV pool.
@@ -1238,6 +1323,7 @@ pub struct OwnedLlamaDecodeExecutor {
     output_ready: bool,
     replays: u64,
     vllm_smol_p128_graph: bool,
+    batched_prefill: bool,
 }
 impl PreparedLlamaBatchExecutor {
     /// Whether this exact prepared owner supports a persistent single-row graph.
@@ -1261,11 +1347,18 @@ impl PreparedLlamaBatchExecutor {
         let mut stream = context.create_stream().map_err(cuda)?;
         let (signature, device_bytes) = self.full_decode_signature(&mut stream)?;
         let vllm_smol_p128_graph = self.config.vllm_smol_p128_graph();
+        let batched_prefill = self.config.vllm_smol_p128_batched_prefill();
         let vocabulary_size = self.vocabulary_size();
         let maximum_position_count = self.maximum_position_count()?;
         let config = self.config.metadata();
         let capacity = config.max_block_entries();
-        let metadata_bytes = ((16 + 6 * capacity + 3) & !3) + 4;
+        let metadata_bytes = ((16 + 6 * capacity + 3) & !3)
+            + 4
+            + if batched_prefill {
+                PREFILL128_METADATA_BYTES
+            } else {
+                0
+            };
         let transfer = (vocabulary_size * 2 + 40).max(metadata_bytes);
         let metadata = crate::llama::PreparedLlamaBatchMetadata::prepare(config)?;
         let parents = FullDecodeParents {
@@ -1278,16 +1371,29 @@ impl PreparedLlamaBatchExecutor {
             staging: context
                 .allocate_pinned_host_buffer((transfer * 2) as u64)
                 .map_err(cuda)?,
+            prefill: if batched_prefill {
+                PREFILL128_SCRATCH_BYTES
+                    .into_iter()
+                    .map(|bytes| context.allocate_device_buffer(bytes).map_err(cuda))
+                    .collect::<LlamaBatchExecutorResult<Vec<_>>>()?
+            } else {
+                Vec::new()
+            },
         };
         let mut registry = None;
         let graph = riley_cuda::OwnedGraphResourceReservation::prepare(parents, |p| {
-            let graph = p.executor.prepare_full_decode(
+            let graph = p.executor.prepare_full_decode_with_prefill(
                 &mut p.stream,
                 &mut p.metadata,
                 &mut p.result,
                 &mut p.staging,
                 capacity as u64,
                 true,
+                if batched_prefill {
+                    Some(&mut p.prefill)
+                } else {
+                    None
+                },
             )?;
             // Publish only a captured, instantiated exact-owner registry entry.
             let registered =
@@ -1315,6 +1421,7 @@ impl PreparedLlamaBatchExecutor {
             output_ready: false,
             replays: 0,
             vllm_smol_p128_graph,
+            batched_prefill,
         })
     }
 }
@@ -1377,7 +1484,7 @@ impl OwnedLlamaDecodeExecutor {
             self.output[offset..offset + 4].try_into().expect("token"),
         ))
     }
-    /// Executes one scheduler-owned token and returns completed native BF16 logits.
+    /// Executes one decode token or the configured complete P128 prefill.
     /// No retry or further publication is permitted after an execution error.
     /// # Errors
     /// Rejects invalid metadata before dispatch, or poisoned/failed execution.
@@ -1391,11 +1498,30 @@ impl OwnedLlamaDecodeExecutor {
         }
         let capacity = self.metadata.config().max_block_entries();
         let packed = self.metadata.pack(rows)?;
-        if packed.row_count() != 1 || packed.total_input_tokens() != 1 {
-            return Err(rejected("owned graph requires exactly one input token"));
+        let input_count = packed.total_input_tokens();
+        if packed.row_count() != 1
+            || (input_count != 1 && !(self.batched_prefill && input_count == 128))
+        {
+            return Err(rejected(
+                "owned graph input count differs from captured topology",
+            ));
         }
-        let token = packed.input_token_ids()[0];
-        let pos = packed.position_ids()[0];
+        let token = packed.input_token_ids()[input_count - 1];
+        let pos = packed.position_ids()[input_count - 1];
+        if self.batched_prefill
+            && !((input_count == 128
+                && pos == 127
+                && packed
+                    .position_ids()
+                    .iter()
+                    .enumerate()
+                    .all(|(i, &p)| p == i as u32))
+                || (input_count == 1 && (128..160).contains(&pos)))
+        {
+            return Err(rejected(
+                "P128 graph requires a complete fresh prompt or one decode token",
+            ));
+        }
         if self.vllm_smol_p128_graph
             && rows[0].kind()
                 != if pos < 128 {
@@ -1409,7 +1535,12 @@ impl OwnedLlamaDecodeExecutor {
         if self.vllm_smol_p128_graph && pos >= 160 {
             return Err(rejected("vllm-smol-p128-v1 position exceeds 159"));
         }
-        if token as usize >= self.vocabulary_size || pos as usize >= self.maximum_position_count {
+        if packed
+            .input_token_ids()
+            .iter()
+            .any(|&id| id as usize >= self.vocabulary_size)
+            || pos as usize >= self.maximum_position_count
+        {
             return Err(rejected("owned graph token or position out of bounds"));
         }
         let decision = select_registered_execution_graph(
@@ -1432,6 +1563,18 @@ impl OwnedLlamaDecodeExecutor {
             let offset = 16 + 4 * capacity + 2 * i;
             self.payload[offset..offset + 2]
                 .copy_from_slice(&packed.valid_tokens()[i].to_le_bytes());
+        }
+        if self.batched_prefill {
+            let offset = ((16 + 6 * capacity + 3) & !3) + 4;
+            self.payload[offset..offset + 4].copy_from_slice(&PREFILL128_MAGIC.to_le_bytes());
+            self.payload[offset + 4..offset + 8]
+                .copy_from_slice(&(input_count as u32).to_le_bytes());
+            if input_count == 128 {
+                for (i, &id) in packed.input_token_ids().iter().enumerate() {
+                    let at = offset + 8 + 4 * i;
+                    self.payload[at..at + 4].copy_from_slice(&id.to_le_bytes());
+                }
+            }
         }
         self.poisoned = true;
         self.graph
@@ -1460,6 +1603,9 @@ impl OwnedLlamaDecodeExecutor {
         p.metadata.close().map_err(cuda)?;
         p.result.close().map_err(cuda)?;
         p.staging.close().map_err(cuda)?;
+        for buffer in p.prefill {
+            buffer.close().map_err(cuda)?;
+        }
         p.stream.close().map_err(cuda)
     }
 }

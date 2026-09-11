@@ -2170,6 +2170,15 @@ mod cuda_backend {
             model: LoadedModel,
             config: CudaBackendConfig,
         ) -> Result<Self, BackendError> {
+            if config.executor.vllm_smol_p128_batched_prefill()
+                && (config.scheduler.max_active_sequences != 1
+                    || config.scheduler.iteration_token_budget != 128
+                    || config.scheduler.max_prefill_chunk_tokens != 128)
+            {
+                return Err(internal(
+                    "P128 graph requires one sequence and complete 128-token prefill scheduling",
+                ));
+            }
             metadata
                 .validate()
                 .map_err(|source| internal(format!("invalid model metadata: {source}")))?;

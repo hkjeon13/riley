@@ -2326,3 +2326,23 @@ cudaError_t riley_cuda_internal::enqueue_decode_embedding(cudaStream_t stream,
   finalize_embedding_error<<<1,1,0,stream>>>(static_cast<const uint32_t*>(tokens),1,report);
   return cudaGetLastError();
 }
+
+// The bounded prefill path uses the same validation, gather and report kernels
+// as M1. All token validation precedes any embedding output write.
+cudaError_t riley_cuda_internal::enqueue_decode_embedding_rows(cudaStream_t stream,
+    const void* table,const void* tokens,void* output,void* error,uint64_t hidden,
+    uint64_t vocab,uint64_t rows) noexcept {
+  if(rows==1)return enqueue_decode_embedding(stream,table,tokens,output,error,hidden,vocab);
+  if(rows!=128||hidden!=576||vocab!=49152)return cudaErrorInvalidValue;
+  auto* report=static_cast<RileyCudaEmbeddingErrorReport*>(error);
+  reset_embedding_error<<<1,1,0,stream>>>(report);
+  auto status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  validate_embedding_tokens<<<1,kThreads,0,stream>>>(static_cast<const uint32_t*>(tokens),rows,vocab,report);
+  status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  embedding_kernel<__nv_bfloat16><<<block_count(hidden*rows),kThreads,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(table),static_cast<const uint32_t*>(tokens),
+      static_cast<__nv_bfloat16*>(output),report,hidden,hidden*rows);
+  status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  finalize_embedding_error<<<1,1,0,stream>>>(static_cast<const uint32_t*>(tokens),rows,report);
+  return cudaGetLastError();
+}
