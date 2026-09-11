@@ -1109,6 +1109,11 @@ cudaError_t enqueue_mlp_residual(cudaStream_t stream, void* residual, void* down
 
 bool aggregate_gemm_plan_matches_context(
     const RileyCudaGemmPlan* plan, const RileyCudaContext* context) noexcept;
+// Read-only qualification under an existing aggregate plan lease. Unlike the
+// public info query, this never attempts a second exclusive acquisition.
+bool reserved_packed_decode_gemm_plan_matches(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context,
+    uint64_t expected_n) noexcept;
 bool release_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan) noexcept;
 bool canonical_gemm_bf16_graph_state_is_valid(
@@ -2342,6 +2347,9 @@ cudaError_t enqueue_compiled_swiglu_rows(cudaStream_t,const void*,const void*,vo
 cudaError_t enqueue_compiled_attention_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
 cudaError_t enqueue_compiled_prefill_gemm_rows(cudaStream_t,const void*,const void*,void*,int,int,int,const void*,uint32_t) noexcept;
 cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,uint32_t) noexcept;
+// Packed profile2 M1 decode: Q[576], K[192], V[192] are disjoint slices of one
+// retained output. Writes rotary Q and paged K/V for a validated position128..159.
+cudaError_t enqueue_compiled_packed_decode_rope_kv(cudaStream_t,const void*,const void*,const void*,void*,void*,void*,const void*,const void*,const void*) noexcept;
 
 }  // namespace riley_cuda_internal
 

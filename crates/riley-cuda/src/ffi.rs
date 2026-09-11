@@ -10710,6 +10710,22 @@ unsafe extern "C" {
         prefill: *const *mut RawDeviceBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_record_decode_prefill128_packed(
+        owner: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        geometry: *const u64,
+        eps: *const f32,
+        profile: u32,
+        publish_logits: u32,
+        prefill: *const *mut RawDeviceBuffer,
+        packed: *const *mut RawDeviceBuffer,
+        packed_plans: *const *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
 }
 impl GraphResourcesHandle {
     #[allow(clippy::too_many_arguments)]
@@ -10725,7 +10741,15 @@ impl GraphResourcesHandle {
         profile: u32,
         publish_logits: bool,
         prefill: Option<[&DeviceBufferHandle; 12]>,
+        packed: Option<[&DeviceBufferHandle; 62]>,
+        packed_plans: Option<[&GemmPlanHandle; 2]>,
     ) -> CudaResult<()> {
+        if packed.is_some() != packed_plans.is_some() || (packed.is_some() && prefill.is_none()) {
+            return Err(CudaError::invalid_argument(
+                "record decode with packed projections",
+                "packed parents and plans must be supplied together with P128 prefill",
+            ));
+        }
         if prefill.is_some() && profile != 2 {
             return Err(CudaError::invalid_argument(
                 "record decode with P128 prefill",
@@ -10749,10 +10773,31 @@ impl GraphResourcesHandle {
         let weights: Vec<_> = weights.iter().map(|d| d.as_ptr()).collect();
         let plans = plans.map(GemmPlanHandle::as_ptr);
         let prefill = prefill.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
+        let packed = packed.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
+        let packed_plans = packed_plans.map(|plans| plans.map(GemmPlanHandle::as_ptr));
         let mut error = ErrorInfo::new();
         // SAFETY: fixed descriptor lengths above; all handles live under retained parents.
         let status = unsafe {
-            if let Some(prefill) = prefill.as_ref() {
+            if let (Some(prefill), Some(packed), Some(packed_plans)) =
+                (prefill.as_ref(), packed.as_ref(), packed_plans.as_ref())
+            {
+                riley_cuda_graph_resources_record_decode_prefill128_packed(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    prefill.as_ptr(),
+                    packed.as_ptr(),
+                    packed_plans.as_ptr(),
+                    &mut error,
+                )
+            } else if let Some(prefill) = prefill.as_ref() {
                 riley_cuda_graph_resources_record_decode_prefill128(
                     self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
                     raw.as_ptr(),

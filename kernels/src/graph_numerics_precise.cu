@@ -131,6 +131,30 @@ __global__ void compiled_kv_write_rows(const __nv_bfloat16* k,const __nv_bfloat1
  int destination=((physical*3+i/64)*16+pos%16)*64+i%64;keys[destination]=k[i];values[destination]=v[i];
 }
 
+// Packed M1 decode only. Preserve compiled_rope's BF16 table rounding and
+// expression order, then publish the rounded K directly to its paged cache.
+// Each K thread also copies the matching two raw V values without conversion.
+// The aggregate owner validates the fresh position, physical map and extents.
+__global__ void compiled_packed_decode_rope_kv(
+    const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,
+    __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,
+    const float* cos,const float* sin,const uint32_t* metadata){
+ const uint32_t* pos=metadata+1;
+ if(*pos<128||*pos>=160)return;
+ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;int head=i/32,dim=i%32;
+ float c=__bfloat162float(__float2bfloat16_rn(cos[*pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[*pos*32+dim]));
+ const __nv_bfloat16* src=head<9?q:k;int base=(head<9?head:head-9)*64;
+ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
+ const __nv_bfloat16 first=__float2bfloat16_rn(a*c-b*s),second=__float2bfloat16_rn(b*c+a*s);
+ if(head<9){qo[base+dim]=first;qo[base+dim+32]=second;}
+ else{
+  const uint32_t physical=metadata[4+*pos/16];
+  const uint32_t destination=((physical*3+head-9)*16+*pos%16)*64+dim;
+  keys[destination]=first;keys[destination+32]=second;
+  values[destination]=v[base+dim];values[destination+32]=v[base+dim+32];
+ }
+}
+
 namespace riley_cuda_internal {
 cudaError_t enqueue_compiled_norm_rows(cudaStream_t s,const void* a,const void* b,const void* w,void* residual,void* out,int mode,uint32_t rows) noexcept {
  if(rows==0||rows>128)return cudaErrorInvalidValue;
@@ -156,5 +180,10 @@ cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t s,const void* k,const vo
  if(rows==0||rows>128)return cudaErrorInvalidValue;
  if(rows==1)return enqueue_compiled_kv_write(s,k,v,keys,values,metadata);
  compiled_kv_write_rows<<<rows,256,0,s>>>((const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(const uint32_t*)metadata,rows);return cudaGetLastError();
+}
+cudaError_t enqueue_compiled_packed_decode_rope_kv(
+    cudaStream_t s,const void* q,const void* k,const void* v,void* qo,
+    void* keys,void* values,const void* cos,const void* sin,const void* metadata) noexcept {
+ compiled_packed_decode_rope_kv<<<2,256,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)qo,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(const float*)cos,(const float*)sin,(const uint32_t*)metadata);return cudaGetLastError();
 }
 } // namespace riley_cuda_internal

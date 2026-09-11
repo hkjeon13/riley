@@ -229,6 +229,9 @@ fn detach_and_snapshot(
     for buffer in parents.prefill {
         buffer.close()?;
     }
+    if let Some(packed) = parents.packed {
+        packed.close()?;
+    }
     parents.stream.close()?;
     Ok((parents.executor, CacheBytes { keys, values }))
 }

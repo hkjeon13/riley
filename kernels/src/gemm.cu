@@ -1350,6 +1350,36 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+bool reserved_packed_decode_gemm_plan_matches(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context,
+    uint64_t expected_n) noexcept {
+  // The caller has already established membership in its aggregate ledger.
+  // Do not call the public plan-info API here: it requires an idle plan and
+  // would try to acquire the exclusive use that the aggregate already owns.
+  if ((expected_n != 960 && expected_n != 3072) ||
+      !canonical_gemm_bf16_plan_is_ready(plan) || plan->owner != context ||
+      plan->active_uses.load(std::memory_order_acquire) != 1 ||
+      plan->config.flags != 0 || plan->config.m != 1 ||
+      plan->config.n != expected_n || plan->config.k != 576 ||
+      plan->input_bytes != 1152 || plan->weight_bytes != expected_n * 1152 ||
+      plan->output_bytes != expected_n * 2) {
+    return false;
+  }
+  const auto& info = plan->algorithm_info;
+  // Exact identity from the bounded 30-layer packed-projection BF16 probe.
+  // This admission does not replace full-model logits/KV qualification.
+  return info.backend == RILEY_CUDA_GEMM_BACKEND_CUBLASLT &&
+         info.algorithm_id == 13 && info.tile_id == 0 && info.stages_id == 0 &&
+         info.cta_swizzling == 0 && info.custom_option == 74 &&
+         info.numerical_implementation_flags == 131585 &&
+         info.compute_capability_major == 8 && info.compute_capability_minor == 9 &&
+         info.runtime_version == 13000 && info.cublaslt_version == 130101 &&
+         info.deterministic == RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED &&
+         info.split_k == 1 &&
+         info.reduction_scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE) &&
+         info.workspace_bytes == 0;
+}
+
 }  // namespace riley_cuda_internal
 
 extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(

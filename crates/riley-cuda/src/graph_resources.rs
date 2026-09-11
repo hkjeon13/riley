@@ -803,6 +803,54 @@ impl BorrowedGraphResourceReservation<'_> {
         publish_logits: bool,
         prefill: Option<[usize; 12]>,
     ) -> CudaResult<()> {
+        self.record_decode_with_profile_prefill_and_packed(
+            devices,
+            workspace,
+            weights,
+            plans,
+            staging,
+            geometry,
+            eps,
+            profile,
+            publish_logits,
+            prefill,
+            None,
+            None,
+        )
+    }
+
+    /// Records P128 prefill with optional packed M1 decode projections.
+    /// Packed device parents alternate QKV `[960, 576]` and gate/up `[3072, 576]`
+    /// row-major BF16 weights for each of thirty layers, followed by BF16 output
+    /// parents of 1920 and 6144 bytes. The two packed plans are respectively
+    /// M1/N960/K576 and M1/N3072/K576. All indices select retained parents.
+    /// Native validation checks distinct, nonaliasing parents and the exact
+    /// workspace-free, no-split plan metadata before capture.
+    /// # Errors
+    /// Rejects packed parents without packed plans, P128 prefill or the
+    /// `VllmSmolP128V1` profile, out-of-range indices, or invalid native capture.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_decode_with_profile_prefill_and_packed(
+        &mut self,
+        devices: [usize; 21],
+        workspace: Option<usize>,
+        weights: &[usize],
+        plans: [usize; 5],
+        staging: usize,
+        geometry: [u64; 4],
+        eps: &[f32],
+        profile: DecodeNumericalProfile,
+        publish_logits: bool,
+        prefill: Option<[usize; 12]>,
+        packed: Option<[usize; 62]>,
+        packed_plans: Option<[usize; 2]>,
+    ) -> CudaResult<()> {
+        if packed.is_some() != packed_plans.is_some() || (packed.is_some() && prefill.is_none()) {
+            return Err(crate::CudaError::invalid_argument(
+                "record decode with packed projections",
+                "packed parents and plans must be supplied together with P128 prefill",
+            ));
+        }
         if prefill.is_some() && profile != DecodeNumericalProfile::VllmSmolP128V1 {
             return Err(crate::CudaError::invalid_argument(
                 "record decode with P128 prefill",
@@ -869,6 +917,38 @@ impl BorrowedGraphResourceReservation<'_> {
                         .map_err(|_| bad())
                 })
                 .transpose()?;
+            let packed = packed
+                .map(|indices| -> CudaResult<_> {
+                    indices
+                        .iter()
+                        .map(|&index| {
+                            self.parents
+                                .devices
+                                .get(index)
+                                .map(|buffer| buffer.native_handle())
+                                .ok_or_else(bad)
+                        })
+                        .collect::<CudaResult<Vec<_>>>()?
+                        .try_into()
+                        .map_err(|_| bad())
+                })
+                .transpose()?;
+            let packed_plans = packed_plans
+                .map(|indices| -> CudaResult<_> {
+                    indices
+                        .iter()
+                        .map(|&index| {
+                            self.parents
+                                .plans
+                                .get(index)
+                                .ok_or_else(bad)?
+                                .graph_resource_handle()
+                        })
+                        .collect::<CudaResult<Vec<_>>>()?
+                        .try_into()
+                        .map_err(|_| bad())
+                })
+                .transpose()?;
             self.native.record_decode(
                 devices.try_into().map_err(|_| bad())?,
                 workspace,
@@ -880,6 +960,8 @@ impl BorrowedGraphResourceReservation<'_> {
                 profile as u32,
                 publish_logits,
                 prefill,
+                packed,
+                packed_plans,
             )
         }
         #[cfg(not(feature = "cuda"))]
@@ -895,6 +977,8 @@ impl BorrowedGraphResourceReservation<'_> {
                 profile as u32,
                 publish_logits,
                 prefill,
+                packed,
+                packed_plans,
             );
             Err(crate::CudaError::unavailable("record decode"))
         }

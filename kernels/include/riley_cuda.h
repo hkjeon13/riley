@@ -2673,6 +2673,21 @@ RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
     const float*, uint32_t, uint32_t, RileyCudaDeviceBuffer* const*,
     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
+// Additive profile2 P128 graph with packed M1 decode projections. Prefill keeps
+// the exact original operators and parents. packed[62] has two weights per
+// layer: [2*l]=BF16 QKV[960,576], [2*l+1]=BF16 gate_up[3072,576], l=0..29;
+// [60]=QKV output1920 bytes, [61]=gate_up output6144 bytes. All packed parents
+// are distinct and disjoint from original device/weight/prefill allocations.
+// packed_plans[2] are selected strict no-split, zero-workspace M1 plans for
+// N960/K576 and N3072/K576, with the explicitly qualified SM89/CUDA13 identity.
+// All parents and plans must already belong to the same aggregate reservation.
+RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
+    const float*, uint32_t, uint32_t, RileyCudaDeviceBuffer* const*,
+    RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan* const*,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_graph_resources_record_attention_chain(
     RileyCudaGraphResources*,RileyCudaDeviceBuffer* const*,RileyCudaGemmPlan*,RileyCudaGemmPlan*,
     RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,

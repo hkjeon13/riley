@@ -825,6 +825,7 @@ static RileyCudaStatus record_decode_impl(
     RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,
     RileyCudaPinnedHostBuffer* staging,const uint64_t* geometry,const float* eps,
     uint32_t profile,uint32_t publish_logits,RileyCudaDeviceBuffer* const* prefill_buffers,
+    RileyCudaDeviceBuffer* const* packed_buffers,RileyCudaGemmPlan* const* packed_plans,
     RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   auto status=transfer_ready(r,error); if(status!=RILEY_CUDA_STATUS_SUCCESS) return status;
@@ -835,7 +836,9 @@ static RileyCudaStatus record_decode_impl(
     return reject(error,"decode lifecycle invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   const uint64_t layers=geometry[0],physical=geometry[1],capacity=geometry[2],vocab=geometry[3];
   if(layers==0||layers>128||physical==0||physical>4096||capacity==0||capacity>physical||vocab==0||vocab>UINT32_MAX||
-      weight_count!=3+9*layers||profile>2||publish_logits>1||(prefill_buffers!=nullptr&&profile!=2))
+      weight_count!=3+9*layers||profile>2||publish_logits>1||(prefill_buffers!=nullptr&&profile!=2)||
+      ((packed_buffers==nullptr)!=(packed_plans==nullptr))||
+      (packed_buffers!=nullptr&&(profile!=2||prefill_buffers==nullptr||layers!=30)))
     return reject(error,"decode bucket unsupported",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   if(profile==2){
     int major=0,minor=0,runtime=0;
@@ -893,11 +896,41 @@ static RileyCudaStatus record_decode_impl(
         return reject(error,"P128 weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
     }
   }
+  if(packed_buffers!=nullptr){
+    for(size_t i=0;i<62;++i){
+      auto* parent=packed_buffers[i];
+      const uint64_t bytes=i==60?1920:i==61?6144:(i%2==0?1105920:3538944);
+      if(parent==nullptr||!same_context(parent->owner,r->owner)||
+          !holds_counter(r,&parent->active_uses)||parent->byte_len!=bytes)
+        return reject(error,"packed decode parent mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      for(size_t j=0;j<i;++j) if(parent==packed_buffers[j])
+        return reject(error,"packed decode parent alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      for(size_t j=0;j<22;++j) if(parent==d[j])
+        return reject(error,"packed decode scratch alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      for(uint64_t j=0;j<weight_count;++j) if(parent==w[j])
+        return reject(error,"packed decode weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      for(size_t j=0;j<12;++j) if(parent==prefill_buffers[j])
+        return reject(error,"packed decode prefill alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+    }
+    for(size_t i=0;i<2;++i){
+      if(packed_plans[i]==nullptr||!holds_plan(r,packed_plans[i]))
+        return reject(error,"packed decode plan absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      if(i!=0&&packed_plans[i]==packed_plans[0])
+        return reject(error,"packed decode plan alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      for(size_t j=0;j<5;++j) if(packed_plans[i]==plans[j])
+        return reject(error,"packed decode original plan alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+      if(!reserved_packed_decode_gemm_plan_matches(packed_plans[i],r->owner,i==0?960:3072))
+        return reject(error,"packed decode plan differs from qualified identity",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+    }
+  }
   using State=RileyCudaCanonicalGemmBf16GraphState;
-  auto* states=static_cast<State*>(std::malloc(static_cast<size_t>(7*layers+1)*sizeof(State)));
+  const uint64_t original_state_count=7*layers+1;
+  const uint64_t state_count=original_state_count+(packed_buffers!=nullptr?2*layers:0);
+  auto* states=static_cast<State*>(std::malloc(static_cast<size_t>(state_count)*sizeof(State)));
   if(states==nullptr) return reject(error,"decode binding allocation failed",RILEY_CUDA_STATUS_OUT_OF_MEMORY);
-  for(uint64_t i=0;i<7*layers+1;++i) new (&states[i]) State();
-  auto release_states=[&]() noexcept { for(uint64_t i=0;i<7*layers+1;++i) states[i].~State(); std::free(states); };
+  for(uint64_t i=0;i<state_count;++i) new (&states[i]) State();
+  auto* packed_states=states+original_state_count;
+  auto release_states=[&]() noexcept { for(uint64_t i=0;i<state_count;++i) states[i].~State(); std::free(states); };
   for(uint64_t l=0;l<layers&&status==RILEY_CUDA_STATUS_SUCCESS;++l){
     auto* weights=w+3+9*l;
     const size_t pi[7]={0,1,1,0,2,2,3},inputs[7]={2,2,2,5,2,2,12},outputs[7]={3,6,7,3,9,10,5},wi[7]={1,2,3,4,6,7,8};
@@ -905,10 +938,18 @@ static RileyCudaStatus record_decode_impl(
       status=bind_reserved_gemm_state(plans[pi[j]],r->stream,d[inputs[j]],weights[wi[j]],d[outputs[j]],d[21],&states[l*7+j],error);
   }
   if(status==RILEY_CUDA_STATUS_SUCCESS) status=bind_reserved_gemm_state(plans[4],r->stream,d[2],w[2],d[13],d[21],&states[layers*7],error);
+  if(packed_buffers!=nullptr){
+    for(uint64_t l=0;l<layers&&status==RILEY_CUDA_STATUS_SUCCESS;++l){
+      status=bind_reserved_gemm_state(packed_plans[0],r->stream,d[2],packed_buffers[2*l],packed_buffers[60],nullptr,&packed_states[2*l],error);
+      if(status==RILEY_CUDA_STATUS_SUCCESS)
+        status=bind_reserved_gemm_state(packed_plans[1],r->stream,d[2],packed_buffers[2*l+1],packed_buffers[61],nullptr,&packed_states[2*l+1],error);
+    }
+  }
   if(status!=RILEY_CUDA_STATUS_SUCCESS){release_states();return status;}
   std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,static_cast<size_t>(transfer));
   auto record_stage = [&](bool prefill) noexcept {
     const bool batched=prefill&&prefill_buffers!=nullptr;
+    const bool packed_decode=!prefill&&packed_buffers!=nullptr;
     const uint32_t rows=batched?128:1;
     auto buffer=[&](size_t index){
       return batched&&index>=1&&index<=12?prefill_buffers[index-1]->device_data:d[index]->device_data;
@@ -935,21 +976,36 @@ static RileyCudaStatus record_decode_impl(
         return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");
       };
       if(profile==2){if(l==0)s=kernel(enqueue_compiled_norm_rows(r->stream->stream,buffer(1),nullptr,weights[0]->device_data,nullptr,buffer(2),0,rows));}else s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,weights[0]->device_data,d[2]->device_data,h/2,eps[1+2*l],profile));
-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(0,3);
-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(1,6);
-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(2,7);
-      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_rope_rows(r->stream->stream,buffer(3),buffer(6),buffer(4),buffer(8),d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4,rows));
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&packed_decode)
+        s=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,packed_buffers[60],packed_states[2*l],error,"packed decode QKV GEMM");
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&!packed_decode) s=gemm(0,3);
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&!packed_decode) s=gemm(1,6);
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&!packed_decode) s=gemm(2,7);
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&packed_decode){
+        const auto* qkv=static_cast<const uint8_t*>(packed_buffers[60]->device_data);
+        s=kernel(enqueue_compiled_packed_decode_rope_kv(r->stream->stream,qkv,qkv+1152,qkv+1536,d[4]->device_data,
+            static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,
+            static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,
+            d[17]->device_data,d[18]->device_data,d[19]->device_data));
+      }
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2&&!packed_decode)s=kernel(enqueue_compiled_rope_rows(r->stream->stream,buffer(3),buffer(6),buffer(4),buffer(8),d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4,rows));
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_qkv_rope(r->stream->stream,d[3]->device_data,d[6]->device_data,d[4]->device_data,d[8]->device_data,d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4,h/128,k/128,d[17]->byte_len/128));
-      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_kv_write_rows(r->stream->stream,buffer(8),buffer(7),static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[19]->device_data,rows));
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2&&!packed_decode)s=kernel(enqueue_compiled_kv_write_rows(r->stream->stream,buffer(8),buffer(7),static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[19]->device_data,rows));
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_decode_kv_attention(r->stream->stream,d[4]->device_data,d[8]->device_data,d[7]->device_data,static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[5]->device_data,d[19]->device_data,capacity,h/128,k/128,physical));
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_attention_rows(r->stream->stream,buffer(4),static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,buffer(5),d[19]->device_data,rows));
       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(3,3);
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_residual(r->stream->stream,d[1]->device_data,d[3]->device_data,d[4]->device_data,h/2));
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_norm(r->stream->stream,d[4]->device_data,weights[5]->device_data,d[2]->device_data,h/2,eps[2+2*l],profile));
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_norm_rows(r->stream->stream,buffer(3),buffer(1),weights[5]->device_data,buffer(11),buffer(2),1,rows));
-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(4,9);
-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(5,10);
-      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_swiglu_rows(r->stream->stream,buffer(9),buffer(10),buffer(12),rows));
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&packed_decode)
+        s=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,packed_buffers[61],packed_states[2*l+1],error,"packed decode gate/up GEMM");
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&!packed_decode) s=gemm(4,9);
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&!packed_decode) s=gemm(5,10);
+      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2){
+        const void* gate=packed_decode?packed_buffers[61]->device_data:buffer(9);
+        const void* up=packed_decode?static_cast<uint8_t*>(packed_buffers[61]->device_data)+3072:buffer(10);
+        s=kernel(enqueue_compiled_swiglu_rows(r->stream->stream,gate,up,buffer(12),rows));
+      }
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_pointwise(r->stream->stream,d[9]->device_data,d[10]->device_data,d[11]->device_data,d[12]->device_data,inter/2));
       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(6,5);
       if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_norm_rows(r->stream->stream,buffer(5),buffer(11),(l+1<layers?w[3+9*(l+1)]:w[1])->device_data,buffer(1),buffer(2),2,rows));
@@ -987,7 +1043,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
     RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,
     RileyCudaPinnedHostBuffer* staging,const uint64_t* geometry,const float* eps,
     uint32_t profile,uint32_t publish_logits,RileyCudaErrorInfo* error) noexcept {
-  return record_decode_impl(r,d,w,weight_count,plans,staging,geometry,eps,profile,publish_logits,nullptr,error);
+  return record_decode_impl(r,d,w,weight_count,plans,staging,geometry,eps,profile,publish_logits,nullptr,nullptr,nullptr,error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
@@ -997,7 +1053,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
     uint32_t profile,uint32_t publish_logits,RileyCudaDeviceBuffer* const* prefill,
     RileyCudaErrorInfo* error) noexcept {
   if(prefill==nullptr){clear_error(error);return reject(error,"P128 scratch parents required",RILEY_CUDA_STATUS_INVALID_ARGUMENT);}
-  return record_decode_impl(r,d,w,weight_count,plans,staging,geometry,eps,profile,publish_logits,prefill,error);
+  return record_decode_impl(r,d,w,weight_count,plans,staging,geometry,eps,profile,publish_logits,prefill,nullptr,nullptr,error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+    RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,
+    RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,
+    RileyCudaPinnedHostBuffer* staging,const uint64_t* geometry,const float* eps,
+    uint32_t profile,uint32_t publish_logits,RileyCudaDeviceBuffer* const* prefill,
+    RileyCudaDeviceBuffer* const* packed,RileyCudaGemmPlan* const* packed_plans,
+    RileyCudaErrorInfo* error) noexcept {
+  if(prefill==nullptr||packed==nullptr||packed_plans==nullptr){
+    clear_error(error);return reject(error,"packed P128 parents and plans required",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+  return record_decode_impl(r,d,w,weight_count,plans,staging,geometry,eps,profile,publish_logits,prefill,packed,packed_plans,error);
 }
 
 #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
