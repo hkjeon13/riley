@@ -113,3 +113,16 @@ and DRAM read/write bytes so launch saving, register pressure, occupancy, and
 memory traffic can be reviewed together. The completion candidate intentionally
 keeps the kernel inventory unchanged; its benefit is measured by the paired
 host execution metric rather than inferred from kernel duration.
+
+## G04 single-row full graph
+
+`execution_graph_policy=disabled|require` selects the same M=1, canonical,
+grouped-head, separate-norm, GPU-greedy configuration on both Riley arms.
+The required gate is `g04-full-decode-p128-o32`; concurrency must be one.
+Graph ownership is prepared before trials and retained across requests.
+Its CUDA event intervals are unavailable and serialize as unmeasured/null;
+request and host monotonic boundaries remain the measurement contract.
+Native host execution uses `--container-image-sha256 none`, serialized as
+null. A container digest must name an actual image when a container is used;
+the pair checker still rejects differing environments. This paired Riley
+profile is separate from the Riley-versus-vLLM competitive campaign.

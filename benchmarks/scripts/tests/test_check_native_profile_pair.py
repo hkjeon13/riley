@@ -332,6 +332,17 @@ class NativeProfilePairTests(unittest.TestCase):
                 {"name": "execution_completion", "value": "iteration-batch"},
             )
 
+    def test_native_host_has_no_invented_container_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ProfilePairFixture(Path(directory))
+            for row in fixture.baseline + fixture.candidate:
+                row["environment"]["software"]["container_image_sha256"] = None
+            fixture.write()
+            self.assertTrue(checker.evaluate(fixture.baseline_paths, fixture.candidate_paths)["passed"])
+            fixture.candidate[0]["environment"]["software"]["container_image_sha256"] = "a" * 64
+            fixture.write()
+            self.assertFalse(checker.evaluate(fixture.baseline_paths, fixture.candidate_paths)["passed"])
+
     def test_decode_fast_path_pairs_are_supported(self) -> None:
         pairs = [
             ("execution_graph_policy", "disabled", "require", "g04-full-decode-p128-o32"),

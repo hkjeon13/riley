@@ -353,11 +353,12 @@ def _validate_environment(value: Any, path: str) -> None:
         "cublas_version",
     ):
         _string(software[key], f"{path}.software.{key}")
-    _string(
-        software["container_image_sha256"],
-        f"{path}.software.container_image_sha256",
-        pattern=SHA256_RE,
-    )
+    if software["container_image_sha256"] is not None:
+        _string(
+            software["container_image_sha256"],
+            f"{path}.software.container_image_sha256",
+            pattern=SHA256_RE,
+        )
 
 
 def _validate_workload(value: Any, path: str) -> None:

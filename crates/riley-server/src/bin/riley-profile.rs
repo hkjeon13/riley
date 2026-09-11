@@ -231,7 +231,7 @@ struct SoftwareEnvironment {
     cuda_runtime_version: String,
     cuda_toolkit_version: String,
     cublas_version: String,
-    container_image_sha256: String,
+    container_image_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -401,10 +401,9 @@ impl Options {
         if self.environment.host.logical_core_count < self.environment.host.physical_core_count {
             return Err("--logical-core-count must be >= --physical-core-count".to_owned());
         }
-        validate_sha256(
-            "--container-image-sha256",
-            &self.environment.software.container_image_sha256,
-        )?;
+        if let Some(digest) = &self.environment.software.container_image_sha256 {
+            validate_sha256("--container-image-sha256", digest)?;
+        }
 
         validate_id("--workload-id", &self.workload.workload_id)?;
         validate_sha256("--weights-sha256", &self.workload.weights_sha256)?;
@@ -613,7 +612,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
                 cuda_runtime_version: take_required(&mut values, "--cuda-runtime-version")?,
                 cuda_toolkit_version: take_required(&mut values, "--cuda-toolkit-version")?,
                 cublas_version: take_required(&mut values, "--cublas-version")?,
-                container_image_sha256: take_required(&mut values, "--container-image-sha256")?,
+                container_image_sha256: match take_required(
+                    &mut values,
+                    "--container-image-sha256",
+                )? {
+                    value if value == "none" => None,
+                    value => Some(value),
+                },
             },
         },
         workload: Workload {
@@ -1624,6 +1629,7 @@ mod tests {
             "metadata_transport" => "pr16-packed-metadata-h2d-exact-v1",
             "greedy_output" => "pr16-gpu-greedy-exact-v1",
             "decode_fast_path" => "pr16-decode-fast-path-exact-v1",
+            "execution_graph_policy" => "g04-full-decode-p128-o32",
             _ => "pr15-fused-residual-rmsnorm-exact-v1",
         };
         let pairs = [
@@ -1699,6 +1705,32 @@ mod tests {
         assert_eq!(options.workload.measured_iterations, 30);
         assert_eq!(options.environment.gpu.device_index, 0);
         assert!(options.output_path.is_none());
+    }
+
+    #[test]
+    fn graph_profile_binds_single_row_and_native_host_identity() {
+        let mut args = valid_arguments("candidate", "execution_graph_policy", "require");
+        let index = args
+            .iter()
+            .position(|x| x == "--container-image-sha256")
+            .expect("flag");
+        args[index + 1] = OsString::from("none");
+        let Command::Run(options) = parse_arguments(args).expect("graph lane") else {
+            panic!("run")
+        };
+        assert_eq!(options.environment.software.container_image_sha256, None);
+        let config = benchmark_config(&options).expect("single row config");
+        assert_eq!(config.scheduler.iteration_token_budget, 1);
+        assert_eq!(config.scheduler.max_prefill_chunk_tokens, 1);
+        assert!(config.gpu_greedy);
+        assert!(
+            parse_arguments(valid_arguments(
+                "baseline",
+                "execution_graph_policy",
+                "require"
+            ))
+            .is_err()
+        );
     }
 
     #[test]

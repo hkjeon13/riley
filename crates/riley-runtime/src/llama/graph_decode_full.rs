@@ -1397,7 +1397,9 @@ mod owned_tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
         let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
-        let prompt = model.tokenizer().encode(&"Hello".repeat(128), riley_model::EncodeOptions::default())?;
+        let prompt = model
+            .tokenizer()
+            .encode(&"Hello".repeat(128), riley_model::EncodeOptions::default())?;
         assert_eq!(prompt.len(), 128);
         let context = riley_cuda::CudaRuntime::initialize()?
             .device(0)?
