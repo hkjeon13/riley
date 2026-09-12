@@ -63,7 +63,7 @@ fn run(cancel_and_replace: bool) -> Result {
         let prompt = (0..128).map(|i| (i * 311 + r * 977 + 13) % 49152).collect();
         scheduler.submit(RequestDescriptor::new(prompt, 32 - r as usize * 3), 0)?;
     }
-    let mut cancelled_blocks = std::collections::BTreeSet::new();
+    let mut cancelled_blocks = std::collections::BTreeSet::<u32>::new();
     let mut replacement = None;
     let mut reused = false;
     let mut rows = 0;
