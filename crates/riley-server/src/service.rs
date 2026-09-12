@@ -35,8 +35,8 @@ use crate::http::{
     write_sse_head,
 };
 use crate::openai::{
-    ApiError, CompletionRequest, CompletionResponse, ErrorObject, ErrorResponse, ModelListResponse,
-    ModelObject, SseStreamEncoder, normalize_completion_request,
+    ApiError, CompletionRequest, CompletionResponse, CompletionTokenCollector, ErrorObject,
+    ErrorResponse, ModelListResponse, ModelObject, SseStreamEncoder, normalize_completion_request,
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
@@ -1774,6 +1774,7 @@ fn write_model(stream: &mut TcpStream, backend: &dyn CompletionBackend, requeste
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_completion(
     stream: &mut TcpStream,
     backend: &dyn CompletionBackend,
@@ -1797,6 +1798,11 @@ fn handle_completion(
         );
         return;
     };
+    let include_usage = request
+        .stream_options
+        .as_ref()
+        .and_then(|options| options.include_usage)
+        .unwrap_or(false);
     let request = match normalize_completion_request(request, config.request_limits) {
         Ok(request) => request,
         Err(error) => {
@@ -1837,6 +1843,12 @@ fn handle_completion(
         return;
     }
     let streaming = request.stream;
+    let delivery = DeliveryOptions {
+        include_token_ids: request.include_token_ids,
+        include_usage,
+        maximum_output_tokens: request.max_new_tokens,
+        maximum_prompt_tokens: model.context_window_tokens,
+    };
     let admission_started = Instant::now();
     let submitted = match backend.submit(request) {
         Ok(submitted) => submitted,
@@ -1859,7 +1871,9 @@ fn handle_completion(
         .checked_add(config.request_timeout)
         .unwrap_or_else(Instant::now);
     if streaming {
-        stream_completion(stream, submitted, backend, stopping, deadline, tracker);
+        stream_completion(
+            stream, submitted, backend, stopping, deadline, tracker, delivery,
+        );
     } else {
         collect_completion(
             stream,
@@ -1869,8 +1883,17 @@ fn handle_completion(
             deadline,
             config.maximum_non_streaming_bytes,
             tracker,
+            delivery,
         );
     }
+}
+
+#[derive(Clone, Copy)]
+struct DeliveryOptions {
+    include_token_ids: bool,
+    include_usage: bool,
+    maximum_output_tokens: usize,
+    maximum_prompt_tokens: usize,
 }
 
 struct RequestTracker {
@@ -1933,7 +1956,7 @@ impl RequestTracker {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn stream_completion(
     stream: &mut TcpStream,
     mut submitted: SubmittedRequest,
@@ -1941,6 +1964,7 @@ fn stream_completion(
     stopping: &AtomicBool,
     deadline: Instant,
     mut tracker: RequestTracker,
+    delivery: DeliveryOptions,
 ) {
     if write_sse_head(stream).is_err() {
         tracker.finish(
@@ -1952,7 +1976,13 @@ fn stream_completion(
         );
         return;
     }
-    let mut encoder = SseStreamEncoder::new(submitted.metadata().clone());
+    let mut encoder = SseStreamEncoder::new_with_options(
+        submitted.metadata().clone(),
+        delivery.include_token_ids,
+        delivery.include_usage,
+        delivery.maximum_output_tokens,
+        delivery.maximum_prompt_tokens,
+    );
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2016,12 +2046,14 @@ fn stream_completion(
                 return;
             }
             Ok(event) => {
-                if matches!(event, GenerationEvent::TokenDelta { .. }) {
-                    tracker.token_delta();
-                }
-                let terminal = !matches!(event, GenerationEvent::TokenDelta { .. });
+                let terminal = matches!(
+                    event,
+                    GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }
+                );
                 let (finish_reason, error_class, completion_tokens) = match &event {
-                    GenerationEvent::TokenDelta { .. } => (None, None, None),
+                    GenerationEvent::TokenDelta { .. } | GenerationEvent::CommittedToken { .. } => {
+                        (None, None, None)
+                    }
                     GenerationEvent::Finished { reason, usage } => (
                         Some(*reason),
                         match reason {
@@ -2044,6 +2076,13 @@ fn stream_completion(
                     );
                     return;
                 };
+                // Preserve the historical visible-text observation. Raw-token
+                // arrival timing belongs to the opt-in HTTP client's clock.
+                if matches!(&event, GenerationEvent::TokenDelta { .. })
+                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty())
+                {
+                    tracker.token_delta();
+                }
                 if stream.write_all(frame.as_bytes()).is_err() {
                     tracker.finish(
                         backend,
@@ -2133,7 +2172,7 @@ fn write_stream_error(
     stream.flush()
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn collect_completion(
     stream: &mut TcpStream,
     mut submitted: SubmittedRequest,
@@ -2142,8 +2181,15 @@ fn collect_completion(
     deadline: Instant,
     maximum_bytes: usize,
     mut tracker: RequestTracker,
+    delivery: DeliveryOptions,
 ) {
     let mut text = String::new();
+    let mut received_events = 0_u64;
+    let mut tokens = CompletionTokenCollector::new(
+        delivery.include_token_ids,
+        delivery.maximum_output_tokens,
+        delivery.maximum_prompt_tokens,
+    );
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2205,9 +2251,35 @@ fn collect_completion(
                 );
                 return;
             }
-            Ok(GenerationEvent::TokenDelta { text: delta }) => {
-                tracker.token_delta();
-                if tracker.delta_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
+            Ok(
+                event @ (GenerationEvent::TokenDelta { .. }
+                | GenerationEvent::CommittedToken { .. }),
+            ) => {
+                if tokens.observe(&event).is_err() {
+                    let _ = write_api_error(stream, &ApiError::Internal);
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::Failed,
+                        None,
+                        Some(ServiceErrorClass::Internal),
+                        None,
+                    );
+                    return;
+                }
+                let visible_delta = matches!(&event, GenerationEvent::TokenDelta { .. })
+                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty());
+                let (GenerationEvent::TokenDelta { text: delta }
+                | GenerationEvent::CommittedToken { text: delta, .. }) = event
+                else {
+                    unreachable!()
+                };
+                if visible_delta {
+                    tracker.token_delta();
+                }
+                // Raw events can carry no visible text. Keep disconnect
+                // polling bounded by received events, not the text metric.
+                received_events = received_events.saturating_add(1);
+                if received_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
                     && client_disconnected(stream)
                 {
                     tracker.finish(
@@ -2255,9 +2327,44 @@ fn collect_completion(
                 text.push_str(&delta);
             }
             Ok(GenerationEvent::Finished { reason, usage }) => {
+                if matches!(reason, FinishReason::Stop | FinishReason::Length)
+                    && tokens.validate_usage(usage).is_err()
+                {
+                    let _ = write_api_error(stream, &ApiError::Internal);
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::Failed,
+                        Some(reason),
+                        Some(ServiceErrorClass::Internal),
+                        None,
+                    );
+                    return;
+                }
                 let response =
                     match CompletionResponse::new(submitted.metadata(), text, reason, usage) {
-                        Ok(response) => write_json(stream, 200, &response),
+                        Ok(mut response) => {
+                            tokens.attach(&mut response);
+                            if delivery.include_token_ids {
+                                match serde_json::to_vec(&response) {
+                                    Ok(body) if body.len() <= maximum_bytes => {
+                                        write_response(stream, 200, JSON_CONTENT_TYPE, &body)
+                                    }
+                                    _ => {
+                                        let _ = write_api_error(stream, &ApiError::Internal);
+                                        tracker.finish(
+                                            backend,
+                                            RequestObservationStatus::Failed,
+                                            Some(reason),
+                                            Some(ServiceErrorClass::Internal),
+                                            None,
+                                        );
+                                        return;
+                                    }
+                                }
+                            } else {
+                                write_json(stream, 200, &response)
+                            }
+                        }
                         Err(_) => write_api_error(
                             stream,
                             &match reason {
@@ -2486,6 +2593,10 @@ mod tests {
 
     enum Script {
         Complete(Vec<String>),
+        /// Explicit source events; never infer model identities from text.
+        Events(Vec<GenerationEvent>),
+        CountedEvents(Vec<GenerationEvent>, Arc<AtomicUsize>),
+        EmptyTokenThenWaitForCancellation,
         WaitForCancellation,
         CancelOnShutdown,
         FloodUntilDisconnected,
@@ -2673,6 +2784,32 @@ mod tests {
             active.fetch_add(1, Ordering::AcqRel);
             thread::spawn(move || {
                 match script {
+                    Script::CountedEvents(events, delivered) => {
+                        for event in events {
+                            if sender.send(event).is_err() {
+                                break;
+                            }
+                            delivered.fetch_add(1, Ordering::AcqRel);
+                        }
+                    }
+                    Script::Events(events) => {
+                        for event in events {
+                            if sender.send(event).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Script::EmptyTokenThenWaitForCancellation => {
+                        let _ = sender.send(GenerationEvent::CommittedToken {
+                            text: String::new(),
+                            token_id: 17,
+                            generated_index: 0,
+                            prompt_token_ids: Some(vec![1, 2]),
+                        });
+                        while !worker_cancellation.is_cancelled() {
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                    }
                     Script::Complete(deltas) => {
                         let completion_tokens =
                             u64::try_from(deltas.len()).expect("test token count fits u64");
@@ -2788,6 +2925,206 @@ mod tests {
         let mut response = Vec::new();
         stream.read_to_end(&mut response).expect("read response");
         response
+    }
+
+    fn committed_fixture() -> Vec<GenerationEvent> {
+        vec![
+            GenerationEvent::CommittedToken {
+                text: String::new(),
+                token_id: 17,
+                generated_index: 0,
+                prompt_token_ids: Some(vec![1, 2]),
+            },
+            GenerationEvent::CommittedToken {
+                text: "가".to_owned(),
+                token_id: 18,
+                generated_index: 1,
+                prompt_token_ids: None,
+            },
+            GenerationEvent::Finished {
+                reason: FinishReason::Length,
+                usage: TokenUsage::new(2, 2).expect("fixture usage"),
+            },
+        ]
+    }
+
+    fn token_request(streaming: bool) -> Vec<u8> {
+        let mut body = json!({"model":"fixture-model", "prompt":"hello", "max_tokens":2,
+            "stream":streaming, "return_token_ids":true});
+        if streaming {
+            body["stream_options"] = json!({"include_usage":true});
+        }
+        post_body(&serde_json::to_vec(&body).expect("request JSON"))
+    }
+
+    #[test]
+    fn committed_tokens_and_usage_survive_concurrent_http_delivery() {
+        for streaming in [false, true] {
+            let backend: Arc<dyn CompletionBackend> =
+                TestBackend::new((0..4).map(|_| Script::Events(committed_fixture())));
+            let server = start_server(test_config(), backend).expect("token server");
+            let address = server.local_address();
+            let clients: Vec<_> = (0..4)
+                .map(|_| thread::spawn(move || send_request(address, &token_request(streaming))))
+                .collect();
+            let mut ids = std::collections::BTreeSet::new();
+            for client in clients {
+                let response = client.join().expect("client");
+                assert_eq!(response_status(&response), 200);
+                if streaming {
+                    let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
+                    let frames: Vec<Value> = body
+                        .lines()
+                        .filter_map(|line| line.strip_prefix("data: "))
+                        .filter(|data| *data != "[DONE]")
+                        .map(|data| serde_json::from_str(data).expect("SSE JSON"))
+                        .collect();
+                    assert_eq!(frames.len(), 4);
+                    assert_eq!(frames[0]["choices"][0]["text"], "");
+                    assert_eq!(frames[0]["choices"][0]["token_ids"], json!([17]));
+                    assert_eq!(frames[0]["choices"][0]["prompt_token_ids"], json!([1, 2]));
+                    assert_eq!(frames[1]["choices"][0]["text"], "가");
+                    assert_eq!(frames[1]["choices"][0]["token_ids"], json!([18]));
+                    assert!(frames[1]["choices"][0].get("prompt_token_ids").is_none());
+                    assert_eq!(frames[2]["choices"][0]["finish_reason"], "length");
+                    assert_eq!(frames[3]["choices"], json!([]));
+                    assert_eq!(frames[3]["usage"]["completion_tokens"], 2);
+                    assert_eq!(body.matches("data: [DONE]").count(), 1);
+                    assert!(ids.insert(frames[0]["id"].as_str().expect("id").to_owned()));
+                    assert!(frames.iter().all(|frame| frame["id"] == frames[0]["id"]));
+                } else {
+                    let body: Value =
+                        serde_json::from_slice(response_body(&response)).expect("completion JSON");
+                    assert_eq!(body["choices"][0]["text"], "가");
+                    assert_eq!(body["choices"][0]["token_ids"], json!([17, 18]));
+                    assert_eq!(body["choices"][0]["prompt_token_ids"], json!([1, 2]));
+                    assert_eq!(body["usage"]["completion_tokens"], 2);
+                    assert!(ids.insert(body["id"].as_str().expect("id").to_owned()));
+                }
+            }
+            server.shutdown().expect("token server shutdown");
+        }
+    }
+
+    #[test]
+    fn missing_token_metadata_fails_before_first_payload_and_bad_usage_cannot_finish() {
+        let missing = vec![GenerationEvent::CommittedToken {
+            text: "must not publish".to_owned(),
+            token_id: 9999,
+            generated_index: 0,
+            prompt_token_ids: None,
+        }];
+        let mut bad_usage = committed_fixture();
+        *bad_usage.last_mut().expect("terminal") = GenerationEvent::Finished {
+            reason: FinishReason::Length,
+            usage: TokenUsage::new(2, 1).expect("wrong usage"),
+        };
+        for events in [
+            missing,
+            bad_usage,
+            vec![GenerationEvent::TokenDelta {
+                text: "must not publish".to_owned(),
+            }],
+        ] {
+            for streaming in [false, true] {
+                let backend: Arc<dyn CompletionBackend> =
+                    TestBackend::new([Script::Events(events.clone())]);
+                let server = start_server(test_config(), backend).expect("malformed token server");
+                let response = send_request(server.local_address(), &token_request(streaming));
+                let body = std::str::from_utf8(response_body(&response)).expect("error UTF-8");
+                assert!(body.contains("internal_error"));
+                assert!(!body.contains("must not publish"));
+                assert!(!body.contains("9999"));
+                assert!(!body.contains("\"finish_reason\":\"length\""));
+                assert!(!body.contains("\"usage\""));
+                assert_eq!(
+                    response_status(&response),
+                    if streaming { 200 } else { 500 }
+                );
+                server.shutdown().expect("malformed server shutdown");
+            }
+        }
+    }
+
+    #[test]
+    fn cancellation_after_invisible_token_emits_no_success_usage() {
+        let mut events = committed_fixture();
+        events.truncate(1);
+        events.push(GenerationEvent::Finished {
+            reason: FinishReason::Cancelled,
+            usage: TokenUsage::new(2, 1).expect("cancelled usage"),
+        });
+        let backend: Arc<dyn CompletionBackend> = TestBackend::new([Script::Events(events)]);
+        let server = start_server(test_config(), backend).expect("cancelled token server");
+        let response = send_request(server.local_address(), &token_request(true));
+        let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
+        assert!(body.contains("\"token_ids\":[17]"));
+        assert!(body.contains("cancelled"));
+        assert!(!body.contains("\"usage\""));
+        assert_eq!(body.matches("data: [DONE]").count(), 1);
+        server.shutdown().expect("cancelled server shutdown");
+    }
+
+    #[test]
+    fn disconnect_after_invisible_token_cancels_source() {
+        let backend = TestBackend::new([Script::EmptyTokenThenWaitForCancellation]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("disconnect token server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect");
+        client
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("timeout");
+        client.write_all(&token_request(true)).expect("request");
+        let mut received = Vec::new();
+        let mut buffer = [0_u8; 512];
+        while !String::from_utf8_lossy(&received).contains("\"token_ids\":[17]") {
+            let count = client.read(&mut buffer).expect("first token frame");
+            assert!(count > 0);
+            received.extend_from_slice(&buffer[..count]);
+        }
+        drop(client);
+        wait_until(|| backend.cancellation_count.load(Ordering::Acquire) == 1);
+        server.shutdown().expect("disconnect token shutdown");
+    }
+
+    #[test]
+    fn opt_in_nonstream_response_counts_serialized_token_bytes() {
+        let backend: Arc<dyn CompletionBackend> =
+            TestBackend::new([Script::Events(committed_fixture())]);
+        let mut config = test_config();
+        config.maximum_non_streaming_bytes = 32;
+        let server = start_server(config, backend).expect("bounded token server");
+        let response = send_request(server.local_address(), &token_request(false));
+        assert_eq!(response_status(&response), 500);
+        server.shutdown().expect("bounded token shutdown");
+    }
+
+    #[test]
+    fn nonstream_disconnect_probe_cadence_counts_invisible_tokens() {
+        let delivered = Arc::new(AtomicUsize::new(0));
+        let events = (0..32)
+            .map(|index| GenerationEvent::CommittedToken {
+                text: String::new(),
+                token_id: 17,
+                generated_index: index,
+                prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+            })
+            .collect();
+        let backend = TestBackend::new([Script::CountedEvents(events, Arc::clone(&delivered))]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("probe cadence server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect");
+        let request = post_body(br#"{"model":"fixture-model","prompt":"hello","max_tokens":32,"return_token_ids":true}"#);
+        client.write_all(&request).expect("request");
+        client
+            .shutdown(Shutdown::Write)
+            .expect("make peer EOF observable by peek");
+        wait_until(|| backend.cancellations() == 1 && backend.active.load(Ordering::Acquire) == 0);
+        // A probe after the first invisible token permits at most 3 sends
+        // through the bounded channel. Correct polling consumes 16 events;
+        // at most two more can already be buffered before cancellation.
+        assert!((16..=18).contains(&delivered.load(Ordering::Acquire)));
+        server.shutdown().expect("probe cadence shutdown");
     }
 
     /// CPU-only transport diagnostic. Keep this opt-in: wall-clock results are

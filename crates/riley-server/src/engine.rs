@@ -261,6 +261,13 @@ impl BackendEvent {
 /// scheduler commit succeeds.  A call must be finite so cancellation and
 /// shutdown are observed at iteration boundaries.
 pub trait EngineBackend: 'static {
+    /// Whether this backend publishes authoritative committed model token IDs.
+    /// Text-only and mock backends reject opt-in token requests by default.
+    #[must_use]
+    fn supports_token_ids(&self) -> bool {
+        false
+    }
+
     /// Validates, tokenizes, and admits a request into backend-owned state.
     ///
     /// # Errors
@@ -1679,6 +1686,10 @@ fn process_command<B: EngineBackend>(
         let _ = admitted.try_send(Err(EngineError::Overloaded));
         return;
     }
+    if request.include_token_ids && !backend.supports_token_ids() {
+        let _ = admitted.try_send(Err(EngineError::InvalidRequest));
+        return;
+    }
     match backend.admit(request_id, &metadata, &request) {
         Ok(()) => {
             let replaced = requests.insert(
@@ -2311,6 +2322,9 @@ mod cuda_backend {
         cancellation_deferred: bool,
         pre_iteration_cancel_delta: String,
         generation_audit: Option<C02RequestAudit>,
+        include_token_ids: bool,
+        prompt_ids_for_delivery: Option<Vec<u32>>,
+        next_delivery_index: usize,
     }
 
     struct C02RequestAudit {
@@ -2597,7 +2611,10 @@ mod cuda_backend {
                 } else {
                     ""
                 };
-                if !delta.is_empty() {
+                // Cancellation flushes withheld text without a new commit.
+                // The raw-token stream terminates as an error, so it omits
+                // this unattributed flush; ordinary text delivery is unchanged.
+                if !delta.is_empty() && !request.include_token_ids {
                     events.push(BackendEvent::new(
                         request.engine_id,
                         GenerationEvent::TokenDelta {
@@ -2624,6 +2641,15 @@ mod cuda_backend {
                         | RequestFinishReason::ExecutorFailure => unreachable!(),
                     };
                     if matches!(reason, FinishReason::Length | FinishReason::Stop) {
+                        if request.include_token_ids
+                            && (request.next_delivery_index
+                                != completion.generated_token_ids().len()
+                                || request.prompt_ids_for_delivery.is_some())
+                        {
+                            return Err(internal(
+                                "terminal committed token delivery count differs",
+                            ));
+                        }
                         if let Some(generation_audit) = generation_audit.as_ref() {
                             let audit = request.generation_audit.take().ok_or_else(|| {
                                 internal("C02 audit sink has no request-local committed record")
@@ -3101,6 +3127,10 @@ mod cuda_backend {
     }
 
     impl EngineBackend for CudaBackend {
+        fn supports_token_ids(&self) -> bool {
+            true
+        }
+
         fn admit(
             &mut self,
             request_id: EngineRequestId,
@@ -3183,6 +3213,15 @@ mod cuda_backend {
                 .then(|| C02RequestAudit::new(metadata, request.stream, request.max_new_tokens))
                 .transpose()?;
             let now_ns = self.now_ns();
+            let prompt_ids_for_delivery = if request.include_token_ids {
+                let mut ids = Vec::new();
+                ids.try_reserve_exact(prompt_token_ids.len())
+                    .map_err(|_| internal("prompt token delivery allocation failed"))?;
+                ids.extend_from_slice(&prompt_token_ids);
+                Some(ids)
+            } else {
+                None
+            };
             let submission = self
                 .scheduler_mut()?
                 .submit(
@@ -3199,6 +3238,9 @@ mod cuda_backend {
                 cancellation_deferred: false,
                 pre_iteration_cancel_delta,
                 generation_audit,
+                include_token_ids: request.include_token_ids,
+                prompt_ids_for_delivery,
+                next_delivery_index: 0,
             });
             Ok(())
         }
@@ -3400,12 +3442,31 @@ mod cuda_backend {
                 let request_index = self
                     .request_index_by_scheduler(token.request_id())
                     .ok_or_else(|| internal("committed token targets unknown request"))?;
-                events.push(BackendEvent::new(
-                    self.requests[request_index].engine_id,
-                    GenerationEvent::TokenDelta {
-                        text: pending.text_delta.clone(),
-                    },
-                ));
+                let text = pending.text_delta.clone();
+                let request = &mut self.requests[request_index];
+                let event = if request.include_token_ids {
+                    if token.generated_index() != request.next_delivery_index
+                        || (token.generated_index() == 0)
+                            != request.prompt_ids_for_delivery.is_some()
+                    {
+                        return Err(internal(
+                            "committed token delivery metadata is inconsistent",
+                        ));
+                    }
+                    request.next_delivery_index = request
+                        .next_delivery_index
+                        .checked_add(1)
+                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
+                    GenerationEvent::CommittedToken {
+                        text,
+                        token_id: token.token_id(),
+                        generated_index: token.generated_index(),
+                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
+                    }
+                } else {
+                    GenerationEvent::TokenDelta { text }
+                };
+                events.push(BackendEvent::new(request.engine_id, event));
             }
             events.extend(self.process_completions(updates.completions())?);
             if !updates.settlement_failures().is_empty() {
@@ -3681,6 +3742,7 @@ mod tests {
             },
             stop_sequences: Vec::new(),
             stream: true,
+            include_token_ids: false,
         }
     }
 
@@ -4031,6 +4093,109 @@ mod tests {
     }
 
     #[test]
+    fn committed_empty_token_is_delivered_and_channel_overflow_cancels() {
+        // Explicit committed-event fixtures exercise publication only. The
+        // text-only backend never manufactures token IDs from its mock text.
+        for capacity in [1, 3] {
+            let counters = Arc::new(MockCounters::default());
+            let mut backend = MockBackend::new(Arc::clone(&counters), Duration::ZERO);
+            let request_id = EngineRequestId(1);
+            backend.requests.insert(
+                request_id,
+                MockRequest {
+                    prompt_tokens: 2,
+                    generated: 2,
+                    remaining: 0,
+                },
+            );
+            let (sender, receiver) = std::sync::mpsc::sync_channel(capacity);
+            let cancellation = Arc::new(std::sync::atomic::AtomicU8::new(super::REQUEST_LIVE));
+            let stats = Arc::new(super::EngineStats::default());
+            stats.active_requests.store(1, Ordering::Release);
+            let mut requests = BTreeMap::from([(
+                request_id,
+                super::RequestControl {
+                    cancellation: Arc::clone(&cancellation),
+                    events: sender,
+                    stats: Arc::clone(&stats),
+                },
+            )]);
+            let events = (0..2)
+                .map(|index| {
+                    BackendEvent::new(
+                        request_id,
+                        GenerationEvent::CommittedToken {
+                            text: String::new(),
+                            token_id: 17 + u32::try_from(index).expect("small index"),
+                            generated_index: index,
+                            prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+                        },
+                    )
+                })
+                .collect();
+            super::publish_events(&mut backend, &mut requests, events);
+            assert!(
+                matches!(receiver.try_recv(), Ok(GenerationEvent::CommittedToken {
+                token_id:17, generated_index:0, text, prompt_token_ids:Some(ids),
+            }) if text.is_empty() && ids == [1,2])
+            );
+            if capacity == 1 {
+                assert_eq!(counters.cancelled.load(Ordering::Acquire), 1);
+                assert!(requests.is_empty());
+                assert!(receiver.try_recv().is_err());
+            } else {
+                assert!(matches!(
+                    receiver.try_recv(),
+                    Ok(GenerationEvent::CommittedToken {
+                        token_id: 18,
+                        generated_index: 1,
+                        prompt_token_ids: None,
+                        ..
+                    })
+                ));
+                assert_eq!(counters.cancelled.load(Ordering::Acquire), 0);
+                cancellation.store(super::REQUEST_CANCELLED, Ordering::Release);
+                super::publish_events(
+                    &mut backend,
+                    &mut requests,
+                    vec![
+                        BackendEvent::new(
+                            request_id,
+                            GenerationEvent::CommittedToken {
+                                text: String::new(),
+                                token_id: 19,
+                                generated_index: 2,
+                                prompt_token_ids: None,
+                            },
+                        ),
+                        BackendEvent::new(
+                            request_id,
+                            GenerationEvent::Finished {
+                                reason: FinishReason::Cancelled,
+                                usage: TokenUsage::new(2, 2).expect("usage"),
+                            },
+                        ),
+                    ],
+                );
+                assert!(matches!(
+                    receiver.try_recv(),
+                    Ok(GenerationEvent::Finished {
+                        reason: FinishReason::Cancelled,
+                        ..
+                    })
+                ));
+                assert!(receiver.try_recv().is_err());
+                assert!(requests.is_empty());
+            }
+            assert_eq!(
+                cancellation.load(Ordering::Acquire),
+                super::REQUEST_TERMINAL
+            );
+            assert_eq!(stats.active_requests.load(Ordering::Acquire), 0);
+        }
+    }
+
+    #[test]
     fn graceful_shutdown_rejects_new_work_and_closes_backend() {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(Arc::clone(&counters), 8, 4, Duration::from_millis(5));
@@ -4061,6 +4226,20 @@ mod tests {
     }
 
     #[test]
+    fn text_only_backend_rejects_token_ids_before_admission() {
+        let counters = Arc::new(MockCounters::default());
+        let engine = engine(Arc::clone(&counters), 8, 2, Duration::ZERO);
+        let mut input = request(2);
+        input.include_token_ids = true;
+        assert!(matches!(
+            engine.submit(input),
+            Err(EngineError::InvalidRequest)
+        ));
+        assert_eq!(engine.status().active_requests, 0);
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+    }
+
+    #[test]
     fn concurrent_requests_finish_without_deadlock() {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(Arc::clone(&counters), 8, 8, Duration::ZERO);
@@ -4079,6 +4258,9 @@ mod tests {
                         GenerationEvent::Finished { .. } => break tokens,
                         GenerationEvent::Failed { class } => {
                             panic!("unexpected failure: {class:?}")
+                        }
+                        GenerationEvent::CommittedToken { .. } => {
+                            panic!("text-only mock produced model IDs")
                         }
                     }
                 }

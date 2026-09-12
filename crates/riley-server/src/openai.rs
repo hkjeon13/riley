@@ -82,6 +82,12 @@ pub struct CompletionRequest {
     /// Selects SSE when true.
     #[serde(default)]
     pub stream: Option<bool>,
+    /// Exposes actual model token IDs when explicitly enabled.
+    #[serde(default)]
+    pub return_token_ids: Option<bool>,
+    /// Optional terminal usage reporting for streaming responses.
+    #[serde(default)]
+    pub stream_options: Option<CompletionStreamOptions>,
     /// The initial endpoint supports exactly one completion.
     #[serde(default)]
     pub n: Option<u64>,
@@ -106,6 +112,15 @@ pub struct CompletionRequest {
     /// Unknown compatibility fields are retained for an explicit rejection.
     #[serde(flatten)]
     pub unsupported_fields: BTreeMap<String, Value>,
+}
+
+/// Supported streaming options; unknown nested fields are rejected.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionStreamOptions {
+    /// Emit one terminal usage-only chunk before `[DONE]`.
+    #[serde(default)]
+    pub include_usage: Option<bool>,
 }
 
 /// Converts an OpenAI-compatible DTO into a transport-independent request.
@@ -192,10 +207,18 @@ pub fn normalize_completion_request(
         },
         stop_sequences,
         stream: request.stream.unwrap_or(false),
+        include_token_ids: request.return_token_ids.unwrap_or(false),
     })
 }
 
 fn validate_supported_options(request: &CompletionRequest) -> Result<(), ValidationError> {
+    if request.stream_options.is_some() && !request.stream.unwrap_or(false) {
+        return Err(ValidationError::new(
+            "stream_options",
+            ValidationErrorCode::UnsupportedParameter,
+            "stream options require stream=true",
+        ));
+    }
     if request.logprobs.is_some() {
         return Err(ValidationError::new(
             "logprobs",
@@ -591,6 +614,105 @@ impl From<TokenUsage> for CompletionUsage {
     }
 }
 
+/// Validates bounded token delivery independently of text detokenization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CompletionTokenCollector {
+    enabled: bool,
+    maximum_output_tokens: usize,
+    maximum_prompt_tokens: usize,
+    prompt_token_ids: Option<Vec<u32>>,
+    token_ids: Vec<u32>,
+}
+
+impl CompletionTokenCollector {
+    pub(crate) const fn new(
+        enabled: bool,
+        maximum_output_tokens: usize,
+        maximum_prompt_tokens: usize,
+    ) -> Self {
+        Self {
+            enabled,
+            maximum_output_tokens,
+            maximum_prompt_tokens,
+            prompt_token_ids: None,
+            token_ids: Vec::new(),
+        }
+    }
+
+    pub(crate) fn observe(&mut self, event: &GenerationEvent) -> Result<(), TokenObservationError> {
+        match event {
+            GenerationEvent::TokenDelta { .. } if self.enabled => Err(TokenObservationError),
+            GenerationEvent::CommittedToken {
+                token_id,
+                generated_index,
+                prompt_token_ids,
+                ..
+            } => {
+                if !self.enabled
+                    || *generated_index != self.token_ids.len()
+                    || self.token_ids.len() >= self.maximum_output_tokens
+                    || (self.token_ids.is_empty() != prompt_token_ids.is_some())
+                {
+                    return Err(TokenObservationError);
+                }
+                if let Some(prompt) = prompt_token_ids {
+                    if prompt.is_empty()
+                        || prompt.len() > self.maximum_prompt_tokens
+                        || self.prompt_token_ids.is_some()
+                    {
+                        return Err(TokenObservationError);
+                    }
+                    let mut copy = Vec::new();
+                    copy.try_reserve_exact(prompt.len())
+                        .map_err(|_| TokenObservationError)?;
+                    copy.extend_from_slice(prompt);
+                    self.prompt_token_ids = Some(copy);
+                }
+                if self.token_ids.is_empty() {
+                    self.token_ids
+                        .try_reserve_exact(self.maximum_output_tokens)
+                        .map_err(|_| TokenObservationError)?;
+                }
+                self.token_ids.push(*token_id);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn validate_usage(&self, usage: TokenUsage) -> Result<(), TokenObservationError> {
+        if self.enabled
+            && (self.token_ids.len() as u64 != usage.completion_tokens()
+                || self
+                    .prompt_token_ids
+                    .as_ref()
+                    .is_none_or(|ids| ids.len() as u64 != usage.prompt_tokens()))
+        {
+            return Err(TokenObservationError);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn attach(self, response: &mut CompletionResponse) {
+        if self.enabled {
+            response.choices[0].token_ids = Some(self.token_ids);
+            response.choices[0].prompt_token_ids = self.prompt_token_ids;
+        }
+    }
+}
+
+/// Token identities, ordering, bounds, or terminal accounting were inconsistent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TokenObservationError;
+
+impl fmt::Display for TokenObservationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("committed token delivery is inconsistent")
+    }
+}
+
+impl error::Error for TokenObservationError {}
+
 /// One choice in a non-streaming completion response.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CompletionChoice {
@@ -602,6 +724,12 @@ pub struct CompletionChoice {
     pub logprobs: Option<Value>,
     /// Successful terminal reason.
     pub finish_reason: CompletionFinishReason,
+    /// Generated model IDs, included only when requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_ids: Option<Vec<u32>>,
+    /// Actual tokenizer output supplied to the model, included only on request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_token_ids: Option<Vec<u32>>,
 }
 
 /// Non-streaming `/v1/completions` response.
@@ -644,6 +772,8 @@ impl CompletionResponse {
                 index: 0,
                 logprobs: None,
                 finish_reason: CompletionFinishReason::try_from(reason)?,
+                token_ids: None,
+                prompt_token_ids: None,
             }],
             usage: usage.into(),
         })
@@ -661,6 +791,12 @@ pub struct CompletionChunkChoice {
     pub logprobs: Option<Value>,
     /// Null for deltas and present only in the terminal finish chunk.
     pub finish_reason: Option<CompletionFinishReason>,
+    /// Delta model IDs, never inferred from text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_ids: Option<Vec<u32>>,
+    /// Present only with the first generated token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_token_ids: Option<Vec<u32>>,
 }
 
 /// JSON data carried by one SSE completion event.
@@ -676,6 +812,9 @@ pub struct CompletionChunk {
     pub model: String,
     /// Exactly one delta or finish choice.
     pub choices: Vec<CompletionChunkChoice>,
+    /// Present in the opt-in terminal usage-only chunk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<CompletionUsage>,
 }
 
 impl CompletionChunk {
@@ -702,7 +841,10 @@ impl CompletionChunk {
                 index: 0,
                 logprobs: None,
                 finish_reason,
+                token_ids: None,
+                prompt_token_ids: None,
             }],
+            usage: None,
         }
     }
 }
@@ -789,6 +931,8 @@ pub enum SseStreamPhase {
 pub struct SseStreamEncoder {
     metadata: RequestMetadata,
     phase: SseStreamPhase,
+    tokens: CompletionTokenCollector,
+    include_usage: bool,
 }
 
 impl SseStreamEncoder {
@@ -798,6 +942,29 @@ impl SseStreamEncoder {
         Self {
             metadata,
             phase: SseStreamPhase::Open,
+            tokens: CompletionTokenCollector::new(false, 0, 0),
+            include_usage: false,
+        }
+    }
+
+    /// Creates an opt-in encoder with explicit request token bounds.
+    #[must_use]
+    pub const fn new_with_options(
+        metadata: RequestMetadata,
+        include_token_ids: bool,
+        include_usage: bool,
+        maximum_output_tokens: usize,
+        maximum_prompt_tokens: usize,
+    ) -> Self {
+        Self {
+            metadata,
+            phase: SseStreamPhase::Open,
+            tokens: CompletionTokenCollector::new(
+                include_token_ids,
+                maximum_output_tokens,
+                maximum_prompt_tokens,
+            ),
+            include_usage,
         }
     }
 
@@ -814,10 +981,42 @@ impl SseStreamEncoder {
     /// Returns [`SseEncodingError`] for an invalid event order, a failed JSON
     /// serialization, or a non-success finish reason.
     pub fn encode_event(&mut self, event: &GenerationEvent) -> Result<String, SseEncodingError> {
+        self.require_phase("generation event", SseStreamPhase::Open)?;
+        self.tokens
+            .observe(event)
+            .map_err(SseEncodingError::TokenObservation)?;
         match event {
             GenerationEvent::TokenDelta { text } => self.encode_delta(text),
-            GenerationEvent::Finished { reason, .. } => match reason {
-                FinishReason::Stop | FinishReason::Length => self.encode_finish(*reason),
+            GenerationEvent::CommittedToken {
+                text,
+                token_id,
+                prompt_token_ids,
+                ..
+            } => {
+                let mut chunk = CompletionChunk::delta(&self.metadata, text.clone());
+                chunk.choices[0].token_ids = Some(vec![*token_id]);
+                chunk.choices[0]
+                    .prompt_token_ids
+                    .clone_from(prompt_token_ids);
+                serialize_sse_json(&chunk).map_err(SseEncodingError::Json)
+            }
+            GenerationEvent::Finished { reason, usage } => match reason {
+                FinishReason::Stop | FinishReason::Length => {
+                    self.tokens
+                        .validate_usage(*usage)
+                        .map_err(SseEncodingError::TokenObservation)?;
+                    let usage_frame = if self.include_usage {
+                        let mut chunk = CompletionChunk::new(&self.metadata, String::new(), None);
+                        chunk.choices.clear();
+                        chunk.usage = Some((*usage).into());
+                        serialize_sse_json(&chunk).map_err(SseEncodingError::Json)?
+                    } else {
+                        String::new()
+                    };
+                    let mut frame = self.encode_finish_frame(*reason)?;
+                    frame.push_str(&usage_frame);
+                    Ok(frame)
+                }
                 FinishReason::Cancelled => self.encode_error(&ApiError::Cancelled),
                 FinishReason::Error => self.encode_error(&ApiError::Internal),
             },
@@ -829,10 +1028,14 @@ impl SseStreamEncoder {
     ///
     /// # Errors
     ///
-    /// Returns [`SseEncodingError`] unless the stream is open, or if JSON
-    /// serialization fails.
+    /// Returns [`SseEncodingError`] unless the stream is open, if JSON
+    /// serialization fails, or when raw token delivery requires
+    /// [`Self::encode_event`] with committed metadata.
     pub fn encode_delta(&mut self, text: &str) -> Result<String, SseEncodingError> {
         self.require_phase("token delta", SseStreamPhase::Open)?;
+        if self.tokens.enabled {
+            return Err(SseEncodingError::TokenObservation(TokenObservationError));
+        }
         serialize_sse_json(&CompletionChunk::delta(&self.metadata, text.to_owned()))
             .map_err(SseEncodingError::Json)
     }
@@ -842,8 +1045,17 @@ impl SseStreamEncoder {
     /// # Errors
     ///
     /// Returns [`SseEncodingError`] for invalid ordering, cancellation or
-    /// execution-error finish reasons, or JSON serialization failure.
+    /// execution-error finish reasons, or JSON serialization failure. Opt-in
+    /// token/usage delivery requires [`Self::encode_event`] with checked usage.
     pub fn encode_finish(&mut self, reason: FinishReason) -> Result<String, SseEncodingError> {
+        self.require_phase("finish", SseStreamPhase::Open)?;
+        if self.tokens.enabled || self.include_usage {
+            return Err(SseEncodingError::TokenObservation(TokenObservationError));
+        }
+        self.encode_finish_frame(reason)
+    }
+
+    fn encode_finish_frame(&mut self, reason: FinishReason) -> Result<String, SseEncodingError> {
         self.require_phase("finish", SseStreamPhase::Open)?;
         let reason = CompletionFinishReason::try_from(reason)
             .map_err(SseEncodingError::UnsupportedFinish)?;
@@ -917,6 +1129,8 @@ pub enum SseEncodingError {
     Json(serde_json::Error),
     /// A cancellation or internal failure was passed as a success reason.
     UnsupportedFinish(UnsupportedFinishReason),
+    /// Model token identities or terminal accounting were inconsistent.
+    TokenObservation(TokenObservationError),
 }
 
 impl fmt::Display for SseEncodingError {
@@ -930,6 +1144,7 @@ impl fmt::Display for SseEncodingError {
             }
             Self::Json(source) => write!(formatter, "could not serialize SSE JSON: {source}"),
             Self::UnsupportedFinish(source) => source.fmt(formatter),
+            Self::TokenObservation(source) => source.fmt(formatter),
         }
     }
 }
@@ -939,6 +1154,7 @@ impl error::Error for SseEncodingError {
         match self {
             Self::Json(source) => Some(source),
             Self::UnsupportedFinish(source) => Some(source),
+            Self::TokenObservation(source) => Some(source),
             Self::InvalidTransition { .. } => None,
         }
     }
@@ -951,9 +1167,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        ApiError, CompletionFinishReason, CompletionRequest, CompletionResponse, PromptInput,
-        SSE_DONE_FRAME, SseEncodingError, SseStreamEncoder, SseStreamPhase, StopInput,
-        ValidationErrorCode, normalize_completion_request,
+        ApiError, CompletionFinishReason, CompletionRequest, CompletionResponse,
+        CompletionTokenCollector, PromptInput, SSE_DONE_FRAME, SseEncodingError, SseStreamEncoder,
+        SseStreamPhase, StopInput, ValidationErrorCode, normalize_completion_request,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, RequestLimits, RequestMetadata, TokenUsage,
@@ -1024,6 +1240,191 @@ mod tests {
         assert_eq!(defaults.sampling.temperature.to_bits(), 1.0_f32.to_bits());
         assert_eq!(defaults.sampling.top_p.to_bits(), 1.0_f32.to_bits());
         assert!(!defaults.stream);
+        assert!(!defaults.include_token_ids);
+    }
+
+    #[test]
+    fn optional_token_request_flags_are_typed_and_stream_usage_requires_streaming() {
+        for flag in [false, true] {
+            let request: CompletionRequest = serde_json::from_value(json!({
+                "model": "fixture-model", "prompt": "hello", "stream": true,
+                "return_token_ids": flag, "stream_options": {"include_usage": flag}
+            }))
+            .expect("boolean observation options");
+            assert_eq!(
+                request
+                    .stream_options
+                    .as_ref()
+                    .expect("options")
+                    .include_usage,
+                Some(flag)
+            );
+            assert_eq!(
+                normalize_completion_request(request, RequestLimits::default())
+                    .expect("supported options")
+                    .include_token_ids,
+                flag
+            );
+        }
+        let request: CompletionRequest = serde_json::from_value(json!({
+            "model": "fixture-model", "prompt": "hello", "stream_options": {"include_usage": true}
+        }))
+        .expect("typed nonstream option");
+        assert_eq!(
+            normalize_completion_request(request, RequestLimits::default())
+                .expect_err("stream options need stream")
+                .parameter(),
+            "stream_options"
+        );
+        for addition in [
+            json!({"return_token_ids": 1}),
+            json!({"return_token_ids": "true"}),
+            json!({"stream_options": true}),
+            json!({"stream_options": {"include_usage": "true"}}),
+            json!({"stream_options": {"unknown": true}}),
+        ] {
+            let mut request = json!({"model":"fixture-model", "prompt":"hello", "stream":true});
+            request
+                .as_object_mut()
+                .expect("object")
+                .extend(addition.as_object().expect("object").clone());
+            assert!(serde_json::from_value::<CompletionRequest>(request).is_err());
+        }
+    }
+
+    fn committed(index: usize, prompt: Option<Vec<u32>>) -> GenerationEvent {
+        GenerationEvent::CommittedToken {
+            text: String::new(),
+            token_id: 17,
+            generated_index: index,
+            prompt_token_ids: prompt,
+        }
+    }
+
+    #[test]
+    fn token_collector_rejects_missing_repeated_or_out_of_order_metadata_and_bounds() {
+        let first = committed(0, Some(vec![1, 2]));
+        for invalid in [
+            committed(0, None),
+            committed(1, Some(vec![1, 2])),
+            committed(0, Some(vec![])),
+            committed(0, Some(vec![1, 2, 3])),
+        ] {
+            let mut collector = CompletionTokenCollector::new(true, 2, 2);
+            assert!(collector.observe(&invalid).is_err());
+            assert!(collector.token_ids.is_empty());
+        }
+        for invalid in [
+            committed(0, None),
+            committed(2, None),
+            committed(1, Some(vec![1, 2])),
+        ] {
+            let mut collector = CompletionTokenCollector::new(true, 2, 2);
+            collector.observe(&first).expect("first token");
+            assert!(collector.observe(&invalid).is_err());
+            assert_eq!(collector.token_ids, [17]);
+        }
+        let mut collector = CompletionTokenCollector::new(true, 1, 2);
+        collector.observe(&first).expect("first token");
+        assert!(collector.observe(&committed(1, None)).is_err());
+        assert!(
+            collector
+                .validate_usage(TokenUsage::new(1, 1).expect("usage"))
+                .is_err()
+        );
+        assert!(
+            collector
+                .validate_usage(TokenUsage::new(2, 2).expect("usage"))
+                .is_err()
+        );
+        assert!(
+            collector
+                .validate_usage(TokenUsage::new(2, 1).expect("usage"))
+                .is_ok()
+        );
+        assert!(
+            CompletionTokenCollector::new(false, 1, 2)
+                .observe(&first)
+                .is_err()
+        );
+        assert!(
+            collector
+                .observe(&GenerationEvent::TokenDelta {
+                    text: "no identity".to_owned()
+                })
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn opted_in_sse_keeps_empty_tokens_and_requires_checked_usage_before_one_done() {
+        let metadata = RequestMetadata::new("cmpl-123", "fixture-model", 42).expect("metadata");
+        let mut encoder = SseStreamEncoder::new_with_options(metadata, true, true, 2, 2);
+        assert!(encoder.encode_delta("unattributed").is_err());
+        assert!(encoder.encode_finish(FinishReason::Length).is_err());
+        assert!(encoder.encode_done().is_err());
+        let frame = encoder
+            .encode_event(&committed(0, Some(vec![1, 2])))
+            .expect("invisible token");
+        let value: Value =
+            serde_json::from_str(frame.trim().strip_prefix("data: ").expect("data")).expect("JSON");
+        assert_eq!(value["choices"][0]["text"], "");
+        assert_eq!(value["choices"][0]["token_ids"], json!([17]));
+        assert_eq!(value["choices"][0]["prompt_token_ids"], json!([1, 2]));
+        assert!(value.get("usage").is_none());
+        assert!(
+            encoder
+                .encode_event(&GenerationEvent::Finished {
+                    reason: FinishReason::Length,
+                    usage: TokenUsage::new(2, 2).expect("bad usage")
+                })
+                .is_err()
+        );
+        assert_eq!(encoder.phase(), SseStreamPhase::Open);
+        let finish = encoder
+            .encode_event(&GenerationEvent::Finished {
+                reason: FinishReason::Stop,
+                usage: TokenUsage::new(2, 1).expect("usage"),
+            })
+            .expect("checked finish and usage");
+        let frames: Vec<Value> = finish
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .map(|line| serde_json::from_str(line).expect("JSON"))
+            .collect();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0]["choices"][0]["finish_reason"], "stop");
+        assert!(frames[0]["choices"][0].get("token_ids").is_none());
+        assert_eq!(frames[1]["choices"], json!([]));
+        assert_eq!(
+            frames[1]["usage"],
+            json!({"prompt_tokens":2,"completion_tokens":1,"total_tokens":3})
+        );
+        assert!(encoder.encode_event(&committed(1, None)).is_err());
+        assert_eq!(encoder.encode_done().expect("done"), SSE_DONE_FRAME);
+        assert!(encoder.encode_done().is_err());
+    }
+
+    #[test]
+    fn usage_only_opt_in_does_not_invent_token_ids_and_direct_finish_cannot_omit_usage() {
+        let metadata = RequestMetadata::new("cmpl-123", "fixture-model", 42).expect("metadata");
+        let mut encoder = SseStreamEncoder::new_with_options(metadata, false, true, 2, 2);
+        let delta = encoder
+            .encode_event(&GenerationEvent::TokenDelta {
+                text: "가".to_owned(),
+            })
+            .expect("text delta");
+        assert!(!delta.contains("token_ids"));
+        assert!(encoder.encode_finish(FinishReason::Length).is_err());
+        let finish = encoder
+            .encode_event(&GenerationEvent::Finished {
+                reason: FinishReason::Length,
+                usage: TokenUsage::new(2, 2).expect("source usage"),
+            })
+            .expect("source terminal usage");
+        assert_eq!(finish.matches("\"usage\"").count(), 1);
+        assert!(!finish.contains("token_ids"));
+        assert_eq!(encoder.encode_done().expect("done"), SSE_DONE_FRAME);
     }
 
     #[test]
@@ -1224,6 +1625,8 @@ mod tests {
         assert_eq!(value["choices"][0]["logprobs"], Value::Null);
         assert_eq!(value["choices"][0]["finish_reason"], "stop");
         assert_eq!(value["usage"]["total_tokens"], 5);
+        assert!(value["choices"][0].get("token_ids").is_none());
+        assert!(value["choices"][0].get("prompt_token_ids").is_none());
 
         assert!(
             CompletionResponse::new(&metadata, String::new(), FinishReason::Error, usage).is_err()
