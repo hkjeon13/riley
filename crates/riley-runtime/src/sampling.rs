@@ -402,6 +402,31 @@ impl SamplingWorkspace {
     ) -> Result<ProcessedDistribution<'_>, SamplingError> {
         self.validate_inputs(logits_bf16_native, constraints, unique_history, params)?;
 
+        // Preserve the full public distribution, without materializing candidates
+        // or applying an identity repetition penalty for deterministic sampling.
+        if params.temperature == 0.0 && params.repetition_penalty == 1.0 {
+            let mask = match constraints {
+                TokenConstraints::AllowAll => None,
+                TokenConstraints::AllowedMask(mask) => Some(mask),
+            };
+            let mut winner = None;
+            let mut maximum = f32::NEG_INFINITY;
+            for (token, bytes) in logits_bf16_native.chunks_exact(BF16_BYTES).enumerate() {
+                if mask.is_none_or(|mask| mask[token]) {
+                    let value = decode_finite_bf16(bytes);
+                    if value > maximum { maximum = value; winner = Some(token); }
+                }
+            }
+            let winner = winner.ok_or(SamplingError::AllMasked)?;
+            self.probabilities.fill(0.0);
+            self.log_probabilities.fill(f64::NEG_INFINITY);
+            self.processed_logits.fill(f64::NEG_INFINITY);
+            self.probabilities[winner] = 1.0;
+            self.log_probabilities[winner] = 0.0;
+            self.processed_logits[winner] = f64::from(maximum);
+            return Ok(self.distribution(true, 1, Some(winner as u32)));
+        }
+
         self.probabilities.fill(0.0);
         self.log_probabilities.fill(f64::NEG_INFINITY);
         self.processed_logits.fill(f64::NEG_INFINITY);
@@ -1230,4 +1255,106 @@ mod tests {
             .process_bf16_native(&bf16_bytes(values), TokenConstraints::AllowAll, &[], params)
             .unwrap_err()
     }
+}
+
+#[cfg(test)]
+impl SamplingWorkspace {
+    fn process_bf16_reference(
+        &mut self,
+        logits_bf16_native: &[u8],
+        constraints: TokenConstraints<'_>,
+        unique_history: &[u32],
+        params: SamplingParams,
+    ) -> Result<ProcessedDistribution<'_>, SamplingError> {
+        self.validate_inputs(logits_bf16_native, constraints, unique_history, params)?;
+
+        self.probabilities.fill(0.0);
+        self.log_probabilities.fill(f64::NEG_INFINITY);
+        self.processed_logits.fill(f64::NEG_INFINITY);
+        self.history_seen.fill(false);
+
+        let allowed_mask = match constraints {
+            TokenConstraints::AllowAll => None,
+            TokenConstraints::AllowedMask(mask) => Some(mask),
+        };
+        let mut candidate_count = 0;
+        for (token_id, bytes) in logits_bf16_native.chunks_exact(BF16_BYTES).enumerate() {
+            if allowed_mask.is_none_or(|mask| mask[token_id]) {
+                let value = decode_finite_bf16(bytes);
+                self.processed_logits[token_id] = f64::from(value);
+                self.candidate_ids[candidate_count] = token_id;
+                candidate_count += 1;
+            }
+        }
+        if candidate_count == 0 {
+            return Err(SamplingError::AllMasked);
+        }
+
+        let penalty = f64::from(params.repetition_penalty);
+        for &token_id in unique_history {
+            let index =
+                usize::try_from(token_id).map_err(|_| SamplingError::HistoryTokenOutOfRange {
+                    token_id,
+                    vocabulary_size: self.vocabulary_size(),
+                })?;
+            if !self.history_seen[index] {
+                self.history_seen[index] = true;
+                let logit = &mut self.processed_logits[index];
+                if logit.is_finite() {
+                    if *logit > 0.0 {
+                        *logit /= penalty;
+                    } else if *logit < 0.0 {
+                        *logit *= penalty;
+                    }
+                }
+            }
+        }
+
+        if params.temperature == 0.0 {
+            return Ok(self.prepare_greedy(candidate_count));
+        }
+
+        let inverse_temperature = 1.0 / f64::from(params.temperature);
+        for &token_id in &self.candidate_ids[..candidate_count] {
+            self.processed_logits[token_id] *= inverse_temperature;
+        }
+
+        let logits = &self.processed_logits;
+        self.candidate_ids[..candidate_count].sort_unstable_by(|left, right| {
+            finite_cmp(logits[*right], logits[*left]).then_with(|| left.cmp(right))
+        });
+
+        let mut support_size = params.top_k.unwrap_or(candidate_count).min(candidate_count);
+        for &token_id in &self.candidate_ids[support_size..candidate_count] {
+            self.processed_logits[token_id] = f64::NEG_INFINITY;
+        }
+
+        if let Some(top_p) = params.top_p {
+            support_size = self.apply_top_p(support_size, top_p);
+        }
+        self.normalize(support_size);
+
+        Ok(self.distribution(false, support_size, None))
+    }
+
+}
+
+#[cfg(test)]
+mod greedy_fast_comparison {
+ use super::*;
+ #[test]
+ fn greedy_fast_preserves_full_distribution_and_errors(){
+  for size in [1,2,17,257,49152] {
+   let mut fast=SamplingWorkspace::new(size).unwrap();let mut reference=SamplingWorkspace::new(size).unwrap();
+   for seed in 0..8 {
+    let mut bytes=Vec::new();for i in 0..size {let bits=match i%11 {0=>0u16,1=>0x8000,_=>((i*139+seed*73)%0x7f80)as u16 | if i%2==0{0x8000}else{0}};bytes.extend_from_slice(&bits.to_ne_bytes());}
+    let mask:Vec<_>=(0..size).map(|i|seed!=7 && (i+seed)%3!=0).collect();
+    let params=SamplingParams{temperature:0.0,..SamplingParams::default()};
+    let history=[0,0];
+    let a=fast.process_bf16_native(&bytes,TokenConstraints::AllowedMask(&mask),&history,params);
+    let b=reference.process_bf16_reference(&bytes,TokenConstraints::AllowedMask(&mask),&history,params);
+    match(a,b){(Ok(a),Ok(b))=>{assert_eq!(a.greedy_token,b.greedy_token);for (x,y) in a.processed_logits().iter().zip(b.processed_logits()){assert_eq!(x.to_bits(),y.to_bits());}assert_eq!(a.probabilities(),b.probabilities());assert_eq!(a.log_probabilities(),b.log_probabilities());},(Err(a),Err(b))=>assert_eq!(a,b),_=>panic!("fast/reference result differs")}
+   }
+  }
+ }
 }

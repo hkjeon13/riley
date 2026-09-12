@@ -77,6 +77,8 @@ pub fn validate_packet(packet:&[u8],scratch:&mut [u8],e:&Expectation)->Result<()
 pub const RESULT_BYTES:usize=128+49152*2;
 /// Validate a completed read from the caller's one outstanding retained owner.
 /// This cannot prove quiescence or perform scheduler settlement on its own.
+// A reduction permits vectorized scanning while checking every inactive byte.
+fn all_zero(bytes:&[u8])->bool {bytes.iter().fold(0u8,|bits,&value|bits|value)==0}
 pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
     validate(e)?;
     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
@@ -90,7 +92,7 @@ fn validate_result_row<'a>(bytes:&'a[u8],e:&Expectation,index:usize)->Result<(Op
     let mut expected=[0u8;128];result_row_identity_into(&mut expected,e,index,token)?;
     check(bytes[..128]==expected,"result_identity","completion differs from outstanding expectation")?;
     let logits=&bytes[128..];
-    if !published {check(logits.iter().all(|&v|v==0) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
+    if !published {check(all_zero(logits) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
     let mut maximum=f32::NEG_INFINITY;let mut host_token=0;
     for (i,word) in logits.chunks_exact(2).enumerate(){let v=f32::from_bits(u32::from(u16::from_le_bytes([word[0],word[1]]))<<16);
         check(v.is_finite(),"logits","nonfinite logit")?;if v>maximum {maximum=v;host_token=i as u32;}}
@@ -119,7 +121,7 @@ pub fn validate_batch_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<Vec<RowRe
         let (token,logits)=validate_result_row(record,e,index)?;
         result.push(RowResult{output_slot:row.output_slot,token,logits});
     }
-    check(bytes[e.rows.len()*RESULT_BYTES..].iter().all(|&v|v==0),"inactive_result","inactive record published bytes")?;
+    check(all_zero(&bytes[e.rows.len()*RESULT_BYTES..]),"inactive_result","inactive record published bytes")?;
     Ok(result)
 }
 
