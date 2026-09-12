@@ -2410,6 +2410,7 @@ cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t,const void*,const voi
 cudaError_t enqueue_compiled_v4_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v4_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
 cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
 cudaError_t enqueue_compiled_v6_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
 cudaError_t enqueue_compiled_v7_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;

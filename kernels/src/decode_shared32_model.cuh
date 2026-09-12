@@ -2,6 +2,7 @@
 #include "prefill_shape_model.cuh"
 #include "decode_shared32.cuh"
 #include "decode_shared32_attention.cuh"
+#include "decode_gqa_attention_v50.cuh"
 // Internal model sequence: caller validates all row identities, context/page
 // ownership and buffer extents before enqueue. Final hidden rows stay in b(1).
 namespace riley_shared32_model {
@@ -49,7 +50,7 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
 }
-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false){
+inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false){
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
@@ -65,7 +66,8 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
- riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+ if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+ else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
  if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
