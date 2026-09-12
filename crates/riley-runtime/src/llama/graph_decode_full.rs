@@ -2,6 +2,9 @@
 #[path = "graph_decode_packed.rs"]
 mod packed;
 use packed::PackedDecodeParents;
+#[path = "graph_decode_multi_parents.rs"]
+mod multi_parents;
+use multi_parents::MultiDecodeParents;
 #[cfg(all(test, feature = "cuda"))]
 #[path = "graph_decode_prefill_parity_gpu.rs"]
 mod prefill_parity_gpu;
@@ -61,6 +64,7 @@ impl PreparedLlamaBatchExecutor {
             publish_logits,
             None,
             None,
+            None,
         )
     }
 
@@ -75,6 +79,7 @@ impl PreparedLlamaBatchExecutor {
         publish_logits: bool,
         prefill: Option<&'a mut Vec<CudaDeviceBuffer>>,
         packed: Option<&'a mut PackedDecodeParents>,
+        multi: Option<&'a mut MultiDecodeParents>,
     ) -> LlamaBatchExecutorResult<BorrowedGraphResourceReservation<'a>> {
         if prefill.as_ref().is_some_and(|buffers| buffers.len() != 12)
             || prefill.is_some() != self.config.vllm_smol_p128_batched_prefill()
@@ -84,6 +89,11 @@ impl PreparedLlamaBatchExecutor {
                 .is_some_and(|p| p.buffers.len() != 62 || p.plans.len() != 2)
         {
             return Err(rejected("prefill parents differ from configured topology"));
+        }
+        if multi.is_some() && (packed.is_none() || capacity != 10 || !publish_logits) {
+            return Err(rejected(
+                "multi catalog requires packed P128, C10 and full logits",
+            ));
         }
         if self.owner.poisoned || self.owner.forward.is_poisoned() {
             return Err(rejected("healthy owner required"));
@@ -202,12 +212,29 @@ impl PreparedLlamaBatchExecutor {
             None => (None, None),
         };
         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
-        let mut graph = BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents {
-            stream,
-            devices,
-            pinned: vec![staging],
-            plans,
-        })
+        let mut pinned = vec![staging];
+        let mut strided = Vec::new();
+        let mut multi_indices = Vec::new();
+        if let Some(multi) = multi {
+            for scratch in &mut multi.scratch {
+                let first = devices.len();
+                devices.extend(scratch.iter_mut());
+                multi_indices.push(std::array::from_fn(|i| {
+                    if i < 14 { first + i } else { base + i + 1 }
+                }));
+            }
+            strided.extend(multi.plans.iter_mut());
+            pinned.extend(multi.staging.iter_mut());
+        }
+        let mut graph = BorrowedGraphResourceReservation::reserve_with_strided(
+            BorrowedGraphResourceParents {
+                stream,
+                devices,
+                pinned,
+                plans,
+            },
+            strided,
+        )
         .map_err(cuda)?;
         graph
             .record_decode_with_profile_prefill_and_packed(
@@ -231,6 +258,24 @@ impl PreparedLlamaBatchExecutor {
                 packed_plan_indices,
             )
             .map_err(cuda)?;
+        if !multi_indices.is_empty() {
+            let mut multi_weights = weights.clone();
+            let packed = packed_indices.ok_or_else(|| rejected("multi packed indices missing"))?;
+            multi_weights.extend_from_slice(&packed[..60]);
+            for (index, indices) in multi_indices.iter().enumerate() {
+                graph
+                    .append_multisequence_decode(
+                        indices,
+                        &multi_weights,
+                        &std::array::from_fn(|i| index * 5 + i),
+                        index + 1,
+                        if index == 0 { 2 } else { 4 },
+                        geometry[1] as u32,
+                        true,
+                    )
+                    .map_err(cuda)?;
+            }
+        }
         Ok(graph)
     }
 }
@@ -1351,6 +1396,7 @@ struct FullDecodeParents {
     staging: CudaPinnedHostBuffer,
     prefill: Vec<CudaDeviceBuffer>,
     packed: Option<PackedDecodeParents>,
+    multi: Option<MultiDecodeParents>,
 }
 
 /// Persistent, thread-confined M=1 graph session on the executor's actual KV pool.
@@ -1383,8 +1429,17 @@ impl PreparedLlamaBatchExecutor {
     /// # Errors
     /// Rejects unsupported configurations or failed capture before publication.
     pub fn into_owned_decode_graph(
+        self,
+        context: &riley_cuda::CudaContext,
+    ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
+        self.into_owned_decode_graph_with_catalog(context, false)
+    }
+
+    // Internal until the scheduler/codec adapter supplies live reservation authority.
+    pub(crate) fn into_owned_decode_graph_with_catalog(
         mut self,
         context: &riley_cuda::CudaContext,
+        catalog: bool,
     ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
         if !self.full_decode_supported() {
             return Err(rejected("unsupported owned graph"));
@@ -1393,6 +1448,14 @@ impl PreparedLlamaBatchExecutor {
         let mut stream = context.create_stream().map_err(cuda)?;
         let vllm_smol_p128_graph = self.config.vllm_smol_p128_graph();
         let batched_prefill = self.config.vllm_smol_p128_batched_prefill();
+        if catalog && (!batched_prefill || self.config.metadata().max_block_entries() != 10) {
+            return Err(rejected("catalog requires packed P128/C10"));
+        }
+        let multi = if catalog {
+            Some(MultiDecodeParents::prepare(context)?)
+        } else {
+            None
+        };
         let packed = if batched_prefill {
             Some(PackedDecodeParents::prepare(
                 &mut self,
@@ -1419,6 +1482,7 @@ impl PreparedLlamaBatchExecutor {
         let metadata = crate::llama::PreparedLlamaBatchMetadata::prepare(config)?;
         let parents = FullDecodeParents {
             packed,
+            multi,
             executor: self,
             stream,
             metadata: context
@@ -1452,6 +1516,7 @@ impl PreparedLlamaBatchExecutor {
                     None
                 },
                 p.packed.as_mut(),
+                p.multi.as_mut(),
             )?;
             // Publish only a captured, instantiated exact-owner registry entry.
             let registered =

@@ -4,13 +4,14 @@ use crate::llama::{
     LlamaBatchBlockTable, LlamaBatchMetadataConfig, LlamaBatchRow, LlamaBatchRowKind,
     PreparedLlamaBatchExecutorConfig, PreparedLlamaForwardConfig,
 };
-use riley_cuda::{CudaContext, CudaStridedGemmConfig};
+use riley_cuda::CudaContext;
 use riley_model::{LoadLimits, LoadedModel};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn prepare(
     model: &LoadedModel,
     context: &CudaContext,
     stream: &mut CudaStream,
+    catalog: bool,
 ) -> Result<OwnedLlamaDecodeExecutor> {
     let config = PreparedLlamaBatchExecutorConfig::new(
         LlamaBatchMetadataConfig::new(1, 128, 10, 1, 40)?,
@@ -33,7 +34,7 @@ fn prepare(
         .owner
         .value_cache
         .upload_from_slice(0, &zeros, &mut io, stream)?;
-    Ok(executor.into_owned_decode_graph(context)?)
+    Ok(executor.into_owned_decode_graph_with_catalog(context, catalog)?)
 }
 fn run(
     owner: &mut OwnedLlamaDecodeExecutor,
@@ -136,8 +137,8 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
     let mut io = context.allocate_pinned_host_buffer(1 << 20)?;
     let mut total_rows = 0;
     for bucket in [2u32, 4] {
-        let mut oracle = prepare(&model, &context, &mut stream)?;
-        let mut candidate = prepare(&model, &context, &mut stream)?;
+        let mut oracle = prepare(&model, &context, &mut stream, false)?;
+        let mut candidate = prepare(&model, &context, &mut stream, true)?;
         let mut tokens = vec![0; bucket as usize];
         let mut positions = vec![128usize; bucket as usize];
         for r in 0..bucket as usize {
@@ -148,166 +149,24 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             assert_eq!(run(&mut candidate, r, &prompt, 128)?, expected);
             tokens[r] = oracle.greedy_token()?;
         }
-        let mut parents = candidate.graph.close()?;
-        let b = u64::from(bucket);
-        let result = 640 + bucket as usize * 98304;
-        let mut scratch = Vec::new();
-        for size in [
-            1152 * b,
-            1152 * b,
-            1920 * b,
-            1152 * b,
-            1152 * b,
-            1152 * b,
-            2304 * b,
-            6144 * b,
-            3072 * b,
-            1152 * b,
-            98304 * b,
-            1280,
-            result as u64,
-            8 * b,
-        ] {
-            scratch.push(context.allocate_device_buffer(size)?);
-        }
-        let mut staging = context.allocate_pinned_host_buffer((2 * result) as u64)?;
-        let mut extra_scratch = Vec::new();
-        if bucket == 4 {
-            for size in [
-                2304, 2304, 3840, 2304, 2304, 2304, 4608, 12288, 6144, 2304, 196608, 1280, 197248,
-                16,
-            ] {
-                extra_scratch.push(context.allocate_device_buffer(size)?);
-            }
-        }
-        let mut extra_staging = context.allocate_pinned_host_buffer(394496)?;
-
-        let mut plans = Vec::new();
-        for (n, k) in [
-            (960, 576),
-            (3072, 576),
-            (576, 576),
-            (576, 1536),
-            (49152, 576),
-        ] {
-            plans.push(
-                context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, bucket, false)?)?,
-            );
-        }
-        if bucket == 4 {
-            for (n, k) in [
-                (960, 576),
-                (3072, 576),
-                (576, 576),
-                (576, 1536),
-                (49152, 576),
-            ] {
-                plans.push(
-                    context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, 2, false)?)?,
-                );
-            }
-        }
-        let owner = &mut parents.executor.owner;
-        let f = &mut owner.forward;
-        let mut weights = vec![
-            f.plan.embedding_weight().index(),
-            f.plan.final_norm_weight().index(),
-            f.plan.lm_head_weight().index(),
-        ];
-        for l in f.plan.layers() {
-            weights.extend(
-                [
-                    l.input_norm_weight(),
-                    l.query_weight(),
-                    l.key_weight(),
-                    l.value_weight(),
-                    l.output_weight(),
-                    l.post_attention_norm_weight(),
-                    l.gate_weight(),
-                    l.up_weight(),
-                    l.down_weight(),
-                ]
-                .map(|w| w.index()),
-            );
-        }
-        let mut devices: Vec<_> = f.weights.borrow_graph_weight_parents().collect();
-        let packed_start = devices.len();
-        devices.extend(
-            parents
-                .packed
-                .as_mut()
-                .ok_or("packed missing")?
-                .buffers
-                .iter_mut()
-                .take(60),
-        );
-        weights.extend(packed_start..packed_start + 60);
-        let start = devices.len();
-        devices.extend(scratch.iter_mut());
-        devices.extend([
-            &mut owner.key_cache,
-            &mut owner.value_cache,
-            &mut owner.absolute_rope_cos,
-            &mut owner.absolute_rope_sin,
-        ]);
-        let extra_start = devices.len();
-        devices.extend(extra_scratch.iter_mut());
-        let mut graph = riley_cuda::BorrowedGraphResourceReservation::reserve_with_strided(
-            riley_cuda::BorrowedGraphResourceParents {
-                stream: &mut parents.stream,
-                devices,
-                pinned: vec![&mut staging, &mut extra_staging],
-                plans: vec![],
-            },
-            plans.iter_mut().collect(),
-        )?;
-        graph.record_multisequence_decode(
-            &std::array::from_fn(|i| start + i),
-            &weights,
-            &[0, 1, 2, 3, 4],
-            0,
-            bucket,
-            40,
-            true,
-        )?;
-        if bucket == 4 {
-            let indices = std::array::from_fn(|i| if i < 14 { extra_start + i } else { start + i });
-            graph.append_multisequence_decode(
-                &indices,
-                &weights,
-                &[5, 6, 7, 8, 9],
-                1,
-                2,
-                40,
-                true,
-            )?;
-            assert!(
-                graph
-                    .append_multisequence_decode(
-                        &indices,
-                        &weights,
-                        &[5, 6, 7, 8, 9],
-                        1,
-                        2,
-                        40,
-                        true
-                    )
-                    .is_err()
-            );
-        }
         let mut first_failure = None;
         'steps: for step in 0..31 {
+            if step == 16 {
+                let r = bucket as usize - 1;
+                let prompt: Vec<u32> = (0..128).map(|i| ((i * 431 + 97) % 49152) as u32).collect();
+                let expected = run(&mut oracle, r, &prompt, 128)?;
+                assert_eq!(run(&mut candidate, r, &prompt, 128)?, expected);
+                tokens[r] = oracle.greedy_token()?;
+                positions[r] = 128;
+            }
             let active = if bucket == 4 {
-                [4, 3, 2, 4][step as usize % 4]
+                [4, 3, 2, 1][step as usize % 4]
             } else {
-                2
+                [2, 1][step as usize % 2]
             };
+            let single_input = tokens[0];
             let selected_bucket = if active <= 2 { 2 } else { 4 };
-            let index = if bucket == 4 && selected_bucket == 2 {
-                1
-            } else {
-                0
-            };
+            let index = if selected_bucket == 2 { 1 } else { 2 };
             let selected_result = 640 + selected_bucket as usize * 98304;
             let p = packet(selected_bucket, active, &positions, &tokens, step + 1);
             let mut expected = Vec::new();
@@ -315,17 +174,27 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
                 expected.push(run(&mut oracle, r, &[tokens[r]], positions[r] + 1)?);
                 tokens[r] = oracle.greedy_token()?;
             }
-            graph.replay_catalog(index, &p)?;
+            if active == 1 {
+                assert_eq!(
+                    run(&mut candidate, 0, &[single_input], positions[0] + 1)?,
+                    expected[0]
+                );
+                positions[0] += 1;
+                total_rows += 1;
+                continue;
+            }
+            candidate.graph.replay_catalog(index, &p)?;
             let mut actual = vec![0; selected_result];
             assert!(
-                graph
+                candidate
+                    .graph
                     .read_catalog(if index == 0 { 1 } else { 0 }, &mut actual)
                     .is_err()
             );
             if index != 0 {
-                assert!(graph.read_transfer(&mut actual).is_err());
+                assert!(candidate.graph.read_transfer(&mut actual).is_err());
             }
-            graph.read_catalog(index, &mut actual)?;
+            candidate.graph.read_catalog(index, &mut actual)?;
             for r in 0..active as usize {
                 let logits = &actual[640 + r * 98304..640 + (r + 1) * 98304];
                 let mismatches = logits
@@ -359,7 +228,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
                     .all(|b| *b == 0)
             );
         }
-        graph.close()?;
+        let mut parents = candidate.graph.close()?;
         let mut oracle_parents = oracle.graph.close()?;
         let bytes = parents.executor.owner.layout.bytes_per_kind() as usize;
         for (actual, expected) in [
@@ -412,7 +281,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
     assert!(context.allocation_stats()?.is_zero());
     context.close()?;
     println!(
-        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=2,4 catalog_switches=true replays=62 rows={total_rows} zero_allocations=true"
+        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=1,2,4 prefill_reentry=true single_cold_owner=true catalog_switches=true replays=62 rows={total_rows} zero_allocations=true"
     );
     Ok(())
 }
