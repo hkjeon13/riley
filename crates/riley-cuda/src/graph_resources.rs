@@ -1028,6 +1028,35 @@ impl BorrowedGraphResourceReservation<'_> {
         physical: u32,
         full: bool,
     ) -> CudaResult<()> {
+        self.prepare_multisequence_entry(
+            devices, weights, plans, staging, bucket, physical, full, false,
+        )
+    }
+    pub fn append_multisequence_decode(
+        &mut self,
+        devices: &[usize; 18],
+        weights: &[usize],
+        plans: &[usize; 5],
+        staging: usize,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+    ) -> CudaResult<()> {
+        self.prepare_multisequence_entry(
+            devices, weights, plans, staging, bucket, physical, full, true,
+        )
+    }
+    fn prepare_multisequence_entry(
+        &mut self,
+        devices: &[usize; 18],
+        weights: &[usize],
+        plans: &[usize; 5],
+        staging: usize,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+        append: bool,
+    ) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
             let bad = || {
@@ -1074,14 +1103,44 @@ impl BorrowedGraphResourceReservation<'_> {
                 bucket,
                 physical,
                 full,
+                append,
             )
         }
         #[cfg(not(feature = "cuda"))]
         {
-            let _ = (devices, weights, plans, staging, bucket, physical, full);
+            let _ = (
+                devices, weights, plans, staging, bucket, physical, full, append,
+            );
             Err(crate::CudaError::unavailable(
                 "record multi-sequence decode",
             ))
+        }
+    }
+}
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Replays a pre-recorded entry: 0 original, 1 appended N2, 2 appended N4.
+    pub fn replay_catalog(&mut self, index: u32, source: &[u8]) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.replay_catalog(index, source)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (index, source);
+            Err(crate::CudaError::unavailable("replay graph catalog"))
+        }
+    }
+    /// Reads only the entry selected by the most recent successful replay.
+    pub fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.read_catalog(index, output)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (index, output);
+            Err(crate::CudaError::unavailable("read graph catalog"))
         }
     }
 }

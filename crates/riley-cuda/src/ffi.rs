@@ -11111,6 +11111,35 @@ unsafe extern "C" {
         full: u32,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_append_multisequence_decode(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        device_count: u64,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        plan_count: u64,
+        staging: *mut RawPinnedHostBuffer,
+        bucket: u32,
+        physical: u32,
+        full: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_replay_catalog(
+        resources: *mut RawGraphResources,
+        index: u32,
+        source: *const u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_read_catalog(
+        resources: *mut RawGraphResources,
+        index: u32,
+        output: *mut u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+
 }
 impl GraphResourcesHandle {
     pub(super) fn record_multisequence_decode(
@@ -11122,6 +11151,7 @@ impl GraphResourcesHandle {
         bucket: u32,
         physical: u32,
         full: bool,
+        append: bool,
     ) -> CudaResult<()> {
         let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
         let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
@@ -11129,8 +11159,13 @@ impl GraphResourcesHandle {
         let mut error = ErrorInfo::new();
         // SAFETY: the enclosing owner retains all parent borrows. Native validates
         // explicit counts, exact allocation geometry and ledger membership.
+        let call = if append {
+            riley_cuda_graph_resources_append_multisequence_decode
+        } else {
+            riley_cuda_graph_resources_record_multisequence_decode
+        };
         let status = unsafe {
-            riley_cuda_graph_resources_record_multisequence_decode(
+            call(
                 self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
                 devices.as_ptr(),
                 devices.len() as u64,
@@ -11146,5 +11181,36 @@ impl GraphResourcesHandle {
             )
         };
         status_result(status, "record multi-sequence decode", &error)
+    }
+}
+
+impl GraphResourcesHandle {
+    pub(super) fn replay_catalog(&mut self, index: u32, source: &[u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: synchronous copy from a live slice; native validates catalog and exact extent.
+        let status = unsafe {
+            riley_cuda_graph_resources_replay_catalog(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                index,
+                source.as_ptr(),
+                source.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "replay graph catalog", &error)
+    }
+    pub(super) fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: writable live slice; native checks the last completed entry and extent.
+        let status = unsafe {
+            riley_cuda_graph_resources_read_catalog(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                index,
+                output.as_mut_ptr(),
+                output.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "read graph catalog", &error)
     }
 }

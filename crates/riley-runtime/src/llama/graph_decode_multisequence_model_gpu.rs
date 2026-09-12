@@ -171,6 +171,17 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             scratch.push(context.allocate_device_buffer(size)?);
         }
         let mut staging = context.allocate_pinned_host_buffer((2 * result) as u64)?;
+        let mut extra_scratch = Vec::new();
+        if bucket == 4 {
+            for size in [
+                2304, 2304, 3840, 2304, 2304, 2304, 4608, 12288, 6144, 2304, 196608, 1280, 197248,
+                16,
+            ] {
+                extra_scratch.push(context.allocate_device_buffer(size)?);
+            }
+        }
+        let mut extra_staging = context.allocate_pinned_host_buffer(394496)?;
+
         let mut plans = Vec::new();
         for (n, k) in [
             (960, 576),
@@ -182,6 +193,19 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             plans.push(
                 context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, bucket, false)?)?,
             );
+        }
+        if bucket == 4 {
+            for (n, k) in [
+                (960, 576),
+                (3072, 576),
+                (576, 576),
+                (576, 1536),
+                (49152, 576),
+            ] {
+                plans.push(
+                    context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, 2, false)?)?,
+                );
+            }
         }
         let owner = &mut parents.executor.owner;
         let f = &mut owner.forward;
@@ -226,11 +250,13 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             &mut owner.absolute_rope_cos,
             &mut owner.absolute_rope_sin,
         ]);
+        let extra_start = devices.len();
+        devices.extend(extra_scratch.iter_mut());
         let mut graph = riley_cuda::BorrowedGraphResourceReservation::reserve_with_strided(
             riley_cuda::BorrowedGraphResourceParents {
                 stream: &mut parents.stream,
                 devices,
-                pinned: vec![&mut staging],
+                pinned: vec![&mut staging, &mut extra_staging],
                 plans: vec![],
             },
             plans.iter_mut().collect(),
@@ -244,22 +270,62 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             40,
             true,
         )?;
+        if bucket == 4 {
+            let indices = std::array::from_fn(|i| if i < 14 { extra_start + i } else { start + i });
+            graph.append_multisequence_decode(
+                &indices,
+                &weights,
+                &[5, 6, 7, 8, 9],
+                1,
+                2,
+                40,
+                true,
+            )?;
+            assert!(
+                graph
+                    .append_multisequence_decode(
+                        &indices,
+                        &weights,
+                        &[5, 6, 7, 8, 9],
+                        1,
+                        2,
+                        40,
+                        true
+                    )
+                    .is_err()
+            );
+        }
         let mut first_failure = None;
         'steps: for step in 0..31 {
-            let active = if bucket == 4 && step % 3 == 1 {
-                3
+            let active = if bucket == 4 {
+                [4, 3, 2, 4][step as usize % 4]
             } else {
-                bucket
+                2
             };
-            let p = packet(bucket, active, &positions, &tokens, step + 1);
+            let selected_bucket = if active <= 2 { 2 } else { 4 };
+            let index = if bucket == 4 && selected_bucket == 2 {
+                1
+            } else {
+                0
+            };
+            let selected_result = 640 + selected_bucket as usize * 98304;
+            let p = packet(selected_bucket, active, &positions, &tokens, step + 1);
             let mut expected = Vec::new();
             for r in 0..active as usize {
                 expected.push(run(&mut oracle, r, &[tokens[r]], positions[r] + 1)?);
                 tokens[r] = oracle.greedy_token()?;
             }
-            graph.replay_transfer(&p)?;
-            let mut actual = vec![0; result];
-            graph.read_transfer(&mut actual)?;
+            graph.replay_catalog(index, &p)?;
+            let mut actual = vec![0; selected_result];
+            assert!(
+                graph
+                    .read_catalog(if index == 0 { 1 } else { 0 }, &mut actual)
+                    .is_err()
+            );
+            if index != 0 {
+                assert!(graph.read_transfer(&mut actual).is_err());
+            }
+            graph.read_catalog(index, &mut actual)?;
             for r in 0..active as usize {
                 let logits = &actual[640 + r * 98304..640 + (r + 1) * 98304];
                 let mismatches = logits
@@ -346,7 +412,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
     assert!(context.allocation_stats()?.is_zero());
     context.close()?;
     println!(
-        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=2,4 replays=62 rows={total_rows} zero_allocations=true"
+        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=2,4 catalog_switches=true replays=62 rows={total_rows} zero_allocations=true"
     );
     Ok(())
 }

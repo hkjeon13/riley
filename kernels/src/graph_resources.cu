@@ -9,6 +9,17 @@
 // The ledger remains the single authority for all retained parents. The
 // optional transfer graph is a lifecycle probe, not a model decode graph.
 struct RileyCudaGraphResources {
+  // Cold additional decode entries share the parent's single resource ledger.
+  struct CatalogEntry {
+    cudaGraph_t graph=nullptr;
+    cudaGraphExec_t exec=nullptr;
+    RileyCudaPinnedHostBuffer* staging=nullptr;
+    uint64_t transfer=0;
+    uint32_t bucket=0,physical=0,full=0;
+  };
+  CatalogEntry catalog[2]{};
+  uint32_t last_catalog=0;
+  bool catalog_sealed=false;
   enum class Kind { Counter, Plan };
   struct Entry {
     Kind kind;
@@ -184,7 +195,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
   if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
-      (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr) {
+      (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
+      (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
+      (*resources)->catalog[1].graph || (*resources)->catalog[1].exec) {
     CaptureDomainControlLease admission((*resources)->owner->capture_domain);
     if (!admission.active())
       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -215,6 +228,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
                              RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
       else (*resources)->completion_unknown = true;
+    }
+    for(auto& entry:(*resources)->catalog){
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.exec){
+        status=runtime_error(cudaGraphExecDestroy(entry.exec),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.exec=nullptr;else (*resources)->completion_unknown=true;
+      }
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.graph){
+        status=runtime_error(cudaGraphDestroy(entry.graph),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.graph=nullptr;else (*resources)->completion_unknown=true;
+      }
     }
     status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
     if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
@@ -305,6 +328,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   // Any attempted replay invalidates the previous result, even preflight errors.
   r->completion_visible = false;
+  r->last_catalog = 0;
   if (r->exec == nullptr || source == nullptr || bytes != r->transfer_bytes)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
@@ -361,6 +385,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kTransfer);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   r->terminal = true;
+  r->catalog_sealed=true;
   std::memmove(r->input->host_data, source, static_cast<size_t>(bytes));
   if (r->bound_attention) {
     auto* host = static_cast<uint8_t*>(r->input->host_data) + r->rope_payload_position_offset;
@@ -398,7 +423,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(
   clear_error(error);
   auto status = transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
-  if (!r->completion_visible || destination == nullptr || bytes != r->transfer_bytes)
+  if (r->last_catalog != 0 || !r->completion_visible || destination == nullptr || bytes != r->transfer_bytes)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "no completed output of the requested size");
   std::memmove(destination, static_cast<uint8_t*>(r->output->host_data) + r->output_byte_offset, static_cast<size_t>(bytes));
@@ -1087,3 +1112,5 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_test_replay_fault(
 #endif
 
 #include "graph_multisequence_record.inc"
+
+#include "graph_multisequence_catalog.inc"
