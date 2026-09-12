@@ -40,6 +40,7 @@ struct RileyCudaGraphResources {
   bool bound_attention = false;
   uint32_t attention_physical_block = 0;
   uint64_t decode_capacity = 0, decode_physical = 0, decode_vocab = 0;
+  uint32_t multi_bucket=0, multi_physical=0, multi_full=0;
 #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
   uint32_t test_replay_fault = 0;
 #endif
@@ -294,6 +295,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
   return status;
 }
 
+#include "graph_multisequence_packet.inc"
+
 extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
     RileyCudaErrorInfo* error) noexcept {
@@ -305,6 +308,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   if (r->exec == nullptr || source == nullptr || bytes != r->transfer_bytes)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
+  if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
+    return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   auto selected_exec = r->exec;
   if(r->decode_capacity!=0){
     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
@@ -1080,3 +1085,5 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_test_replay_fault(
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 #endif
+
+#include "graph_multisequence_record.inc"

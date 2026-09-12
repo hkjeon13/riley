@@ -2565,6 +2565,18 @@ RileyCudaStatus riley_cuda_smoke_invalid_launch(
 // operator DAG, authorize capture, or admit full decode replay. Maximum 4096
 // occurrences and 1024 unique resources including the stream.
 typedef struct RileyCudaGraphResources RileyCudaGraphResources;
+// Low-level fixed SmolLM2 numerical recorder, separate from scheduler admission.
+// 18 exact device parents, 333 weights (273 legacy + 60 packed), five strided
+// plans. Scratch roles are defined by graph_multisequence_record.inc.
+// Only decode buckets 2/4; runtime must authorize each live reservation before
+// replay. Structural packet checks do not prove scheduler/KV ownership.
+RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
+    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
+    RileyCudaDeviceBuffer* const* weights, uint64_t weight_count,
+    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
+    RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical_blocks,
+    uint32_t full_logits, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_graph_resources_reserve(
     RileyCudaStream* stream,
     RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
