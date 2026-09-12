@@ -1,0 +1,86 @@
+{
+  "lane": "baseline",
+  "mode": "off",
+  "completed": true,
+  "responses": [
+    {
+      "phase": "warmup-nonstream",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/warmup-nonstream.jsonl",
+        "sha256": "096fe43742177340bd55062b099ee3e842fde98acfc0f93315eb8cba45a88f75"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/warmup-nonstream-accounting.json",
+        "sha256": "11952a1b06272c485571eb87f704ff73fab28d0b6a04c26fd25ee087a31ae83c"
+      }
+    },
+    {
+      "phase": "warmup-stream",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/warmup-stream.jsonl",
+        "sha256": "6a0b86933c7649694dab37494a1fcb895d71f3c2df5d9841af7bdf01dd48ae1f"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/warmup-stream-accounting.json",
+        "sha256": "b9ca8f956c3ac93d0e299af83f267386ea482b6a8a9ceb931c073c354b43f56e"
+      }
+    },
+    {
+      "phase": "retained",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/retained.jsonl",
+        "sha256": "84030f4350e5334e639cc3477c025a7620e879536d87223796fed6f110a1b59b"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/retained-accounting.json",
+        "sha256": "69c6ad411858d9f6c63debce19dfdccea36695d89263b8684c72bc26e0282977"
+      }
+    }
+  ],
+  "cleanup": {
+    "returncode": 0,
+    "remaining_owned_pids": [],
+    "zombie_pids": [],
+    "cleanup_verified": true,
+    "log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/server.log",
+      "sha256": "1af770265ede40189d12e9eecbd73caaebe9cb493a58b0c905eb747d8c58d603"
+    }
+  },
+  "native": {
+    "full": {
+      "replays": 512,
+      "prefill": 16,
+      "decode": 496,
+      "operator_replays": 0,
+      "first_replay_id": 1,
+      "last_replay_id": 512
+    },
+    "retained": {
+      "replays": 192,
+      "prefill": 6,
+      "decode": 186,
+      "operator_replays": 0,
+      "first_replay_id": 321,
+      "last_replay_id": 512
+    },
+    "raw_log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/server.log",
+      "sha256": "1af770265ede40189d12e9eecbd73caaebe9cb493a58b0c905eb747d8c58d603"
+    },
+    "retained_log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/retained-native.log",
+      "sha256": "d8e6f43641d7d072301dd1e167af0e9d8cbab0ab40e66af680b79a3bfa76b6fe"
+    },
+    "summary": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/native-summary.json",
+      "sha256": "fed29e8e4af6290198b28f274e37066d178fc2a4291248abd2b0c87631cfae88"
+    },
+    "performance_claim_eligible": false
+  },
+  "binary": {
+    "path": "/tmp/riley-opt-260912/decode7-combined-profile-target/release/riley",
+    "sha256": "e8b8c2705fd1b046b712d6c099da56960aac8fdf2bd9ccc7eb9c706c19432534"
+  },
+  "performance_claim_eligible": false
+}

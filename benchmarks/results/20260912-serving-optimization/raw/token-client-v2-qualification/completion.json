@@ -1,0 +1,1379 @@
+{
+  "schema_version": "riley.grouped-token-client-qualification.v1",
+  "completed": true,
+  "cpu_only": true,
+  "gpu_executed": false,
+  "performance_claim": false,
+  "measurement_client_qualified": true,
+  "inputs": {
+    "runner": {
+      "path": "/tmp/riley-opt-260912/validate_grouped_token_client.py",
+      "sha256": "314bfa0e9e5f8c76c5c0c0d2ed870a06b148b9debd7ffaf042b62ff4b72bc983"
+    },
+    "python": {
+      "path": "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/bin/python3.13",
+      "sha256": "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866"
+    },
+    "tests": {
+      "path": "/tmp/riley-opt-260912/token-client-tests/test_serving_token_client_v2.py",
+      "sha256": "0f963a9cb4a37d031f2c12ef94788b97ddc3598022be527d66743ebb6f0aa353"
+    },
+    "client_v1": {
+      "path": "/tmp/riley-opt-260912/serving_token_client.py",
+      "sha256": "a2a4a35569d6b892542097c119e2be8a6402beb60ab1565aa95658794c364766"
+    },
+    "client_v2": {
+      "path": "/tmp/riley-opt-260912/serving_token_client_v2.py",
+      "sha256": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf"
+    },
+    "preparation": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13/preparation.json",
+      "sha256": "40a251908cd89429a794e15d4c1d30bcfa2a64e3d6822ec10e37488619e047ca"
+    },
+    "plan": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13-plan.json",
+      "sha256": "0ca01ebc7b16f9422db84f0f5afa233c6518773bb5e7c141e3ef9d42ed328de1"
+    },
+    "finalization": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13/finalization.json",
+      "sha256": "2f61901debee8bf5c9cb9096766b48193572d6a8d9d98229c6df524fc276ced0"
+    },
+    "binding": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/native-binding.json",
+      "sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b"
+    },
+    "reference_parent": {
+      "path": "/tmp/riley-opt-260912/batch7-http-plan.json",
+      "sha256": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6"
+    }
+  },
+  "client_v1": {
+    "path": "/tmp/riley-opt-260912/serving_token_client.py",
+    "sha256": "a2a4a35569d6b892542097c119e2be8a6402beb60ab1565aa95658794c364766"
+  },
+  "client_v2": {
+    "path": "/tmp/riley-opt-260912/serving_token_client_v2.py",
+    "sha256": "2bc9238265666b99654f4f4e456ca0bb10c45b8bed8f28493452b89c1f450fcf"
+  },
+  "raw_files": {
+    "warmup-nonstream": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream.jsonl",
+      "sha256": "fc843d760cb47bd5fabebfaf1f7b0b3a9053e3c2c434f1aaf3fa4a2043a7ff83"
+    },
+    "warmup-stream": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream.jsonl",
+      "sha256": "ae28f8864fb7f7c48b3a9ae958bec22b272780ad69734f70f4731f95a9966b4a"
+    },
+    "retained": {
+      "path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained.jsonl",
+      "sha256": "460dca8381d57afdcfe1abe13ae5d06a9e4e019a986f18870a2ea1a28bd65cc0"
+    }
+  },
+  "reference": {
+    "model": "g04-smol",
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "output_token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      1443,
+      929,
+      3156,
+      28,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      339,
+      1277,
+      288,
+      1643,
+      314,
+      338,
+      339,
+      5248,
+      2045,
+      288,
+      1138,
+      346,
+      253,
+      1443,
+      282
+    ],
+    "text": ", I'm a little bit of a few years ago,\n\nThe first thing I want to say is that I'm going to show you a few of",
+    "finish_reason": "length"
+  },
+  "replay": {
+    "successful_requests_replayed": 133,
+    "retained_successes_replayed": 123,
+    "successful_old_new_common_fields_exact": true,
+    "successful": [
+      {
+        "phase": "warmup-nonstream",
+        "index": 0,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-nonstream",
+        "index": 1,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-nonstream",
+        "index": 2,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-nonstream",
+        "index": 3,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-nonstream",
+        "index": 4,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-stream",
+        "index": 0,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-stream",
+        "index": 1,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-stream",
+        "index": 2,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-stream",
+        "index": 3,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "warmup-stream",
+        "index": 4,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 0,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 1,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 2,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 3,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 4,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 5,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 6,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 7,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 8,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 9,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 10,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 11,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 12,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 13,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 14,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 15,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 16,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 17,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 18,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 19,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 20,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 21,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 22,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 23,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 24,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 25,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 26,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 27,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 28,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 29,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 30,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 31,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 32,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 33,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 34,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 35,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 36,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 37,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 38,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 39,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 40,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 41,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 42,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 43,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 44,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 45,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 46,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 47,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 48,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 49,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 50,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 51,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 52,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 53,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 54,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 55,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 56,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 57,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 58,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 59,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 60,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 61,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 62,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 63,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 64,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 65,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 66,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 67,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 68,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 69,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 70,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 71,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 72,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 73,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 74,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 75,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 76,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 77,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 78,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 79,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 80,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 81,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 82,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 83,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 84,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 85,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 86,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 87,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 88,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 89,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 90,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 91,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 92,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 93,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 94,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 95,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 96,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 97,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 98,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 99,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 100,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 101,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 102,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 103,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 104,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 105,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 106,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 107,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 108,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 109,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 110,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 111,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 112,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 113,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 114,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 115,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 116,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 117,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 118,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 119,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 120,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 121,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      },
+      {
+        "phase": "retained",
+        "index": 122,
+        "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+        "old_new_common_fields_exact": true,
+        "group_metadata_exact": true,
+        "transport_complete_in_original_record": true
+      }
+    ],
+    "partial_requests_replayed": 1,
+    "partial": [
+      {
+        "phase": "retained",
+        "index": 123,
+        "original_prefix_tokens": 21,
+        "replayed_prefix_tokens": 23,
+        "observed_group_ids": [
+          314,
+          338
+        ],
+        "observed_group_text": " is that",
+        "prefix_exact": true,
+        "group_metadata": {
+          "frame_token_counts": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ],
+          "generated_frame_count": 22,
+          "multi_token_frame_count": 1,
+          "tokens_in_multi_token_frames": 2,
+          "within_frame_zero_itl_count": 1,
+          "max_frame_token_count": 2
+        },
+        "completion_recovered": false,
+        "finish_usage_done_added": false,
+        "full_request_correctness_qualified": false,
+        "performance_qualified": false
+      }
+    ],
+    "performance_claim": false
+  },
+  "tests": {
+    "argv": [
+      "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/bin/python3.13",
+      "/tmp/riley-opt-260912/token-client-tests/test_serving_token_client_v2.py",
+      "-v"
+    ],
+    "returncode": 0,
+    "passed_tests": 26,
+    "log": {
+      "path": "/tmp/riley-opt-260912/token-client-v2-qualification/cpu-tests.log",
+      "sha256": "ddcb339d01782e1cea8a6ad1f2a407a48ac5a62e3829329f95b3d56d1f05fa32"
+    }
+  },
+  "original_campaign_complete": false,
+  "production_or_server_configuration_changed": false,
+  "scope": "grouped client delivery observations only; source/API proofs stay bound to their original V1 client"
+}

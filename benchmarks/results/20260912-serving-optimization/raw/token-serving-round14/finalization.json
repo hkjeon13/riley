@@ -1,0 +1,537 @@
+{
+  "completed_pairs": [
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair01/pair.json",
+        "sha256": "8e036d86a0588adb59d60235b5e5d1083711c29cdde3684e4c080a5b89f57e14"
+      },
+      "ratios": {
+        "throughput_right_over_left": 1.0377392134137113,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.7018897842205861,
+          "p95": 0.5390413702658584,
+          "p99": 0.32398406121639184
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0575012163069668,
+          "p95": 0.965884996068956,
+          "p99": 0.8252216589396097
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.0475489739666803,
+          "p95": 0.8901568170273104,
+          "p99": 0.7246065400425128
+        },
+        "e2e_ms_right_over_left": {
+          "median": 0.9819826684123912,
+          "p95": 0.8524938609950913,
+          "p99": 0.7245811935339972
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.7018897842205861,
+          "p95": 0.5390413702658584,
+          "p99": 0.32398406121639184
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair02/pair.json",
+        "sha256": "c86d8b22894c14b1d892856396d7dd887eb6fbc638f375a51ef1e943066c6141"
+      },
+      "ratios": {
+        "throughput_right_over_left": 1.0423692216585212,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.6942154840338471,
+          "p95": 0.5374191639768799,
+          "p99": 0.3220595722983699
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0540227169641003,
+          "p95": 0.9568553087112665,
+          "p99": 0.8492595890023665
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.0437024630000824,
+          "p95": 0.8775940561243611,
+          "p99": 0.7161497418368007
+        },
+        "e2e_ms_right_over_left": {
+          "median": 0.9767118450920195,
+          "p95": 0.8564133092106732,
+          "p99": 0.7054024488360875
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.6942154840338471,
+          "p95": 0.5374191639768799,
+          "p99": 0.3220595722983699
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair03/pair.json",
+        "sha256": "9366b069c033aa2d3d63735801ce81b45abc3a7617936b033cabf1c2bd0c20e8"
+      },
+      "ratios": {
+        "throughput_right_over_left": 1.0406969814895204,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.7009852771552654,
+          "p95": 0.45949159743185997,
+          "p99": 0.3272166305893077
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0541429712187236,
+          "p95": 0.9690085695363396,
+          "p99": 0.873808127123699
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.044000489785071,
+          "p95": 0.8827553760272967,
+          "p99": 0.7292339743566364
+        },
+        "e2e_ms_right_over_left": {
+          "median": 0.9784680718584124,
+          "p95": 0.8519432598850453,
+          "p99": 0.7306224030080498
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.7009852771552654,
+          "p95": 0.45949159743185997,
+          "p99": 0.3272166305893077
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair04/pair.json",
+        "sha256": "301978d0fc7a27d9ea7fd1df8442f32175baf9e8cd05885542d1a6a321e7a381"
+      },
+      "ratios": {
+        "throughput_right_over_left": 1.0369634057548232,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.7016916508991602,
+          "p95": 0.5450983753391844,
+          "p99": 0.3320037555587917
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0542394513987479,
+          "p95": 0.9630537018065325,
+          "p99": 0.8692029224604136
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.0440649793794725,
+          "p95": 0.9007516512989973,
+          "p99": 0.7384010432548129
+        },
+        "e2e_ms_right_over_left": {
+          "median": 0.9794051901397298,
+          "p95": 0.8669320351721804,
+          "p99": 0.7646064449821462
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.7016916508991602,
+          "p95": 0.5450983753391844,
+          "p99": 0.3320037555587917
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair05/pair.json",
+        "sha256": "6b0b3685474991cc3b53a93fa0ba64fff2d958a0214f51f5215557565fcd96d8"
+      },
+      "ratios": {
+        "throughput_right_over_left": 1.0343452377359696,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.7032069838833931,
+          "p95": 0.5569989313024623,
+          "p99": 0.3372736323939864
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0544966041396804,
+          "p95": 0.9818268625728291,
+          "p99": 0.8846927609358398
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.044974337357542,
+          "p95": 0.9055918677208509,
+          "p99": 0.7490003525130939
+        },
+        "e2e_ms_right_over_left": {
+          "median": 0.9799030483948743,
+          "p95": 0.8782895126690122,
+          "p99": 0.7702324084651276
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.7032069838833931,
+          "p95": 0.5569989313024623,
+          "p99": 0.3372736323939864
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair01/pair.json",
+        "sha256": "5ac08b0061116a1f0f4153e2d192bbc86b0f630b0bb1b4ad7a076e95e65f9248"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9420069420197442,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9985988918006787,
+          "p95": 0.9993864435846238,
+          "p99": 0.9957359435282637
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0734780946236864,
+          "p95": 1.0732751885143674,
+          "p99": 1.072419480591937
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.074474909369144,
+          "p95": 1.0772466668928318,
+          "p99": 1.0687568415017021
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0620030244877696,
+          "p95": 1.0602638496659618,
+          "p99": 1.062260778311283
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9985988918006787,
+          "p95": 0.9993864435846238,
+          "p99": 0.9957359435282637
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair02/pair.json",
+        "sha256": "404b4552c3b9c2d1cbec79704b05d2a9bcf88b309ad28c010cc77a1bdb403104"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.942295166811239,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9992404675926393,
+          "p95": 0.9997485690621627,
+          "p99": 1.0007566139553985
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.073052327369031,
+          "p95": 1.0677520810760504,
+          "p99": 1.0697530817460579
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.0742835460837643,
+          "p95": 1.0767676518655709,
+          "p99": 1.068395083483854
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0618755243322422,
+          "p95": 1.0600759418566763,
+          "p99": 1.0596347451168318
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9992404675926393,
+          "p95": 0.9997485690621627,
+          "p99": 1.0007566139553985
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair03/pair.json",
+        "sha256": "388a2e97451405d1c4b40e3ebba56cb79ee7458eb9bed030eb7986167b93bfee"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9419615401282841,
+        "token_ttft_ms_right_over_left": {
+          "median": 1.0011722144611324,
+          "p95": 0.9986173528833205,
+          "p99": 1.00169623945405
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.072976420310151,
+          "p95": 1.0695951418668617,
+          "p99": 1.0688993626940833
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073522675097128,
+          "p95": 1.0755019767144778,
+          "p99": 1.0657891184150132
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0621541762986197,
+          "p95": 1.0588612905093386,
+          "p99": 1.0587816521337652
+        },
+        "first_text_ms_right_over_left": {
+          "median": 1.0011722144611324,
+          "p95": 0.9986173528833205,
+          "p99": 1.00169623945405
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair04/pair.json",
+        "sha256": "c2f7d6a942d9f0f3798f86a91438609b38a8c9b1baa9052dc3d0b788bca301c1"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9418877312016937,
+        "token_ttft_ms_right_over_left": {
+          "median": 1.0034221186456145,
+          "p95": 1.000355587450212,
+          "p99": 1.0033564625096807
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0730498193364795,
+          "p95": 1.0650568082520078,
+          "p99": 1.0694999978651831
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073775381378222,
+          "p95": 1.0755042955661387,
+          "p99": 1.0627098060161548
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0624754822721387,
+          "p95": 1.0572136039608613,
+          "p99": 1.0647112428834602
+        },
+        "first_text_ms_right_over_left": {
+          "median": 1.0034221186456145,
+          "p95": 1.000355587450212,
+          "p99": 1.0033564625096807
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair05/pair.json",
+        "sha256": "3c37bf088cf3ccfd6a1c51c77f2667785ac7d658cdb370ad9b6da73deb0bb7e4"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.942752278869802,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9994620779495486,
+          "p95": 0.9969341261272615,
+          "p99": 0.9881058909465714
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.072708424274256,
+          "p95": 1.0690773811093437,
+          "p99": 1.0606038360348236
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073406309350462,
+          "p95": 1.0756411310208778,
+          "p99": 1.0671034672129012
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0617741317167455,
+          "p95": 1.0567287666724547,
+          "p99": 1.0502027094684132
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9994620779495486,
+          "p95": 0.9969341261272615,
+          "p99": 0.9881058909465714
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair01/pair.json",
+        "sha256": "c43798d4f1c87facad2279a4d84e07c754a06dc48e1f9b62d1d393c2dc578bec"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9858818933692988,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.6930439433228873,
+          "p95": 0.42707545320059326,
+          "p99": 0.31021421339402033
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.1311206098060893,
+          "p95": 1.0169192366020807,
+          "p99": 0.9092125080428051
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.1210652436170423,
+          "p95": 0.9569902198590308,
+          "p99": 0.7739507479942186
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0365628833133222,
+          "p95": 0.873907965845371,
+          "p99": 0.7657539150559562
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.6930439433228873,
+          "p95": 0.42707545320059326,
+          "p99": 0.31021421339402033
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair02/pair.json",
+        "sha256": "d7ff63a5b5727ced939bf3632401ec3c573df4199e947069fe77faaf648d00ad"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9874065360538298,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.6791823865897475,
+          "p95": 0.48321284215528426,
+          "p99": 0.3225820854430758
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.1321868574326683,
+          "p95": 1.0163778067895164,
+          "p99": 0.8930604174588422
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.1212539216639557,
+          "p95": 0.9418080268694454,
+          "p99": 0.7763117114416713
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0339652442772054,
+          "p95": 0.8782299378625043,
+          "p99": 0.7705988211237396
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.6791823865897475,
+          "p95": 0.48321284215528426,
+          "p99": 0.3225820854430758
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair03/pair.json",
+        "sha256": "7c02cffc99c1f05daf05879ebce8311692b432632c5db3c1be81f8b2075832e9"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9811300332888377,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.6986904107910952,
+          "p95": 0.49450132509711825,
+          "p99": 0.3195009023338256
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.1319347187475908,
+          "p95": 1.01702163266462,
+          "p99": 0.9383884173314585
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.1216831601032624,
+          "p95": 0.9532935795813685,
+          "p99": 0.7762860930064048
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0391443234584765,
+          "p95": 0.9076680512585582,
+          "p99": 0.7939886973515404
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.6986904107910952,
+          "p95": 0.49450132509711825,
+          "p99": 0.3195009023338256
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair04/pair.json",
+        "sha256": "ac86814abddee11cdad40b210eaebe52ff20f4c4e0a9c42c0a313c1ca03ee86d"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9818300180281282,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.7014975394254008,
+          "p95": 0.4827474062741041,
+          "p99": 0.32124999412036037
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.131459155156372,
+          "p95": 1.016945195384424,
+          "p99": 0.9230714450852416
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.1212352565743295,
+          "p95": 0.9425459599060443,
+          "p99": 0.7822799198611395
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.039057184285706,
+          "p95": 0.8914614867201575,
+          "p99": 0.7633012914036693
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.7014975394254008,
+          "p95": 0.4827474062741041,
+          "p99": 0.32124999412036037
+        }
+      }
+    },
+    {
+      "setting": "c1-b128",
+      "pair": {
+        "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair05/pair.json",
+        "sha256": "bef3ed55295f447310beb3766b8cb277726672cff37cd931587eed4da054a838"
+      },
+      "ratios": {
+        "throughput_right_over_left": 0.9939200230887982,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.6881434543733382,
+          "p95": 0.4074659775102815,
+          "p99": 0.313886255054985
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.1320019796953067,
+          "p95": 0.9797000678275591,
+          "p99": 0.8733940360560926
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.1211311565730444,
+          "p95": 0.8682431872499397,
+          "p99": 0.7606828024749983
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0355522068185292,
+          "p95": 0.8406389299691077,
+          "p99": 0.7460469202077707
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.6881434543733382,
+          "p95": 0.4074659775102815,
+          "p99": 0.313886255054985
+        }
+      }
+    }
+  ],
+  "failure": {
+    "type": "KeyboardInterrupt",
+    "message": ""
+  },
+  "restoration": {
+    "path": "/tmp/riley-opt-260912/blender-round14/verified.json",
+    "sha256": "5a822ce22a4cbfad1feb768f844bc7c730031690e18e915310d37bf37a0f55c9"
+  }
+}

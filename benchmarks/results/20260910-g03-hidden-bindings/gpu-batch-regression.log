@@ -1,0 +1,141 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+
+running 1 test
+test concurrency_one_matches_the_single_request_forward ...     Finished `test` profile [unoptimized + debuginfo] target(s) in 2.36s
+     Running tests/llama_batch_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/llama_batch_gpu-b1d5dfa7cf36817d)
+pr13-batch-parity schema_version=1 label=concurrency-one cosine=0.999952644842 max_abs=0.769531250 mean_abs=0.167807836 actual_top1=4052 expected_top1=4052 actual_top1_value=24.625000 expected_top1_value=25.000000 top1_exact=true cosine_min=0.9979035305495393 max_abs_max=5.852936458587647 mean_abs_max=1.151280319263363
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 8.54s
+
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/llama_batch_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/llama_batch_gpu-b1d5dfa7cf36817d)
+
+running 1 test
+test fused_residual_norm_matches_separate_multi_step_greedy_exactly ... pr15-residual-rmsnorm-parity schema_version=1 decode_steps=16 committed_iterations=16 raw_logit_mismatches=0 generated_token_ids=[4052, 2025, 284, 965, 6497, 288, 1492, 418, 260, 16438, 30, 198, 198, 504, 16438, 314] status=passed
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 6.20s
+
+
+running 1 test
+test mixed_prefill_chunk_and_decode_match_independent_full_sequences ... warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/llama_batch_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/llama_batch_gpu-b1d5dfa7cf36817d)
+pr13-batch-parity schema_version=1 label=packed-mixed-prefill-b-output-slot-0 cosine=0.999993063706 max_abs=0.250000000 mean_abs=0.099903477 actual_top1=198 expected_top1=198 actual_top1_value=22.125000 expected_top1_value=22.000000 top1_exact=true cosine_min=0.9979035305495393 max_abs_max=5.852936458587647 mean_abs_max=1.151280319263363
+pr13-batch-parity schema_version=1 label=packed-mixed-decode-a-output-slot-1 cosine=0.999554610756 max_abs=0.531250000 mean_abs=0.117161783 actual_top1=27003 expected_top1=27003 actual_top1_value=14.750000 expected_top1_value=14.625000 top1_exact=true cosine_min=0.9979035305495393 max_abs_max=5.852936458587647 mean_abs_max=1.151280319263363
+phase2-packed-async-executor-parity schema_version=1 h2d_copies_per_iteration=1 tokens_match=true kv_continuation_match=true output_slots=2,1-to-0,0-to-1 raw_logit_mismatches=0 synchronous_fallback=true invalid_pairing_fail_closed=true cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 status=passed
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 6.12s
+

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/check_gui_driver_runtime.py", line 123, in <module>
+    main()
+  File "/tmp/riley-opt-260912/check_gui_driver_runtime.py", line 110, in main
+    assert all(digest(path) == sha for path, sha in pins.items())
+  File "/tmp/riley-opt-260912/check_gui_driver_runtime.py", line 110, in <genexpr>
+    assert all(digest(path) == sha for path, sha in pins.items())
+  File "/tmp/riley-opt-260912/check_gui_driver_runtime.py", line 22, in digest
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+AttributeError: 'str' object has no attribute 'read_bytes'

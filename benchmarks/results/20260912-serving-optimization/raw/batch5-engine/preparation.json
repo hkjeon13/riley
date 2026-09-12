@@ -1,0 +1,29 @@
+{
+  "schema_version": "riley.engine-optimization.v1",
+  "measurement_started": true,
+  "condition": {
+    "condition_id": "serving-gui-retained-512mib-cool48-v1",
+    "gui_retained": true,
+    "idle_memory_limit_mib": 512,
+    "start_temperature_limit_c": 48,
+    "canonical_idle_memory_limit_mib": 256,
+    "canonical_qualification": false,
+    "scope": "single-concurrency engine-only diagnostic",
+    "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+  },
+  "inputs": {
+    "/tmp/riley-opt-260912/batch5-engine-plan.json": "176f62fde36ab1ecd1112a4844384fbf3ed9c9d8eeb943678b86e6bb73b4a488",
+    "/tmp/riley-g04-vllm-profile-260911/request.json": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+    "/tmp/riley-opt-260912/batch5-binding.json": "c015518b377a204a30a5de24c827d3882df5bf3bbbbd380a7a1e2542187cb57f"
+  },
+  "runner_sha256": "dcecda3438756d970c0438c4fcab66e0395e87780a7393ab5f17fa0b60f868d6",
+  "shared_runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+  "source_commit": "a791d63081dcdb319c8e45c79ec9301166ee199a",
+  "pairs": 5,
+  "warmups": 5,
+  "iterations": 30,
+  "warmup_token_validation": "delegated to pinned engine adapters; retained requests independently checked",
+  "legacy_vllm_raw": "preserved without rewriting; not canonical-eligible; actual environment is envelope plus live preflight",
+  "timing_boundary": "engine request TTFT/TPOT/E2E; not CUDA kernel timing",
+  "tail_estimator": "nearest rank per process; thirty samples do not establish high-concurrency tail stability"
+}

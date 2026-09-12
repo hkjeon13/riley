@@ -1,0 +1,97 @@
+{
+  "schema": "riley.multisequence-descriptor-v1.cpu-validation.v1",
+  "recorded_at_utc": "2026-09-12T02:34:25.271767+00:00",
+  "completed": true,
+  "scope": "isolated CPU codec and readiness prototype only",
+  "production_integration": false,
+  "gpu_execution": false,
+  "remote_execution": false,
+  "numerical_qualification": false,
+  "performance_claim": false,
+  "contract": {
+    "path": "benchmarks/results/20260912-serving-optimization/MULTISEQUENCE_DESCRIPTOR_CONTRACT.md",
+    "sha256": "5bed6d70342dec4f30c85ba67dd41cf560e6b7f4b0de5dedfe59424cecc9b641"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "cargo": "cargo 1.85.0 (d73d2caf9 2024-12-31)"
+  },
+  "checks": [
+    {
+      "command": "cargo test --manifest-path benchmarks/prototypes/multisequence_descriptor_v1/Cargo.toml --offline",
+      "exit_code": 0,
+      "unit_tests_passed": 22,
+      "unit_tests_failed": 0,
+      "unit_tests_ignored": 0,
+      "doc_tests": 0
+    },
+    {
+      "command": "cargo clippy --manifest-path benchmarks/prototypes/multisequence_descriptor_v1/Cargo.toml --offline --all-targets -- -D warnings",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo fmt --manifest-path benchmarks/prototypes/multisequence_descriptor_v1/Cargo.toml --check",
+      "exit_code": 0
+    },
+    {
+      "check": "independent golden request/result exact bytes and SHA256",
+      "passed": true
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "Cargo.toml",
+      "bytes": 213,
+      "sha256": "122fedfebbfdc2dad12c663d772fc6a402a9ffab236e498fdaa0699748f1fd06"
+    },
+    {
+      "path": "Cargo.lock",
+      "bytes": 181,
+      "sha256": "e9165c446b210efd39fbc986a8a334656c2c67ab926a40e2ac12090083fff572"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 9,
+      "sha256": "306fd52e74fca6746e12acc750f232de15e71da917756a1270d74c91f5eb7368"
+    },
+    {
+      "path": "src/lib.rs",
+      "bytes": 33632,
+      "sha256": "4fc5ae24cdd94ade8f2d95415b75f9648938274fec8189a4f3eb0724eb7a984e"
+    },
+    {
+      "path": "src/tests.rs",
+      "bytes": 24630,
+      "sha256": "4bc9aeb9840d370013eb435638760b87e3fc93a04be8aee9f6f81279c8c86e93"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7949,
+      "sha256": "b5ec5c1d373bd4fc25c8bff7a81c1c1e1b228c666a8e462224d0f3cc4bcdc406"
+    },
+    {
+      "path": "fixtures/README.md",
+      "bytes": 1687,
+      "sha256": "2f7dc689c0bff0d12906cea9da9d3deea84eddbff78bf739c6d34d681e2e8c7f"
+    },
+    {
+      "path": "fixtures/request-n3.bin",
+      "bytes": 1280,
+      "sha256": "885cfa7344b8f9ceda8a279ba1b5d7a734ba87a0e8ba56ea6d07617ad2ef96c9"
+    },
+    {
+      "path": "fixtures/result-n3.bin",
+      "bytes": 393856,
+      "sha256": "b9b72de4923751be9f05aae5c8d73cda0fe6dd83943117bad35cf8f1b375fb86"
+    }
+  ],
+  "artifact_manifest_sha256": "1b316583e8946cd6e5975c8eba7cbdcb786986e2386887c5d699bd7dc3c26316",
+  "authority_boundary": "Owner/catalog/reservation/committed-KV lineage, completion and settlement are explicit adapter assertions, not inferred from bytes or independently proved by this prototype.",
+  "remaining_gates": [
+    "real graph/lease/KV/scheduler integration",
+    "registered reservation and initialized-prefix validation",
+    "real cancellation and settlement failure handling",
+    "actual M2/M4 arithmetic and full-model/KV qualification",
+    "matched serving workloads"
+  ]
+}

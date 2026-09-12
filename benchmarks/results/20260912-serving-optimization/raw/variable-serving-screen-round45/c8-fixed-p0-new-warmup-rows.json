@@ -1,0 +1,5018 @@
+[
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "131a5ca8238a910fe450d6c75a210cfb1465dd198e23aa1548940046a425af90",
+    "started_ns": 887333102841353,
+    "finished_ns": 887333148434766,
+    "response_identity": {
+      "id": "cmpl-0000000000000007",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333133429342,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30],\"prompt_token_ids\":[13764,3298,836,260,1695,1391,6850,281,827,8545,30,378,4971,2299,7233,354,9447,5817,28,25410,260,15168,281,5933,28,284,12775,971,13254,2004,30,330,1165,10657,983,1545,23488,12767,30,378,2299,19611,623,4585,1092,6021,260,725,3179,2754,288,511,4419,30,15462,2534,4851,1867,2605,30,46626,836,260,1695,1391,6850,281,827,8545,30,378,4971,2299,7233,354,9447,5817,28,25410,260,15168,281,5933,28,284,12775,971,13254,2004,30,330,1165,10657,983,1545,23488,12767,30,378,2299,19611,623,4585,1092,6021,260,725,3179,2754,288,511,4419,30,15462,2534,4851,1867,2605,30,46626,836,260,1695,1391,6850,281,827,8545]}]}"
+      },
+      {
+        "arrived_ns": 887333134905771,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[378]}]}"
+      },
+      {
+        "arrived_ns": 887333138986409,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" library\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4971]}]}"
+      },
+      {
+        "arrived_ns": 887333140213347,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" team\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2299]}]}"
+      },
+      {
+        "arrived_ns": 887333141359558,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" replaced\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7233]}]}"
+      },
+      {
+        "arrived_ns": 887333145893227,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" an\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[354]}]}"
+      },
+      {
+        "arrived_ns": 887333147193737,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" aging\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[9447]}]}"
+      },
+      {
+        "arrived_ns": 887333148409219,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" database\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[5817]}]}"
+      },
+      {
+        "arrived_ns": 887333148434766,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333148434766,
+        "data": "{\"id\":\"cmpl-0000000000000007\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":8,\"total_tokens\":136}}"
+      },
+      {
+        "arrived_ns": 887333148434766,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333133429342,
+      887333134905771,
+      887333138986409,
+      887333140213347,
+      887333141359558,
+      887333145893227,
+      887333147193737,
+      887333148409219
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 8,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333133429342,
+      887333134905771,
+      887333138986409,
+      887333140213347,
+      887333141359558,
+      887333145893227,
+      887333147193737,
+      887333148409219
+    ],
+    "prompt_token_ids": [
+      13764,
+      3298,
+      836,
+      260,
+      1695,
+      1391,
+      6850,
+      281,
+      827,
+      8545,
+      30,
+      378,
+      4971,
+      2299,
+      7233,
+      354,
+      9447,
+      5817,
+      28,
+      25410,
+      260,
+      15168,
+      281,
+      5933,
+      28,
+      284,
+      12775,
+      971,
+      13254,
+      2004,
+      30,
+      330,
+      1165,
+      10657,
+      983,
+      1545,
+      23488,
+      12767,
+      30,
+      378,
+      2299,
+      19611,
+      623,
+      4585,
+      1092,
+      6021,
+      260,
+      725,
+      3179,
+      2754,
+      288,
+      511,
+      4419,
+      30,
+      15462,
+      2534,
+      4851,
+      1867,
+      2605,
+      30,
+      46626,
+      836,
+      260,
+      1695,
+      1391,
+      6850,
+      281,
+      827,
+      8545,
+      30,
+      378,
+      4971,
+      2299,
+      7233,
+      354,
+      9447,
+      5817,
+      28,
+      25410,
+      260,
+      15168,
+      281,
+      5933,
+      28,
+      284,
+      12775,
+      971,
+      13254,
+      2004,
+      30,
+      330,
+      1165,
+      10657,
+      983,
+      1545,
+      23488,
+      12767,
+      30,
+      378,
+      2299,
+      19611,
+      623,
+      4585,
+      1092,
+      6021,
+      260,
+      725,
+      3179,
+      2754,
+      288,
+      511,
+      4419,
+      30,
+      15462,
+      2534,
+      4851,
+      1867,
+      2605,
+      30,
+      46626,
+      836,
+      260,
+      1695,
+      1391,
+      6850,
+      281,
+      827,
+      8545
+    ],
+    "token_ids": [
+      30,
+      378,
+      4971,
+      2299,
+      7233,
+      354,
+      9447,
+      5817
+    ],
+    "text": ". The library team replaced an aging database",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 8,
+      "total_tokens": 136
+    },
+    "done_ns": 887333148434766,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 45593413,
+      "token_ttft_ns": 30587989,
+      "token_tpot_ns": 2139982.4285714286,
+      "token_itl_ns": [
+        1476429,
+        4080638,
+        1226938,
+        1146211,
+        4533669,
+        1300510,
+        1215482
+      ],
+      "first_text_ns": 30587989
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333106012104,
+    "call_finished_ns": 887333148645050,
+    "raw_body_bytes": 2598,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Summarize the following project update in two sentences. The library team replaced an aging database, migrated the catalog in stages, and checked each imported record. A small pilot found several duplicate entries. The team corrected these records before opening the new search service to all readers. Staff training continues next week. Summarize the following project update in two sentences. The library team replaced an aging database, migrated the catalog in stages, and checked each imported record. A small pilot found several duplicate entries. The team corrected these records before opening the new search service to all readers. Staff training continues next week. Summarize the following project update in two sentences",
+      "max_tokens": 8,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "35565f4853e2f483d85a85b3382cc2479cef9a23fbd06d64905b87e71f29e237",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "summary",
+    "index": 0,
+    "worker_id": 7,
+    "phase": "warmup",
+    "call_started_ns": 887333102795887
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "345dc0c157e8e0fc079c4e23b9546cd10e196cc2ebbc058ea2875ab276974a83",
+    "started_ns": 887333102928763,
+    "finished_ns": 887333162655782,
+    "response_identity": {
+      "id": "cmpl-0000000000000005",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333125279916,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" repeated\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6514],\"prompt_token_ids\":[36971,732,451,5905,1517,35864,284,5125,582,5595,1671,30,753,985,79,6774,24,2692,727,11002,446,4548,43,327,2229,281,1694,30,5916,3734,11002,75,3002,77,446,11002,30,726,24,3002,28,216,32,25,1232,216,33,43,1003,11002,30,6689,6514,1924,28,23784,28,284,354,7964,3007,4928,30,330,2222,5988,288,2930,260,1517,327,253,1165,3140,3854,30,16374,732,451,5905,1517,35864,284,5125,582,5595,1671,30,753,985,79,6774,24,2692,727,11002,446,4548,43,327,2229,281,1694,30,5916,3734,11002,75,3002,77,446,11002,30,726,24,3002,28,216,32,25,1232,216,33,43,1003,11002,30,6689]}]}"
+      },
+      {
+        "arrived_ns": 887333126492251,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" words\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1924]}]}"
+      },
+      {
+        "arrived_ns": 887333130602539,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\",\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 887333134786003,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" punctuation\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[23784]}]}"
+      },
+      {
+        "arrived_ns": 887333139029278,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\",\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 887333140435710,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284]}]}"
+      },
+      {
+        "arrived_ns": 887333141475474,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" an\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[354]}]}"
+      },
+      {
+        "arrived_ns": 887333145924124,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" empty\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7964]}]}"
+      },
+      {
+        "arrived_ns": 887333147219087,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" input\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3007]}]}"
+      },
+      {
+        "arrived_ns": 887333148572330,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" string\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4928]}]}"
+      },
+      {
+        "arrived_ns": 887333149807574,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333154182020,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" A\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[330]}]}"
+      },
+      {
+        "arrived_ns": 887333155407984,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" student\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2222]}]}"
+      },
+      {
+        "arrived_ns": 887333156672881,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" wants\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[5988]}]}"
+      },
+      {
+        "arrived_ns": 887333158029772,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" to\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 887333162655782,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" adapt\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2930]}]}"
+      },
+      {
+        "arrived_ns": 887333162655782,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333162655782,
+        "data": "{\"id\":\"cmpl-0000000000000005\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":16,\"total_tokens\":144}}"
+      },
+      {
+        "arrived_ns": 887333162655782,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333125279916,
+      887333126492251,
+      887333130602539,
+      887333134786003,
+      887333139029278,
+      887333140435710,
+      887333141475474,
+      887333145924124,
+      887333147219087,
+      887333148572330,
+      887333149807574,
+      887333154182020,
+      887333155407984,
+      887333156672881,
+      887333158029772,
+      887333162655782
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 16,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333125279916,
+      887333126492251,
+      887333130602539,
+      887333134786003,
+      887333139029278,
+      887333140435710,
+      887333141475474,
+      887333145924124,
+      887333147219087,
+      887333148572330,
+      887333149807574,
+      887333154182020,
+      887333155407984,
+      887333156672881,
+      887333158029772,
+      887333162655782
+    ],
+    "prompt_token_ids": [
+      36971,
+      732,
+      451,
+      5905,
+      1517,
+      35864,
+      284,
+      5125,
+      582,
+      5595,
+      1671,
+      30,
+      753,
+      985,
+      79,
+      6774,
+      24,
+      2692,
+      727,
+      11002,
+      446,
+      4548,
+      43,
+      327,
+      2229,
+      281,
+      1694,
+      30,
+      5916,
+      3734,
+      11002,
+      75,
+      3002,
+      77,
+      446,
+      11002,
+      30,
+      726,
+      24,
+      3002,
+      28,
+      216,
+      32,
+      25,
+      1232,
+      216,
+      33,
+      43,
+      1003,
+      11002,
+      30,
+      6689,
+      6514,
+      1924,
+      28,
+      23784,
+      28,
+      284,
+      354,
+      7964,
+      3007,
+      4928,
+      30,
+      330,
+      2222,
+      5988,
+      288,
+      2930,
+      260,
+      1517,
+      327,
+      253,
+      1165,
+      3140,
+      3854,
+      30,
+      16374,
+      732,
+      451,
+      5905,
+      1517,
+      35864,
+      284,
+      5125,
+      582,
+      5595,
+      1671,
+      30,
+      753,
+      985,
+      79,
+      6774,
+      24,
+      2692,
+      727,
+      11002,
+      446,
+      4548,
+      43,
+      327,
+      2229,
+      281,
+      1694,
+      30,
+      5916,
+      3734,
+      11002,
+      75,
+      3002,
+      77,
+      446,
+      11002,
+      30,
+      726,
+      24,
+      3002,
+      28,
+      216,
+      32,
+      25,
+      1232,
+      216,
+      33,
+      43,
+      1003,
+      11002,
+      30,
+      6689
+    ],
+    "token_ids": [
+      6514,
+      1924,
+      28,
+      23784,
+      28,
+      284,
+      354,
+      7964,
+      3007,
+      4928,
+      30,
+      330,
+      2222,
+      5988,
+      288,
+      2930
+    ],
+    "text": " repeated words, punctuation, and an empty input string. A student wants to adapt",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 16,
+      "total_tokens": 144
+    },
+    "done_ns": 887333162655782,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 59727019,
+      "token_ttft_ns": 22351153,
+      "token_tpot_ns": 2491724.4,
+      "token_itl_ns": [
+        1212335,
+        4110288,
+        4183464,
+        4243275,
+        1406432,
+        1039764,
+        4448650,
+        1294963,
+        1353243,
+        1235244,
+        4374446,
+        1225964,
+        1264897,
+        1356891,
+        4626010
+      ],
+      "first_text_ns": 22351153
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333105407243,
+    "call_finished_ns": 887333162810792,
+    "raw_body_bytes": 4147,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Explain what this Python function computes and describe one edge case. def count_words(text): counts = {}; for word in text.split(): counts[word] = counts.get(word, 0) + 1; return counts. Consider repeated words, punctuation, and an empty input string. A student wants to adapt the function for a small document collection. Explain what this Python function computes and describe one edge case. def count_words(text): counts = {}; for word in text.split(): counts[word] = counts.get(word, 0) + 1; return counts. Consider",
+      "max_tokens": 16,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "9d2b6ed5a4d996d82a98c0ecb972bdec620a9548500420197099eac6424c3c91",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "python",
+    "index": 1,
+    "worker_id": 3,
+    "phase": "warmup",
+    "call_started_ns": 887333102891656
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "b9280150295f00743ca2cf81f9bc74b0a3fe399175370dc507b13a6be27427c5",
+    "started_ns": 887333103008293,
+    "finished_ns": 887333179034783,
+    "response_identity": {
+      "id": "cmpl-0000000000000008",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333137586931,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" step\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1833],\"prompt_token_ids\":[16339,307,451,1732,1833,411,1833,30,330,1125,34680,11314,10155,282,25487,30,3768,3985,3593,7522,1876,25487,30,13696,4547,3796,11591,25487,971,28,284,260,6219,25487,359,5454,281,253,3577,7118,4265,30,1073,800,25487,2612,47,16374,469,13310,4763,284,2545,260,966,411,4990,260,6636,284,6219,25487,30,43104,451,1732,1833,411,1833,30,330,1125,34680,11314,10155,282,25487,30,3768,3985,3593,7522,1876,25487,30,13696,4547,3796,11591,25487,971,28,284,260,6219,25487,359,5454,281,253,3577,7118,4265,30,1073,800,25487,2612,47,16374,469,13310,4763,284,2545,260,966,411,4990,260,6636,284,6219,25487,30,43104,451,1732]}]}"
+      },
+      {
+        "arrived_ns": 887333138890367,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" by\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[411]}]}"
+      },
+      {
+        "arrived_ns": 887333140385375,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" step\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1833]}]}"
+      },
+      {
+        "arrived_ns": 887333141430865,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333145963837,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" A\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[330]}]}"
+      },
+      {
+        "arrived_ns": 887333147260983,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" school\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1125]}]}"
+      },
+      {
+        "arrived_ns": 887333148739046,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" buys\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[34680]}]}"
+      },
+      {
+        "arrived_ns": 887333149773217,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" twelve\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[11314]}]}"
+      },
+      {
+        "arrived_ns": 887333154160783,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" boxes\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[10155]}]}"
+      },
+      {
+        "arrived_ns": 887333155521629,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333156732616,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" pencils\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[25487]}]}"
+      },
+      {
+        "arrived_ns": 887333157958456,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333162494362,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Each\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3768]}]}"
+      },
+      {
+        "arrived_ns": 887333163738136,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" box\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3985]}]}"
+      },
+      {
+        "arrived_ns": 887333168221943,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" contains\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3593]}]}"
+      },
+      {
+        "arrived_ns": 887333169561558,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" twenty\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7522]}]}"
+      },
+      {
+        "arrived_ns": 887333170709733,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" four\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1876]}]}"
+      },
+      {
+        "arrived_ns": 887333171967203,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" pencils\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[25487]}]}"
+      },
+      {
+        "arrived_ns": 887333173155916,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333174341773,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Five\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[13696]}]}"
+      },
+      {
+        "arrived_ns": 887333175453227,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" classes\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4547]}]}"
+      },
+      {
+        "arrived_ns": 887333176672296,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" receive\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3796]}]}"
+      },
+      {
+        "arrived_ns": 887333177830576,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" thirty\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[11591]}]}"
+      },
+      {
+        "arrived_ns": 887333179034783,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" pencils\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[25487]}]}"
+      },
+      {
+        "arrived_ns": 887333179034783,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333179034783,
+        "data": "{\"id\":\"cmpl-0000000000000008\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":24,\"total_tokens\":152}}"
+      },
+      {
+        "arrived_ns": 887333179034783,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333137586931,
+      887333138890367,
+      887333140385375,
+      887333141430865,
+      887333145963837,
+      887333147260983,
+      887333148739046,
+      887333149773217,
+      887333154160783,
+      887333155521629,
+      887333156732616,
+      887333157958456,
+      887333162494362,
+      887333163738136,
+      887333168221943,
+      887333169561558,
+      887333170709733,
+      887333171967203,
+      887333173155916,
+      887333174341773,
+      887333175453227,
+      887333176672296,
+      887333177830576,
+      887333179034783
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 24,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333137586931,
+      887333138890367,
+      887333140385375,
+      887333141430865,
+      887333145963837,
+      887333147260983,
+      887333148739046,
+      887333149773217,
+      887333154160783,
+      887333155521629,
+      887333156732616,
+      887333157958456,
+      887333162494362,
+      887333163738136,
+      887333168221943,
+      887333169561558,
+      887333170709733,
+      887333171967203,
+      887333173155916,
+      887333174341773,
+      887333175453227,
+      887333176672296,
+      887333177830576,
+      887333179034783
+    ],
+    "prompt_token_ids": [
+      16339,
+      307,
+      451,
+      1732,
+      1833,
+      411,
+      1833,
+      30,
+      330,
+      1125,
+      34680,
+      11314,
+      10155,
+      282,
+      25487,
+      30,
+      3768,
+      3985,
+      3593,
+      7522,
+      1876,
+      25487,
+      30,
+      13696,
+      4547,
+      3796,
+      11591,
+      25487,
+      971,
+      28,
+      284,
+      260,
+      6219,
+      25487,
+      359,
+      5454,
+      281,
+      253,
+      3577,
+      7118,
+      4265,
+      30,
+      1073,
+      800,
+      25487,
+      2612,
+      47,
+      16374,
+      469,
+      13310,
+      4763,
+      284,
+      2545,
+      260,
+      966,
+      411,
+      4990,
+      260,
+      6636,
+      284,
+      6219,
+      25487,
+      30,
+      43104,
+      451,
+      1732,
+      1833,
+      411,
+      1833,
+      30,
+      330,
+      1125,
+      34680,
+      11314,
+      10155,
+      282,
+      25487,
+      30,
+      3768,
+      3985,
+      3593,
+      7522,
+      1876,
+      25487,
+      30,
+      13696,
+      4547,
+      3796,
+      11591,
+      25487,
+      971,
+      28,
+      284,
+      260,
+      6219,
+      25487,
+      359,
+      5454,
+      281,
+      253,
+      3577,
+      7118,
+      4265,
+      30,
+      1073,
+      800,
+      25487,
+      2612,
+      47,
+      16374,
+      469,
+      13310,
+      4763,
+      284,
+      2545,
+      260,
+      966,
+      411,
+      4990,
+      260,
+      6636,
+      284,
+      6219,
+      25487,
+      30,
+      43104,
+      451,
+      1732
+    ],
+    "token_ids": [
+      1833,
+      411,
+      1833,
+      30,
+      330,
+      1125,
+      34680,
+      11314,
+      10155,
+      282,
+      25487,
+      30,
+      3768,
+      3985,
+      3593,
+      7522,
+      1876,
+      25487,
+      30,
+      13696,
+      4547,
+      3796,
+      11591,
+      25487
+    ],
+    "text": " step by step. A school buys twelve boxes of pencils. Each box contains twenty four pencils. Five classes receive thirty pencils",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 24,
+      "total_tokens": 152
+    },
+    "done_ns": 887333179034783,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 76026490,
+      "token_ttft_ns": 34578638,
+      "token_tpot_ns": 1802080.5217391304,
+      "token_itl_ns": [
+        1303436,
+        1495008,
+        1045490,
+        4532972,
+        1297146,
+        1478063,
+        1034171,
+        4387566,
+        1360846,
+        1210987,
+        1225840,
+        4535906,
+        1243774,
+        4483807,
+        1339615,
+        1148175,
+        1257470,
+        1188713,
+        1185857,
+        1111454,
+        1219069,
+        1158280,
+        1204207
+      ],
+      "first_text_ns": 34578638
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333106351130,
+    "call_finished_ns": 887333179181857,
+    "raw_body_bytes": 5815,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Solve this problem step by step. A school buys twelve boxes of pencils. Each box contains twenty four pencils. Five classes receive thirty pencils each, and the remaining pencils are kept in a supply cupboard. How many pencils remain? Explain your calculation clearly and check the result by adding the distributed and remaining pencils. Solve this problem step by step. A school buys twelve boxes of pencils. Each box contains twenty four pencils. Five classes receive thirty pencils each, and the remaining pencils are kept in a supply cupboard. How many pencils remain? Explain your calculation clearly and check the result by adding the distributed and remaining pencils. Solve this problem",
+      "max_tokens": 24,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "b16c0ec492acc2ed83d98abdb6d56a1f0549b54e6755eb429ad83d3107d50cee",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "arithmetic",
+    "index": 2,
+    "worker_id": 5,
+    "phase": "warmup",
+    "call_started_ns": 887333102973289
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "83d17aebd092712ed2e2380b7881f33bfebf927dcb4ede476f1ef30fc3172542",
+    "started_ns": 887333103081630,
+    "finished_ns": 887333183416373,
+    "response_identity": {
+      "id": "cmpl-0000000000000004",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333121257795,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Write\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[9517],\"prompt_token_ids\":[19161,253,4786,1252,327,253,1773,4480,30,37851,416,2220,335,14986,42236,30,378,2530,11287,2976,2737,282,8118,971,1194,284,553,582,913,7038,30,378,1528,5988,288,1075,9973,28,13886,28,284,10981,979,4825,253,2437,6139,2050,30,26852,7060,28,9137,28,15877,28,284,253,2232,970,288,3812,9131,30,9517,253,4786,1252,327,253,1773,4480,30,37851,416,2220,335,14986,42236,30,378,2530,11287,2976,2737,282,8118,971,1194,284,553,582,913,7038,30,378,1528,5988,288,1075,9973,28,13886,28,284,10981,979,4825,253,2437,6139,2050,30,26852,7060,28,9137,28,15877,28,284,253,2232,970,288,3812,9131,30]}]}"
+      },
+      {
+        "arrived_ns": 887333122451042,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333126588018,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" practical\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4786]}]}"
+      },
+      {
+        "arrived_ns": 887333130551219,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" plan\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1252]}]}"
+      },
+      {
+        "arrived_ns": 887333134736823,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" for\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[327]}]}"
+      },
+      {
+        "arrived_ns": 887333139094421,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333140345157,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" community\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1773]}]}"
+      },
+      {
+        "arrived_ns": 887333141582122,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" garden\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4480]}]}"
+      },
+      {
+        "arrived_ns": 887333146055301,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333147302432,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Volunteers\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[37851]}]}"
+      },
+      {
+        "arrived_ns": 887333148483740,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" can\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[416]}]}"
+      },
+      {
+        "arrived_ns": 887333149735352,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" meet\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2220]}]}"
+      },
+      {
+        "arrived_ns": 887333154327243,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" on\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[335]}]}"
+      },
+      {
+        "arrived_ns": 887333155498113,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Saturday\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[14986]}]}"
+      },
+      {
+        "arrived_ns": 887333156866129,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" mornings\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[42236]}]}"
+      },
+      {
+        "arrived_ns": 887333158085010,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333162564913,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[378]}]}"
+      },
+      {
+        "arrived_ns": 887333163913646,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" site\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2530]}]}"
+      },
+      {
+        "arrived_ns": 887333168290522,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" receives\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[11287]}]}"
+      },
+      {
+        "arrived_ns": 887333169523891,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" six\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2976]}]}"
+      },
+      {
+        "arrived_ns": 887333170789541,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" hours\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2737]}]}"
+      },
+      {
+        "arrived_ns": 887333171930508,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333173123840,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sunlight\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[8118]}]}"
+      },
+      {
+        "arrived_ns": 887333174310592,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" each\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[971]}]}"
+      },
+      {
+        "arrived_ns": 887333175523397,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" day\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1194]}]}"
+      },
+      {
+        "arrived_ns": 887333176635676,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284]}]}"
+      },
+      {
+        "arrived_ns": 887333177908217,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" has\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[553]}]}"
+      },
+      {
+        "arrived_ns": 887333179003183,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" one\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[582]}]}"
+      },
+      {
+        "arrived_ns": 887333180103112,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" water\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[913]}]}"
+      },
+      {
+        "arrived_ns": 887333181224372,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" tap\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7038]}]}"
+      },
+      {
+        "arrived_ns": 887333182325502,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333183416373,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[378]}]}"
+      },
+      {
+        "arrived_ns": 887333183416373,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333183416373,
+        "data": "{\"id\":\"cmpl-0000000000000004\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":32,\"total_tokens\":160}}"
+      },
+      {
+        "arrived_ns": 887333183416373,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333121257795,
+      887333122451042,
+      887333126588018,
+      887333130551219,
+      887333134736823,
+      887333139094421,
+      887333140345157,
+      887333141582122,
+      887333146055301,
+      887333147302432,
+      887333148483740,
+      887333149735352,
+      887333154327243,
+      887333155498113,
+      887333156866129,
+      887333158085010,
+      887333162564913,
+      887333163913646,
+      887333168290522,
+      887333169523891,
+      887333170789541,
+      887333171930508,
+      887333173123840,
+      887333174310592,
+      887333175523397,
+      887333176635676,
+      887333177908217,
+      887333179003183,
+      887333180103112,
+      887333181224372,
+      887333182325502,
+      887333183416373
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333121257795,
+      887333122451042,
+      887333126588018,
+      887333130551219,
+      887333134736823,
+      887333139094421,
+      887333140345157,
+      887333141582122,
+      887333146055301,
+      887333147302432,
+      887333148483740,
+      887333149735352,
+      887333154327243,
+      887333155498113,
+      887333156866129,
+      887333158085010,
+      887333162564913,
+      887333163913646,
+      887333168290522,
+      887333169523891,
+      887333170789541,
+      887333171930508,
+      887333173123840,
+      887333174310592,
+      887333175523397,
+      887333176635676,
+      887333177908217,
+      887333179003183,
+      887333180103112,
+      887333181224372,
+      887333182325502,
+      887333183416373
+    ],
+    "prompt_token_ids": [
+      19161,
+      253,
+      4786,
+      1252,
+      327,
+      253,
+      1773,
+      4480,
+      30,
+      37851,
+      416,
+      2220,
+      335,
+      14986,
+      42236,
+      30,
+      378,
+      2530,
+      11287,
+      2976,
+      2737,
+      282,
+      8118,
+      971,
+      1194,
+      284,
+      553,
+      582,
+      913,
+      7038,
+      30,
+      378,
+      1528,
+      5988,
+      288,
+      1075,
+      9973,
+      28,
+      13886,
+      28,
+      284,
+      10981,
+      979,
+      4825,
+      253,
+      2437,
+      6139,
+      2050,
+      30,
+      26852,
+      7060,
+      28,
+      9137,
+      28,
+      15877,
+      28,
+      284,
+      253,
+      2232,
+      970,
+      288,
+      3812,
+      9131,
+      30,
+      9517,
+      253,
+      4786,
+      1252,
+      327,
+      253,
+      1773,
+      4480,
+      30,
+      37851,
+      416,
+      2220,
+      335,
+      14986,
+      42236,
+      30,
+      378,
+      2530,
+      11287,
+      2976,
+      2737,
+      282,
+      8118,
+      971,
+      1194,
+      284,
+      553,
+      582,
+      913,
+      7038,
+      30,
+      378,
+      1528,
+      5988,
+      288,
+      1075,
+      9973,
+      28,
+      13886,
+      28,
+      284,
+      10981,
+      979,
+      4825,
+      253,
+      2437,
+      6139,
+      2050,
+      30,
+      26852,
+      7060,
+      28,
+      9137,
+      28,
+      15877,
+      28,
+      284,
+      253,
+      2232,
+      970,
+      288,
+      3812,
+      9131,
+      30
+    ],
+    "token_ids": [
+      9517,
+      253,
+      4786,
+      1252,
+      327,
+      253,
+      1773,
+      4480,
+      30,
+      37851,
+      416,
+      2220,
+      335,
+      14986,
+      42236,
+      30,
+      378,
+      2530,
+      11287,
+      2976,
+      2737,
+      282,
+      8118,
+      971,
+      1194,
+      284,
+      553,
+      582,
+      913,
+      7038,
+      30,
+      378
+    ],
+    "text": " Write a practical plan for a community garden. Volunteers can meet on Saturday mornings. The site receives six hours of sunlight each day and has one water tap. The",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 32,
+      "total_tokens": 160
+    },
+    "done_ns": 887333183416373,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 80334743,
+      "token_ttft_ns": 18176165,
+      "token_tpot_ns": 2005115.4193548388,
+      "token_itl_ns": [
+        1193247,
+        4136976,
+        3963201,
+        4185604,
+        4357598,
+        1250736,
+        1236965,
+        4473179,
+        1247131,
+        1181308,
+        1251612,
+        4591891,
+        1170870,
+        1368016,
+        1218881,
+        4479903,
+        1348733,
+        4376876,
+        1233369,
+        1265650,
+        1140967,
+        1193332,
+        1186752,
+        1212805,
+        1112279,
+        1272541,
+        1094966,
+        1099929,
+        1121260,
+        1101130,
+        1090871
+      ],
+      "first_text_ns": 18176165
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333105169754,
+    "call_finished_ns": 887333183567504,
+    "raw_body_bytes": 7370,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Write a practical plan for a community garden. Volunteers can meet on Saturday mornings. The site receives six hours of sunlight each day and has one water tap. The group wants to grow beans, tomatoes, and herbs while keeping a clear walking path. Include preparation, planting, watering, and a simple way to assign responsibilities. Write a practical plan for a community garden. Volunteers can meet on Saturday mornings. The site receives six hours of sunlight each day and has one water tap. The group wants to grow beans, tomatoes, and herbs while keeping a clear walking path. Include preparation, planting, watering, and a simple way to assign responsibilities.",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "6492d50a787104ac3f29d48e3b060cdc66da05b714e86de87cf388b0bb1e25d2",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "planning",
+    "index": 3,
+    "worker_id": 2,
+    "phase": "warmup",
+    "call_started_ns": 887333103048876
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "ba8f10c9a905e12936e1511d9948ef0ad9a13e60632034fa248ac72e0d5861a0",
+    "started_ns": 887333103158678,
+    "finished_ns": 887333140246898,
+    "response_identity": {
+      "id": "cmpl-0000000000000003",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333117260673,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284],\"prompt_token_ids\":[35589,32840,284,19188,327,253,1890,2956,41014,30,6689,2827,655,28,3947,28,1708,28,8660,28,284,11770,30,378,7410,314,2531,12091,986,284,2978,827,10229,29410,30,330,1549,20623,897,16764,3487,30,330,6086,16311,24289,7725,768,282,260,7410,28,564,665,314,3435,11996,19018,4759,418,260,10420,30,19602,32840,284,19188,327,253,1890,2956,41014,30,6689,2827,655,28,3947,28,1708,28,8660,28,284,11770,30,378,7410,314,2531,12091,986,284,2978,827,10229,29410,30,330,1549,20623,897,16764,3487,30,330,6086,16311,24289,7725,768,282,260,7410,28,564,665,314,3435,11996,19018,4759,418,260,10420,30,19602,32840]}]}"
+      },
+      {
+        "arrived_ns": 887333118357816,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" buses\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[19188]}]}"
+      },
+      {
+        "arrived_ns": 887333122500642,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" for\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[327]}]}"
+      },
+      {
+        "arrived_ns": 887333126459654,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333130740929,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" short\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1890]}]}"
+      },
+      {
+        "arrived_ns": 887333134693399,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" daily\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2956]}]}"
+      },
+      {
+        "arrived_ns": 887333138861233,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" commute\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[41014]}]}"
+      },
+      {
+        "arrived_ns": 887333140246898,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333140246898,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333140246898,
+        "data": "{\"id\":\"cmpl-0000000000000003\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":8,\"total_tokens\":136}}"
+      },
+      {
+        "arrived_ns": 887333140246898,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333117260673,
+      887333118357816,
+      887333122500642,
+      887333126459654,
+      887333130740929,
+      887333134693399,
+      887333138861233,
+      887333140246898
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 8,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333117260673,
+      887333118357816,
+      887333122500642,
+      887333126459654,
+      887333130740929,
+      887333134693399,
+      887333138861233,
+      887333140246898
+    ],
+    "prompt_token_ids": [
+      35589,
+      32840,
+      284,
+      19188,
+      327,
+      253,
+      1890,
+      2956,
+      41014,
+      30,
+      6689,
+      2827,
+      655,
+      28,
+      3947,
+      28,
+      1708,
+      28,
+      8660,
+      28,
+      284,
+      11770,
+      30,
+      378,
+      7410,
+      314,
+      2531,
+      12091,
+      986,
+      284,
+      2978,
+      827,
+      10229,
+      29410,
+      30,
+      330,
+      1549,
+      20623,
+      897,
+      16764,
+      3487,
+      30,
+      330,
+      6086,
+      16311,
+      24289,
+      7725,
+      768,
+      282,
+      260,
+      7410,
+      28,
+      564,
+      665,
+      314,
+      3435,
+      11996,
+      19018,
+      4759,
+      418,
+      260,
+      10420,
+      30,
+      19602,
+      32840,
+      284,
+      19188,
+      327,
+      253,
+      1890,
+      2956,
+      41014,
+      30,
+      6689,
+      2827,
+      655,
+      28,
+      3947,
+      28,
+      1708,
+      28,
+      8660,
+      28,
+      284,
+      11770,
+      30,
+      378,
+      7410,
+      314,
+      2531,
+      12091,
+      986,
+      284,
+      2978,
+      827,
+      10229,
+      29410,
+      30,
+      330,
+      1549,
+      20623,
+      897,
+      16764,
+      3487,
+      30,
+      330,
+      6086,
+      16311,
+      24289,
+      7725,
+      768,
+      282,
+      260,
+      7410,
+      28,
+      564,
+      665,
+      314,
+      3435,
+      11996,
+      19018,
+      4759,
+      418,
+      260,
+      10420,
+      30,
+      19602,
+      32840
+    ],
+    "token_ids": [
+      284,
+      19188,
+      327,
+      253,
+      1890,
+      2956,
+      41014,
+      30
+    ],
+    "text": " and buses for a short daily commute.",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 8,
+      "total_tokens": 136
+    },
+    "done_ns": 887333140246898,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 37088220,
+      "token_ttft_ns": 14101995,
+      "token_tpot_ns": 3283746.4285714286,
+      "token_itl_ns": [
+        1097143,
+        4142826,
+        3959012,
+        4281275,
+        3952470,
+        4167834,
+        1385665
+      ],
+      "first_text_ns": 14101995
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333104829683,
+    "call_finished_ns": 887333140521193,
+    "raw_body_bytes": 2588,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Compare bicycles and buses for a short daily commute. Consider travel time, weather, cost, flexibility, and accessibility. The route is five kilometers long and includes two busy intersections. A bus arrives every fifteen minutes. A protected cycling lane covers most of the route, but there is limited indoor bicycle storage at the destination. Compare bicycles and buses for a short daily commute. Consider travel time, weather, cost, flexibility, and accessibility. The route is five kilometers long and includes two busy intersections. A bus arrives every fifteen minutes. A protected cycling lane covers most of the route, but there is limited indoor bicycle storage at the destination. Compare bicycles",
+      "max_tokens": 8,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "0ff7412a6ca3b722848dd1e37b6bbbb497eb33dcca8808b90ffffb9d6491b5b2",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "comparison",
+    "index": 4,
+    "worker_id": 1,
+    "phase": "warmup",
+    "call_started_ns": 887333103131537
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "c17f3fcce7d9199fd61989ec3dead9b23f4f948330a754735c2917e8e4f82b5e",
+    "started_ns": 887333103213747,
+    "finished_ns": 887333163803677,
+    "response_identity": {
+      "id": "cmpl-0000000000000006",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333129348719,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" location\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3695],\"prompt_token_ids\":[34683,260,3688,28,3695,28,284,2353,3723,429,623,4751,4658,30,378,11992,523,1188,1379,335,4451,11314,418,260,42385,5663,3644,30,14964,523,13398,260,3589,28,48746,523,5697,260,44472,28,284,9565,523,1028,260,40245,30,32780,29508,1296,2009,1092,260,2121,30,378,25127,1959,4723,7522,4697,30,28873,260,3688,28,3695,28,284,2353,3723,429,623,4751,4658,30,378,11992,523,1188,1379,335,4451,11314,418,260,42385,5663,3644,30,14964,523,13398,260,3589,28,48746,523,5697,260,44472,28,284,9565,523,1028,260,40245,30,32780,29508,1296,2009,1092,260,2121,30,378,25127,1959,4723,7522,4697,30,28873,260,3688,28]}]}"
+      },
+      {
+        "arrived_ns": 887333130783651,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\",\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 887333134822815,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284]}]}"
+      },
+      {
+        "arrived_ns": 887333138937662,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" action\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2353]}]}"
+      },
+      {
+        "arrived_ns": 887333140183888,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" items\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3723]}]}"
+      },
+      {
+        "arrived_ns": 887333141533015,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" from\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[429]}]}"
+      },
+      {
+        "arrived_ns": 887333145993317,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" these\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[623]}]}"
+      },
+      {
+        "arrived_ns": 887333147240432,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" meeting\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4751]}]}"
+      },
+      {
+        "arrived_ns": 887333148551954,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" notes\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4658]}]}"
+      },
+      {
+        "arrived_ns": 887333149692204,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333154224969,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[378]}]}"
+      },
+      {
+        "arrived_ns": 887333155450803,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" workshop\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[11992]}]}"
+      },
+      {
+        "arrived_ns": 887333156751218,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" will\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[523]}]}"
+      },
+      {
+        "arrived_ns": 887333157914066,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" take\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1188]}]}"
+      },
+      {
+        "arrived_ns": 887333162615360,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" place\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1379]}]}"
+      },
+      {
+        "arrived_ns": 887333163803677,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" on\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[335]}]}"
+      },
+      {
+        "arrived_ns": 887333163803677,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333163803677,
+        "data": "{\"id\":\"cmpl-0000000000000006\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":16,\"total_tokens\":144}}"
+      },
+      {
+        "arrived_ns": 887333163803677,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333129348719,
+      887333130783651,
+      887333134822815,
+      887333138937662,
+      887333140183888,
+      887333141533015,
+      887333145993317,
+      887333147240432,
+      887333148551954,
+      887333149692204,
+      887333154224969,
+      887333155450803,
+      887333156751218,
+      887333157914066,
+      887333162615360,
+      887333163803677
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 16,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333129348719,
+      887333130783651,
+      887333134822815,
+      887333138937662,
+      887333140183888,
+      887333141533015,
+      887333145993317,
+      887333147240432,
+      887333148551954,
+      887333149692204,
+      887333154224969,
+      887333155450803,
+      887333156751218,
+      887333157914066,
+      887333162615360,
+      887333163803677
+    ],
+    "prompt_token_ids": [
+      34683,
+      260,
+      3688,
+      28,
+      3695,
+      28,
+      284,
+      2353,
+      3723,
+      429,
+      623,
+      4751,
+      4658,
+      30,
+      378,
+      11992,
+      523,
+      1188,
+      1379,
+      335,
+      4451,
+      11314,
+      418,
+      260,
+      42385,
+      5663,
+      3644,
+      30,
+      14964,
+      523,
+      13398,
+      260,
+      3589,
+      28,
+      48746,
+      523,
+      5697,
+      260,
+      44472,
+      28,
+      284,
+      9565,
+      523,
+      1028,
+      260,
+      40245,
+      30,
+      32780,
+      29508,
+      1296,
+      2009,
+      1092,
+      260,
+      2121,
+      30,
+      378,
+      25127,
+      1959,
+      4723,
+      7522,
+      4697,
+      30,
+      28873,
+      260,
+      3688,
+      28,
+      3695,
+      28,
+      284,
+      2353,
+      3723,
+      429,
+      623,
+      4751,
+      4658,
+      30,
+      378,
+      11992,
+      523,
+      1188,
+      1379,
+      335,
+      4451,
+      11314,
+      418,
+      260,
+      42385,
+      5663,
+      3644,
+      30,
+      14964,
+      523,
+      13398,
+      260,
+      3589,
+      28,
+      48746,
+      523,
+      5697,
+      260,
+      44472,
+      28,
+      284,
+      9565,
+      523,
+      1028,
+      260,
+      40245,
+      30,
+      32780,
+      29508,
+      1296,
+      2009,
+      1092,
+      260,
+      2121,
+      30,
+      378,
+      25127,
+      1959,
+      4723,
+      7522,
+      4697,
+      30,
+      28873,
+      260,
+      3688,
+      28
+    ],
+    "token_ids": [
+      3695,
+      28,
+      284,
+      2353,
+      3723,
+      429,
+      623,
+      4751,
+      4658,
+      30,
+      378,
+      11992,
+      523,
+      1188,
+      1379,
+      335
+    ],
+    "text": " location, and action items from these meeting notes. The workshop will take place on",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 16,
+      "total_tokens": 144
+    },
+    "done_ns": 887333163803677,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 60589930,
+      "token_ttft_ns": 26134972,
+      "token_tpot_ns": 2296997.2,
+      "token_itl_ns": [
+        1434932,
+        4039164,
+        4114847,
+        1246226,
+        1349127,
+        4460302,
+        1247115,
+        1311522,
+        1140250,
+        4532765,
+        1225834,
+        1300415,
+        1162848,
+        4701294,
+        1188317
+      ],
+      "first_text_ns": 26134972
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333105744869,
+    "call_finished_ns": 887333163974803,
+    "raw_body_bytes": 4191,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Extract the date, location, and action items from these meeting notes. The workshop will take place on October twelve at the Riverside Learning Center. Maya will reserve the room, Omar will prepare the handouts, and Lin will test the projector. Registration closes three days before the event. The organizers expect approximately twenty participants. Extract the date, location, and action items from these meeting notes. The workshop will take place on October twelve at the Riverside Learning Center. Maya will reserve the room, Omar will prepare the handouts, and Lin will test the projector. Registration closes three days before the event. The organizers expect approximately twenty participants. Extract the date,",
+      "max_tokens": 16,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "b412b5d842192ec5c9bd28bcd17fa8345eef726f469572b63a1d58fd33ff13c2",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "extraction",
+    "index": 5,
+    "worker_id": 6,
+    "phase": "warmup",
+    "call_started_ns": 887333103186377
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "3fdc854685fc79df606b3ec11bf35edd202cdba1fc364d4eb5d765e48628f5b0",
+    "started_ns": 887333103267002,
+    "finished_ns": 887333170827214,
+    "response_identity": {
+      "id": "cmpl-0000000000000001",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333109285439,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" shallow\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[12120],\"prompt_token_ids\":[36971,1701,913,46327,429,253,12120,12505,908,645,357,314,441,16891,30,4076,2232,1789,327,253,7436,2222,30,372,1448,260,5522,282,6756,28,2779,28,284,260,3990,1512,30,378,2222,4294,10084,25370,2141,253,12926,5700,284,281,253,3122,7118,4265,28,965,4537,896,1971,281,913,1106,30,16374,1701,913,46327,429,253,12120,12505,908,645,357,314,441,16891,30,4076,2232,1789,327,253,7436,2222,30,372,1448,260,5522,282,6756,28,2779,28,284,260,3990,1512,30,378,2222,4294,10084,25370,2141,253,12926,5700,284,281,253,3122,7118,4265,28,965,4537,896,1971,281,913,1106,30,16374,1701,913,46327,429,253]}]}"
+      },
+      {
+        "arrived_ns": 887333110379925,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" bowl\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[12505]}]}"
+      },
+      {
+        "arrived_ns": 887333114354688,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" even\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[908]}]}"
+      },
+      {
+        "arrived_ns": 887333118385530,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" when\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[645]}]}"
+      },
+      {
+        "arrived_ns": 887333122374838,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" it\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[357]}]}"
+      },
+      {
+        "arrived_ns": 887333126432377,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" is\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 887333130525850,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" not\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[441]}]}"
+      },
+      {
+        "arrived_ns": 887333134669848,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" boiling\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[16891]}]}"
+      },
+      {
+        "arrived_ns": 887333138833792,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333140100111,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Use\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4076]}]}"
+      },
+      {
+        "arrived_ns": 887333141329426,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" simple\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2232]}]}"
+      },
+      {
+        "arrived_ns": 887333146081061,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" language\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1789]}]}"
+      },
+      {
+        "arrived_ns": 887333147160769,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" for\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[327]}]}"
+      },
+      {
+        "arrived_ns": 887333148520686,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333149629632,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" curious\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7436]}]}"
+      },
+      {
+        "arrived_ns": 887333154270066,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" student\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2222]}]}"
+      },
+      {
+        "arrived_ns": 887333155601959,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333156697163,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" M\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[372]}]}"
+      },
+      {
+        "arrived_ns": 887333158128343,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"ention\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1448]}]}"
+      },
+      {
+        "arrived_ns": 887333162517209,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" the\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 887333163765087,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" motion\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[5522]}]}"
+      },
+      {
+        "arrived_ns": 887333168330353,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333169452019,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" molecules\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6756]}]}"
+      },
+      {
+        "arrived_ns": 887333170672737,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\",\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 887333170827214,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333170827214,
+        "data": "{\"id\":\"cmpl-0000000000000001\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":24,\"total_tokens\":152}}"
+      },
+      {
+        "arrived_ns": 887333170827214,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333109285439,
+      887333110379925,
+      887333114354688,
+      887333118385530,
+      887333122374838,
+      887333126432377,
+      887333130525850,
+      887333134669848,
+      887333138833792,
+      887333140100111,
+      887333141329426,
+      887333146081061,
+      887333147160769,
+      887333148520686,
+      887333149629632,
+      887333154270066,
+      887333155601959,
+      887333156697163,
+      887333158128343,
+      887333162517209,
+      887333163765087,
+      887333168330353,
+      887333169452019,
+      887333170672737
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 24,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333109285439,
+      887333110379925,
+      887333114354688,
+      887333118385530,
+      887333122374838,
+      887333126432377,
+      887333130525850,
+      887333134669848,
+      887333138833792,
+      887333140100111,
+      887333141329426,
+      887333146081061,
+      887333147160769,
+      887333148520686,
+      887333149629632,
+      887333154270066,
+      887333155601959,
+      887333156697163,
+      887333158128343,
+      887333162517209,
+      887333163765087,
+      887333168330353,
+      887333169452019,
+      887333170672737
+    ],
+    "prompt_token_ids": [
+      36971,
+      1701,
+      913,
+      46327,
+      429,
+      253,
+      12120,
+      12505,
+      908,
+      645,
+      357,
+      314,
+      441,
+      16891,
+      30,
+      4076,
+      2232,
+      1789,
+      327,
+      253,
+      7436,
+      2222,
+      30,
+      372,
+      1448,
+      260,
+      5522,
+      282,
+      6756,
+      28,
+      2779,
+      28,
+      284,
+      260,
+      3990,
+      1512,
+      30,
+      378,
+      2222,
+      4294,
+      10084,
+      25370,
+      2141,
+      253,
+      12926,
+      5700,
+      284,
+      281,
+      253,
+      3122,
+      7118,
+      4265,
+      28,
+      965,
+      4537,
+      896,
+      1971,
+      281,
+      913,
+      1106,
+      30,
+      16374,
+      1701,
+      913,
+      46327,
+      429,
+      253,
+      12120,
+      12505,
+      908,
+      645,
+      357,
+      314,
+      441,
+      16891,
+      30,
+      4076,
+      2232,
+      1789,
+      327,
+      253,
+      7436,
+      2222,
+      30,
+      372,
+      1448,
+      260,
+      5522,
+      282,
+      6756,
+      28,
+      2779,
+      28,
+      284,
+      260,
+      3990,
+      1512,
+      30,
+      378,
+      2222,
+      4294,
+      10084,
+      25370,
+      2141,
+      253,
+      12926,
+      5700,
+      284,
+      281,
+      253,
+      3122,
+      7118,
+      4265,
+      28,
+      965,
+      4537,
+      896,
+      1971,
+      281,
+      913,
+      1106,
+      30,
+      16374,
+      1701,
+      913,
+      46327,
+      429,
+      253
+    ],
+    "token_ids": [
+      12120,
+      12505,
+      908,
+      645,
+      357,
+      314,
+      441,
+      16891,
+      30,
+      4076,
+      2232,
+      1789,
+      327,
+      253,
+      7436,
+      2222,
+      30,
+      372,
+      1448,
+      260,
+      5522,
+      282,
+      6756,
+      28
+    ],
+    "text": " shallow bowl even when it is not boiling. Use simple language for a curious student. Mention the motion of molecules,",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 24,
+      "total_tokens": 152
+    },
+    "done_ns": 887333170827214,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 67560212,
+      "token_ttft_ns": 6018437,
+      "token_tpot_ns": 2669012.9565217393,
+      "token_itl_ns": [
+        1094486,
+        3974763,
+        4030842,
+        3989308,
+        4057539,
+        4093473,
+        4143998,
+        4163944,
+        1266319,
+        1229315,
+        4751635,
+        1079708,
+        1359917,
+        1108946,
+        4640434,
+        1331893,
+        1095204,
+        1431180,
+        4388866,
+        1247878,
+        4565266,
+        1121666,
+        1220718
+      ],
+      "first_text_ns": 6018437
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333104193605,
+    "call_finished_ns": 887333170956528,
+    "raw_body_bytes": 5769,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Explain why water evaporates from a shallow bowl even when it is not boiling. Use simple language for a curious student. Mention the motion of molecules, temperature, and the surrounding air. The student placed identical bowls near a sunny window and in a cool cupboard, then observed different changes in water level. Explain why water evaporates from a shallow bowl even when it is not boiling. Use simple language for a curious student. Mention the motion of molecules, temperature, and the surrounding air. The student placed identical bowls near a sunny window and in a cool cupboard, then observed different changes in water level. Explain why water evaporates from a",
+      "max_tokens": 24,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "7293b08fc1e915ec83fb678b3b89d2440be69fd8b2f2e63ff712658b46e34170",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "science",
+    "index": 6,
+    "worker_id": 0,
+    "phase": "warmup",
+    "call_started_ns": 887333103246465
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "1976f45d213f850f5fbecd7e5863c1a7ff1c9b921fc893f20677e5ce35a5909c",
+    "started_ns": 887333103325153,
+    "finished_ns": 887333181262203,
+    "response_identity": {
+      "id": "cmpl-0000000000000002",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333113283263,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" message\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3714],\"prompt_token_ids\":[66,846,16064,451,3714,281,253,26310,284,19484,9238,30,339,457,3413,563,260,7037,6757,284,1361,457,787,6850,30,1046,737,260,3813,327,253,2534,6094,1867,15083,30,8765,5143,1991,260,38022,553,2049,469,27618,284,1538,354,5183,10898,3688,30,1094,665,314,253,7223,28,3556,260,1770,8837,30,30721,16064,451,3714,281,253,26310,284,19484,9238,30,339,457,3413,563,260,7037,6757,284,1361,457,787,6850,30,1046,737,260,3813,327,253,2534,6094,1867,15083,30,8765,5143,1991,260,38022,553,2049,469,27618,284,1538,354,5183,10898,3688,30,1094,665,314,253,7223,28,3556,260,1770,8837,30,30721,16064,451]}]}"
+      },
+      {
+        "arrived_ns": 887333114387040,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" in\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[281]}]}"
+      },
+      {
+        "arrived_ns": 887333118426044,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333122406212,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" polite\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[26310]}]}"
+      },
+      {
+        "arrived_ns": 887333126541139,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284]}]}"
+      },
+      {
+        "arrived_ns": 887333130701169,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" concise\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[19484]}]}"
+      },
+      {
+        "arrived_ns": 887333134853777,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" tone\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[9238]}]}"
+      },
+      {
+        "arrived_ns": 887333139056902,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333140146976,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" I\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 887333141385510,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" have\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[457]}]}"
+      },
+      {
+        "arrived_ns": 887333146030429,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" asked\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3413]}]}"
+      },
+      {
+        "arrived_ns": 887333147322783,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" about\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[563]}]}"
+      },
+      {
+        "arrived_ns": 887333148696837,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" the\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 887333149712049,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" delivery\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7037]}]}"
+      },
+      {
+        "arrived_ns": 887333154307650,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" twice\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6757]}]}"
+      },
+      {
+        "arrived_ns": 887333155570414,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" and\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[284]}]}"
+      },
+      {
+        "arrived_ns": 887333156771900,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" still\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1361]}]}"
+      },
+      {
+        "arrived_ns": 887333157987086,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" have\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[457]}]}"
+      },
+      {
+        "arrived_ns": 887333162471166,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" no\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[787]}]}"
+      },
+      {
+        "arrived_ns": 887333163862037,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" update\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6850]}]}"
+      },
+      {
+        "arrived_ns": 887333168376405,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333169489102,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" We\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1046]}]}"
+      },
+      {
+        "arrived_ns": 887333170748931,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" need\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[737]}]}"
+      },
+      {
+        "arrived_ns": 887333171891083,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" the\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 887333173085436,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" equipment\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3813]}]}"
+      },
+      {
+        "arrived_ns": 887333174269611,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" for\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[327]}]}"
+      },
+      {
+        "arrived_ns": 887333175485932,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333176711415,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" training\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2534]}]}"
+      },
+      {
+        "arrived_ns": 887333177945182,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" session\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6094]}]}"
+      },
+      {
+        "arrived_ns": 887333178962899,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" next\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1867]}]}"
+      },
+      {
+        "arrived_ns": 887333180142216,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Wednesday\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[15083]}]}"
+      },
+      {
+        "arrived_ns": 887333181262203,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333181262203,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333181262203,
+        "data": "{\"id\":\"cmpl-0000000000000002\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":32,\"total_tokens\":160}}"
+      },
+      {
+        "arrived_ns": 887333181262203,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333113283263,
+      887333114387040,
+      887333118426044,
+      887333122406212,
+      887333126541139,
+      887333130701169,
+      887333134853777,
+      887333139056902,
+      887333140146976,
+      887333141385510,
+      887333146030429,
+      887333147322783,
+      887333148696837,
+      887333149712049,
+      887333154307650,
+      887333155570414,
+      887333156771900,
+      887333157987086,
+      887333162471166,
+      887333163862037,
+      887333168376405,
+      887333169489102,
+      887333170748931,
+      887333171891083,
+      887333173085436,
+      887333174269611,
+      887333175485932,
+      887333176711415,
+      887333177945182,
+      887333178962899,
+      887333180142216,
+      887333181262203
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333113283263,
+      887333114387040,
+      887333118426044,
+      887333122406212,
+      887333126541139,
+      887333130701169,
+      887333134853777,
+      887333139056902,
+      887333140146976,
+      887333141385510,
+      887333146030429,
+      887333147322783,
+      887333148696837,
+      887333149712049,
+      887333154307650,
+      887333155570414,
+      887333156771900,
+      887333157987086,
+      887333162471166,
+      887333163862037,
+      887333168376405,
+      887333169489102,
+      887333170748931,
+      887333171891083,
+      887333173085436,
+      887333174269611,
+      887333175485932,
+      887333176711415,
+      887333177945182,
+      887333178962899,
+      887333180142216,
+      887333181262203
+    ],
+    "prompt_token_ids": [
+      66,
+      846,
+      16064,
+      451,
+      3714,
+      281,
+      253,
+      26310,
+      284,
+      19484,
+      9238,
+      30,
+      339,
+      457,
+      3413,
+      563,
+      260,
+      7037,
+      6757,
+      284,
+      1361,
+      457,
+      787,
+      6850,
+      30,
+      1046,
+      737,
+      260,
+      3813,
+      327,
+      253,
+      2534,
+      6094,
+      1867,
+      15083,
+      30,
+      8765,
+      5143,
+      1991,
+      260,
+      38022,
+      553,
+      2049,
+      469,
+      27618,
+      284,
+      1538,
+      354,
+      5183,
+      10898,
+      3688,
+      30,
+      1094,
+      665,
+      314,
+      253,
+      7223,
+      28,
+      3556,
+      260,
+      1770,
+      8837,
+      30,
+      30721,
+      16064,
+      451,
+      3714,
+      281,
+      253,
+      26310,
+      284,
+      19484,
+      9238,
+      30,
+      339,
+      457,
+      3413,
+      563,
+      260,
+      7037,
+      6757,
+      284,
+      1361,
+      457,
+      787,
+      6850,
+      30,
+      1046,
+      737,
+      260,
+      3813,
+      327,
+      253,
+      2534,
+      6094,
+      1867,
+      15083,
+      30,
+      8765,
+      5143,
+      1991,
+      260,
+      38022,
+      553,
+      2049,
+      469,
+      27618,
+      284,
+      1538,
+      354,
+      5183,
+      10898,
+      3688,
+      30,
+      1094,
+      665,
+      314,
+      253,
+      7223,
+      28,
+      3556,
+      260,
+      1770,
+      8837,
+      30,
+      30721,
+      16064,
+      451
+    ],
+    "token_ids": [
+      3714,
+      281,
+      253,
+      26310,
+      284,
+      19484,
+      9238,
+      30,
+      339,
+      457,
+      3413,
+      563,
+      260,
+      7037,
+      6757,
+      284,
+      1361,
+      457,
+      787,
+      6850,
+      30,
+      1046,
+      737,
+      260,
+      3813,
+      327,
+      253,
+      2534,
+      6094,
+      1867,
+      15083,
+      30
+    ],
+    "text": " message in a polite and concise tone. I have asked about the delivery twice and still have no update. We need the equipment for a training session next Wednesday.",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 32,
+      "total_tokens": 160
+    },
+    "done_ns": 887333181262203,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 77937050,
+      "token_ttft_ns": 9958110,
+      "token_tpot_ns": 2192869.0322580645,
+      "token_itl_ns": [
+        1103777,
+        4039004,
+        3980168,
+        4134927,
+        4160030,
+        4152608,
+        4203125,
+        1090074,
+        1238534,
+        4644919,
+        1292354,
+        1374054,
+        1015212,
+        4595601,
+        1262764,
+        1201486,
+        1215186,
+        4484080,
+        1390871,
+        4514368,
+        1112697,
+        1259829,
+        1142152,
+        1194353,
+        1184175,
+        1216321,
+        1225483,
+        1233767,
+        1017717,
+        1179317,
+        1119987
+      ],
+      "first_text_ns": 9958110
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333104531828,
+    "call_finished_ns": 887333181420142,
+    "raw_body_bytes": 7372,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Rewrite this message in a polite and concise tone. I have asked about the delivery twice and still have no update. We need the equipment for a training session next Wednesday. Please confirm whether the shipment has left your warehouse and provide an estimated arrival date. If there is a delay, explain the available alternatives. Rewrite this message in a polite and concise tone. I have asked about the delivery twice and still have no update. We need the equipment for a training session next Wednesday. Please confirm whether the shipment has left your warehouse and provide an estimated arrival date. If there is a delay, explain the available alternatives. Rewrite this",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "eb9d6d4406ee1619256781133bb785bc61f42be36e9aafc47253f01ce3aa7557",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "editing",
+    "index": 7,
+    "worker_id": 4,
+    "phase": "warmup",
+    "call_started_ns": 887333103293786
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "b624b87f771f27cb21ea67a25bf902df5c0a0cde87ea241b32ed59d8c40d666a",
+    "started_ns": 887333140588737,
+    "finished_ns": 887333156851480,
+    "response_identity": {
+      "id": "cmpl-0000000000000009",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333144638321,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Ben\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[5465],\"prompt_token_ids\":[16705,2428,11296,418,253,1020,4565,418,896,1711,30,8590,20623,1092,5465,30,28433,20623,990,8590,564,1092,5465,30,5516,480,10898,1686,284,3556,527,7868,3346,357,30,3875,5125,1991,260,1686,736,1361,325,19971,5250,585,260,1796,4814,805,1137,338,28433,20623,990,8590,30,8696,2428,11296,418,253,1020,4565,418,896,1711,30,8590,20623,1092,5465,30,28433,20623,990,8590,564,1092,5465,30,5516,480,10898,1686,284,3556,527,7868,3346,357,30,3875,5125,1991,260,1686,736,1361,325,19971,5250,585,260,1796,4814,805,1137,338,28433,20623,990,8590,30,8696,2428,11296,418,253,1020,4565,418,896,1711,30,8590,20623,1092]}]}"
+      },
+      {
+        "arrived_ns": 887333146129199,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333147281886,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Clara\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[28433]}]}"
+      },
+      {
+        "arrived_ns": 887333148593134,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" arrives\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[20623]}]}"
+      },
+      {
+        "arrived_ns": 887333149669128,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" after\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[990]}]}"
+      },
+      {
+        "arrived_ns": 887333154201313,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Alice\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[8590]}]}"
+      },
+      {
+        "arrived_ns": 887333155426041,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" but\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[564]}]}"
+      },
+      {
+        "arrived_ns": 887333156813416,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" before\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1092]}]}"
+      },
+      {
+        "arrived_ns": 887333156813416,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333156813416,
+        "data": "{\"id\":\"cmpl-0000000000000009\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":8,\"total_tokens\":136}}"
+      },
+      {
+        "arrived_ns": 887333156851480,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333144638321,
+      887333146129199,
+      887333147281886,
+      887333148593134,
+      887333149669128,
+      887333154201313,
+      887333155426041,
+      887333156813416
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 8,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333144638321,
+      887333146129199,
+      887333147281886,
+      887333148593134,
+      887333149669128,
+      887333154201313,
+      887333155426041,
+      887333156813416
+    ],
+    "prompt_token_ids": [
+      16705,
+      2428,
+      11296,
+      418,
+      253,
+      1020,
+      4565,
+      418,
+      896,
+      1711,
+      30,
+      8590,
+      20623,
+      1092,
+      5465,
+      30,
+      28433,
+      20623,
+      990,
+      8590,
+      564,
+      1092,
+      5465,
+      30,
+      5516,
+      480,
+      10898,
+      1686,
+      284,
+      3556,
+      527,
+      7868,
+      3346,
+      357,
+      30,
+      3875,
+      5125,
+      1991,
+      260,
+      1686,
+      736,
+      1361,
+      325,
+      19971,
+      5250,
+      585,
+      260,
+      1796,
+      4814,
+      805,
+      1137,
+      338,
+      28433,
+      20623,
+      990,
+      8590,
+      30,
+      8696,
+      2428,
+      11296,
+      418,
+      253,
+      1020,
+      4565,
+      418,
+      896,
+      1711,
+      30,
+      8590,
+      20623,
+      1092,
+      5465,
+      30,
+      28433,
+      20623,
+      990,
+      8590,
+      564,
+      1092,
+      5465,
+      30,
+      5516,
+      480,
+      10898,
+      1686,
+      284,
+      3556,
+      527,
+      7868,
+      3346,
+      357,
+      30,
+      3875,
+      5125,
+      1991,
+      260,
+      1686,
+      736,
+      1361,
+      325,
+      19971,
+      5250,
+      585,
+      260,
+      1796,
+      4814,
+      805,
+      1137,
+      338,
+      28433,
+      20623,
+      990,
+      8590,
+      30,
+      8696,
+      2428,
+      11296,
+      418,
+      253,
+      1020,
+      4565,
+      418,
+      896,
+      1711,
+      30,
+      8590,
+      20623,
+      1092
+    ],
+    "token_ids": [
+      5465,
+      30,
+      28433,
+      20623,
+      990,
+      8590,
+      564,
+      1092
+    ],
+    "text": " Ben. Clara arrives after Alice but before",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 8,
+      "total_tokens": 136
+    },
+    "done_ns": 887333156851480,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 16262743,
+      "token_ttft_ns": 4049584,
+      "token_tpot_ns": 1739299.2857142857,
+      "token_itl_ns": [
+        1490878,
+        1152687,
+        1311248,
+        1075994,
+        4532185,
+        1224728,
+        1387375
+      ],
+      "first_text_ns": 4049584
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333141814693,
+    "call_finished_ns": 887333156932408,
+    "raw_body_bytes": 2601,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Three friends arrive at a cafe at different times. Alice arrives before Ben. Clara arrives after Alice but before Ben. List their arrival order and explain which statements determine it. Then describe whether the order would still be uniquely determined if the second statement only said that Clara arrives after Alice. Three friends arrive at a cafe at different times. Alice arrives before Ben. Clara arrives after Alice but before Ben. List their arrival order and explain which statements determine it. Then describe whether the order would still be uniquely determined if the second statement only said that Clara arrives after Alice. Three friends arrive at a cafe at different times. Alice arrives before",
+      "max_tokens": 8,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "ed73beea0df0e198674236728e95a5c2f9f2d009950703317728e9dfe059b462",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "logic",
+    "index": 8,
+    "worker_id": 1,
+    "phase": "warmup",
+    "call_started_ns": 887333140548974
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "b00f2f8622ffa4a839b1f34347e143f9705fbf547704fe696e863b874ef6fa6a",
+    "started_ns": 887333148680354,
+    "finished_ns": 887333177866292,
+    "response_identity": {
+      "id": "cmpl-000000000000000a",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333152850891,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" row\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4505],\"prompt_token_ids\":[37964,253,15142,8520,338,8639,971,7742,284,260,1230,282,9112,502,4294,30,378,6348,3252,3593,7742,79,311,284,1462,30,378,9112,3252,3593,1686,79,311,28,7742,79,311,28,284,1686,79,2759,30,26852,6348,351,787,9112,284,3556,1701,260,4187,282,5757,5939,30,378,1378,868,2127,582,4505,567,7742,30,20263,253,15142,8520,338,8639,971,7742,284,260,1230,282,9112,502,4294,30,378,6348,3252,3593,7742,79,311,284,1462,30,378,9112,3252,3593,1686,79,311,28,7742,79,311,28,284,1686,79,2759,30,26852,6348,351,787,9112,284,3556,1701,260,4187,282,5757,5939,30,378,1378,868,2127,582]}]}"
+      },
+      {
+        "arrived_ns": 887333154122059,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" per\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[567]}]}"
+      },
+      {
+        "arrived_ns": 887333155386480,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" customer\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7742]}]}"
+      },
+      {
+        "arrived_ns": 887333156650903,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333157881318,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\\n\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 887333162446242,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\\n\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 887333163654854,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 887333168158832,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" report\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1378]}]}"
+      },
+      {
+        "arrived_ns": 887333169385631,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" should\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[868]}]}"
+      },
+      {
+        "arrived_ns": 887333170612976,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" contain\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[2127]}]}"
+      },
+      {
+        "arrived_ns": 887333171823482,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" one\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[582]}]}"
+      },
+      {
+        "arrived_ns": 887333173019923,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" row\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4505]}]}"
+      },
+      {
+        "arrived_ns": 887333174199229,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" per\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[567]}]}"
+      },
+      {
+        "arrived_ns": 887333175389349,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" customer\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7742]}]}"
+      },
+      {
+        "arrived_ns": 887333176571864,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333177801666,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\\n\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 887333177866292,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333177866292,
+        "data": "{\"id\":\"cmpl-000000000000000a\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":16,\"total_tokens\":144}}"
+      },
+      {
+        "arrived_ns": 887333177866292,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333152850891,
+      887333154122059,
+      887333155386480,
+      887333156650903,
+      887333157881318,
+      887333162446242,
+      887333163654854,
+      887333168158832,
+      887333169385631,
+      887333170612976,
+      887333171823482,
+      887333173019923,
+      887333174199229,
+      887333175389349,
+      887333176571864,
+      887333177801666
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 16,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333152850891,
+      887333154122059,
+      887333155386480,
+      887333156650903,
+      887333157881318,
+      887333162446242,
+      887333163654854,
+      887333168158832,
+      887333169385631,
+      887333170612976,
+      887333171823482,
+      887333173019923,
+      887333174199229,
+      887333175389349,
+      887333176571864,
+      887333177801666
+    ],
+    "prompt_token_ids": [
+      37964,
+      253,
+      15142,
+      8520,
+      338,
+      8639,
+      971,
+      7742,
+      284,
+      260,
+      1230,
+      282,
+      9112,
+      502,
+      4294,
+      30,
+      378,
+      6348,
+      3252,
+      3593,
+      7742,
+      79,
+      311,
+      284,
+      1462,
+      30,
+      378,
+      9112,
+      3252,
+      3593,
+      1686,
+      79,
+      311,
+      28,
+      7742,
+      79,
+      311,
+      28,
+      284,
+      1686,
+      79,
+      2759,
+      30,
+      26852,
+      6348,
+      351,
+      787,
+      9112,
+      284,
+      3556,
+      1701,
+      260,
+      4187,
+      282,
+      5757,
+      5939,
+      30,
+      378,
+      1378,
+      868,
+      2127,
+      582,
+      4505,
+      567,
+      7742,
+      30,
+      20263,
+      253,
+      15142,
+      8520,
+      338,
+      8639,
+      971,
+      7742,
+      284,
+      260,
+      1230,
+      282,
+      9112,
+      502,
+      4294,
+      30,
+      378,
+      6348,
+      3252,
+      3593,
+      7742,
+      79,
+      311,
+      284,
+      1462,
+      30,
+      378,
+      9112,
+      3252,
+      3593,
+      1686,
+      79,
+      311,
+      28,
+      7742,
+      79,
+      311,
+      28,
+      284,
+      1686,
+      79,
+      2759,
+      30,
+      26852,
+      6348,
+      351,
+      787,
+      9112,
+      284,
+      3556,
+      1701,
+      260,
+      4187,
+      282,
+      5757,
+      5939,
+      30,
+      378,
+      1378,
+      868,
+      2127,
+      582
+    ],
+    "token_ids": [
+      4505,
+      567,
+      7742,
+      30,
+      198,
+      198,
+      504,
+      1378,
+      868,
+      2127,
+      582,
+      4505,
+      567,
+      7742,
+      30,
+      198
+    ],
+    "text": " row per customer.\n\nThe report should contain one row per customer.\n",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 16,
+      "total_tokens": 144
+    },
+    "done_ns": 887333177866292,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 29185938,
+      "token_ttft_ns": 4170537,
+      "token_tpot_ns": 1663385.0,
+      "token_itl_ns": [
+        1271168,
+        1264421,
+        1264423,
+        1230415,
+        4564924,
+        1208612,
+        4503978,
+        1226799,
+        1227345,
+        1210506,
+        1196441,
+        1179306,
+        1190120,
+        1182515,
+        1229802
+      ],
+      "first_text_ns": 4170537
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333149995611,
+    "call_finished_ns": 887333178006529,
+    "raw_body_bytes": 4143,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Describe a SQL query that lists each customer and the number of orders they placed. The customers table contains customer_id and name. The orders table contains order_id, customer_id, and order_date. Include customers with no orders and explain why the choice of join matters. The report should contain one row per customer. Describe a SQL query that lists each customer and the number of orders they placed. The customers table contains customer_id and name. The orders table contains order_id, customer_id, and order_date. Include customers with no orders and explain why the choice of join matters. The report should contain one",
+      "max_tokens": 16,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "055f9ce21373ddfc4c0a4231208d692ba9830e837f947c5dbfe4cba27dea2db4",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "sql",
+    "index": 9,
+    "worker_id": 7,
+    "phase": "warmup",
+    "call_started_ns": 887333148659379
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "95667995f206dd4c97ab4e2dea18bf13acddd169b06262df44925819dc914ddc",
+    "started_ns": 887333156963871,
+    "finished_ns": 887333190794800,
+    "response_identity": {
+      "id": "cmpl-000000000000000b",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333161152625,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"bridge\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[7502],\"prompt_token_ids\":[26226,451,1890,1977,281,253,9071,16724,3997,30,378,1573,5729,9191,8976,915,347,6334,81,19529,4581,260,7964,3941,30,533,874,16264,436,253,1681,12172,351,253,5510,282,260,1142,9191,28,2362,411,2206,3449,1462,1041,1250,441,5221,30,330,32584,1699,260,11893,267,8883,284,9073,1731,253,6260,3374,7502,30,18136,451,1890,1977,281,253,9071,16724,3997,30,378,1573,5729,9191,8976,915,347,6334,81,19529,4581,260,7964,3941,30,533,874,16264,436,253,1681,12172,351,253,5510,282,260,1142,9191,28,2362,411,2206,3449,1462,1041,1250,441,5221,30,330,32584,1699,260,11893,267,8883,284,9073,1731,253,6260,3374]}]}"
+      },
+      {
+        "arrived_ns": 887333162421493,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333163685348,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Continue\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[18136]}]}"
+      },
+      {
+        "arrived_ns": 887333168182031,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" this\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[451]}]}"
+      },
+      {
+        "arrived_ns": 887333169405461,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" short\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1890]}]}"
+      },
+      {
+        "arrived_ns": 887333170632820,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" story\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1977]}]}"
+      },
+      {
+        "arrived_ns": 887333171804022,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" in\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[281]}]}"
+      },
+      {
+        "arrived_ns": 887333172990195,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333174179409,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" calm\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[9071]}]}"
+      },
+      {
+        "arrived_ns": 887333175370267,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" descriptive\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[16724]}]}"
+      },
+      {
+        "arrived_ns": 887333176553612,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" style\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[3997]}]}"
+      },
+      {
+        "arrived_ns": 887333177743084,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\".\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 887333178892983,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[378]}]}"
+      },
+      {
+        "arrived_ns": 887333180026769,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" old\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1573]}]}"
+      },
+      {
+        "arrived_ns": 887333181156797,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" station\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[5729]}]}"
+      },
+      {
+        "arrived_ns": 887333182262946,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" clock\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[9191]}]}"
+      },
+      {
+        "arrived_ns": 887333183349827,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" stopped\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[8976]}]}"
+      },
+      {
+        "arrived_ns": 887333184406485,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" just\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[915]}]}"
+      },
+      {
+        "arrived_ns": 887333185464788,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" as\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[347]}]}"
+      },
+      {
+        "arrived_ns": 887333186525751,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" Nor\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[6334]}]}"
+      },
+      {
+        "arrived_ns": 887333187586347,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[81]}]}"
+      },
+      {
+        "arrived_ns": 887333188645194,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" stepped\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[19529]}]}"
+      },
+      {
+        "arrived_ns": 887333189706392,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" onto\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4581]}]}"
+      },
+      {
+        "arrived_ns": 887333190768202,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" the\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 887333190794800,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333190794800,
+        "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":24,\"total_tokens\":152}}"
+      },
+      {
+        "arrived_ns": 887333190794800,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333161152625,
+      887333162421493,
+      887333163685348,
+      887333168182031,
+      887333169405461,
+      887333170632820,
+      887333171804022,
+      887333172990195,
+      887333174179409,
+      887333175370267,
+      887333176553612,
+      887333177743084,
+      887333178892983,
+      887333180026769,
+      887333181156797,
+      887333182262946,
+      887333183349827,
+      887333184406485,
+      887333185464788,
+      887333186525751,
+      887333187586347,
+      887333188645194,
+      887333189706392,
+      887333190768202
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 24,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333161152625,
+      887333162421493,
+      887333163685348,
+      887333168182031,
+      887333169405461,
+      887333170632820,
+      887333171804022,
+      887333172990195,
+      887333174179409,
+      887333175370267,
+      887333176553612,
+      887333177743084,
+      887333178892983,
+      887333180026769,
+      887333181156797,
+      887333182262946,
+      887333183349827,
+      887333184406485,
+      887333185464788,
+      887333186525751,
+      887333187586347,
+      887333188645194,
+      887333189706392,
+      887333190768202
+    ],
+    "prompt_token_ids": [
+      26226,
+      451,
+      1890,
+      1977,
+      281,
+      253,
+      9071,
+      16724,
+      3997,
+      30,
+      378,
+      1573,
+      5729,
+      9191,
+      8976,
+      915,
+      347,
+      6334,
+      81,
+      19529,
+      4581,
+      260,
+      7964,
+      3941,
+      30,
+      533,
+      874,
+      16264,
+      436,
+      253,
+      1681,
+      12172,
+      351,
+      253,
+      5510,
+      282,
+      260,
+      1142,
+      9191,
+      28,
+      2362,
+      411,
+      2206,
+      3449,
+      1462,
+      1041,
+      1250,
+      441,
+      5221,
+      30,
+      330,
+      32584,
+      1699,
+      260,
+      11893,
+      267,
+      8883,
+      284,
+      9073,
+      1731,
+      253,
+      6260,
+      3374,
+      7502,
+      30,
+      18136,
+      451,
+      1890,
+      1977,
+      281,
+      253,
+      9071,
+      16724,
+      3997,
+      30,
+      378,
+      1573,
+      5729,
+      9191,
+      8976,
+      915,
+      347,
+      6334,
+      81,
+      19529,
+      4581,
+      260,
+      7964,
+      3941,
+      30,
+      533,
+      874,
+      16264,
+      436,
+      253,
+      1681,
+      12172,
+      351,
+      253,
+      5510,
+      282,
+      260,
+      1142,
+      9191,
+      28,
+      2362,
+      411,
+      2206,
+      3449,
+      1462,
+      1041,
+      1250,
+      441,
+      5221,
+      30,
+      330,
+      32584,
+      1699,
+      260,
+      11893,
+      267,
+      8883,
+      284,
+      9073,
+      1731,
+      253,
+      6260,
+      3374
+    ],
+    "token_ids": [
+      7502,
+      30,
+      18136,
+      451,
+      1890,
+      1977,
+      281,
+      253,
+      9071,
+      16724,
+      3997,
+      30,
+      378,
+      1573,
+      5729,
+      9191,
+      8976,
+      915,
+      347,
+      6334,
+      81,
+      19529,
+      4581,
+      260
+    ],
+    "text": "bridge. Continue this short story in a calm descriptive style. The old station clock stopped just as Nora stepped onto the",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 24,
+      "total_tokens": 152
+    },
+    "done_ns": 887333190794800,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 33830929,
+      "token_ttft_ns": 4188754,
+      "token_tpot_ns": 1287633.7826086956,
+      "token_itl_ns": [
+        1268868,
+        1263855,
+        4496683,
+        1223430,
+        1227359,
+        1171202,
+        1186173,
+        1189214,
+        1190858,
+        1183345,
+        1189472,
+        1149899,
+        1133786,
+        1130028,
+        1106149,
+        1086881,
+        1056658,
+        1058303,
+        1060963,
+        1060596,
+        1058847,
+        1061198,
+        1061810
+      ],
+      "first_text_ns": 4188754
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333158289405,
+    "call_finished_ns": 887333190899030,
+    "raw_body_bytes": 5785,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Continue this short story in a calm descriptive style. The old station clock stopped just as Nora stepped onto the empty platform. In her pocket was a postcard with a drawing of the same clock, sent by someone whose name she did not recognize. A gardener across the tracks waved and pointed toward a narrow footbridge. Continue this short story in a calm descriptive style. The old station clock stopped just as Nora stepped onto the empty platform. In her pocket was a postcard with a drawing of the same clock, sent by someone whose name she did not recognize. A gardener across the tracks waved and pointed toward a narrow foot",
+      "max_tokens": 24,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "5a79ae1ba4c0e3bab22caf6dcefc0283626133a2f306d6502d938329f682d2ad",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "story",
+    "index": 10,
+    "worker_id": 1,
+    "phase": "warmup",
+    "call_started_ns": 887333156944154
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "observe",
+    "streaming": true,
+    "reference_sha256": "3819a6370dff7a4e16cf9d52e3180bde9d91732a2fbcf36676a19db19cb5d72c",
+    "started_ns": 887333162856162,
+    "finished_ns": 887333201053876,
+    "response_identity": {
+      "id": "cmpl-000000000000000c",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789230180
+    },
+    "frames": [
+      {
+        "arrived_ns": 887333166937036,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\\n\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[198],\"prompt_token_ids\":[8530,1282,623,7742,6623,347,2731,28,3524,28,355,6468,284,3556,13099,30,378,8567,6612,1584,28,564,582,5033,436,6782,30,378,6388,592,2437,284,260,9621,2637,805,3772,3487,30,378,1199,7997,436,7952,28,3551,357,2637,1296,2009,288,3796,253,15482,30,10965,335,260,2455,282,971,2994,5189,30,5397,1282,623,7742,6623,347,2731,28,3524,28,355,6468,284,3556,13099,30,378,8567,6612,1584,28,564,582,5033,436,6782,30,378,6388,592,2437,284,260,9621,2637,805,3772,3487,30,378,1199,7997,436,7952,28,3551,357,2637,1296,2009,288,3796,253,15482,30,10965,335,260,2455,282,971,2994,5189,30]}]}"
+      },
+      {
+        "arrived_ns": 887333168245586,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\\n\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 887333169432039,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"The\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 887333170655290,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" following\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[1695]}]}"
+      },
+      {
+        "arrived_ns": 887333171853434,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" is\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 887333173047209,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333174225765,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333175413630,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333176598161,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333177768013,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333178919742,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333180061338,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333181186437,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333182286461,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333183377604,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333184442985,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333185500924,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333186558515,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333187631479,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333188677940,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333189739483,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333190833437,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333191846957,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333192867985,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333193883011,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333194907865,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333195944133,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333196950863,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333197949622,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333198973586,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" a\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 887333199996361,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" sample\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[4315]}]}"
+      },
+      {
+        "arrived_ns": 887333201028908,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\" of\",\"index\":0,\"logprobs\":null,\"finish_reason\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 887333201053876,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}"
+      },
+      {
+        "arrived_ns": 887333201053876,
+        "data": "{\"id\":\"cmpl-000000000000000c\",\"object\":\"text_completion\",\"created\":1789230180,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"completion_tokens\":32,\"total_tokens\":160}}"
+      },
+      {
+        "arrived_ns": 887333201053876,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      887333166937036,
+      887333168245586,
+      887333169432039,
+      887333170655290,
+      887333171853434,
+      887333173047209,
+      887333174225765,
+      887333175413630,
+      887333176598161,
+      887333177768013,
+      887333178919742,
+      887333180061338,
+      887333181186437,
+      887333182286461,
+      887333183377604,
+      887333184442985,
+      887333185500924,
+      887333186558515,
+      887333187631479,
+      887333188677940,
+      887333189739483,
+      887333190833437,
+      887333191846957,
+      887333192867985,
+      887333193883011,
+      887333194907865,
+      887333195944133,
+      887333196950863,
+      887333197949622,
+      887333198973586,
+      887333199996361,
+      887333201028908
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      887333166937036,
+      887333168245586,
+      887333169432039,
+      887333170655290,
+      887333171853434,
+      887333173047209,
+      887333174225765,
+      887333175413630,
+      887333176598161,
+      887333177768013,
+      887333178919742,
+      887333180061338,
+      887333181186437,
+      887333182286461,
+      887333183377604,
+      887333184442985,
+      887333185500924,
+      887333186558515,
+      887333187631479,
+      887333188677940,
+      887333189739483,
+      887333190833437,
+      887333191846957,
+      887333192867985,
+      887333193883011,
+      887333194907865,
+      887333195944133,
+      887333196950863,
+      887333197949622,
+      887333198973586,
+      887333199996361,
+      887333201028908
+    ],
+    "prompt_token_ids": [
+      8530,
+      1282,
+      623,
+      7742,
+      6623,
+      347,
+      2731,
+      28,
+      3524,
+      28,
+      355,
+      6468,
+      284,
+      3556,
+      13099,
+      30,
+      378,
+      8567,
+      6612,
+      1584,
+      28,
+      564,
+      582,
+      5033,
+      436,
+      6782,
+      30,
+      378,
+      6388,
+      592,
+      2437,
+      284,
+      260,
+      9621,
+      2637,
+      805,
+      3772,
+      3487,
+      30,
+      378,
+      1199,
+      7997,
+      436,
+      7952,
+      28,
+      3551,
+      357,
+      2637,
+      1296,
+      2009,
+      288,
+      3796,
+      253,
+      15482,
+      30,
+      10965,
+      335,
+      260,
+      2455,
+      282,
+      971,
+      2994,
+      5189,
+      30,
+      5397,
+      1282,
+      623,
+      7742,
+      6623,
+      347,
+      2731,
+      28,
+      3524,
+      28,
+      355,
+      6468,
+      284,
+      3556,
+      13099,
+      30,
+      378,
+      8567,
+      6612,
+      1584,
+      28,
+      564,
+      582,
+      5033,
+      436,
+      6782,
+      30,
+      378,
+      6388,
+      592,
+      2437,
+      284,
+      260,
+      9621,
+      2637,
+      805,
+      3772,
+      3487,
+      30,
+      378,
+      1199,
+      7997,
+      436,
+      7952,
+      28,
+      3551,
+      357,
+      2637,
+      1296,
+      2009,
+      288,
+      3796,
+      253,
+      15482,
+      30,
+      10965,
+      335,
+      260,
+      2455,
+      282,
+      971,
+      2994,
+      5189,
+      30
+    ],
+    "token_ids": [
+      198,
+      198,
+      504,
+      1695,
+      314,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282,
+      253,
+      4315,
+      282
+    ],
+    "text": "\n\nThe following is a sample of a sample of a sample of a sample of a sample of a sample of a sample of a sample of a sample of",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "completion_tokens": 32,
+      "total_tokens": 160
+    },
+    "done_ns": 887333201053876,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": true,
+    "metrics": {
+      "e2e_ns": 38197714,
+      "token_ttft_ns": 4080874,
+      "token_tpot_ns": 1099737.8064516129,
+      "token_itl_ns": [
+        1308550,
+        1186453,
+        1223251,
+        1198144,
+        1193775,
+        1178556,
+        1187865,
+        1184531,
+        1169852,
+        1151729,
+        1141596,
+        1125099,
+        1100024,
+        1091143,
+        1065381,
+        1057939,
+        1057591,
+        1072964,
+        1046461,
+        1061543,
+        1093954,
+        1013520,
+        1021028,
+        1015026,
+        1024854,
+        1036268,
+        1006730,
+        998759,
+        1023964,
+        1022775,
+        1032547
+      ],
+      "first_text_ns": 4080874
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 887333164110503,
+    "call_finished_ns": 887333201135429,
+    "raw_body_bytes": 7317,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "Classify these customer comments as positive, negative, or mixed and explain briefly. The package arrived early, but one item was missing. The instructions were clear and the assembly took only ten minutes. The support agent was friendly, although it took three days to receive a reply. Focus on the meaning of each complete comment. Classify these customer comments as positive, negative, or mixed and explain briefly. The package arrived early, but one item was missing. The instructions were clear and the assembly took only ten minutes. The support agent was friendly, although it took three days to receive a reply. Focus on the meaning of each complete comment.",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "a6cd861907b78db196b698742937cc6bebd8c0d818653d733eec838e794f6d88",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "corpus_id": "classification",
+    "index": 11,
+    "worker_id": 3,
+    "phase": "warmup",
+    "call_started_ns": 887333162829121
+  }
+]

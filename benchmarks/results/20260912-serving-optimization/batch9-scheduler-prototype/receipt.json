@@ -1,0 +1,97 @@
+{
+  "schema_version": "riley.batch9-scheduler-prototype.v1",
+  "created_at_utc": "2026-09-12T02:30:33.150560+00:00",
+  "sandbox_root": "/tmp/riley-batch9-local-scheduler-20260912",
+  "main_repository": "/Users/psyche/PycharmProjects/riley",
+  "main_production_source_files_checked": 341,
+  "main_production_source_unchanged": true,
+  "source_before": {
+    "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source-before.json",
+    "sha256": "222597ffb99f923144f482ec072aeed5ba0bd3863ab297743b7111de6c66a071"
+  },
+  "source_after": {
+    "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source-after.json",
+    "sha256": "eaa78f75df5deecb5ed511bd205dc4621158b92e9144a651ba0f695e88bf6b1c"
+  },
+  "patch": {
+    "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/scheduler-policy.patch",
+    "sha256": "a43ac86fad725dc4c08ec594f2019fd066ce4b416fe3deabf75d0c1fc17e1bd7"
+  },
+  "changed_source_files": {
+    "crates/riley-scheduler/src/config.rs": {
+      "before_sha256": "f4ee6820ed8488011d3325beabc268a75bcc3843714c826ed871dd4b1c9e38fd",
+      "after_sha256": "d223cf667c91c07cc6693f950610503c416096968d60a32c8d77eb8f50187f0d",
+      "copy": {
+        "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source/crates/riley-scheduler/src/config.rs",
+        "sha256": "d223cf667c91c07cc6693f950610503c416096968d60a32c8d77eb8f50187f0d"
+      }
+    },
+    "crates/riley-scheduler/src/lib.rs": {
+      "before_sha256": "608d7ded3b0e6b7c02e737f755ea44665e6c90e6578a1ef11ea76271ff9ae596",
+      "after_sha256": "8037b3b3080c65aec591ba5f9cccd3de63fb639e8c0c90540a350b4f8933a6c6",
+      "copy": {
+        "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source/crates/riley-scheduler/src/lib.rs",
+        "sha256": "8037b3b3080c65aec591ba5f9cccd3de63fb639e8c0c90540a350b4f8933a6c6"
+      }
+    },
+    "crates/riley-scheduler/src/scheduler.rs": {
+      "before_sha256": "b158fa8d734f3a5bd17d3523209fa3fd6ef450971656e841a872d397a1d7deb5",
+      "after_sha256": "bbc2879b57e33a41de193e42db4a6627df28becada3a3f073938f0450226ec33",
+      "copy": {
+        "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source/crates/riley-scheduler/src/scheduler.rs",
+        "sha256": "bbc2879b57e33a41de193e42db4a6627df28becada3a3f073938f0450226ec33"
+      }
+    },
+    "crates/riley-scheduler/tests/complete_prefill_policy.rs": {
+      "before_sha256": null,
+      "after_sha256": "2035b929b2041ae45357df72981f9c4cfda7407ea82ba80a88c5f7ae043603b6",
+      "copy": {
+        "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/source/crates/riley-scheduler/tests/complete_prefill_policy.rs",
+        "sha256": "2035b929b2041ae45357df72981f9c4cfda7407ea82ba80a88c5f7ae043603b6"
+      }
+    }
+  },
+  "validation": {
+    "cpu_tests_passed": true,
+    "total_passed_tests": 57,
+    "library_tests": 31,
+    "new_policy_tests": 12,
+    "legacy_simulation_tests": 14,
+    "failed": 0,
+    "ignored": 0,
+    "test_log": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/cpu-tests.log",
+      "sha256": "8b49bc09f93b85e1bb03c1f0e2b78e2509d1ed4909b25f129f577ae3f0234d2d"
+    },
+    "test_run": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/test-run.json",
+      "sha256": "5a93d3ad625e234a79e8cce6fca3f11dba8971943a62a90e8dd5a7fde10bb825"
+    },
+    "compiler": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/rustc.txt",
+      "sha256": "9e5ca763c214efa1c5a1ad84b9d9363e3d993a2ce3a7c896e24def1ce9b5b7aa"
+    },
+    "format_log": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/rustfmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source_unchanged_during_tests": true,
+    "patch_applies_to_exact_before": true
+  },
+  "independent_review": {
+    "result": "no concrete blocker",
+    "read_only": true,
+    "tests_rerun": false,
+    "record": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/batch9-scheduler-prototype/review.txt",
+      "sha256": "52f43f1d5583578302481c55196fd59bfdc5347823c78ad21d1d7ff6e749fb24"
+    }
+  },
+  "implemented_in_main_repository": false,
+  "runtime_or_server_integrated": false,
+  "gpu_executed": false,
+  "remote_executed": false,
+  "numerical_qualification": false,
+  "serving_performance_measured": false,
+  "optimization_accepted": false
+}

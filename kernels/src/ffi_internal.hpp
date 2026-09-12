@@ -212,6 +212,10 @@ struct RileyCudaRaggedPagedKvCacheWriteBf16State {
         query_head_count(0),
         output_row_count(0),
         attention_scale(0.0F),
+        attention_parent_layers(0),
+        attention_layer_index(0),
+        attention_metadata_packed(false),
+        attention_metadata_offsets{},
         grouped_attention(false),
         enqueue_count(0),
         key_source_lease_held(false),
@@ -245,6 +249,10 @@ struct RileyCudaRaggedPagedKvCacheWriteBf16State {
   uint64_t query_head_count;
   uint64_t output_row_count;
   float attention_scale;
+  uint64_t attention_parent_layers;
+  uint64_t attention_layer_index;
+  bool attention_metadata_packed;
+  uint64_t attention_metadata_offsets[5];
   bool grouped_attention;
   uint32_t enqueue_count;
   bool key_source_lease_held;
@@ -275,7 +283,7 @@ struct RileyCudaCanonicalGemmBf16GraphState {
         plan_lease_held(false),
         input_lease_held(false),
         weight_lease_held(false),
-        workspace_lease_held(false) {}
+        workspace_lease_held(false), selected_no_split(false) {}
 
   RileyCudaGemmPlan* plan;
   RileyCudaDeviceBuffer* input;
@@ -290,6 +298,8 @@ struct RileyCudaCanonicalGemmBf16GraphState {
   bool input_lease_held;
   bool weight_lease_held;
   bool workspace_lease_held;
+  // Additive contract: preserve policy, require effective no-split, optional workspace parent.
+  bool selected_no_split;
 };
 
 // C05-22 combines generic canonical RMSNorm with a canonical cuBLASLt GEMM.
@@ -477,6 +487,8 @@ struct RileyCudaGraphCapture {
   uint64_t canonical_rms_norm_row_count;
   uint64_t canonical_rms_norm_hidden_size;
   float canonical_rms_norm_epsilon;
+  // Immutable norm-family profile: 0 canonical, 1 reviewed HF SmolLM2.
+  uint32_t rms_norm_profile = 0;
   uint32_t canonical_rms_norm_enqueue_count;
   bool canonical_rms_norm_input_lease_held;
   bool canonical_rms_norm_weight_lease_held;
@@ -511,6 +523,8 @@ struct RileyCudaGraphCapture {
   uint64_t bf16_row_gather_argmax_d2h_output_row_count;
   uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
   uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  uint64_t output_indices_byte_offset = 0;
+  bool output_parent_binding = false;
   uint32_t bf16_row_gather_argmax_d2h_enqueue_count;
   bool bf16_row_gather_argmax_d2h_input_lease_held;
   bool bf16_row_gather_argmax_d2h_indices_lease_held;
@@ -520,6 +534,7 @@ struct RileyCudaGraphCapture {
   RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
   RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
   RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_positions_byte_offset = 0;
   uint64_t indexed_rope_bf16_active_row_count;
   uint64_t indexed_rope_bf16_head_count;
   uint64_t indexed_rope_bf16_head_size;
@@ -725,6 +740,8 @@ struct RileyCudaGraph {
   uint64_t canonical_rms_norm_row_count;
   uint64_t canonical_rms_norm_hidden_size;
   float canonical_rms_norm_epsilon;
+  // Immutable norm-family profile: 0 canonical, 1 reviewed HF SmolLM2.
+  uint32_t rms_norm_profile = 0;
   RileyCudaDeviceBuffer* bf16_argmax_logits;
   uint64_t bf16_argmax_row_count;
   uint64_t bf16_argmax_vocabulary_size;
@@ -747,10 +764,13 @@ struct RileyCudaGraph {
   uint64_t bf16_row_gather_argmax_d2h_output_row_count;
   uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
   uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  uint64_t output_indices_byte_offset = 0;
+  bool output_parent_binding = false;
   RileyCudaDeviceBuffer* indexed_rope_bf16_input;
   RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
   RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
   RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_positions_byte_offset = 0;
   uint64_t indexed_rope_bf16_active_row_count;
   uint64_t indexed_rope_bf16_head_count;
   uint64_t indexed_rope_bf16_head_size;
@@ -917,6 +937,8 @@ struct RileyCudaGraphExec {
   uint64_t canonical_rms_norm_row_count;
   uint64_t canonical_rms_norm_hidden_size;
   float canonical_rms_norm_epsilon;
+  // Immutable norm-family profile: 0 canonical, 1 reviewed HF SmolLM2.
+  uint32_t rms_norm_profile = 0;
   RileyCudaDeviceBuffer* bf16_argmax_logits;
   uint64_t bf16_argmax_row_count;
   uint64_t bf16_argmax_vocabulary_size;
@@ -939,10 +961,13 @@ struct RileyCudaGraphExec {
   uint64_t bf16_row_gather_argmax_d2h_output_row_count;
   uint64_t bf16_row_gather_argmax_d2h_vocabulary_size;
   uint64_t bf16_row_gather_argmax_d2h_result_byte_len;
+  uint64_t output_indices_byte_offset = 0;
+  bool output_parent_binding = false;
   RileyCudaDeviceBuffer* indexed_rope_bf16_input;
   RileyCudaDeviceBuffer* indexed_rope_bf16_cos;
   RileyCudaDeviceBuffer* indexed_rope_bf16_sin;
   RileyCudaDeviceBuffer* indexed_rope_bf16_positions;
+  uint64_t indexed_rope_bf16_positions_byte_offset = 0;
   uint64_t indexed_rope_bf16_active_row_count;
   uint64_t indexed_rope_bf16_head_count;
   uint64_t indexed_rope_bf16_head_size;
@@ -1024,6 +1049,13 @@ struct RileyCudaCopy {
 
 namespace riley_cuda_internal {
 
+// Launch-only bridge to the exact eager HF kernel. Caller owns context,
+// fixed leases and capture validation; no allocations or synchronization.
+void launch_graph_hf_smollm2_rms_norm(const void* input, const void* weight,
+                                    void* output, uint64_t rows,
+                                    cudaStream_t stream) noexcept;
+
+
 #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
 // Defined in memory.cu beside the process-local test injector. This is an
 // internal-only one-shot probe for the C05-22 second-node failure path; it is
@@ -1040,10 +1072,48 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* out_state,
-    RileyCudaErrorInfo* error, const char* operation) noexcept;
+    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split = false) noexcept;
 RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
     const char* operation) noexcept;
+// Adds the eager BF16 SiLU and multiply kernels with an explicit dependency.
+// Caller owns all parents, validates exact geometry, and holds the CUDA context.
+cudaError_t add_swiglu_graph_nodes(cudaGraph_t graph, cudaGraphNode_t gate_ready,
+    cudaGraphNode_t up_ready, void* gate, void* up, void* activated, void* product,
+    uint64_t elements, cudaGraphNode_t* activated_node, cudaGraphNode_t* product_node) noexcept;
+
+RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
+cudaError_t enqueue_decode_embedding(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t) noexcept;
+cudaError_t enqueue_decode_embedding_rows(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t, uint64_t) noexcept;
+cudaError_t enqueue_decode_kv_attention(cudaStream_t, const void*, const void*, const void*, void*, void*, void*, const void*, uint64_t, uint64_t, uint64_t, uint64_t) noexcept;
+cudaError_t enqueue_decode_argmax(cudaStream_t, const void*, void*, uint64_t) noexcept;
+cudaError_t enqueue_bound_attention(cudaStream_t stream,const void* query,const void* key,
+    const void* value,void* output,const void* metadata,const uint64_t* fields,
+    uint64_t position_offset,uint64_t query_heads,uint64_t kv_heads,uint64_t physical_blocks) noexcept;
+cudaError_t enqueue_bound_kv_write(cudaStream_t stream, const void* key, const void* value,
+    void* key_pool, void* value_pool, const void* position, uint64_t heads,
+    uint64_t physical_block) noexcept;
+cudaError_t enqueue_qkv_rope(cudaStream_t stream, const void* q, const void* k,
+    void* qr, void* kr, const void* cos, const void* sin, const void* positions,
+    uint64_t q_heads, uint64_t kv_heads, uint64_t table_positions) noexcept;
+cudaError_t enqueue_mlp_norm(cudaStream_t stream, const void* input,
+    const void* weight, void* output, uint64_t hidden, float epsilon,
+    uint32_t profile) noexcept;
+cudaError_t enqueue_mlp_pointwise(cudaStream_t stream, void* gate, void* up,
+    void* activated, void* product, uint64_t elements) noexcept;
+cudaError_t enqueue_mlp_residual(cudaStream_t stream, void* residual, void* down,
+    void* output, uint64_t elements) noexcept;
+
+bool aggregate_gemm_plan_matches_context(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context) noexcept;
+// Read-only qualification under an existing aggregate plan lease. Unlike the
+// public info query, this never attempts a second exclusive acquisition.
+bool reserved_packed_decode_gemm_plan_matches(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context,
+    uint64_t expected_n) noexcept;
 bool release_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan) noexcept;
 bool canonical_gemm_bf16_graph_state_is_valid(
@@ -2258,6 +2328,42 @@ inline bool release_child(RileyCudaContext* context) noexcept {
   }
   return false;
 }
+
+
+cudaError_t enqueue_compiled_norm(cudaStream_t,const void*,const void*,const void*,void*,void*,int) noexcept;
+cudaError_t enqueue_compiled_rope(cudaStream_t,const void*,const void*,void*,void*,const void*,const void*,const void*) noexcept;
+cudaError_t enqueue_compiled_swiglu(cudaStream_t,const void*,const void*,void*) noexcept;
+cudaError_t enqueue_compiled_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+cudaError_t enqueue_compiled_prefill_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
+cudaError_t enqueue_compiled_kv_write(cudaStream_t,const void*,const void*,void*,void*,const void*) noexcept;
+// Row-parallel profile-2 prefill. rows is 1..128; every BF16 row is contiguous.
+// Norm residual mode 1 writes FP32[rows][576]; mode 2 consumes that layout.
+// RoPE/GEMM take a device pointer to the inclusive last position. Attention/KV
+// take the existing prefix: last position at byte 4, block IDs at byte 16.
+// The aggregate owner validates positions, physical maps and buffer extents.
+cudaError_t enqueue_compiled_norm_rows(cudaStream_t,const void*,const void*,const void*,void*,void*,int,uint32_t) noexcept;
+cudaError_t enqueue_compiled_rope_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,const void*,const void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_swiglu_rows(cudaStream_t,const void*,const void*,void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_attention_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
+cudaError_t enqueue_compiled_prefill_gemm_rows(cudaStream_t,const void*,const void*,void*,int,int,int,const void*,uint32_t) noexcept;
+// Fixed 128-row profile2 prefill at inclusive position127. Only the five
+// supported (N,K,round interval) shapes are accepted; buffers remain row-major.
+cudaError_t enqueue_compiled_prefill_m16_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
+cudaError_t enqueue_compiled_kv_write_rows(cudaStream_t,const void*,const void*,void*,void*,const void*,uint32_t) noexcept;
+// Packed profile2 M1 decode: Q[576], K[192], V[192] are disjoint slices of one
+// retained output. Writes rotary Q and paged K/V for a validated position128..159.
+cudaError_t enqueue_compiled_packed_decode_rope_kv(cudaStream_t,const void*,const void*,const void*,void*,void*,void*,const void*,const void*,const void*) noexcept;
+// MODE6 packed M1 attention: Q[576], paged K/V and output[576]. The existing
+// metadata supplies inclusive position128..159 and the validated block map.
+cudaError_t enqueue_compiled_packed_decode_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+// Same MODE6 contract; two warps partition independent QK/PV work while
+// retaining each score/output MMA chain and the original denominator order.
+cudaError_t enqueue_compiled_packed_decode_attention_two_warp(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+// Fused packed M1 decode. Raw Q[576]/K[192]/V[192] and FP32 tables produce
+// rotary Q[576], current paged K/V and attention[576] at position128..159.
+// Current-token attention reads CTA-local K/raw V; all parent buffers and
+// validated metadata have the same lifetime and nonalias contract as above.
+cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t,const void*,const void*,const void*,void*,void*,void*,void*,const void*,const void*,const void*) noexcept;
 
 }  // namespace riley_cuda_internal
 

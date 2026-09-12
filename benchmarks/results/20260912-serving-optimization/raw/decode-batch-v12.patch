@@ -1,0 +1,196 @@
+diff --git a/crates/riley-cuda/tests/v3_recorder_gpu.rs b/crates/riley-cuda/tests/v3_recorder_gpu.rs
+index 5ca4c3e..6f9d3f1 100644
+--- a/crates/riley-cuda/tests/v3_recorder_gpu.rs
++++ b/crates/riley-cuda/tests/v3_recorder_gpu.rs
+@@ -12,6 +12,7 @@ for i in 0..count{p32(&mut p,13440+i as usize*4,33);}p}
+ fn v3_recorder_head_and_partial_completion()->Result<(),Box<dyn std::error::Error>>{
+ let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;let mut upload=context.allocate_pinned_host_buffer(1<<20)?;
+ let mut sizes=vec![1152*32;5];sizes.extend([384*32,384*32,384*32,3072*32,3072*32,2304*32,3072*32]);sizes.extend([30*4*16*384,30*4*16*384,64*128,64*128,17536,1152,128,4,98304,8,56623104,1152,663552,221184,1769472]);
++sizes[7]=sizes[7].max(9*4096*4);
+ let mut buffers=vec![];for size in sizes{let mut b=context.allocate_device_buffer(size)?;b.upload_from_slice(0,&vec![0;size as usize],&mut upload,&mut stream)?;buffers.push(b);}
+ let mut weights=vec![22,23,22];for _ in 0..30{weights.extend([23,24,25,25,24,23,26,26,26]);}
+ let mut head=context.prepare_gemm(CudaGemmConfig::new(1,49152,576,0)?)?;let mut staging=context.allocate_pinned_host_buffer(196864)?;
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 072b174..1b7b57d 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2080,7 +2080,8 @@ impl PreparedLlamaBatchExecutor {
+         }
+         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
+         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
+-        for source in [include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
++        for source in [include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
++            include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_attention.cuh").as_slice(),
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index accf67d..96d4cbb 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -79,7 +79,7 @@ impl VariableGraphBuffers {
+         let _=config;
+         let sizes=[1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072];
+         let mut devices=Vec::with_capacity(18);
+-        for bytes in sizes {devices.push(context.allocate_device_buffer(bytes*capacity as u64)?);}
++        for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
+         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
+         Ok(Self{devices,staging:context.allocate_pinned_host_buffer(196864)?,
+             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
+diff --git a/kernels/src/decode_shape.cuh b/kernels/src/decode_shape.cuh
+new file mode 100644
+index 0000000..7ea8ff9
+--- /dev/null
++++ b/kernels/src/decode_shape.cuh
+@@ -0,0 +1,90 @@
++#pragma once
++#include "prefill_shape_attention.cuh"
++// One-row projection: independent original BF16 rounding chunks run in parallel.
++// Each warp writes eight output columns. The merge retains the original order.
++template<int N,int K,int Interval>
++__global__ void decode_projection_parts(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out){
++ const int lane=threadIdx.x,g=lane/4,t=lane%4,base=blockIdx.x*8;
++ constexpr int Chunk=Interval>0?Interval:K;
++ int begin=blockIdx.y*Chunk,end=min(begin+Chunk,K);float d[4]={};
++ #pragma unroll
++ for(int depth=0;depth<Chunk;depth+=16){
++  if(begin+depth>=end)break;
++  int k=begin+depth;
++  uint32_t a=*reinterpret_cast<const uint32_t*>(x+k+2*t),aa=*reinterpret_cast<const uint32_t*>(x+k+2*t+8);
++  uint32_t b=*reinterpret_cast<const uint32_t*>(w+(base+g)*K+k+2*t),bb=*reinterpret_cast<const uint32_t*>(w+(base+g)*K+k+2*t+8);
++  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
++ }
++ if(g==0)for(int j=0;j<2;++j){
++  auto v=__float2bfloat16_rn(d[j]);
++  if constexpr(Interval>0)parts[blockIdx.y*N+base+2*t+j]=__bfloat162float(v);
++  else out[base+2*t+j]=v;
++ }
++}
++template<int N,int K,int Interval>
++__global__ void decode_projection_merge(const float* parts,__nv_bfloat16* out){
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=N)return;float value=0.;
++ #pragma unroll
++ for(int chunk=0;chunk<(K+Interval-1)/Interval;++chunk)value+=parts[chunk*N+i];
++ out[i]=__float2bfloat16_rn(value);
++}
++template<int N,int K,int Interval>
++inline void enqueue_decode_projection(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* out,float* parts){
++ constexpr int chunk=Interval>0?Interval:K;
++ constexpr int chunks=(K+chunk-1)/chunk;
++ decode_projection_parts<N,K,Interval><<<dim3(N/8,chunks),32,0,stream>>>(x,w,parts,out);
++ if constexpr(Interval>0)decode_projection_merge<N,K,Interval><<<(N+255)/256,256,0,stream>>>(parts,out);
++}
++namespace riley_decode_shape {
++// Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
++__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages){
++ int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y;
++ if(token>=count || count>4096)return;
++ int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
++ #pragma unroll
++ for(int depth=0;depth<64;depth+=16){
++  auto* qp=q+head*64+depth;
++  uint32_t a=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);
++  uint32_t aa=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);
++  int kb=token+g<count?riley_prefill_shape::cache_index(token+g,head/3,depth,pages):0;
++  uint32_t b=token+g<count?riley_prefill_shape::pair(k[kb+2*t],k[kb+2*t+1]):0;
++  uint32_t bb=token+g<count?riley_prefill_shape::pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
++ }
++ if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
++}
++// Independent output eight-column groups share the precomputed score buffer.
++// Tile order, lane-local denominator and BF16 probability rounding are unchanged.
++__global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages){
++ int count=shape[1]+1,head=blockIdx.y,block=blockIdx.x,lane=threadIdx.x,g=lane/4,t=lane%4;
++ if(count<1||count>4096)return;
++ __shared__ __nv_bfloat16 probs[128];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[head*4096+begin+i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++  for(int i=lane;i<128;i+=32)probs[i]=__float2bfloat16_rn(i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.);
++  float local_den=den*alpha;
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=riley_prefill_shape::exponential(scores[head*4096+begin+i],mx);}
++  den=local_den;maximum=mx;__syncwarp();
++  for(int j=0;j<4;++j)accum[j]*=alpha;
++  for(int token=begin;token<end;token+=16){
++   int pi=token-begin;uint32_t a=riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]);
++   uint32_t aa=riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]);
++   int dim=block*8+g;auto val=[&](int pos){return pos<end?v[riley_prefill_shape::cache_index(pos,head/3,dim,pages)]:zero;};
++   uint32_t b=riley_prefill_shape::pair(val(token+2*t),val(token+2*t+1));
++   uint32_t bb=riley_prefill_shape::pair(val(token+2*t+8),val(token+2*t+9));
++   riley_prefill_shape::mma(accum,a,a,aa,aa,b,bb);
++  }
++  __syncwarp();
++ }
++ den+=__shfl_xor_sync(0xffffffff,den,2);den+=__shfl_xor_sync(0xffffffff,den,1);float inverse=1.0F/den;
++ if(g==0)for(int j=0;j<2;++j)out[head*64+block*8+2*t+j]=__float2bfloat16_rn(accum[j]*inverse);
++}
++inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,uint32_t physical){
++ scores<<<dim3((min(physical*16,4096u)+7)/8,9),32,0,stream>>>(q,k,scratch,shape,pages);
++ values<<<dim3(8,9),32,0,stream>>>(scratch,v,out,shape,pages);
++}
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index bc7d576..01746ca 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1151,7 +1151,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+   for(size_t j=0;j<23;++j)if(w[i]==d[j])return reject(error,"V3 weight/mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
+- for(size_t i=0;i<12;++i)if(d[i]->byte_len!=capacity*widths[i])return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>8192*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=17536||d[17]->byte_len!=1152||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
+diff --git a/kernels/src/prefill_shape_model.cuh b/kernels/src/prefill_shape_model.cuh
+index f1121e3..d7f78de 100644
+--- a/kernels/src/prefill_shape_model.cuh
++++ b/kernels/src/prefill_shape_model.cuh
+@@ -3,6 +3,7 @@
+ #include "prefill_shape_rope_kv.cuh"
+ #include "prefill_shape_attention.cuh"
+ #include "prefill_shape_pointwise.cuh"
++#include "decode_shape.cuh"
+ // Borrowed 30-layer SmolLM2 BF16 prefill sequence. Caller must validate V3 packet,
+ // all allocation extents/aliases and hold the resource ledger until completion.
+ // This enqueues work; it does not authorize scheduler settlement or serving output.
+@@ -21,19 +22,27 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
+  riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,reinterpret_cast<const uint32_t*>(metadata)+4);
+  for(int layer=0;layer<30;++layer){int base=3+9*layer;
+   if(layer==0)riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,shape,capacity);
+-  gemm_prefill_shape_vector<576,576,192,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(1),w(base+1),b(2),capacity,shape+2);
+-  gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+2),b(5),capacity,shape+2);
+-  gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+3),b(6),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<576,576,192>(stream,b(1),w(base+1),b(2),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<576,576,192,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(1),w(base+1),b(2),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<192,576,192>(stream,b(1),w(base+2),b(5),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+2),b(5),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<192,576,192>(stream,b(1),w(base+3),b(6),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+3),b(6),capacity,shape+2);
+   auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+   auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+   prefill_shape_rope_kv<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),pages,0,capacity,shape);
+-  riley_prefill_shape::attention_shape<<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,0,reinterpret_cast<const int*>(shape+1),pages,shape+2);
+-  gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
++  if(capacity==1)riley_decode_shape::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,physical);
++  else riley_prefill_shape::attention_shape<<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,0,reinterpret_cast<const int*>(shape+1),pages,shape+2);
++  if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
+-  gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
+-  gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
+-  gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,shape,capacity);
+  }
+  riley_prefill_pointwise::select_hidden<<<1,256,0,stream>>>(b(1),static_cast<__nv_bfloat16*>(selected),shape,capacity,status,publish);

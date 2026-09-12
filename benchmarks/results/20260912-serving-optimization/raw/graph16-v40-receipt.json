@@ -1,0 +1,33 @@
+{
+  "source_commit": "f09ef11281fbbd9a4f341c3d57c9848ecfac4e1b",
+  "documentation_head": "19566b8f46bb958d64917731b8f88546f109d750",
+  "build": {
+    "source_commit": "f09ef11281fbbd9a4f341c3d57c9848ecfac4e1b",
+    "binaries": {
+      "/tmp/riley-opt-260912/variable-candidate-v40/riley": "2a8261364a31ebe6f9ab0fee2507f1effe385bccc2d4df694ad5261c3c55e762"
+    },
+    "build_log_sha256": "e4bf035a07f4deb5c5a9c4469e7cdff103f731dea2d59bddb702c63a08a68d29",
+    "profile": "variable-smol-v4",
+    "decode_capacity": 16
+  },
+  "tests": {
+    "owned_gpu": 3,
+    "owned_logits_rows": 4896,
+    "owned16_memcheck_errors": 0,
+    "recorder_memcheck_errors": 0,
+    "scheduler_cpu": 35,
+    "cli_cpu": 3,
+    "http_completed": 37,
+    "http_disconnects": 1,
+    "cleanup_allocation_zero": true
+  },
+  "retained_serving_requests": 18432,
+  "riley_reference_matches": 12288,
+  "diagnostic_requests": 1536,
+  "goal_achieved": false,
+  "decision": "Keep V3 for low concurrency; V4 explicit high-concurrency candidate improves throughput/TPOT but remains below vLLM. No default replacement or long-term stability qualification.",
+  "test_binaries": {
+    "/tmp/riley-opt-260912/prefill-shapes-target-v11/release/deps/v3_shared_owned_gpu-bb1a782b521f0de1": "3502f0635afefd1b114e913a0b5112e8b3e21486976fb191d7943bd4b35d1bd1",
+    "/tmp/riley-opt-260912/prefill-shapes-target-v11/release/deps/v4_shared_recorder_gpu-63c869c763789df9": "bbb4c1bc86322f47e5a9836c9b43ec45084fa9e0ce35ac52f7d016e11ead3395"
+  }
+}

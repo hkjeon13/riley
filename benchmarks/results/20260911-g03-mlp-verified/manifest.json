@@ -1,0 +1,31 @@
+{
+  "scope": "authorized MLP subgraph GPU validation",
+  "cuda_build_passed": true,
+  "gpu_tests": {
+    "gpu-mlp.log": 1,
+    "gpu-model.log": 14,
+    "gpu-aggregate.log": 3,
+    "gpu-swiglu.log": 2
+  },
+  "gpu_total_passed": 20,
+  "mlp_model_replays": 640,
+  "source_hashes_match": true,
+  "model_parity_matches_prior": true,
+  "full_decode_graph_complete": false,
+  "vllm_speedup_claim": false,
+  "artifacts": {
+    "README.md": "444ff3e6a056d9a0900ab3f8d3102a468b92ee34bca607d009b927bd5c2a6ccb",
+    "authorized-transfer.json": "2a4fa7dd1fc64b8c6679d5b652085f52d80e49a720ea790c2bd591a271ae3340",
+    "build-fixed.log": "47eced073c3ca7f0c778284f11f4f80ff753f7a6761fa619ecf94d3e71319abc",
+    "build.log": "8ab5fdaebc75ed9296d5159348bef7a225c33cc5afb81a95e1c4c349f8e7eeba",
+    "gpu-aggregate.log": "5ab38edc2ee0704fd3fe869f87f3d3ef4d6887ca2ac84216a71e40374afa4246",
+    "gpu-mlp.log": "90860a960829781b34582a9867f15a1a95af5fd28dcd91019ac958aaf2a183dc",
+    "gpu-model.log": "61b3189ea7c09ab956e163fcce528b9fd5e234b15d2b5c91b99e3ac957b6cd37",
+    "gpu-swiglu.log": "76164e426669d61712a9d086035399c9c40e15eb3e06b267c57fcbc583941b01",
+    "local-checks.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-parity.json": "338d95ded703707ee6947edf12de6370560ceaa50617b4787e4e57f88c1802ed",
+    "model-preservation.json": "b3a4299929af2f0d7ba3e525f3cee0af85043e27e95d6b263f15e2a5614a6314",
+    "remote-final-identities.txt": "3f093a8146127f586a04df4d37a7216cb624a8d8a7931b9527aff79368a47157",
+    "remote-hashes.txt": "91c56c96e7d4c01464bd4bd7356ddbd8d4d94f1f07fbdbb654c89bb1a11104e4"
+  }
+}

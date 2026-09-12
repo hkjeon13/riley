@@ -1,0 +1,6 @@
+/tmp/riley-opt-260912/query-dispatch-v44/timing.cu(93): warning #177-D: variable "at" was declared but never referenced
+   auto at=[&](int p,int h,int d){return ((pages[p/16]*3+h)*16+p%16)*64+d;};
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+

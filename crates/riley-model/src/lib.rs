@@ -31,7 +31,9 @@ pub use ir::{
 pub use limits::LoadLimits;
 pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_CONFIG_FILENAME, TOKENIZER_FILENAME};
 pub use pattern::{PatternId, SEMANTIC_PATTERN_SCHEMA_VERSION, SemanticPattern};
-pub use provenance::{CheckpointProvenance, PROVENANCE_FILENAME, ProvenanceFile};
+pub use provenance::{
+    CheckpointProvenance, LEGACY_PROVENANCE_FILENAME, PROVENANCE_FILENAME, ProvenanceFile,
+};
 pub use qwen::{ChatMessage, ChatRole, ChatTemplateOptions, Qwen2Tokenizer, Qwen2TokenizerConfig};
 pub use tokenizer::{DecodeOptions, EncodeOptions, SmolLm2Tokenizer, Tokenizer};
 pub use weights::{

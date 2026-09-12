@@ -1,0 +1,833 @@
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index a83b564..c5c28b7 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -198,6 +198,13 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/gemm.cu"),
+         kernels_dir.join("src/graph.cu"),
+         kernels_dir.join("src/graph_resources.cu"),
++        kernels_dir.join("src/graph_numerics.cu"),
++        kernels_dir.join("src/graph_numerics_precise.cu"),
++        kernels_dir.join("src/graph_multisequence_attention.cu"),
++        kernels_dir.join("src/graph_multisequence_precise.cu"),
++        kernels_dir.join("src/graph_multisequence_io.cu"),
++        kernels_dir.join("src/graph_multisequence_packet.inc"),
++        kernels_dir.join("src/graph_multisequence_record.inc"),
+         kernels_dir.join("src/host_runtime.cu"),
+         kernels_dir.join("src/memory.cu"),
+         kernels_dir.join("src/primitives.cu"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index e136c68..a1d671b 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11095,3 +11095,56 @@ mod aggregate_replay_fault_tests {
+         Ok(())
+     }
+ }
++
++unsafe extern "C" {
++    fn riley_cuda_graph_resources_record_multisequence_decode(
++        resources: *mut RawGraphResources,
++        devices: *const *mut RawDeviceBuffer,
++        device_count: u64,
++        weights: *const *mut RawDeviceBuffer,
++        weight_count: u64,
++        plans: *const *mut RawGemmPlan,
++        plan_count: u64,
++        staging: *mut RawPinnedHostBuffer,
++        bucket: u32,
++        physical: u32,
++        full: u32,
++        error: *mut ErrorInfo,
++    ) -> i32;
++}
++impl GraphResourcesHandle {
++    pub(super) fn record_multisequence_decode(
++        &mut self,
++        devices: &[&DeviceBufferHandle],
++        weights: &[&DeviceBufferHandle],
++        plans: &[&GemmPlanHandle],
++        staging: &PinnedHostBufferHandle,
++        bucket: u32,
++        physical: u32,
++        full: bool,
++    ) -> CudaResult<()> {
++        let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
++        let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
++        let plans: Vec<_> = plans.iter().map(|v| v.as_ptr()).collect();
++        let mut error = ErrorInfo::new();
++        // SAFETY: the enclosing owner retains all parent borrows. Native validates
++        // explicit counts, exact allocation geometry and ledger membership.
++        let status = unsafe {
++            riley_cuda_graph_resources_record_multisequence_decode(
++                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
++                devices.as_ptr(),
++                devices.len() as u64,
++                weights.as_ptr(),
++                weights.len() as u64,
++                plans.as_ptr(),
++                plans.len() as u64,
++                staging.as_ptr(),
++                bucket,
++                physical,
++                u32::from(full),
++                &mut error,
++            )
++        };
++        status_result(status, "record multi-sequence decode", &error)
++    }
++}
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index b677b84..ee8d180 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1009,3 +1009,79 @@ impl BorrowedGraphResourceReservation<'_> {
+         }
+     }
+ }
++
++impl BorrowedGraphResourceReservation<'_> {
++    /// Records a fixed SmolLM2 numerical decode DAG for two or four request rows.
++    /// Device roles follow the native recorder's 18-parent contract; weights are
++    /// the 273 legacy weights followed by 60 packed QKV/gate-up parents. This
++    /// low-level owner does not authorize scheduler reservations or KV ownership.
++    /// # Errors
++    /// Rejects invalid indices, parent geometry, unsupported buckets or native failures.
++    #[allow(clippy::too_many_arguments)]
++    pub fn record_multisequence_decode(
++        &mut self,
++        devices: &[usize; 18],
++        weights: &[usize],
++        plans: &[usize; 5],
++        staging: usize,
++        bucket: u32,
++        physical: u32,
++        full: bool,
++    ) -> CudaResult<()> {
++        #[cfg(feature = "cuda")]
++        {
++            let bad = || {
++                crate::CudaError::invalid_argument(
++                    "record multi-sequence decode",
++                    "parent index out of range",
++                )
++            };
++            let devices: Vec<_> = devices
++                .iter()
++                .map(|i| {
++                    self.parents
++                        .devices
++                        .get(*i)
++                        .map(|p| p.native_handle())
++                        .ok_or_else(bad)
++                })
++                .collect::<CudaResult<_>>()?;
++            let weights: Vec<_> = weights
++                .iter()
++                .map(|i| {
++                    self.parents
++                        .devices
++                        .get(*i)
++                        .map(|p| p.native_handle())
++                        .ok_or_else(bad)
++                })
++                .collect::<CudaResult<_>>()?;
++            let plans: Vec<_> = plans
++                .iter()
++                .map(|i| {
++                    self.strided_plans
++                        .get(*i)
++                        .ok_or_else(bad)?
++                        .graph_resource_handle()
++                })
++                .collect::<CudaResult<_>>()?;
++            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
++            self.native.record_multisequence_decode(
++                &devices,
++                &weights,
++                &plans,
++                staging.native_handle(),
++                bucket,
++                physical,
++                full,
++            )
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = (devices, weights, plans, staging, bucket, physical, full);
++            Err(crate::CudaError::unavailable(
++                "record multi-sequence decode",
++            ))
++        }
++    }
++}
+diff --git a/crates/riley-cuda/tests/multisequence_decode_gpu.rs b/crates/riley-cuda/tests/multisequence_decode_gpu.rs
+new file mode 100644
+index 0000000..aaae1da
+--- /dev/null
++++ b/crates/riley-cuda/tests/multisequence_decode_gpu.rs
+@@ -0,0 +1,189 @@
++#![cfg(feature = "cuda")]
++use riley_cuda::{
++    BorrowedGraphResourceParents, BorrowedGraphResourceReservation, CudaRuntime,
++    CudaStridedGemmConfig,
++};
++fn put32(bytes: &mut [u8], at: usize, value: u32) {
++    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
++}
++fn put64(bytes: &mut [u8], at: usize, value: u64) {
++    bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
++}
++fn packet(bucket: u32, active: u32, full: bool, transfer: usize, replay: u64) -> Vec<u8> {
++    let mut p = vec![0; transfer];
++    for (at, value) in [
++        (0, 0x31444d52),
++        (4, 0x00800001),
++        (8, 1280),
++        (12, 128),
++        (16, 1),
++        (20, bucket),
++        (24, active),
++        (28, active),
++        (32, 4),
++        (36, 10),
++        (40, 49152),
++        (44, 40),
++        (104, u32::from(full)),
++    ] {
++        put32(&mut p, at, value);
++    }
++    put64(&mut p, 48, 1);
++    put64(&mut p, 56, replay);
++    put64(&mut p, 64, replay);
++    p[72..104].fill(0x5a);
++    for row in 0..active as usize {
++        let base = 128 + row * 128;
++        let pos = 128 + row as u32;
++        put32(&mut p, base, 17 + row as u32);
++        put32(&mut p, base + 4, pos);
++        put32(&mut p, base + 12, 9);
++        for i in 0..9 {
++            put32(&mut p, base + 16 + 4 * i, (row * 10 + i) as u32);
++            let valid = if i < 8 { 16u16 } else { pos as u16 % 16 + 1 };
++            p[base + 56 + 2 * i..base + 58 + 2 * i].copy_from_slice(&valid.to_le_bytes());
++        }
++        put64(&mut p, base + 80, 100 + row as u64);
++        put64(&mut p, base + 88, 200 + row as u64);
++        for (at, value) in [
++            (96, pos + 1),
++            (100, active - 1 - row as u32),
++            (104, 1),
++            (108, pos - 127),
++            (112, 1),
++            (116, 1),
++        ] {
++            put32(&mut p, base + at, value);
++        }
++    }
++    p
++}
++#[test]
++#[ignore = "requires qualified RTX 4090; zero-weight full-DAG lifecycle smoke, not model parity"]
++fn full_multisequence_decode_capture_replay_and_packet_rejection()
++-> Result<(), Box<dyn std::error::Error>> {
++    let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
++    let mut stream = context.create_stream()?;
++    let mut upload = context.allocate_pinned_host_buffer(1 << 20)?;
++    for bucket in [2u32, 4] {
++        for full in [false, true] {
++            let result = 640 + if full { bucket as usize * 98304 } else { 0 };
++            let transfer = result.max(1280);
++            let b = u64::from(bucket);
++            let sizes = [
++                1152 * b,
++                1152 * b,
++                1920 * b,
++                1152 * b,
++                1152 * b,
++                1152 * b,
++                2304 * b,
++                6144 * b,
++                3072 * b,
++                1152 * b,
++                98304 * b,
++                1280,
++                result as u64,
++                8 * b,
++                384 * 16 * 40 * 30,
++                384 * 16 * 40 * 30,
++                161 * 128,
++                161 * 128,
++                49152 * 1152,
++                1152,
++                960 * 1152,
++                576 * 1152,
++                3072 * 1152,
++                576 * 3072,
++            ];
++            let mut buffers = Vec::new();
++            for bytes in sizes {
++                let mut buffer = context.allocate_device_buffer(bytes)?;
++                buffer.upload_from_slice(0, &vec![0; bytes as usize], &mut upload, &mut stream)?;
++                buffers.push(buffer);
++            }
++            let mut plans = Vec::new();
++            for (n, k) in [
++                (960, 576),
++                (3072, 576),
++                (576, 576),
++                (576, 1536),
++                (49152, 576),
++            ] {
++                plans.push(
++                    context
++                        .prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, bucket, false)?)?,
++                );
++            }
++            let mut staging = context.allocate_pinned_host_buffer((transfer * 2) as u64)?;
++            let mut weights = vec![19usize; 273];
++            weights[0] = 18;
++            weights[2] = 18;
++            for l in 0..30 {
++                weights[7 + 9 * l] = 21;
++                weights[11 + 9 * l] = 23;
++                weights.extend([20, 22]);
++            }
++            let mut owner = BorrowedGraphResourceReservation::reserve_with_strided(
++                BorrowedGraphResourceParents {
++                    stream: &mut stream,
++                    devices: buffers.iter_mut().collect(),
++                    pinned: vec![&mut staging],
++                    plans: vec![],
++                },
++                plans.iter_mut().collect(),
++            )?;
++            owner.record_multisequence_decode(
++                &std::array::from_fn(|i| i),
++                &weights,
++                &[0, 1, 2, 3, 4],
++                0,
++                bucket,
++                40,
++                full,
++            )?;
++            for (iteration, active) in [bucket, if bucket == 4 { 3 } else { 2 }, bucket]
++                .into_iter()
++                .enumerate()
++            {
++                let p = packet(bucket, active, full, transfer, iteration as u64 + 1);
++                let mut bad = p.clone();
++                bad[128 + 128 + 16..128 + 128 + 20].copy_from_slice(&0u32.to_le_bytes());
++                assert!(owner.replay_transfer(&bad).is_err());
++                let mut out = vec![0xff; transfer];
++                assert!(owner.read_transfer(&mut out).is_err());
++                owner.replay_transfer(&p)?;
++                owner.read_transfer(&mut out)?;
++                assert_eq!(&out[..4], &0x314f4d52u32.to_le_bytes());
++                assert_eq!(&out[8..12], &(result as u32).to_le_bytes());
++                assert_eq!(&out[24..28], &active.to_le_bytes());
++                assert!(out[108..112].iter().all(|b| *b == 0));
++                for row in 0..active as usize {
++                    let base = 128 + row * 128;
++                    assert_eq!(&out[base..base + 8], &(100 + row as u64).to_le_bytes());
++                    assert_eq!(
++                        &out[base + 36..base + 40],
++                        &(active - 1 - row as u32).to_le_bytes()
++                    );
++                    assert!(out[base + 48..base + 56].iter().all(|b| *b == 0));
++                    assert_eq!(&out[base + 56..base + 60], &32u32.to_le_bytes());
++                    assert_eq!(&out[base + 88..base + 92], &1u32.to_le_bytes());
++                }
++                assert!(
++                    out[128 + active as usize * 128..640]
++                        .iter()
++                        .all(|b| *b == 0)
++                );
++                assert!(out[640..].iter().all(|b| *b == 0));
++            }
++            owner.close()?;
++            for plan in plans {
++                plan.close()?;
++            }
++        }
++    }
++    eprintln!(
++        "MULTI_FULL_DAG zero_weight_cases=4 replays=12 malformed_packets_rejected=12 model_parity=false"
++    );
++    Ok(())
++}
+diff --git a/kernels/CMakeLists.txt b/kernels/CMakeLists.txt
+index b59ee40..7f9fb50 100644
+--- a/kernels/CMakeLists.txt
++++ b/kernels/CMakeLists.txt
+@@ -29,6 +29,9 @@ add_library(riley_cuda_native STATIC
+     src/gemm.cu
+     src/graph_numerics_precise.cu
+     src/graph_numerics.cu
++    src/graph_multisequence_attention.cu
++    src/graph_multisequence_precise.cu
++    src/graph_multisequence_io.cu
+     src/graph_resources.cu
+     src/graph.cu
+     src/host_runtime.cu
+@@ -140,3 +143,5 @@ install(FILES include/riley_cuda.h
+ )
+ 
+ set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
++
++set_source_files_properties(src/graph_multisequence_attention.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 8ee6c89..d0123dd 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2565,6 +2565,18 @@ RileyCudaStatus riley_cuda_smoke_invalid_launch(
+ // operator DAG, authorize capture, or admit full decode replay. Maximum 4096
+ // occurrences and 1024 unique resources including the stream.
+ typedef struct RileyCudaGraphResources RileyCudaGraphResources;
++// Low-level fixed SmolLM2 numerical recorder, separate from scheduler admission.
++// 18 exact device parents, 333 weights (273 legacy + 60 packed), five strided
++// plans. Scratch roles are defined by graph_multisequence_record.inc.
++// Only decode buckets 2/4; runtime must authorize each live reservation before
++// replay. Structural packet checks do not prove scheduler/KV ownership.
++RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
++    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
++    RileyCudaDeviceBuffer* const* weights, uint64_t weight_count,
++    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
++    RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical_blocks,
++    uint32_t full_logits, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
++
+ RileyCudaStatus riley_cuda_graph_resources_reserve(
+     RileyCudaStream* stream,
+     RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index fd4f336..3d9e656 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2375,3 +2375,15 @@ cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t,const voi
+ }  // namespace riley_cuda_internal
+ 
+ #endif  // RILEY_CUDA_FFI_INTERNAL_HPP_
++
++namespace riley_multisequence_attention {
++cudaError_t enqueue_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
++}
++namespace riley_multisequence_precise {
++cudaError_t enqueue_rope_rows(cudaStream_t,const void*,void*,void*,void*,const void*,const void*,const void*,uint32_t) noexcept;
++cudaError_t enqueue_swiglu_rows(cudaStream_t,const void*,void*,const void*,uint32_t) noexcept;
++}
++namespace riley_cuda_internal {
++cudaError_t enqueue_multi_embedding(cudaStream_t,const void*,const void*,void*,uint32_t) noexcept;
++cudaError_t enqueue_multi_completion(cudaStream_t,const void*,const void*,const void*,void*,uint32_t,uint32_t) noexcept;
++}
+diff --git a/kernels/src/graph_multisequence_attention.cu b/kernels/src/graph_multisequence_attention.cu
+new file mode 100644
+index 0000000..f272872
+--- /dev/null
++++ b/kernels/src/graph_multisequence_attention.cu
+@@ -0,0 +1,125 @@
++#include "ffi_internal.hpp"
++// Diagnostic SM89 BF16 tensor-core attention, fixed head dimension 64.
++#include <cuda_runtime.h>
++#include <math_constants.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++#ifndef MODE
++#define MODE 6
++#endif
++#if MODE != 6
++#error "This experiment requires accepted MODE6 arithmetic"
++#endif
++namespace riley_multisequence_attention {
++__device__ float exponential(float score,float maximum){
++#if MODE == 1 || MODE >= 4
++ return exp2f(fmaf(score,1.4426950408889634F,-maximum*1.4426950408889634F));
++#elif MODE == 2
++ float x=(score-maximum)*1.4426950408889634F,y;
++ asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x)); return y;
++#else
++ return exp2f((score-maximum)*1.4426950408889634F);
++#endif
++}
++__device__ uint32_t pair(__nv_bfloat16 a,__nv_bfloat16 b){return uint32_t(__bfloat16_as_ushort(a)) | (uint32_t(__bfloat16_as_ushort(b))<<16);}
++__device__ void mma(float* d,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uint32_t b0,uint32_t b1){
++ asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
++ : "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]) : "r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b0),"r"(b1));
++}
++__device__ int cache_index(int token,int head,int dim,const uint32_t* blocks){
++ return blocks ? ((blocks[token/16]*3+head)*16+token%16)*64+dim : (token*3+head)*64+dim;
++}
++__global__ void attention_rows_v1(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* packet){
++ const uint32_t row=blockIdx.z;
++ out+=row*576;
++ const uint32_t active_rows=packet[6]; // fresh common header, byte24
++ // Uniform inactive return precedes row metadata/Q/KV loads and every CTA barrier.
++ if(row>=active_rows){
++  if(threadIdx.x<32)out[blockIdx.x*64+blockIdx.y*32+threadIdx.x]=__ushort_as_bfloat16(0);
++  return;
++ }
++ q+=row*576;
++ const uint32_t* metadata=packet+32+row*32; // byte128 + row*128: C10 view
++ const uint32_t position=metadata[1];
++ const int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
++ const int qh=blockIdx.x,kvh=qh/3,first_block=blockIdx.y*4+warp*2,qb=qh*64;
++ if(position<128||position>=160){
++  if(warp==0)out[qb+blockIdx.y*32+lane]=__float2bfloat16_rn(CUDART_NAN_F);
++  return;
++ }
++ const int count=static_cast<int>(position)+1;
++ const uint32_t* blocks=metadata+4;
++ __shared__ float scores[128];
++ __shared__ __nv_bfloat16 probs[128];
++ __shared__ float alpha_by_lane[32],inverse_by_lane[32];
++ float maximum=-CUDART_INF_F,den=0.;float accum[2][4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);
++  for(int token=begin+8*warp;token<end;token+=16){
++   float d[4]={};
++   for(int depth=0;depth<64;depth+=16){
++    uint32_t a=pair(q[qb+depth+2*t],q[qb+depth+2*t+1]);
++    uint32_t aa=pair(q[qb+depth+2*t+8],q[qb+depth+2*t+9]);
++    int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
++    uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
++    uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++    mma(d,a,a,aa,aa,b,bb);
++   }
++   if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[token-begin+2*t+j]=d[j]*.125F;}
++  }
++  // Includes the idle second warp when the tail has at most eight tokens.
++  __syncthreads();
++  if(warp==0){
++   float mx=maximum;
++   for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[i]);
++   for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++   float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++   alpha_by_lane[lane]=alpha;
++   for(int i=lane;i<128;i+=32){
++    float p=i<end-begin?exponential(scores[i],mx):0.;
++    probs[i]=__float2bfloat16_rn(p);
++    scores[i]=p;
++   }
++   __syncwarp();
++   // Warp zero retains the accepted per-lane j/z addition order and keeps
++   // the original FP32 probabilities, not their BF16 PV representation.
++   float local_den=den*alpha;
++   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
++     if(i<end-begin)local_den+=scores[i];}
++   den=local_den;
++   maximum=mx;
++  }
++  __syncthreads(); // Publish probabilities and the corresponding lane's alpha.
++  const float alpha=alpha_by_lane[lane];
++  for(int block=0;block<2;++block){
++   for(int j=0;j<4;++j)accum[block][j]*=alpha;
++   for(int token=begin;token<end;token+=16){
++    int pi=token-begin;
++    uint32_t a=pair(probs[pi+2*t],probs[pi+2*t+1]);
++    uint32_t aa=pair(probs[pi+2*t+8],probs[pi+2*t+9]);
++    int dim=(first_block+block)*8+group;
++    auto val=[&](int pos){return pos<end?v[cache_index(pos,kvh,dim,blocks)]:zero;};
++    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
++    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
++    mma(accum[block],a,a,aa,aa,b,bb);
++   }
++  }
++  __syncthreads(); // Finish both PV readers before reusing scores/probabilities.
++ }
++ if(warp==0){
++  den+=__shfl_xor_sync(0xffffffff,den,2);
++  den+=__shfl_xor_sync(0xffffffff,den,1);
++  inverse_by_lane[lane]=1.0F/den;
++ }
++ __syncthreads();
++ const float inverse=inverse_by_lane[lane];
++ if(group==0)for(int block=0;block<2;++block)for(int j=0;j<2;++j)
++  out[qb+(first_block+block)*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
++}
++cudaError_t enqueue_rows(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* packet,uint32_t bucket) noexcept {
++ if(!q||!k||!v||!out||!packet||(bucket!=1&&bucket!=2&&bucket!=4))return cudaErrorInvalidValue;
++ attention_rows_v1<<<dim3(9,2,bucket),64,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,(const uint32_t*)packet);
++ return cudaGetLastError();
++}
++} // namespace riley_multisequence_attention
+diff --git a/kernels/src/graph_multisequence_io.cu b/kernels/src/graph_multisequence_io.cu
+new file mode 100644
+index 0000000..5af6263
+--- /dev/null
++++ b/kernels/src/graph_multisequence_io.cu
+@@ -0,0 +1,53 @@
++#include "ffi_internal.hpp"
++#include <cuda_bf16.h>
++namespace riley_cuda_internal {
++namespace {
++__global__ void multi_embedding(const __nv_bfloat16* weights, const uint32_t* packet,
++                               __nv_bfloat16* hidden) {
++  const unsigned row=blockIdx.x, active=packet[6];
++  const unsigned token=row<active?packet[32+row*32]:0;
++  for(unsigned i=threadIdx.x;i<576;i+=blockDim.x)
++    hidden[row*576+i]=(row<active&&token<49152)?weights[token*576+i]:__ushort_as_bfloat16(0);
++}
++// Explicit wire encoding. All rows and reserved bytes are initialized on every
++// replay, including transitions from a larger active count to a smaller one.
++__global__ void multi_completion(const uint32_t* packet, const uint32_t* argmax,
++                                const uint16_t* logits, uint32_t* output,
++                                unsigned bucket, unsigned full) {
++  const unsigned bytes=640+(full?bucket*98304:0);
++  for(unsigned i=threadIdx.x;i<bytes/4;i+=blockDim.x)output[i]=0;
++  __syncthreads();
++  if(threadIdx.x==0){
++    for(unsigned i=0;i<32;++i)output[i]=packet[i];
++    output[0]=0x314f4d52; output[2]=bytes; output[27]=0; output[28]=full?bucket:0;
++    for(unsigned r=0;r<packet[6];++r){
++      const uint32_t* in=packet+32+r*32; uint32_t* out=output+32+r*32;
++      out[0]=in[20];out[1]=in[21];out[2]=in[22];out[3]=in[23];
++      out[4]=packet[14];out[5]=packet[15];out[6]=packet[16];out[7]=packet[17];
++      out[8]=r;out[9]=in[25];out[10]=in[1];out[11]=in[27];
++      out[12]=argmax[2*r];out[13]=argmax[2*r+1];out[14]=32;
++      out[22]=argmax[2*r+1]==0?1:2;
++      if(argmax[2*r+1]!=0)output[27]=1;
++      if(full){out[24]=640+r*98304;out[26]=98304;}
++    }
++  }
++  if(full){
++    auto* target=reinterpret_cast<uint16_t*>(output)+320;
++    for(unsigned i=threadIdx.x;i<packet[6]*49152;i+=blockDim.x)target[i]=logits[i];
++  }
++}
++}
++cudaError_t enqueue_multi_embedding(cudaStream_t stream,const void* weights,
++    const void* packet,void* hidden,uint32_t bucket) noexcept {
++  multi_embedding<<<bucket,256,0,stream>>>(static_cast<const __nv_bfloat16*>(weights),
++      static_cast<const uint32_t*>(packet),static_cast<__nv_bfloat16*>(hidden));
++  return cudaGetLastError();
++}
++cudaError_t enqueue_multi_completion(cudaStream_t stream,const void* packet,
++    const void* argmax,const void* logits,void* output,uint32_t bucket,uint32_t full) noexcept {
++  multi_completion<<<1,256,0,stream>>>(static_cast<const uint32_t*>(packet),
++      static_cast<const uint32_t*>(argmax),static_cast<const uint16_t*>(logits),
++      static_cast<uint32_t*>(output),bucket,full);
++  return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/graph_multisequence_packet.inc b/kernels/src/graph_multisequence_packet.inc
+new file mode 100644
+index 0000000..3a35934
+--- /dev/null
++++ b/kernels/src/graph_multisequence_packet.inc
+@@ -0,0 +1,38 @@
++// Structural admission for the low-level numerical recorder. Scheduler ownership
++// and live reservation authorization must additionally be checked by its Rust
++// runtime owner; these echoed wire identities do not establish that authority.
++static bool valid_multisequence_packet(const uint8_t* source,uint64_t bytes,
++    uint32_t bucket,uint32_t physical,uint32_t full) noexcept {
++  if(bytes<1280)return false;
++  auto u32=[&](size_t offset){uint32_t value;std::memcpy(&value,source+offset,4);return value;};
++  auto u64=[&](size_t offset){uint64_t value;std::memcpy(&value,source+offset,8);return value;};
++  auto u16=[&](size_t offset){uint16_t value;std::memcpy(&value,source+offset,2);return value;};
++  auto zero=[&](size_t begin,size_t end){for(size_t i=begin;i<end;++i)if(source[i])return false;return true;};
++  const uint32_t active=u32(24);
++  if(u32(0)!=0x31444d52||u16(4)!=1||u16(6)!=128||u32(8)!=1280||u32(12)!=128||
++      u32(16)!=1||u32(20)!=bucket||active<2||active>bucket||(bucket==4&&active<3)||
++      u32(28)!=active||u32(32)!=4||u32(36)!=10||u32(40)!=49152||u32(44)!=physical||
++      !u64(48)||!u64(56)||!u64(64)||zero(72,104)||u32(104)!=full||!zero(108,128)||
++      !zero(128+active*128,static_cast<size_t>(bytes)))return false;
++  // At most 40 live block IDs; no allocations or unbounded work on replay.
++  uint32_t blocks[40]{},count=0,slots=0;
++  for(uint32_t row=0;row<active;++row){
++    const size_t base=128+row*128;
++    const uint32_t pos=u32(base+4),live=u32(base+12),slot=u32(base+100);
++    if(u32(base)>=49152||pos<128||pos>=160||u32(base+8)||live!=pos/16+1||u32(base+76)||
++        !u64(base+80)||!u64(base+88)||u32(base+96)!=pos+1||slot>=active||
++        (slots&(1U<<slot))||u32(base+104)!=1||u32(base+108)!=pos-127||u32(base+112)!=1||
++        u16(base+116)!=1||!zero(base+118,base+128))return false;
++    slots|=1U<<slot;
++    for(uint32_t prior=0;prior<row;++prior)
++      if(u64(base+80)==u64(128+prior*128+80)||u64(base+88)==u64(128+prior*128+88))return false;
++    for(uint32_t i=0;i<10;++i){
++      const uint32_t block=u32(base+16+4*i),valid=u16(base+56+2*i);
++      if(i>=live){if(block||valid)return false;continue;}
++      if(block>=physical||valid!=(i+1<live?16:pos%16+1))return false;
++      for(uint32_t j=0;j<count;++j)if(blocks[j]==block)return false;
++      blocks[count++]=block;
++    }
++  }
++  return true;
++}
+diff --git a/kernels/src/graph_multisequence_precise.cu b/kernels/src/graph_multisequence_precise.cu
+new file mode 100644
+index 0000000..826e012
+--- /dev/null
++++ b/kernels/src/graph_multisequence_precise.cu
+@@ -0,0 +1,47 @@
++#include "ffi_internal.hpp"
++#include <cuda_bf16.h>
++namespace riley_multisequence_precise {
++__global__ void rope_rows(const __nv_bfloat16* packed,
++    __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,
++    const float* cos,const float* sin,const uint32_t* packet){
++ const uint32_t row=blockIdx.y,active_rows=packet[6];
++ qo+=row*576;
++ if(row>=active_rows){
++  for(int i=threadIdx.x+blockIdx.x*blockDim.x;i<576;i+=blockDim.x*gridDim.x)qo[i]=__ushort_as_bfloat16(0);
++  return;
++ }
++ const __nv_bfloat16* q=packed+row*960;const __nv_bfloat16* k=q+576;const __nv_bfloat16* v=q+768;
++ const uint32_t* metadata=packet+32+row*32;
++ const uint32_t* pos=metadata+1;
++ if(*pos<128||*pos>=160)return;
++ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;int head=i/32,dim=i%32;
++ float c=__bfloat162float(__float2bfloat16_rn(cos[*pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[*pos*32+dim]));
++ const __nv_bfloat16* src=head<9?q:k;int base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
++ const __nv_bfloat16 first=__float2bfloat16_rn(a*c-b*s),second=__float2bfloat16_rn(b*c+a*s);
++ if(head<9){qo[base+dim]=first;qo[base+dim+32]=second;}
++ else{
++  const uint32_t physical=metadata[4+*pos/16];
++  const uint32_t destination=((physical*3+head-9)*16+*pos%16)*64+dim;
++  keys[destination]=first;keys[destination+32]=second;
++  values[destination]=v[base+dim];values[destination+32]=v[base+dim+32];
++ }
++}
++__global__ void swiglu_rows(const __nv_bfloat16* packed,__nv_bfloat16* out,const uint32_t* packet){
++ const uint32_t row=blockIdx.y,active_rows=packet[6];
++ out+=row*1536;
++ if(row>=active_rows){int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<1536)out[i]=__ushort_as_bfloat16(0);return;}
++ const __nv_bfloat16* g=packed+row*3072;const __nv_bfloat16* u=g+1536;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<1536){float x=__bfloat162float(g[i]);out[i]=__float2bfloat16_rn((x/(1.F+expf(-x)))*__bfloat162float(u[i]));}
++}
++cudaError_t enqueue_rope_rows(cudaStream_t stream,const void* packed,void* qo,void* keys,void* values,const void* cos,const void* sin,const void* packet,uint32_t bucket) noexcept {
++ if(!packed||!qo||!keys||!values||!cos||!sin||!packet||(bucket!=1&&bucket!=2&&bucket!=4))return cudaErrorInvalidValue;
++ rope_rows<<<dim3(2,bucket),256,0,stream>>>((const __nv_bfloat16*)packed,(__nv_bfloat16*)qo,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(const float*)cos,(const float*)sin,(const uint32_t*)packet);
++ return cudaGetLastError();
++}
++cudaError_t enqueue_swiglu_rows(cudaStream_t stream,const void* packed,void* out,const void* packet,uint32_t bucket) noexcept {
++ if(!packed||!out||!packet||(bucket!=1&&bucket!=2&&bucket!=4))return cudaErrorInvalidValue;
++ swiglu_rows<<<dim3(6,bucket),256,0,stream>>>((const __nv_bfloat16*)packed,(__nv_bfloat16*)out,(const uint32_t*)packet);
++ return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/graph_multisequence_record.inc b/kernels/src/graph_multisequence_record.inc
+new file mode 100644
+index 0000000..564f8e8
+--- /dev/null
++++ b/kernels/src/graph_multisequence_record.inc
+@@ -0,0 +1,83 @@
++// Fixed SmolLM2 strided decode DAG. Included in the aggregate owner TU so all
++// parent membership, capture rollback and graph destruction use one ledger.
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
++    RileyCudaGraphResources* r, RileyCudaDeviceBuffer* const* d, uint64_t device_count,
++    RileyCudaDeviceBuffer* const* w, uint64_t weight_count,
++    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
++    RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical,
++    uint32_t full, RileyCudaErrorInfo* error) noexcept {
++  clear_error(error);
++  auto status=transfer_ready(r,error);
++  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  if(!d||!w||!plans||!staging||device_count!=18||weight_count!=333||plan_count!=5||
++      (bucket!=2&&bucket!=4)||physical<10||physical>4096||full>1||r->graph||r->exec||
++      r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
++      !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses))
++    return reject(error,"multi decode catalog or parents invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  const uint64_t result=640+(full?uint64_t(bucket)*98304:0),transfer=result>1280?result:1280;
++  const uint64_t sizes[18]={1152ULL*bucket,1152ULL*bucket,1920ULL*bucket,
++      1152ULL*bucket,1152ULL*bucket,1152ULL*bucket,2304ULL*bucket,6144ULL*bucket,
++      3072ULL*bucket,1152ULL*bucket,98304ULL*bucket,1280,result,8ULL*bucket,
++      384ULL*16*physical*30,384ULL*16*physical*30,160*128,160*128};
++  if(staging->byte_len!=2*transfer)return reject(error,"multi staging extent invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  for(size_t i=0;i<18;++i){
++    if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses)||(i<16?d[i]->byte_len!=sizes[i]:(d[i]->byte_len<160*128||d[i]->byte_len%128!=0)))
++      return reject(error,"multi device geometry or membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    for(size_t j=0;j<i;++j)if(d[i]==d[j])return reject(error,"multi device alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  }
++  if(d[16]->byte_len!=d[17]->byte_len)return reject(error,"multi RoPE table geometry differs",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  for(size_t i=0;i<333;++i){
++    if(!w[i]||!same_context(w[i]->owner,r->owner)||!holds_counter(r,&w[i]->active_uses))
++      return reject(error,"multi weight membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    for(size_t j=0;j<18;++j)if(w[i]==d[j])return reject(error,"multi weight scratch alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  }
++  if(w[0]->byte_len!=49152ULL*1152||w[1]->byte_len!=1152||w[2]->byte_len!=49152ULL*1152)
++    return reject(error,"multi embedding/head geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  for(size_t i=0;i<5;++i)if(!plans[i]||!holds_plan(r,plans[i]))
++    return reject(error,"multi plan membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  using State=RileyCudaCanonicalGemmBf16GraphState;
++  State states[121]{};
++  auto bind=[&](size_t index,size_t plan,size_t input,size_t weight,size_t output,uint64_t n,uint64_t k){
++    return bind_reserved_strided_gemm_state(plans[plan],r->stream,d[input],w[weight],d[output],bucket,n,k,k,n,&states[index],error);
++  };
++  for(size_t l=0;l<30&&status==RILEY_CUDA_STATUS_SUCCESS;++l){
++    if(w[3+9*l]->byte_len!=1152||w[8+9*l]->byte_len!=1152)
++      return reject(error,"multi norm geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    status=bind(4*l,0,1,273+2*l,2,960,576);
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=bind(4*l+1,2,4,7+9*l,5,576,576);
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=bind(4*l+2,1,1,274+2*l,7,3072,576);
++    if(status==RILEY_CUDA_STATUS_SUCCESS)status=bind(4*l+3,3,8,11+9*l,9,576,1536);
++  }
++  if(status==RILEY_CUDA_STATUS_SUCCESS)status=bind(120,4,1,2,10,49152,576);
++  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,transfer);
++  status=record_reserved_sequence(r,staging,transfer,[&]() noexcept {
++    const auto stream=r->stream->stream;
++    auto kernel=[&](cudaError_t e){return runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"multi decode kernel");};
++    auto gemm=[&](size_t state,size_t output){return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[output],states[state],error,"multi decode GEMM");};
++    auto s=runtime_error(cudaMemcpyAsync(d[11]->device_data,staging->host_data,1280,cudaMemcpyHostToDevice,stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"multi packet upload");
++    if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_multi_embedding(stream,w[0]->device_data,d[11]->device_data,d[0]->device_data,bucket));
++    if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[0]->device_data,nullptr,w[3]->device_data,nullptr,d[1]->device_data,0,bucket));
++    for(size_t l=0;l<30&&s==RILEY_CUDA_STATUS_SUCCESS;++l){
++      auto* keys=static_cast<uint8_t*>(d[14]->device_data)+l*384*16*physical;
++      auto* values=static_cast<uint8_t*>(d[15]->device_data)+l*384*16*physical;
++      s=gemm(4*l,2);
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(riley_multisequence_precise::enqueue_rope_rows(stream,d[2]->device_data,d[3]->device_data,keys,values,d[16]->device_data,d[17]->device_data,d[11]->device_data,bucket));
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(riley_multisequence_attention::enqueue_rows(stream,d[3]->device_data,keys,values,d[4]->device_data,d[11]->device_data,bucket));
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(4*l+1,5);
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[5]->device_data,d[0]->device_data,w[8+9*l]->device_data,d[6]->device_data,d[1]->device_data,1,bucket));
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(4*l+2,7);
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(riley_multisequence_precise::enqueue_swiglu_rows(stream,d[7]->device_data,d[8]->device_data,d[11]->device_data,bucket));
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(4*l+3,9);
++      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[9]->device_data,d[6]->device_data,w[l+1<30?3+9*(l+1):1]->device_data,d[0]->device_data,d[1]->device_data,2,bucket));
++    }
++    if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(120,10);
++    for(unsigned row=0;row<bucket&&s==RILEY_CUDA_STATUS_SUCCESS;++row)
++      s=kernel(enqueue_decode_argmax(stream,static_cast<uint8_t*>(d[10]->device_data)+row*98304,static_cast<uint8_t*>(d[13]->device_data)+row*8,49152));
++    if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_multi_completion(stream,d[11]->device_data,d[13]->device_data,d[10]->device_data,d[12]->device_data,bucket,full));
++    if(s==RILEY_CUDA_STATUS_SUCCESS)s=runtime_error(cudaMemcpyAsync(static_cast<uint8_t*>(staging->host_data)+transfer,d[12]->device_data,result,cudaMemcpyDeviceToHost,stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"multi completion download");
++    return s;
++  },error);
++  if(status==RILEY_CUDA_STATUS_SUCCESS){r->multi_bucket=bucket;r->multi_physical=physical;r->multi_full=full;}
++  return status;
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 6b01e45..53e8f9f 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -40,6 +40,7 @@ struct RileyCudaGraphResources {
+   bool bound_attention = false;
+   uint32_t attention_physical_block = 0;
+   uint64_t decode_capacity = 0, decode_physical = 0, decode_vocab = 0;
++  uint32_t multi_bucket=0, multi_physical=0, multi_full=0;
+ #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+   uint32_t test_replay_fault = 0;
+ #endif
+@@ -294,6 +295,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
+   return status;
+ }
+ 
++#include "graph_multisequence_packet.inc"
++
+ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+     RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
+     RileyCudaErrorInfo* error) noexcept {
+@@ -305,6 +308,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   if (r->exec == nullptr || source == nullptr || bytes != r->transfer_bytes)
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
++  if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
++    return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   auto selected_exec = r->exec;
+   if(r->decode_capacity!=0){
+     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
+@@ -1080,3 +1085,5 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_test_replay_fault(
+   return RILEY_CUDA_STATUS_SUCCESS;
+ }
+ #endif
++
++#include "graph_multisequence_record.inc"

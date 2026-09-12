@@ -1,0 +1,28 @@
+{
+  "schema_version": "riley.http-token-observation-local-validation.v2",
+  "completed": true,
+  "cpu_tests": 16,
+  "gpu_tests_executed": false,
+  "remote_actions": false,
+  "performance_claim": false,
+  "files": {
+    "http_token_observation_check_v2.py": "19729397dcc46b986768a51333a0be725a3dd412f509d3ccb45b244526ef69c6",
+    "test_http_token_observation_check_v2.py": "c05e488f0ef91feb4e0bddb5fa559c1406c4b7823575be7ff64d094634073ea4"
+  },
+  "stop_fixture": {
+    "stop": ", I'm",
+    "token_ids": [
+      28,
+      339,
+      5248
+    ],
+    "decoded_prefixes": [
+      ",",
+      ", I",
+      ", I'm"
+    ],
+    "terminal_text": ""
+  },
+  "test_command": "python3 benchmarks/results/20260912-serving-optimization/test_http_token_observation_check_v2.py -v",
+  "frozen_v1_sha256": "d0531b6af5873e490c6c77cd49b32c58e5c2c6aa7e5d03dc72701fc4f07e9962"
+}

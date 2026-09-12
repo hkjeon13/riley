@@ -1,0 +1,565 @@
+diff --git a/crates/riley-runtime/src/llama/batch_executor.rs b/crates/riley-runtime/src/llama/batch_executor.rs
+index b3bc43e..e6efe94 100644
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -1607,4 +1607,4 @@ mod qkv_audit;
+ mod full_decode;
+ 
+ #[cfg(feature = "cuda")]
+-pub use full_decode::OwnedLlamaDecodeExecutor;
++pub use full_decode::{OwnedLlamaDecodeExecutor, OwnedLlamaMultiDecodeExecutor};
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 4b773cc..dbc1594 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2038,3 +2038,7 @@ mod owned_tests {
+ #[cfg(all(test, feature = "cuda"))]
+ #[path = "graph_decode_multisequence_model_gpu.rs"]
+ mod multisequence_model_gpu;
++
++#[path = "graph_decode_multi_session.rs"]
++mod multi_session;
++pub use multi_session::OwnedLlamaMultiDecodeExecutor;
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multi_session.rs b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+new file mode 100644
+index 0000000..48e6d69
+--- /dev/null
++++ b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+@@ -0,0 +1,244 @@
++//! Retained catalog identity, submission lifetime and whole-result publication.
++use super::*;
++use crate::llama::multi_descriptor::{
++    self as wire, CatalogEntry, CodecOwner, CompletionEvidence, OwnerExpectation, ResultMode,
++    Stage, SubmissionExpectation, ValidatedBulk,
++};
++use sha2::{Digest, Sha256};
++use std::sync::atomic::{AtomicU64, Ordering};
++static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
++const MAX_BYTES: usize = 640 + 4 * 98304;
++/// A single prepared P128/M1/N2/N4 owner with one outstanding transaction.
++/// Scheduler callers must supply expectations from their live reservation authority.
++pub struct OwnedLlamaMultiDecodeExecutor {
++    inner: OwnedLlamaDecodeExecutor,
++    codec: CodecOwner,
++    next_cookie: u64,
++    issued: Vec<u64>,
++    input: Vec<u8>,
++    output: Vec<u8>,
++    started: bool,
++    poisoned: bool,
++}
++fn wire_error(_: wire::Error) -> LlamaBatchExecutorError {
++    rejected("multi descriptor or completion validation failed")
++}
++fn put32(p: &mut [u8], at: usize, value: u32) {
++    p[at..at + 4].copy_from_slice(&value.to_le_bytes());
++}
++impl PreparedLlamaBatchExecutor {
++    /// Prepares all supported graph shapes before any request executes.
++    pub fn into_owned_multi_decode_graph(
++        self,
++        context: &riley_cuda::CudaContext,
++    ) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
++        let physical = self.owner.layout.physical_block_count() as u32;
++        let inner = self.into_owned_decode_graph_with_catalog(context, true)?;
++        let generation = NEXT_GENERATION
++            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
++            .map_err(|_| rejected("multi owner generation exhausted"))?;
++        let mut hash = Sha256::new();
++        hash.update(b"riley.multi-catalog.full-logits.v1\0");
++        hash.update(inner.signature.fingerprint().as_bytes());
++        hash.update(physical.to_le_bytes());
++        hash.update(include_bytes!("graph_decode_multi_parents.rs"));
++        hash.update(include_bytes!("../../../../kernels/src/graph_numerics.cu"));
++        hash.update(include_bytes!("../../../../kernels/src/gemm.cu"));
++        hash.update(include_bytes!(
++            "../../../../kernels/src/graph_multisequence_record.inc"
++        ));
++        hash.update(include_bytes!(
++            "../../../../kernels/src/graph_multisequence_catalog.inc"
++        ));
++        hash.update(include_bytes!(
++            "../../../../kernels/src/graph_multisequence_io.cu"
++        ));
++        let catalog = vec![
++            CatalogEntry {
++                stage: Stage::Prefill128,
++                bucket: 1,
++                mode: ResultMode::FullLogits,
++            },
++            CatalogEntry {
++                stage: Stage::Decode,
++                bucket: 1,
++                mode: ResultMode::FullLogits,
++            },
++            CatalogEntry {
++                stage: Stage::Decode,
++                bucket: 2,
++                mode: ResultMode::FullLogits,
++            },
++            CatalogEntry {
++                stage: Stage::Decode,
++                bucket: 4,
++                mode: ResultMode::FullLogits,
++            },
++        ];
++        let codec = CodecOwner::new(OwnerExpectation {
++            generation,
++            last_accepted_replay: 0,
++            catalog_digest: hash.finalize().into(),
++            max_active_rows: 4,
++            physical_block_count: physical,
++            catalog,
++        });
++        Ok(OwnedLlamaMultiDecodeExecutor {
++            inner,
++            codec,
++            next_cookie: 1,
++            issued: Vec::with_capacity(4),
++            input: vec![0; MAX_BYTES],
++            output: vec![0; MAX_BYTES],
++            started: false,
++            poisoned: false,
++        })
++    }
++}
++impl OwnedLlamaMultiDecodeExecutor {
++    /// Allocates unique cookies for the next scoped scheduler submission.
++    pub fn issue_submission(
++        &mut self,
++        rows: usize,
++    ) -> LlamaBatchExecutorResult<(OwnerExpectation, u64, Vec<u64>)> {
++        if self.poisoned
++            || self.codec.retained_expectation().is_some()
++            || !self.issued.is_empty()
++            || !(1..=4).contains(&rows)
++        {
++            return Err(rejected("multi owner busy or invalid row count"));
++        }
++        self.started = false;
++        let replay = self
++            .codec
++            .expectation()
++            .last_accepted_replay
++            .checked_add(1)
++            .ok_or_else(|| rejected("multi replay identity exhausted"))?;
++        let end = self
++            .next_cookie
++            .checked_add(rows as u64)
++            .ok_or_else(|| rejected("multi cookie identity exhausted"))?;
++        self.issued.extend(self.next_cookie..end);
++        self.next_cookie = end;
++        Ok((
++            self.codec.expectation().clone(),
++            replay,
++            self.issued.clone(),
++        ))
++    }
++    /// Clears an identity allocation only before an actual admitted submission.
++    pub fn abandon_issued_submission(&mut self) -> LlamaBatchExecutorResult<()> {
++        if self.codec.retained_expectation().is_some() {
++            return Err(rejected("cannot abandon admitted multi submission"));
++        }
++        self.issued.clear();
++        Ok(())
++    }
++    /// True means errors require conservative GPU-completion containment.
++    pub fn submission_started(&self) -> bool {
++        self.started
++    }
++    /// Executes one authorized expectation; no row is exposed until all validate.
++    pub fn execute_submission(
++        &mut self,
++        e: SubmissionExpectation,
++    ) -> LlamaBatchExecutorResult<&ValidatedBulk> {
++        if self.codec.retained_expectation().is_some() {
++            self.poisoned = true;
++            return Err(rejected("previous multi submission is unsettled"));
++        }
++        self.started = false;
++        self.inner.output_ready = false;
++        if self.poisoned
++            || self.issued.len() != e.rows.len()
++            || e.rows.iter().zip(&self.issued).any(|(r, c)| r.cookie != *c)
++        {
++            return Err(rejected("multi submission identity differs"));
++        }
++        let packet = wire::encode_request(&e).map_err(wire_error)?;
++        let decoded = wire::decode_request(&packet, &e).map_err(wire_error)?;
++        self.codec.admit(&packet, e.clone()).map_err(wire_error)?;
++        self.issued.clear();
++        let bytes =
++            wire::result_bytes(decoded.bucket, ResultMode::FullLogits).map_err(wire_error)?;
++        self.output[..bytes].fill(0);
++        self.started = true;
++        let executed: LlamaBatchExecutorResult<()> = if decoded.bucket == 1 {
++            let row = &e.rows[0];
++            let table = crate::llama::LlamaBatchBlockTable::new(
++                crate::paged_kv::BLOCK_TABLE_V1_VERSION,
++                &row.physical_ids,
++                &row.valid_tokens,
++                row.target_length,
++            );
++            let item = crate::llama::LlamaBatchRow::new(
++                row.sequence_tag,
++                if e.stage == Stage::Prefill128 {
++                    crate::llama::LlamaBatchRowKind::Prefill
++                } else {
++                    crate::llama::LlamaBatchRowKind::Decode
++                },
++                &row.input_tokens,
++                row.target_length,
++                table,
++                Some(0),
++            );
++            self.inner.execute(&[item]).map(|_| ()).map(|()| {
++                self.output[..128].copy_from_slice(&packet[..128]);
++                put32(&mut self.output, 0, 0x314f4d52);
++                put32(&mut self.output, 8, bytes as u32);
++                put32(&mut self.output, 108, 0);
++                put32(&mut self.output, 112, 1);
++                self.output[128..144].copy_from_slice(&packet[208..224]);
++                self.output[144..160].copy_from_slice(&packet[56..72]);
++                put32(&mut self.output, 164, row.output_slot);
++                put32(&mut self.output, 168, row.target_length - 1);
++                put32(&mut self.output, 172, row.generated_index);
++                self.output[176..216].copy_from_slice(&self.inner.output[98304..98344]);
++                put32(&mut self.output, 216, 1);
++                put32(&mut self.output, 224, 640);
++                put32(&mut self.output, 232, 98304);
++                self.output[640..bytes].copy_from_slice(&self.inner.output[..98304]);
++            })
++        } else {
++            self.input[..bytes].fill(0);
++            self.input[..1280].copy_from_slice(&packet);
++            let index = if decoded.bucket == 2 { 1 } else { 2 };
++            self.inner
++                .graph
++                .replay_catalog(index, &self.input[..bytes])
++                .and_then(|()| {
++                    self.inner
++                        .graph
++                        .read_catalog(index, &mut self.output[..bytes])
++                })
++                .map_err(|e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e))
++        };
++        if let Err(error) = executed {
++            self.poisoned = true;
++            let _ = self.codec.accept_result(&[], CompletionEvidence::Unknown);
++            return Err(error);
++        }
++        if let Err(error) = self
++            .codec
++            .accept_result(&self.output[..bytes], CompletionEvidence::Quiesced)
++        {
++            self.poisoned = true;
++            return Err(wire_error(error));
++        }
++        self.codec.result().map_err(wire_error)
++    }
++    /// Call only after the scheduler has successfully committed this iteration.
++    pub fn confirm_scheduler_commit(&mut self, iteration: u64) -> LlamaBatchExecutorResult<()> {
++        if self.codec.result().map_err(wire_error)?.iteration_id() != iteration {
++            return Err(rejected("multi commit identity differs"));
++        }
++        self.codec.settle_success(true).map_err(wire_error)?;
++        Ok(())
++    }
++    /// Native graph close remains the authority for releasing GPU parent leases.
++    pub fn close(self) -> LlamaBatchExecutorResult<()> {
++        self.inner.close()
++    }
++}
+diff --git a/crates/riley-runtime/src/llama/mod.rs b/crates/riley-runtime/src/llama/mod.rs
+index 08a41fb..734678b 100644
+--- a/crates/riley-runtime/src/llama/mod.rs
++++ b/crates/riley-runtime/src/llama/mod.rs
+@@ -109,8 +109,9 @@ pub use batch_executor::{
+     BatchMetadataTransport, ExecutionCompletionImplementation, LlamaBatchExecutorError,
+     LlamaBatchExecutorResource, LlamaBatchExecutorResult, LlamaBatchShapeBucketHit,
+     LlamaBatchShapeObservation, LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS,
+-    OwnedLlamaDecodeExecutor, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
+-    PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation, ResidualNormImplementation,
++    OwnedLlamaDecodeExecutor, OwnedLlamaMultiDecodeExecutor, PreparedLlamaBatchAllocationReport,
++    PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation,
++    ResidualNormImplementation,
+ };
+ 
+ pub use error::{
+@@ -1098,3 +1099,6 @@ mod source_contract_tests {
+         assert!(guard.contains("LlamaOp::IterationCompletion"));
+     }
+ }
++
++/// Versioned multi-request input and completion validation.
++pub mod multi_descriptor;
+diff --git a/crates/riley-scheduler/src/descriptor/fixtures/request-n3.bin b/crates/riley-runtime/src/llama/multi_descriptor/fixtures/request-n3.bin
+similarity index 100%
+rename from crates/riley-scheduler/src/descriptor/fixtures/request-n3.bin
+rename to crates/riley-runtime/src/llama/multi_descriptor/fixtures/request-n3.bin
+diff --git a/crates/riley-scheduler/src/descriptor/fixtures/result-n3.bin b/crates/riley-runtime/src/llama/multi_descriptor/fixtures/result-n3.bin
+similarity index 100%
+rename from crates/riley-scheduler/src/descriptor/fixtures/result-n3.bin
+rename to crates/riley-runtime/src/llama/multi_descriptor/fixtures/result-n3.bin
+diff --git a/crates/riley-scheduler/src/descriptor/mod.rs b/crates/riley-runtime/src/llama/multi_descriptor/mod.rs
+similarity index 100%
+rename from crates/riley-scheduler/src/descriptor/mod.rs
+rename to crates/riley-runtime/src/llama/multi_descriptor/mod.rs
+diff --git a/crates/riley-scheduler/src/descriptor/tests.rs b/crates/riley-runtime/src/llama/multi_descriptor/tests.rs
+similarity index 100%
+rename from crates/riley-scheduler/src/descriptor/tests.rs
+rename to crates/riley-runtime/src/llama/multi_descriptor/tests.rs
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 4db9e3a..922efe6 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -2025,3 +2025,99 @@ pub fn execute_llama_iteration_graph(
+         commit_outputs: prepared.commit_outputs,
+     })
+ }
++
++/// Executes only a live, scheduler-authorized reservation on the common graph
++/// catalog. After committing the returned result, the caller must confirm that
++/// commit on the owner before issuing another submission.
++#[cfg(feature = "cuda")]
++pub fn execute_llama_iteration_multi_graph(
++    authority: &crate::AuthorizedExecution<'_>,
++    executor: &mut riley_runtime::llama::OwnedLlamaMultiDecodeExecutor,
++    greedy_workspace: Option<&mut Vec<u32>>,
++) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
++    let id = authority.plan().iteration_id();
++    let before =
++        |error| IterationExecutionFailure::new(id, Some(ExecutionAbort::NotDispatched), error);
++    let runtime = |source| IterationAdapterError::Runtime(Box::new(source));
++    let prepared = PreparedLlamaIteration::prepare(authority.plan()).map_err(before)?;
++    let vocabulary_size = 49_152;
++    if greedy_workspace
++        .as_ref()
++        .is_some_and(|w| w.capacity() < prepared.output_count)
++    {
++        return Err(before(IterationAdapterError::InvalidRuntimeOutput {
++            field: "multi graph greedy workspace",
++            reason: "insufficient preallocated capacity",
++        }));
++    }
++    let mut logits = if greedy_workspace.is_none() {
++        zeroed_vec(
++            prepared.output_count * vocabulary_size * 2,
++            "multi graph logits",
++        )
++        .map_err(before)?
++    } else {
++        Vec::new()
++    };
++    let (owner, replay, cookies) = executor
++        .issue_submission(authority.rows().len())
++        .map_err(|error| before(runtime(error)))?;
++    let expectation = match authority.descriptor_expectation(owner, replay, &cookies) {
++        Ok(value) => value,
++        Err(error) => {
++            executor
++                .abandon_issued_submission()
++                .map_err(|error| before(runtime(error)))?;
++            return Err(before(IterationAdapterError::InvalidRuntimeOutput {
++                field: error.field,
++                reason: error.reason,
++            }));
++        }
++    };
++    // From admission onward any error is conservatively unsettled. The caller
++    // must close the owner and establish completion before reclaiming KV pages.
++    let bulk = executor
++        .execute_submission(expectation)
++        .map_err(|error| IterationExecutionFailure::new(id, None, runtime(error)))?;
++    if bulk.rows_by_slot().len() != prepared.output_count {
++        return Err(IterationExecutionFailure::new(
++            id,
++            None,
++            IterationAdapterError::InvalidRuntimeOutput {
++                field: "multi graph result",
++                reason: "output count differs from scheduler plan",
++            },
++        ));
++    }
++    let output = if let Some(tokens) = greedy_workspace {
++        tokens.clear();
++        tokens.extend(bulk.rows_by_slot().iter().map(|row| row.token_id()));
++        DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens))
++    } else {
++        for (slot, row) in bulk.rows_by_slot().iter().enumerate() {
++            let bytes = row
++                .logits()
++                .filter(|bytes| bytes.len() == vocabulary_size * 2)
++                .ok_or_else(|| {
++                    IterationExecutionFailure::new(
++                        id,
++                        None,
++                        IterationAdapterError::InvalidRuntimeOutput {
++                            field: "multi graph logits",
++                            reason: "missing full logit row",
++                        },
++                    )
++                })?;
++            logits[slot * vocabulary_size * 2..(slot + 1) * vocabulary_size * 2]
++                .copy_from_slice(bytes);
++        }
++        DownloadedLlamaOutput::Logits(logits)
++    };
++    Ok(DownloadedLlamaIteration {
++        iteration_id: id,
++        vocabulary_size,
++        output_count: prepared.output_count,
++        output,
++        commit_outputs: prepared.commit_outputs,
++    })
++}
+diff --git a/crates/riley-scheduler/src/lib.rs b/crates/riley-scheduler/src/lib.rs
+index 02534fb..a0a54cf 100644
+--- a/crates/riley-scheduler/src/lib.rs
++++ b/crates/riley-scheduler/src/lib.rs
+@@ -75,7 +75,8 @@ pub use execution::{
+     IterationExecutionFailure, LlamaIterationCudaTimer, execute_llama_iteration,
+     execute_llama_iteration_graph, execute_llama_iteration_greedy,
+     execute_llama_iteration_greedy_timed, execute_llama_iteration_greedy_timed_with_workspace,
+-    execute_llama_iteration_greedy_with_workspace, execute_llama_iteration_timed,
++    execute_llama_iteration_greedy_with_workspace, execute_llama_iteration_multi_graph,
++    execute_llama_iteration_timed,
+ };
+ pub use metrics::{
+     IterationMetricSample, MetricWindowSnapshot, SchedulerGauges, SchedulerMetricsSnapshot,
+@@ -102,5 +103,4 @@ pub fn runtime_build_info() -> riley_core::Result<riley_runtime::BuildInfo> {
+ mod authority;
+ pub use authority::{AuthorizedExecution, AuthorizedExecutionRow};
+ 
+-#[allow(dead_code)] // Runtime dispatch integration is assembled with the scoped authority adapter.
+-mod descriptor;
++use riley_runtime::llama::multi_descriptor as descriptor;
+diff --git a/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs b/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs
+new file mode 100644
+index 0000000..fabea0a
+--- /dev/null
++++ b/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs
+@@ -0,0 +1,123 @@
++//! Actual model, live scheduler authority, common owner and commit integration.
++#![cfg(feature = "cuda")]
++use riley_model::{LoadLimits, LoadedModel};
++use riley_runtime::llama::*;
++use riley_runtime::paged_kv::{BLOCK_TABLE_V1_VERSION, KvLayout};
++use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
++use riley_scheduler::*;
++type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
++fn prepare(
++    model: &LoadedModel,
++    context: &CudaContext,
++    stream: &mut CudaStream,
++) -> Result<PreparedLlamaBatchExecutor> {
++    let config = PreparedLlamaBatchExecutorConfig::new(
++        LlamaBatchMetadataConfig::new(1, 128, 10, 1, 40)?,
++        PreparedLlamaForwardConfig::default(),
++    )
++    .with_grouped_ragged_attention_heads()
++    .with_separate_residual_norm()
++    .with_iteration_batch_completion()
++    .with_packed_async_metadata()
++    .with_vllm_smol_p128_graph();
++    Ok(PreparedLlamaBatchExecutor::prepare(
++        model, context, stream, config,
++    )?)
++}
++#[test]
++#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
++fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
++    let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
++    let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
++    let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
++    let mut stream = context.create_stream()?;
++    let mut owner =
++        prepare(&model, &context, &mut stream)?.into_owned_multi_decode_graph(&context)?;
++    let mut oracle = prepare(&model, &context, &mut stream)?.into_owned_decode_graph(&context)?;
++    let mut scheduler = Scheduler::new_with_execution_shape(
++        SchedulerConfig {
++            max_waiting_requests: 8,
++            max_waiting_prompt_tokens: 1024,
++            max_active_sequences: 4,
++            max_sequence_tokens: 160,
++            iteration_token_budget: 128,
++            max_prefill_chunk_tokens: 128,
++            aging_threshold_ns: 1,
++            overload_policy: OverloadPolicy::Wait,
++            admission_timeout_ns: None,
++            max_promised_kv_blocks: 40,
++            metrics_window_samples: 16,
++        },
++        KvLayout::checked(30, 40, 3, 64)?,
++        ExecutionShapePolicy::CompletePrefill128DecodeN,
++    )?;
++    for r in 0..4u32 {
++        let prompt = (0..128).map(|i| (i * 311 + r * 977 + 13) % 49152).collect();
++        scheduler.submit(RequestDescriptor::new(prompt, 32 - r as usize * 3), 0)?;
++    }
++    let mut rows = 0;
++    let mut shapes = std::collections::BTreeSet::new();
++    let mut finished = 0;
++    for now in 1..200 {
++        let Some(plan) = scheduler.plan_iteration(now)?.into_parts().0 else {
++            break;
++        };
++        let authority = scheduler.authorize_execution(&plan)?;
++        let downloaded = execute_llama_iteration_multi_graph(&authority, &mut owner, None)
++            .map_err(|e| format!("execution failed: {e:?}"))?;
++        let mut samples = vec![SampledIterationToken::new(0, false); downloaded.output_count()];
++        for work in plan.prefill_items().iter().chain(plan.decode_items()) {
++            let table = &plan.block_tables()[work.block_table_index()];
++            let row = LlamaBatchRow::new(
++                work.request_id().get(),
++                if work.input_tokens().len() == 128 {
++                    LlamaBatchRowKind::Prefill
++                } else {
++                    LlamaBatchRowKind::Decode
++                },
++                work.input_tokens(),
++                work.target_logical_length() as u32,
++                LlamaBatchBlockTable::new(
++                    BLOCK_TABLE_V1_VERSION,
++                    table.physical_block_ids(),
++                    table.valid_tokens(),
++                    table.logical_length(),
++                ),
++                Some(0),
++            );
++            let expected = oracle.execute(&[row])?;
++            let slot = work.output_slot().unwrap().get() as usize;
++            assert_eq!(
++                &downloaded.logits_bf16_native()[slot * 98304..(slot + 1) * 98304],
++                expected,
++                "iteration {now}, request {}",
++                work.request_id().get()
++            );
++            samples[slot] = SampledIterationToken::new(oracle.greedy_token()?, false);
++            rows += 1;
++        }
++        if plan.prefill_items().is_empty() {
++            shapes.insert(plan.batch_size());
++        }
++        drop(authority);
++        let id = downloaded.iteration_id().get();
++        let result = downloaded
++            .into_result(&samples, IterationTiming::new(0, 0))
++            .map_err(|e| format!("result failed: {e:?}"))?;
++        let settled = scheduler.complete_iteration(&result, now)?;
++        assert!(settled.settlement_failures().is_empty());
++        finished += settled.completions().len();
++        owner.confirm_scheduler_commit(id)?;
++    }
++    assert_eq!(rows, 110);
++    assert_eq!(finished, 4);
++    assert_eq!(shapes, [1, 2, 3, 4].into_iter().collect());
++    owner.close()?;
++    oracle.close()?;
++    assert!(scheduler.close(200, None)?.settlement_failures().is_empty());
++    stream.close()?;
++    eprintln!(
++        "live scheduler owner parity: {rows} full-logit rows, {finished} completed requests, decode shapes {shapes:?}"
++    );
++    Ok(())
++}

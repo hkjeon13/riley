@@ -1,0 +1,25 @@
+{
+  "check_id": "fixed-03",
+  "kind": "completion",
+  "completed": true,
+  "sampler": "gpu-greedy",
+  "spec": {
+    "shape": "o32",
+    "streaming": true,
+    "raw": true
+  },
+  "server_request_id": "cmpl-0000000000000004",
+  "request": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/fixed-03-request.json",
+    "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/fixed-03-response.json",
+    "sha256": "fbe8ce038f452726208f45c9f28fb19c8ff95fdc928ed40921f9290028867494"
+  },
+  "blank_generated_token_events": 0,
+  "started_ns": 834415765595069,
+  "finished_ns": 834415801589784,
+  "published_ids_match_reference": true,
+  "performance_claim": false
+}

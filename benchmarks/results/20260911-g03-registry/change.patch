@@ -1,0 +1,649 @@
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -208,11 +208,32 @@
+     /// Returns invalid request/poison/CUDA errors. `context` and `stream` must belong
+     /// to the executor's original device context. No performance timing is collected.
+     pub fn generate_greedy_with_decode_graph(
++        self,
++        context: &riley_cuda::CudaContext,
++        stream: &mut CudaStream,
++        prompt: &[u32],
++        steps: u32,
++    ) -> LlamaBatchExecutorResult<Vec<u32>> {
++        self.generate_greedy_with_decode_graph_policy(
++            context,
++            stream,
++            prompt,
++            steps,
++            ExecutionGraphPolicy::Auto,
++        )
++    }
++
++    /// Selects disabled, automatic fallback, or required full graph generation.
++    /// Require rejects unsupported configurations before prefill or capture.
++    /// # Errors
++    /// Returns validation, required-graph, capture, replay or completion errors.
++    pub fn generate_greedy_with_decode_graph_policy(
+         mut self,
+         context: &riley_cuda::CudaContext,
+         stream: &mut CudaStream,
+         prompt: &[u32],
+         steps: u32,
++        policy: ExecutionGraphPolicy,
+     ) -> LlamaBatchExecutorResult<Vec<u32>> {
+         use crate::llama::{LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRowKind};
+         use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
+@@ -231,6 +252,20 @@
+                 "invalid token, generation length or output capacity",
+             ));
+         }
++        let use_graph = policy != ExecutionGraphPolicy::Disabled && self.full_decode_supported();
++        if !use_graph {
++            let decision =
++                select_execution_graph(full_decode_request(policy, self.full_decode_supported()))
++                    .map_err(|_| rejected("required full decode unsupported"))?;
++            if decision.mode() != ExecutionMode::ExactEager {
++                return Err(rejected("unexpected pre-capture execution mode"));
++            }
++        }
++        let prepared_signature = if use_graph {
++            Some(self.full_decode_signature(stream)?)
++        } else {
++            None
++        };
+         let mut generated = Vec::with_capacity(steps as usize);
+         let mapping: Vec<u32> = (0..capacity).map(|i| i as u32).collect();
+         let first_decode_position = (prompt.len() - 1) as u32;
+@@ -261,7 +296,7 @@
+             self.execute(&rows, stream)?;
+         }
+         let mut token = prompt[prompt.len() - 1];
+-        if !self.full_decode_supported() {
++        if !use_graph {
+             for step in 0..steps {
+                 let pos = first_decode_position + step;
+                 let live = pos as usize / 16 + 1;
+@@ -309,7 +344,7 @@
+         let mut payload = vec![0; transfer];
+         let mut output = vec![0; transfer];
+         {
+-            let mut graph = self.prepare_full_decode(
++            let graph = self.prepare_full_decode(
+                 stream,
+                 &mut metadata,
+                 &mut result,
+@@ -317,6 +352,10 @@
+                 capacity as u64,
+                 false,
+             )?;
++            let (signature, device_bytes) =
++                prepared_signature.ok_or_else(|| rejected("missing prepared signature"))?;
++            let mut registered =
++                RegisteredFullDecode::new(graph, signature, (transfer * 2) as u64, device_bytes)?;
+             for step in 0..steps {
+                 let pos = first_decode_position + step;
+                 let live = pos as usize / 16 + 1;
+@@ -334,8 +373,7 @@
+                     let o = 16 + 4 * capacity + 2 * i;
+                     payload[o..o + 2].copy_from_slice(&valid.to_le_bytes());
+                 }
+-                graph.replay_transfer(&payload).map_err(cuda)?;
+-                graph.read_transfer(&mut output).map_err(cuda)?;
++                registered.replay(policy, &payload, &mut output)?;
+                 let read = |offset| {
+                     u32::from_le_bytes(
+                         output[offset..offset + 4]
+@@ -353,13 +391,359 @@
+                 token = read(logits_bytes);
+                 generated.push(token);
+             }
+-            graph.close().map_err(cuda)?;
++            registered.close()?;
+         }
+         metadata.close().map_err(cuda)?;
+         result.close().map_err(cuda)?;
+         staging.close().map_err(cuda)?;
+         self.close()?;
+         Ok(generated)
++    }
++}
++
++use crate::llama::graph::*;
++use crate::llama::graph_registry::{
++    GraphEntryFootprint, GraphRegistry, GraphRegistryEntry, GraphRegistryEntryState,
++    GraphRegistryLimits, GraphReplayMode, GraphReplaySlot,
++};
++use crate::llama::graph_registry_dispatch::{
++    GraphRegistryDispatchDecision, select_registered_execution_graph,
++};
++use sha2::{Digest, Sha256};
++
++fn full_decode_request(policy: ExecutionGraphPolicy, supported: bool) -> GraphDispatchRequest {
++    GraphDispatchRequest::new(
++        policy,
++        GraphDispatchEligibility::new(
++            GraphWorkloadStage::PureDecode,
++            true,
++            true,
++            true,
++            GraphCaptureSafety::new(
++                GraphSamplingBackend::GpuGreedy,
++                if supported {
++                    GraphOperatorCapability::Supported
++                } else {
++                    GraphOperatorCapability::Unsupported
++                },
++                supported,
++            ),
++        ),
++        GraphInventoryState::NotPrepared,
++    )
++}
++
++// This registry cannot escape its retained owner or resolve another owner's slot.
++// Never register Prepared until native capture and instantiate have succeeded.
++struct RegisteredFullDecode<'a> {
++    graph: BorrowedGraphResourceReservation<'a>,
++    registry: GraphRegistry<1>,
++    signature: GraphSignature,
++    poisoned: bool,
++}
++impl<'a> RegisteredFullDecode<'a> {
++    fn new(
++        graph: BorrowedGraphResourceReservation<'a>,
++        signature: GraphSignature,
++        host: u64,
++        device: u64,
++    ) -> LlamaBatchExecutorResult<Self> {
++        let registry = GraphRegistry::try_new(
++            GraphRegistryLimits::new(1, 1, 0, host, device),
++            &[GraphRegistryEntry::new(
++                signature,
++                GraphReplayMode::FullGraph,
++                GraphReplaySlot::new(0),
++                GraphRegistryEntryState::Prepared,
++                GraphEntryFootprint::new(host, device),
++            )],
++        )
++        .map_err(|_| rejected("invalid full decode registry accounting"))?;
++        Ok(Self {
++            graph,
++            registry,
++            signature,
++            poisoned: false,
++        })
++    }
++    fn select(
++        &self,
++        policy: ExecutionGraphPolicy,
++        signature: GraphSignature,
++    ) -> LlamaBatchExecutorResult<GraphRegistryDispatchDecision> {
++        if self.poisoned {
++            return Err(rejected("registered decode owner poisoned"));
++        }
++        select_registered_execution_graph(
++            GraphDispatchRequest::new(
++                policy,
++                GraphDispatchEligibility::new(
++                    GraphWorkloadStage::PureDecode,
++                    true,
++                    true,
++                    true,
++                    GraphCaptureSafety::new(
++                        GraphSamplingBackend::GpuGreedy,
++                        GraphOperatorCapability::Supported,
++                        true,
++                    ),
++                ),
++                GraphInventoryState::NotPrepared,
++            ),
++            signature,
++            &self.registry,
++        )
++        .map_err(|_| rejected("required registered decode unavailable"))
++    }
++    fn replay(
++        &mut self,
++        policy: ExecutionGraphPolicy,
++        payload: &[u8],
++        output: &mut [u8],
++    ) -> LlamaBatchExecutorResult<()> {
++        match self.select(policy, self.signature)? {
++            GraphRegistryDispatchDecision::FullGraph { replay_slot }
++                if replay_slot == GraphReplaySlot::new(0) => {}
++            _ => return Err(rejected("registered decode slot mismatch")),
++        }
++        let result = self
++            .graph
++            .replay_transfer(payload)
++            .and_then(|()| self.graph.read_transfer(output));
++        if result.is_err() {
++            self.poisoned = true;
++        }
++        result.map_err(|e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e))
++    }
++    fn close(self) -> LlamaBatchExecutorResult<()> {
++        self.graph
++            .close()
++            .map_err(|e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e))
++    }
++}
++
++impl PreparedLlamaBatchExecutor {
++    // Cold content identity; never use paths, pointers, Debug formatting or truncated
++    // algorithm IDs as a model/plan key. Hash actual uploaded weight/table bytes.
++    fn full_decode_signature(
++        &mut self,
++        stream: &mut CudaStream,
++    ) -> LlamaBatchExecutorResult<(GraphSignature, u64)> {
++        if !self.full_decode_supported() {
++            return Err(rejected("unsupported registry signature"));
++        }
++        let owner = &mut self.owner;
++        let f = &mut owner.forward;
++        let dims = f.plan.dimensions();
++        let capacity = self.config.metadata().max_block_entries() as u64;
++        let profile = match f.rms_norm_profile() {
++            LlamaRmsNormProfile::Canonical => 0_u32,
++            LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
++            _ => unreachable!(),
++        };
++        let mut digest = Sha256::new();
++        digest.update(b"riley.full-decode.owner-content.v1\0");
++        digest.update(profile.to_le_bytes());
++        digest.update(f.plan.rope_theta().to_bits().to_le_bytes());
++        digest.update(f.plan.final_norm_epsilon().to_bits().to_le_bytes());
++        for id in [
++            f.plan.embedding_weight(),
++            f.plan.final_norm_weight(),
++            f.plan.lm_head_weight(),
++        ] {
++            digest.update((id.index() as u64).to_le_bytes());
++        }
++        for l in f.plan.layers() {
++            for id in [
++                l.input_norm_weight(),
++                l.query_weight(),
++                l.key_weight(),
++                l.value_weight(),
++                l.output_weight(),
++                l.post_attention_norm_weight(),
++                l.gate_weight(),
++                l.up_weight(),
++                l.down_weight(),
++            ] {
++                digest.update((id.index() as u64).to_le_bytes());
++            }
++            digest.update(l.input_norm_epsilon().to_bits().to_le_bytes());
++            digest.update(l.post_attention_norm_epsilon().to_bits().to_le_bytes());
++        }
++        let mut native_identity = None;
++        for p in [
++            &f.gemms.hidden,
++            &f.gemms.key_value,
++            &f.gemms.intermediate,
++            &f.gemms.down,
++            &f.gemms.lm_head,
++        ] {
++            let PreparedLlamaGemm::Canonical(p) = p else {
++                unreachable!()
++            };
++            let m = p.algorithm_metadata();
++            let identity = (
++                m.compute_capability(),
++                m.runtime_version(),
++                m.cublaslt_version(),
++            );
++            if native_identity.is_some_and(|previous| previous != identity) {
++                return Err(rejected("selected plans have different device identities"));
++            }
++            native_identity = Some(identity);
++            for v in [
++                m.backend_id(),
++                m.algorithm_id() as u32,
++                m.tile_id(),
++                m.stages_id(),
++                m.split_k(),
++                m.reduction_scheme(),
++                m.cta_swizzling(),
++                m.custom_option(),
++                u32::from(m.deterministic()),
++            ] {
++                digest.update(v.to_le_bytes());
++            }
++            let (m_rows, n, k) = m.dimensions();
++            for v in [
++                m_rows,
++                n,
++                k,
++                m.workspace_bytes(),
++                m.numerical_implementation_flags(),
++            ] {
++                digest.update(v.to_le_bytes());
++            }
++        }
++        let mut device_bytes = 0_u64;
++        let mut chunk = vec![
++            0;
++            usize::try_from(f.io_staging.byte_len().min(1024 * 1024))
++                .map_err(|_| rejected("staging length overflow"))?
++        ];
++        if chunk.is_empty() {
++            return Err(rejected("content identity requires staging"));
++        }
++        for (index, buffer) in f
++            .weights
++            .borrow_graph_weight_parents()
++            .chain([&mut owner.absolute_rope_cos, &mut owner.absolute_rope_sin])
++            .enumerate()
++        {
++            digest.update((index as u64).to_le_bytes());
++            digest.update(buffer.byte_len().to_le_bytes());
++            device_bytes = device_bytes
++                .checked_add(buffer.byte_len())
++                .ok_or_else(|| rejected("footprint overflow"))?;
++            let mut offset = 0;
++            while offset < buffer.byte_len() {
++                let count = (buffer.byte_len() - offset).min(chunk.len() as u64) as usize;
++                buffer
++                    .download_to_slice(offset, &mut chunk[..count], &mut f.io_staging, stream)
++                    .map_err(|e| {
++                        cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e)
++                    })?;
++                digest.update(&chunk[..count]);
++                offset += count as u64;
++            }
++        }
++        let b = &f.buffers;
++        for buffer in [
++            &b.token_ids,
++            &b.hidden_current,
++            &b.hidden_norm,
++            &b.hidden_projection,
++            &b.hidden_rotary,
++            &b.hidden_context,
++            &b.key_raw,
++            &b.value_raw,
++            &b.key_rotary,
++            &b.gate_raw,
++            &b.up_raw,
++            &b.gate_activated,
++            &b.gated_product,
++            &b.logits,
++            &b.embedding_error_scratch,
++            &owner.key_cache,
++            &owner.value_cache,
++        ]
++        .into_iter()
++        .chain(b.gemm_workspace.as_ref())
++        {
++            device_bytes = device_bytes
++                .checked_add(buffer.byte_len())
++                .ok_or_else(|| rejected("footprint overflow"))?;
++            digest.update(buffer.byte_len().to_le_bytes());
++        }
++        let metadata_bytes = ((16 + 6 * capacity + 3) & !3) + 4;
++        let mut layout = Sha256::new();
++        layout.update(b"riley.full-decode.packed-token-position-blocks-slot.v1\0");
++        for v in [
++            capacity,
++            owner.layout.physical_block_count() as u64,
++            metadata_bytes,
++            8,
++            16,
++            16 + 4 * capacity,
++            metadata_bytes - 4,
++            40,
++        ] {
++            layout.update(v.to_le_bytes());
++        }
++        let ((major, minor), runtime, cublas) =
++            native_identity.ok_or_else(|| rejected("missing native plan identity"))?;
++        let device = GraphDeviceSignature::new(
++            major,
++            minor,
++            u32::try_from(runtime).map_err(|_| rejected("invalid runtime version"))?,
++            u32::try_from(cublas).map_err(|_| rejected("invalid cuBLASLt version"))?,
++            riley_cuda::EXPECTED_ABI_VERSION,
++        );
++        let signature = GraphSignature::new(
++            GraphStaticSignature::new(
++                GraphModelSignature::new(
++                    GraphModelArchitecture::LlamaDecoder,
++                    1,
++                    GraphRevisionFingerprint::from_bytes(digest.finalize().into()),
++                    1,
++                ),
++                device,
++                GraphTensorSignature::new(
++                    GraphDataType::BFloat16,
++                    GraphDataType::BFloat16,
++                    GraphComputeType::Float32,
++                ),
++                GraphGeometrySignature::new(
++                    f.plan.layers().len() as u32,
++                    dims.hidden_size() as u32,
++                    dims.intermediate_size() as u32,
++                    dims.vocabulary_size() as u32,
++                    dims.query_heads() as u32,
++                    dims.key_value_heads() as u32,
++                    dims.head_dimension() as u32,
++                ),
++                GraphLayoutSignature::new(
++                    (capacity * 16) as u32,
++                    16,
++                    1,
++                    GraphMetadataLayoutSignature::new(2, layout.finalize().into()),
++                ),
++                GraphImplementationSignature::new(
++                    GraphImplementationId::new(0xF001),
++                    GraphImplementationId::new(0xF001),
++                    GraphImplementationId::new(0xF001),
++                    GraphImplementationId::new(0xF001),
++                    GraphGemmPlanSetId::new(1),
++                    GraphReductionPolicyId::new(profile),
++                ),
++            ),
++            GraphIterationSignature::new(
++                GraphWorkloadStage::PureDecode,
++                1,
++                GraphSamplingBackend::GpuGreedy,
++            ),
++        );
++        Ok((signature, device_bytes + metadata_bytes + 8))
+     }
+ }
+ 
+@@ -429,6 +813,54 @@
+             &mut candidate.owner.value_cache,
+         ] {
+             d.upload_from_slice(0, &zeros, &mut io, &mut stream)?;
++        }
++        let (signature, footprint) = candidate.full_decode_signature(&mut stream)?;
++        let (same_signature, same_footprint) = baseline.full_decode_signature(&mut eager_stream)?;
++        assert_eq!(
++            signature, same_signature,
++            "stable actual-owner content identity"
++        );
++        assert_eq!(footprint, same_footprint);
++        if env == "RILEY_CANONICAL_CHECKPOINT" {
++            let id = candidate.owner.forward.plan.final_norm_weight();
++            let weight = candidate.owner.forward.weights.borrow_graph_weight(id)?;
++            let mut original = vec![0; weight.byte_len() as usize];
++            weight.download_to_slice(0, &mut original, &mut io, &mut stream)?;
++            let mut changed = original.clone();
++            changed[0] ^= 1;
++            weight.upload_from_slice(0, &changed, &mut io, &mut stream)?;
++            assert_ne!(
++                candidate.full_decode_signature(&mut stream)?.0,
++                signature,
++                "weight content changes exact key"
++            );
++            candidate
++                .owner
++                .forward
++                .weights
++                .borrow_graph_weight(id)?
++                .upload_from_slice(0, &original, &mut io, &mut stream)?;
++            candidate.config = PreparedLlamaBatchExecutorConfig::new(
++                LlamaBatchMetadataConfig::new(1, 1, 3, 1, 4)?,
++                PreparedLlamaForwardConfig::default(),
++            )
++            .with_grouped_ragged_attention_heads()
++            .with_iteration_batch_completion()
++            .with_packed_async_metadata();
++            assert_ne!(
++                candidate.full_decode_signature(&mut stream)?.0,
++                signature,
++                "metadata capacity changes exact key"
++            );
++            candidate.config = config;
++            assert_eq!(
++                candidate.full_decode_signature(&mut stream)?.0,
++                signature,
++                "restored key"
++            );
++            println!(
++                "G03_REGISTERED_KEY_CHANGE weight_content=true metadata_capacity=true restored=true"
++            );
+         }
+         let stats = context.allocation_stats()?;
+         let mut graph = candidate.prepare_full_decode(
+@@ -557,6 +989,91 @@
+                 .map(|b| format!("{b:02x}"))
+                 .collect::<String>()
+         );
++        // A registry key/slot is metadata, never authority to replay a different owner.
++        {
++            let graph = candidate.prepare_full_decode(
++                &mut stream,
++                &mut metadata,
++                &mut result,
++                &mut staging,
++                capacity as u64,
++                false,
++            )?;
++            let mut registered =
++                RegisteredFullDecode::new(graph, signature, (transfer * 2) as u64, footprint)?;
++            assert_eq!(
++                registered
++                    .select(ExecutionGraphPolicy::Auto, signature)?
++                    .mode(),
++                ExecutionMode::FullGraph
++            );
++            assert_eq!(
++                registered
++                    .select(ExecutionGraphPolicy::Require, signature)?
++                    .replay_slot(),
++                Some(GraphReplaySlot::new(0))
++            );
++            assert_eq!(
++                registered
++                    .select(ExecutionGraphPolicy::Disabled, signature)?
++                    .mode(),
++                ExecutionMode::ExactEager
++            );
++            let miss = GraphSignature::new(
++                signature.static_signature(),
++                GraphIterationSignature::new(
++                    GraphWorkloadStage::PureDecode,
++                    2,
++                    GraphSamplingBackend::GpuGreedy,
++                ),
++            );
++            assert_eq!(
++                registered.select(ExecutionGraphPolicy::Auto, miss)?.mode(),
++                ExecutionMode::ExactEager
++            );
++            assert!(
++                registered
++                    .select(ExecutionGraphPolicy::Require, miss)
++                    .is_err()
++            );
++            let expected_registry = registered.registry.clone();
++            registered.registry = GraphRegistry::try_new(
++                GraphRegistryLimits::new(1, 1, 0, u64::MAX, u64::MAX),
++                &[GraphRegistryEntry::new(
++                    signature,
++                    GraphReplayMode::FullGraph,
++                    GraphReplaySlot::new(1),
++                    GraphRegistryEntryState::Prepared,
++                    GraphEntryFootprint::new(0, 0),
++                )],
++            )?;
++            assert!(
++                registered
++                    .replay(ExecutionGraphPolicy::Auto, &[], &mut output)
++                    .is_err()
++            );
++            registered.registry = expected_registry;
++            assert!(
++                registered
++                    .replay(ExecutionGraphPolicy::Auto, &[], &mut output)
++                    .is_err()
++            );
++            assert!(
++                registered
++                    .select(ExecutionGraphPolicy::Auto, signature)
++                    .is_err()
++            );
++            registered.close()?;
++        }
++        println!(
++            "G03_REGISTERED checkpoint={env} stable_key=true exact_slot=true miss_rejected=true poison_rejected=true signature={}",
++            signature
++                .fingerprint()
++                .as_bytes()
++                .iter()
++                .map(|b| format!("{b:02x}"))
++                .collect::<String>()
++        );
+         let generation =
+             PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config)?;
+         assert!(generation.full_decode_supported());
+@@ -564,7 +1081,45 @@
+             generation.generate_greedy_with_decode_graph(&context, &mut stream, &[504], steps)?,
+             tokens
+         );
++        let required = PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config)?;
++        assert_eq!(
++            required.generate_greedy_with_decode_graph_policy(
++                &context,
++                &mut stream,
++                &[504],
++                steps,
++                ExecutionGraphPolicy::Require
++            )?,
++            tokens
++        );
++        let disabled = PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config)?;
++        assert_eq!(
++            disabled.generate_greedy_with_decode_graph_policy(
++                &context,
++                &mut stream,
++                &[504],
++                steps,
++                ExecutionGraphPolicy::Disabled
++            )?,
++            tokens
++        );
+         let legacy = config.with_legacy_ragged_attention_heads();
++        let unsupported =
++            PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, legacy)?;
++        assert!(
++            unsupported
++                .generate_greedy_with_decode_graph_policy(
++                    &context,
++                    &mut stream,
++                    &[504],
++                    steps,
++                    ExecutionGraphPolicy::Require
++                )
++                .is_err()
++        );
++        println!(
++            "G03_REGISTERED_POLICY checkpoint={env} auto=true require=true disabled=true unsupported_require_rejected=true"
++        );
+         let fallback = PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, legacy)?;
+         assert!(!fallback.full_decode_supported());
+         assert_eq!(

@@ -1818,10 +1818,25 @@ fn owned_canonical_bf16_rms_norm_graph_uses_fixed_three_buffer_lifecycle_without
     assert!(begin.contains("epsilon <= 0.0F"));
     assert!(begin.contains("RileyCudaGraphCaptureOperation::kCanonicalRmsNormBf16"));
 
-    let enqueue = native_export_body(
+    let canonical_entry = native_export_body(
         native,
         "riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16",
     );
+    assert!(canonical_entry.contains("enqueue_norm_bf16_impl(capture, out_graph_error, error, 0)"));
+    let hf_entry = native_export_body(
+        native,
+        "riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16",
+    );
+    assert!(hf_entry.contains("enqueue_norm_bf16_impl(capture, out_graph_error, error, 1)"));
+    let enqueue = native
+        .split("static RileyCudaStatus enqueue_norm_bf16_impl(")
+        .nth(1)
+        .expect("shared profile-checked enqueue")
+        .split("extern \"C\"")
+        .next()
+        .expect("enqueue body");
+    assert!(enqueue.contains("owner->rms_norm_profile != profile"));
+    assert!(enqueue.contains("launch_graph_hf_smollm2_rms_norm"));
     assert!(enqueue.contains("graph_canonical_rms_norm_bf16<<<"));
     assert!(enqueue.contains("cudaGetLastError"));
     assert!(enqueue.contains("owner->canonical_rms_norm_enqueue_count != 0"));

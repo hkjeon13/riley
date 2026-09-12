@@ -45,6 +45,8 @@ serve options:
   --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+  --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+  --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
@@ -53,8 +55,7 @@ serve options:
   --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
   --c02-audit-dir PATH           absolute C02 generation-audit output directory
   --c02-shutdown-artifact PATH   direct-child C02 shutdown-v2 JSON artifact in audit dir
-  --shutdown-on-stdin            gracefully stop after one input line or EOF
-";
+  --shutdown-on-stdin            gracefully stop after one input line or EOF";
 
 #[allow(clippy::large_enum_variant)] // Parsed once at process startup; avoid an extra heap allocation.
 #[derive(Debug, Eq, PartialEq)]
@@ -83,7 +84,9 @@ struct ServeOptions {
     batch_shape_buckets: Option<Vec<usize>>,
     metadata_transport: MetadataTransportMode,
     sampling_backend: SamplingBackendMode,
+    execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
     reduction_profile: ReductionProfileMode,
+    vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -240,6 +243,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut batch_shape_buckets = None;
     let mut metadata_transport = None;
     let mut sampling_backend = None;
+    let mut execution_graph_policy = None;
+    let mut graph_numerics = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -356,6 +361,38 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_metadata_transport(next_value(&mut arguments, "--metadata-transport")?)?,
                 "--metadata-transport",
             )?,
+            "--graph-numerics" => {
+                let value = next_value(&mut arguments, "--graph-numerics")?;
+                let enabled = match value.to_str() {
+                    Some("existing") => false,
+                    Some("vllm-smol-p128-v1") => true,
+                    _ => {
+                        return Err(
+                            "--graph-numerics requires existing or vllm-smol-p128-v1".to_owned()
+                        );
+                    }
+                };
+                set_once(&mut graph_numerics, enabled, "--graph-numerics")?;
+            }
+            "--execution-graph-policy" => {
+                let value = next_value(&mut arguments, "--execution-graph-policy")?;
+                let policy = match value.to_str() {
+                    Some("disabled") => riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                    Some("auto") => riley_runtime::llama::ExecutionGraphPolicy::Auto,
+                    Some("require") => riley_runtime::llama::ExecutionGraphPolicy::Require,
+                    _ => {
+                        return Err(
+                            "--execution-graph-policy requires disabled, auto, or require"
+                                .to_owned(),
+                        );
+                    }
+                };
+                set_once(
+                    &mut execution_graph_policy,
+                    policy,
+                    "--execution-graph-policy",
+                )?;
+            }
             "--sampling-backend" => set_once(
                 &mut sampling_backend,
                 parse_sampling_backend(next_value(&mut arguments, "--sampling-backend")?)?,
@@ -463,6 +500,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
+    let vllm_smol_p128_graph = graph_numerics.unwrap_or(false);
+    if vllm_smol_p128_graph
+        && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
+    {
+        return Err("vllm-smol-p128-v1 requires --execution-graph-policy require".to_owned());
+    }
+    if vllm_smol_p128_graph && c02_runtime_config.is_some() {
+        return Err("vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts".to_owned());
+    }
     Ok(CliCommand::Serve(ServeOptions {
         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
         model_id,
@@ -481,7 +527,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         batch_shape_buckets,
         metadata_transport,
         sampling_backend: sampling_backend.unwrap_or(SamplingBackendMode::Cpu),
+        execution_graph_policy: execution_graph_policy
+            .unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled),
         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
+        vllm_smol_p128_graph,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -806,6 +855,7 @@ fn run_serve(
         options.batch_shape_buckets,
         options.metadata_transport,
         options.sampling_backend,
+        options.execution_graph_policy,
         options.reduction_profile,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
@@ -863,6 +913,14 @@ fn run_serve(
     validate_positive("--prefill-chunk-tokens", options.prefill_chunk_tokens)?;
     if options.prefill_chunk_tokens > options.batch_token_budget {
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
+    }
+    if options.vllm_smol_p128_graph
+        && (options.max_active_sequences != 1
+            || !matches!(options.batch_token_budget, 1 | 128)
+            || options.prefill_chunk_tokens != options.batch_token_budget
+            || options.batch_shape_policy != BatchShapePolicyMode::FixedMaximum)
+    {
+        return Err("vllm-smol-p128-v1 requires one active sequence, fixed-max shape, and matching batch/prefill budgets of 1 or 128".to_owned());
     }
     if options.batch_token_budget < options.max_active_sequences {
         return Err(
@@ -980,6 +1038,20 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
+    let executor = if options.vllm_smol_p128_graph {
+        executor.with_vllm_smol_p128_graph()
+    } else {
+        executor
+    };
+    // Full graph kernels use the reviewed exact grouped-head implementation.
+    // Select it explicitly before deriving effective runtime facts; Disabled
+    // preserves the established CLI defaults.
+    let executor =
+        if options.execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled {
+            executor.with_grouped_ragged_attention_heads()
+        } else {
+            executor
+        };
     let model_id = options
         .model_id
         .unwrap_or_else(|| model.provenance().source_model().to_owned());
@@ -1004,7 +1076,8 @@ fn run_serve(
             gpu_greedy: options.sampling_backend == SamplingBackendMode::GpuGreedy,
         },
     )
-    .map_err(|error| format!("CUDA backend preparation failed: {error}"))?;
+    .map_err(|error| format!("CUDA backend preparation failed: {error}"))?
+    .with_execution_graph_policy(options.execution_graph_policy);
     let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
         Some(c02) => {
             let facts = resources.effective_runtime_facts();
@@ -3758,8 +3831,10 @@ mod tests {
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
+                execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4143,8 +4218,10 @@ mod tests {
                 batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
                 batch_shape_buckets: Some(vec![1, 2, 4, 8, 16, 32, 64]),
                 metadata_transport: MetadataTransportMode::PackedAsync,
+                execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
                 sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
+                vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4295,8 +4372,10 @@ mod tests {
                 batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
                 batch_shape_buckets: Some(vec![1, 3, 7]),
                 metadata_transport: MetadataTransportMode::Synchronous,
+                execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4414,8 +4493,10 @@ mod tests {
                 batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
+                execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
+                vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4487,5 +4568,129 @@ mod tests {
         assert_eq!(decoded["counters"]["dropped_observations"], 0);
         assert!(decoded["counters"].get("dropped_samples").is_none());
         std::fs::remove_file(&path).expect("remove exact test artifact");
+    }
+}
+
+#[cfg(test)]
+mod graph_policy_cli_tests {
+    use super::*;
+    #[test]
+    fn graph_policy_is_explicit_and_closed() {
+        for (value, expected) in [
+            (
+                "disabled",
+                riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+            ),
+            ("auto", riley_runtime::llama::ExecutionGraphPolicy::Auto),
+            (
+                "require",
+                riley_runtime::llama::ExecutionGraphPolicy::Require,
+            ),
+        ] {
+            let command = parse_arguments(
+                [
+                    "serve",
+                    "--model",
+                    "/tmp/model",
+                    "--execution-graph-policy",
+                    value,
+                ]
+                .map(OsString::from),
+            )
+            .expect("policy");
+            let CliCommand::Serve(options) = command else {
+                panic!("serve")
+            };
+            assert_eq!(options.execution_graph_policy, expected);
+        }
+        assert!(
+            parse_arguments(
+                [
+                    "serve",
+                    "--model",
+                    "/tmp/model",
+                    "--execution-graph-policy",
+                    "yes"
+                ]
+                .map(OsString::from)
+            )
+            .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod graph_numerics_cli_tests {
+    use super::*;
+    #[test]
+    fn numerical_profile_requires_explicit_required_graph() {
+        for policy in ["auto", "disabled"] {
+            assert!(
+                parse_arguments(
+                    [
+                        "serve",
+                        "--model",
+                        "/tmp/model",
+                        "--graph-numerics",
+                        "vllm-smol-p128-v1",
+                        "--execution-graph-policy",
+                        policy
+                    ]
+                    .map(OsString::from)
+                )
+                .is_err()
+            );
+        }
+        let CliCommand::Serve(options) = parse_arguments(
+            [
+                "serve",
+                "--model",
+                "/tmp/model",
+                "--graph-numerics",
+                "vllm-smol-p128-v1",
+                "--execution-graph-policy",
+                "require",
+            ]
+            .map(OsString::from),
+        )
+        .expect("explicit profile") else {
+            panic!("serve")
+        };
+        assert!(options.vllm_smol_p128_graph);
+        let CliCommand::Serve(default) =
+            parse_arguments(["serve", "--model", "/tmp/model"].map(OsString::from))
+                .expect("default")
+        else {
+            panic!("serve")
+        };
+        assert!(!default.vllm_smol_p128_graph);
+        assert!(
+            parse_arguments(
+                [
+                    "serve",
+                    "--model",
+                    "/tmp/model",
+                    "--graph-numerics",
+                    "unknown"
+                ]
+                .map(OsString::from)
+            )
+            .is_err()
+        );
+        assert!(
+            parse_arguments(
+                [
+                    "serve",
+                    "--model",
+                    "/tmp/model",
+                    "--graph-numerics",
+                    "existing",
+                    "--graph-numerics",
+                    "existing"
+                ]
+                .map(OsString::from)
+            )
+            .is_err()
+        );
     }
 }

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/rope_arithmetic_probe.py", line 418, in <module>
+    main()
+  File "/tmp/riley-opt-260912/rope_arithmetic_probe.py", line 404, in main
+    elif args.command == "inspect": result = inspect_probe(args.manifest, args.cuobjdump)
+  File "/tmp/riley-opt-260912/rope_arithmetic_probe.py", line 361, in inspect_probe
+    subprocess.run(command, stdout=out, stderr=stderr, check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump', '--dump-sass', '--gpu-architecture', 'sm_89', '/tmp/riley-opt-260912/batch7-target/release/riley']' returned non-zero exit status 1.

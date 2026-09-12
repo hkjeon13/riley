@@ -1094,7 +1094,7 @@ bool canonical_gemm_bf16_plan_is_ready(
       plan->algorithm_info.reduction_scheme !=
           static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE) ||
       plan->config.m == 0 || plan->config.n == 0 || plan->config.k == 0 ||
-      plan->config.flags != 0 ||
+      (plan->config.flags != 0 && plan->config.flags != 1 && plan->config.flags != 3) ||
       plan->config.input_dtype != RILEY_CUDA_DTYPE_BF16 ||
       plan->config.weight_dtype != RILEY_CUDA_DTYPE_BF16 ||
       plan->config.accumulator_dtype != RILEY_CUDA_DTYPE_F32 ||
@@ -1116,6 +1116,7 @@ bool canonical_gemm_bf16_state_metadata_is_valid(
     const RileyCudaGemmPlan* plan,
     const RileyCudaCanonicalGemmBf16GraphState& state) noexcept {
   return canonical_gemm_bf16_plan_is_ready(plan) && state.plan == plan &&
+         (state.selected_no_split || plan->config.flags == 0) &&
          state.input_byte_len == plan->input_bytes &&
          state.weight_byte_len == plan->weight_bytes &&
          state.output_byte_len == plan->output_bytes &&
@@ -1131,7 +1132,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* out_state,
-    RileyCudaErrorInfo* error, const char* operation) noexcept {
+    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split) noexcept {
   if (out_state == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
@@ -1139,12 +1140,13 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
   }
   *out_state = RileyCudaCanonicalGemmBf16GraphState{};
   if (plan == nullptr || stream == nullptr || input == nullptr ||
-      weight == nullptr || output == nullptr || workspace == nullptr) {
+      weight == nullptr || output == nullptr || (!selected_no_split && workspace == nullptr)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "canonical GEMM graph plan, stream, or fixed allocation is null");
   }
   if (!canonical_gemm_bf16_plan_is_ready(plan) ||
+      (!selected_no_split && plan->config.flags != 0) ||
       !same_context(plan->owner, stream->owner) ||
       plan->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -1154,6 +1156,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
   RileyCudaDeviceBuffer* const buffers[] = {input, weight, output, workspace};
   constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
   for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index] == nullptr) continue;
     if (buffers[index]->owner == nullptr ||
         !same_context(plan->owner, buffers[index]->owner)) {
       return validation_error(
@@ -1173,10 +1176,12 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
   if (input->byte_len != plan->input_bytes ||
       weight->byte_len != plan->weight_bytes ||
       output->byte_len != plan->output_bytes ||
-      workspace->byte_len != plan->algorithm_info.workspace_bytes ||
+      (workspace == nullptr ? plan->algorithm_info.workspace_bytes != 0 :
+       (selected_no_split ? workspace->byte_len < plan->algorithm_info.workspace_bytes :
+        workspace->byte_len != plan->algorithm_info.workspace_bytes)) ||
       input->device_data == nullptr || weight->device_data == nullptr ||
       output->device_data == nullptr ||
-      (workspace->byte_len != 0 && workspace->device_data == nullptr)) {
+      (workspace != nullptr && workspace->byte_len != 0 && workspace->device_data == nullptr)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
@@ -1189,12 +1194,14 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
                             "canonical GEMM graph plan or stream already has an active use");
   }
   for (RileyCudaDeviceBuffer* buffer : buffers) {
+    if (buffer == nullptr) continue;
     if (buffer->active_uses.load(std::memory_order_acquire) != 0) {
       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                               RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                               "a canonical GEMM graph allocation already has an active use");
     }
   }
+  out_state->selected_no_split = selected_no_split;
   out_state->plan = plan;
   out_state->input = input;
   out_state->weight = weight;
@@ -1204,6 +1211,12 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
   out_state->output_byte_len = plan->output_bytes;
   out_state->workspace_byte_len = plan->algorithm_info.workspace_bytes;
   return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+bool aggregate_gemm_plan_matches_context(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context) noexcept {
+  return canonical_gemm_bf16_plan_is_ready(plan) &&
+         same_context(plan->owner, context);
 }
 
 RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
@@ -1231,12 +1244,13 @@ bool canonical_gemm_bf16_graph_state_is_valid(
     bool leases_held) noexcept {
   if (owner == nullptr || stream == nullptr || output == nullptr ||
       state.plan == nullptr || state.input == nullptr ||
-      state.weight == nullptr || state.workspace == nullptr ||
+      state.weight == nullptr ||
+      (state.workspace == nullptr && (!state.selected_no_split || state.workspace_byte_len != 0)) ||
       !canonical_gemm_bf16_state_metadata_is_valid(state.plan, state) ||
       state.plan_lease_held != leases_held ||
       state.input_lease_held != leases_held ||
       state.weight_lease_held != leases_held ||
-      state.workspace_lease_held != leases_held ||
+      state.workspace_lease_held != (leases_held && state.workspace != nullptr) ||
       state.input == state.weight || state.input == output ||
       state.input == state.workspace || state.weight == output ||
       state.weight == state.workspace || output == state.workspace ||
@@ -1245,11 +1259,13 @@ bool canonical_gemm_bf16_graph_state_is_valid(
       !same_context(owner, state.input->owner) ||
       !same_context(owner, state.weight->owner) ||
       !same_context(owner, output->owner) ||
-      !same_context(owner, state.workspace->owner) ||
+      (state.workspace != nullptr && !same_context(owner, state.workspace->owner)) ||
       state.input->byte_len != state.input_byte_len ||
       state.weight->byte_len != state.weight_byte_len ||
       output->byte_len != state.output_byte_len ||
-      state.workspace->byte_len != state.workspace_byte_len ||
+      (state.workspace != nullptr && (state.selected_no_split ?
+       state.workspace->byte_len < state.workspace_byte_len :
+       state.workspace->byte_len != state.workspace_byte_len)) ||
       state.input->device_data == nullptr ||
       state.weight->device_data == nullptr || output->device_data == nullptr ||
       (state.workspace_byte_len != 0 &&
@@ -1259,7 +1275,7 @@ bool canonical_gemm_bf16_graph_state_is_valid(
       state.input->active_uses.load(std::memory_order_acquire) != 1 ||
       state.weight->active_uses.load(std::memory_order_acquire) != 1 ||
       output->active_uses.load(std::memory_order_acquire) != 1 ||
-      state.workspace->active_uses.load(std::memory_order_acquire) != 1) {
+      (state.workspace != nullptr && state.workspace->active_uses.load(std::memory_order_acquire) != 1)) {
     return false;
   }
   return true;
@@ -1310,6 +1326,58 @@ RileyCudaStatus enqueue_canonical_gemm_bf16_graph_matmul(
           state.plan->output_layout, &state.plan->algorithm, workspace_data,
           static_cast<size_t>(state.workspace_byte_len), stream->stream),
       error, RILEY_CUDA_ERROR_STAGE_LAUNCH, operation);
+}
+
+RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
+  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || plan->config.m != 1)
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "requires selected no-split M=1 plan");
+  *state = RileyCudaCanonicalGemmBf16GraphState{};
+  state->plan = plan; state->input = input; state->weight = weight; state->workspace = workspace;
+  state->input_byte_len = plan->input_bytes; state->weight_byte_len = plan->weight_bytes;
+  state->output_byte_len = plan->output_bytes; state->workspace_byte_len = plan->algorithm_info.workspace_bytes;
+  state->selected_no_split = true;
+  // These flags describe leases already held by the aggregate ledger. The
+  // aggregate caller independently proves membership for every exact parent.
+  state->plan_lease_held = true; state->input_lease_held = true; state->weight_lease_held = true;
+  state->workspace_lease_held = workspace != nullptr;
+  if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, *state, true))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "reserved plan/parent geometry differs");
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+bool reserved_packed_decode_gemm_plan_matches(
+    const RileyCudaGemmPlan* plan, const RileyCudaContext* context,
+    uint64_t expected_n) noexcept {
+  // The caller has already established membership in its aggregate ledger.
+  // Do not call the public plan-info API here: it requires an idle plan and
+  // would try to acquire the exclusive use that the aggregate already owns.
+  if ((expected_n != 960 && expected_n != 3072) ||
+      !canonical_gemm_bf16_plan_is_ready(plan) || plan->owner != context ||
+      plan->active_uses.load(std::memory_order_acquire) != 1 ||
+      plan->config.flags != 0 || plan->config.m != 1 ||
+      plan->config.n != expected_n || plan->config.k != 576 ||
+      plan->input_bytes != 1152 || plan->weight_bytes != expected_n * 1152 ||
+      plan->output_bytes != expected_n * 2) {
+    return false;
+  }
+  const auto& info = plan->algorithm_info;
+  // Exact identity from the bounded 30-layer packed-projection BF16 probe.
+  // This admission does not replace full-model logits/KV qualification.
+  return info.backend == RILEY_CUDA_GEMM_BACKEND_CUBLASLT &&
+         info.algorithm_id == 13 && info.tile_id == 0 && info.stages_id == 0 &&
+         info.cta_swizzling == 0 && info.custom_option == 74 &&
+         info.numerical_implementation_flags == 131585 &&
+         info.compute_capability_major == 8 && info.compute_capability_minor == 9 &&
+         info.runtime_version == 13000 && info.cublaslt_version == 130101 &&
+         info.deterministic == RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED &&
+         info.split_k == 1 &&
+         info.reduction_scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE) &&
+         info.workspace_bytes == 0;
 }
 
 }  // namespace riley_cuda_internal

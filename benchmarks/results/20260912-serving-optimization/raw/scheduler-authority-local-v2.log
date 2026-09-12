@@ -1,0 +1,22 @@
+   Compiling riley-scheduler v0.1.0 (/private/tmp/riley-multisequence-integration-20260912/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running tests/complete_prefill_policy.rs (target/debug/deps/complete_prefill_policy-03a2f69d8da925b5)
+
+running 14 tests
+test policy_rejects_incompatible_configuration_before_pool_construction ... ok
+test invalid_requests_never_take_promises_ids_or_waiting_capacity ... ok
+test default_constructor_retains_mixed_127_token_prefill_behavior ... ok
+test execution_authority_rejects_forged_tokens_and_stale_plan ... ok
+test quiesced_failed_dispatch_poisons_only_its_rows_then_allows_survivors ... ok
+test rejected_output_vocabulary_cannot_enter_the_next_decode ... ok
+test execution_authority_checks_actual_tables_and_off_batch_owners ... ok
+test waiting_short_request_still_reserves_ten_blocks_after_admission ... ok
+test possibly_dispatched_prefill_failure_does_not_delay_a_healthy_decoder_again ... ok
+test undispatched_retry_and_rejected_results_do_not_advance_class_progress ... ok
+test aged_prefill_pressure_alternates_whole_prompts_and_immediate_decode_buckets ... ok
+test cancellation_of_one_inflight_decoder_keeps_other_rows_and_reuses_capacity ... ok
+test output_limit32_never_plans_low_level_position159_or_output33 ... ok
+test continuous_short_prefills_cannot_starve_an_aged_ready_decoder ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,388 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10120:19
+      |
+10119 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10120 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10130 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10424:19
+      |
+10423 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10424 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10435 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10447 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/riley_runtime-37b6549c31f0f56a)
+
+running 333 tests
+test generation::tests::minimum_tokens_masks_and_disables_all_stop_forms ... ok
+test generation::tests::cancellation_is_pre_step_and_consumes_no_rng ... ok
+test generation::tests::accepting_tokens_does_not_change_preallocated_buffer_addresses ... ok
+test generation::tests::minimum_token_gate_never_reactivates_past_raw_stop_bytes ... ok
+test generation::tests::external_failure_is_terminal_idempotent_and_consumes_no_rng ... ok
+test generation::tests::finish_precedence_and_hidden_token_history_are_exact ... ok
+test generation::tests::overlapping_stop_strings_use_chunk_independent_earliest_completion ... ok
+test generation::tests::split_and_invalid_utf8_tails_are_withheld_without_replacement ... ok
+test generation::tests::stop_strings_are_excluded_across_token_boundaries ... ok
+test generation::tests::request_rng_is_fixed_seed_reproducible_and_batch_order_isolated ... ok
+test generation::tests::stop_strings_match_raw_bytes_after_an_unrenderable_utf8_tail ... ok
+test generation::tests::terminal_paths_flush_nonmatching_stop_prefixes ... ok
+test generation::tests::token_acceptance_errors_are_terminal_without_partial_commit ... ok
+test generation::tests::zero_maximum_is_immediately_length_finished ... ok
+test generation::tests::validation_rejects_inconsistent_request_before_rng_use ... ok
+test kernel::tests::gemm_selection_requires_exact_accumulator_dtype ... ok
+test generation::tests::terminal_unrenderable_utf8_is_retained_without_lossy_replacement ... ok
+test kernel::tests::optimized_selection_is_deterministic_and_falls_back_to_reference ... ok
+test kernel::tests::production_selection_rejects_triton_and_nondeterminism ... ok
+test kernel::tests::reference_preference_requires_reference_origin ... ok
+test kernel::tests::registration_rejects_empty_and_duplicate_ids ... ok
+test kernel::tests::row_bias_capability_is_semantic_and_exact ... ok
+test llama::batch::tests::configuration_rejects_unrepresentable_or_inconsistent_bounds ... ok
+test llama::batch::tests::intermediate_prefill_can_pack_without_output_capacity ... ok
+test llama::batch::tests::rejects_duplicate_sequences_and_capacity_overflow ... ok
+test llama::batch_executor::attention_model_gpu_tests::c07_model_owned_packed_attention_preserves_logits_tokens_and_kv_continuation ... ignored, requires CUDA and RILEY_REAL_CHECKPOINT; actual model continuation
+test llama::batch_executor::final_norm_model_gpu_tests::c07_final_norm_model_canonical_owner_preserves_norm_and_continuation ... ignored, requires CUDA and RILEY_CANONICAL_CHECKPOINT synthetic canonical fixture
+test llama::batch_executor::final_norm_model_gpu_tests::c07_final_norm_model_hf_owner_preserves_norm_and_continuation ... ignored, requires CUDA and RILEY_REAL_CHECKPOINT pinned SmolLM2
+test llama::batch_executor::final_norm_model_gpu_tests::c07_hidden_bindings_odd_layer_continuation ... ignored, requires CUDA and RILEY_ODD_CHECKPOINT synthetic three-layer fixture
+test llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_canonical_all_layers_and_continuation ... ignored, requires CUDA and RILEY_CANONICAL_CHECKPOINT
+test llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_hf_all_layers_and_continuation ... ignored, requires CUDA and RILEY_REAL_CHECKPOINT
+test llama::batch_executor::full_decode::multisequence_model_gpu::multisequence_full_model_logits_and_kv_match_m1 ... ignored, requires SmolLM2 checkpoint and qualified CUDA runtime
+test llama::batch::tests::rejects_noncanonical_or_aliased_block_tables ... ok
+test llama::batch_executor::full_decode::owned_tests::owned_graph_smol_p128_o32_reuses_scheduler_block_mappings ... ignored, requires SmolLM2 checkpoint and CUDA
+test llama::batch_executor::full_decode::owned_tests::owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings ... ignored, requires SmolLM2 checkpoint and CUDA
+test llama::batch_executor::full_decode::prefill_parity_gpu::batched_prefill_exact_logits_status_and_every_decode_kv ... ignored, requires SM89 CUDA13 and RILEY_REAL_CHECKPOINT; recaptures for full KV snapshots
+test llama::batch_executor::full_decode::prefill_parity_gpu::batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation ... ignored, requires SM89 CUDA13 and RILEY_REAL_CHECKPOINT
+test llama::batch_executor::full_decode::stage_parity_gpu::owned_profile2_stage_parity_bytes ... ignored, requires SM89 CUDA13, SmolLM2 checkpoint, and new RILEY_STAGE_PARITY_OUTPUT path
+test llama::batch_executor::full_decode::tests::full_decode_canonical_64_tokens ... ignored, requires CUDA canonical fixture
+test llama::batch_executor::full_decode::tests::full_decode_odd_64_tokens ... ignored, requires CUDA odd-layer fixture
+test llama::batch::tests::mixed_rows_pack_csr_positions_and_dense_output_routes ... ok
+test llama::batch_executor::full_decode::tests::full_decode_smol_64_tokens ... ignored, requires CUDA and SmolLM2 checkpoint
+test llama::batch::tests::rejects_decode_shape_and_output_slot_errors ... ok
+test llama::batch::tests::repeated_pack_reuses_every_prepared_allocation ... ok
+test llama::batch_executor::tests::active_row_policy_selects_smallest_prepared_bucket ... ok
+test llama::batch_executor::tests::active_row_policy_uses_non_power_of_two_maximum_as_final_bucket ... ok
+test llama::batch_executor::tests::active_shape_history_tracks_shape_changes_and_maximum_hits ... ok
+test llama::batch_executor::tests::custom_active_row_buckets_fail_closed_for_every_list_invariant ... ok
+test llama::batch_executor::tests::c02_runtime_fact_ids_follow_normalized_prepared_policy ... ok
+test llama::batch_executor::tests::custom_active_row_buckets_are_stored_and_select_the_smallest_shape ... ok
+test llama::batch_executor::tests::fixed_maximum_shape_is_default_and_reversible ... ok
+test llama::batch_executor::tests::fixed_maximum_shape_history_tracks_padding_and_one_bucket ... ok
+test llama::batch_executor::tests::metadata_transport_is_synchronous_by_default_and_explicitly_reversible ... ok
+test llama::batch_executor::tests::new_batch_config_inherits_forward_reduction_profile ... ok
+test llama::batch_executor::tests::packed_iteration_layout_is_checked_aligned_and_capacity_bounded ... ok
+test llama::batch_executor::tests::packed_iteration_input_preflight_preserves_destination_bytes ... ok
+test llama::batch_executor::tests::prepare_normalization_preserves_active_row_policy ... ok
+test llama::batch_executor::tests::fixed37_profile_rejects_t8193_in_host_preflight ... ok
+test llama::batch::tests::hot_pack_source_contains_no_preparation_or_allocation ... ok
+test llama::batch_executor::tests::ragged_attention_implementation_is_legacy_by_default_reversible_and_preserved ... ok
+test llama::batch_executor::tests::packed_iteration_host_bytes_match_all_seven_sources_and_zero_padding ... ok
+test llama::batch_executor::tests::shape_selection_rejects_empty_and_over_capacity_batches ... ok
+test llama::batch_executor::tests::whole_reduction_profile_updates_forward_and_ragged_attention_atomically ... ok
+test llama::decode::tests::cache_layout_is_checked_layer_then_head_major ... ok
+test llama::decode::tests::cache_layout_rejects_zero_and_overflow ... ok
+test llama::decode::tests::lifecycle_validation_is_pre_mutation_and_capacity_exact ... ok
+test llama::executor::config::graph_numerical_profile_tests::batched_prefill_requires_explicit_profile_and_exact_p128_capacity ... ok
+test llama::executor::config::graph_numerical_profile_tests::explicit_profile_survives_normalization_without_changing_default ... ok
+test llama::executor::error::tests::checked_scalar_helpers_are_exact_and_retain_their_resource_mapping ... ok
+test llama::executor::host::tests::zeroed_host_bytes_are_exact_and_fail_closed_on_overflow ... ok
+test llama::executor::metadata::tests::checked_region_slice_preserves_error_precedence ... ok
+test llama::executor::dispatch::tests::dispatch_disposition_distinguishes_preflight_from_unknown_mutation ... ok
+test llama::executor::metadata::tests::typed_region_encoders_preserve_mismatch_reason_without_writing ... ok
+test llama::executor::metadata::tests::packed_layout_u64_capacity_preserves_conversion_and_layout_errors ... ok
+test llama::executor::dispatch::hidden_role_tests::physical_roles_preserve_legacy_chain_and_continuation ... ok
+test llama::executor::output::tests::greedy_records_preserve_nonfinite_status_without_partial_publication ... ok
+test llama::executor::output::tests::greedy_records_publish_dense_tokens_only_after_full_validation ... ok
+test llama::executor::output::tests::greedy_records_publish_each_valid_dense_token ... ok
+test llama::executor::output::tests::greedy_result_bytes_is_exact_and_fails_closed_on_overflow ... ok
+test llama::executor::output::tests::greedy_result_capacity_bytes_preserves_cuda_abi_overflow_mapping ... ok
+test llama::executor::output::tests::output_logits_bytes_is_exact_and_fails_closed_on_overflow ... ok
+test llama::executor::owner::tests::cleanup_precedence_keeps_shape_before_forward_error ... ok
+test llama::executor::owner::tests::cleanup_precedence_keeps_the_first_resource_error ... ok
+test llama::executor::owner::tests::cleanup_succeeds_when_every_close_succeeds ... ok
+test llama::executor::poison::tests::configuration_and_overflow_fail_close_without_reading_owner_gemm_state ... ok
+test llama::executor::poison::tests::forward_error_categories_preserve_flag_and_gemm_folding_rules ... ok
+test llama::executor::poison::tests::forward_error_folds_owner_gemm_state_only_when_forward_is_not_poisoned ... ok
+test llama::executor::rope::tests::absolute_rope_builders_preserve_empty_floor_shape ... ok
+test llama::executor::rope::tests::absolute_rope_position_count_preserves_floor_and_overflow_semantics ... ok
+test llama::executor::rope::tests::absolute_rope_builders_preserve_position_major_native_bytes ... ok
+test llama::executor::rope::tests::absolute_rope_table_shape_preserves_floor_and_overflow_semantics ... ok
+test llama::executor::rope::tests::rope_builders_preserve_overflow_resource_precedence ... ok
+test llama::executor::shape::tests::history_retains_supported_buckets_and_the_maximum_fallback ... ok
+test llama::executor::shape::tests::unavailable_anchored_shape_uses_the_next_prepared_bucket_or_exact_maximum ... ok
+test llama::forward::tests::workspace_growth_updates_exact_allocation_totals_once ... ok
+test llama::forward::tests::workspace_report_growth_is_atomic_on_overflow ... ok
+test llama::graph::tests::auto_reports_closed_fallback_reasons_without_graph_work ... ok
+test llama::graph::tests::auto_selects_only_the_stage_matching_prepared_mode ... ok
+test llama::graph::tests::disabled_policy_never_selects_a_ready_graph ... ok
+test llama::graph::tests::pure_decode_graph_bucket_catalog_is_fixed_minimal_and_bounded ... ok
+test llama::graph::tests::replacing_operator_evidence_preserves_every_other_eligibility_fact ... ok
+test llama::graph_decode_attention_owner::tests::c07_packed_attention_owner_parity_binds_only_matching_live_inventory ... ignored, requires CUDA GPU; exact canonical C07 attention owner
+test llama::graph::tests::require_turns_every_miss_into_a_fail_closed_error ... ok
+test llama::graph_decode_attention_parent_binding::tests::closed_parent_is_rejected_and_completion_precedes_graph_release ... ok
+test llama::graph_decode_attention_parent_binding::tests::exact_binding_derives_one_immutable_layer_span_from_the_parent_layout ... ok
+test llama::graph_decode_attention_parent_binding::tests::parent_capacity_and_layer_bounds_reject_before_lease ... ok
+test llama::graph_decode_attention_parent_binding::tests::scope_and_metadata_mismatch_reject_before_lease ... ok
+test llama::graph_decode_attention_parent_binding::tests::wrong_parent_and_aliasing_key_value_parent_reject_before_lease ... ok
+test llama::graph_decode_binding::tests::binding_is_a_copyable_value_only_contract ... ok
+test llama::graph_decode_binding::tests::mismatched_buckets_fail_closed_without_reselection_or_fallback ... ok
+test llama::graph_decode_binding::tests::matching_bucket_binds_layout_padding_and_layout_derived_digest ... ok
+test llama::gemm_policy::tests::attention_promotion_preserves_explicit_and_unreviewed_selections ... ok
+test llama::graph_decode_binding::tests::unsupported_active_counts_produce_no_padding_input_for_binding ... ok
+test llama::graph_decode_binding::tests::same_bucket_different_active_rows_share_geometry_but_not_padding ... ok
+test llama::graph_decode_c05_capture_capability_dispatch_binding::tests::partial_inventory_forces_auto_eager_and_require_rejection ... ok
+test llama::graph_decode_c05_capture_capability_dispatch_binding::tests::exact_c05_evidence_still_denies_the_incomplete_decode_chain ... ok
+test llama::graph_decode_binding::tests::same_bucket_different_cold_geometry_binds_but_keeps_distinct_digests ... ok
+test llama::graph_decode_c05_capture_capability_dispatch_binding::tests::complete_synthetic_evidence_only_passes_the_operator_gate ... ok
+test llama::graph_decode_c05_h2d_metadata_owner::tests::c07_26_captures_exact_metadata_owner_and_recovers_cold_resources ... ignored, requires a remote CUDA GPU
+test llama::graph_decode_c05_h2d_metadata_owner::tests::c07_26_recovers_exact_resources_after_c05_preflight_rejection ... ignored, requires a remote CUDA GPU
+test llama::graph_decode_c05_capture_capability_dispatch_binding::tests::binding_changes_only_operator_evidence ... ok
+test llama::graph_decode_c05_h2d_metadata_owner::tests::c07_27_resolves_exact_metadata_owner_and_replays_fresh_host_leases ... ignored, requires a remote CUDA GPU
+test llama::graph_decode_c05_capture_capability_evidence::tests::exact_c05_capability_mapping_is_closed ... ok
+test llama::graph_decode_c05_owned_exec_resolver::tests::c07_24_resolves_one_exact_c05_owner_without_c07_execution_wiring ... ignored, requires a remote CUDA GPU
+test llama::graph_decode_c05_capture_capability_evidence::tests::native_c05_evidence_leaves_the_incomplete_decode_chain_unknown ... ok
+test llama::graph_decode_c05_capture_capability_dispatch_binding::tests::pure_decode_evidence_never_admits_prefill_or_mixed_piecewise_graphs ... ok
+test llama::graph_decode_c05_owned_h2d_exec_resolver::tests::c07_25_resolves_one_exact_c05_h2d_owner_without_c07_execution_wiring ... ignored, requires a remote CUDA GPU
+test llama::gemm_policy::tests::source_family_resolves_one_cold_per_plan_policy_without_hot_dispatch ... ok
+test llama::graph_decode_c05_owned_exec_resolver::tests::selected_piecewise_graph_never_borrows_a_c07_full_graph_owner ... ok
+test llama::graph_decode_c05_owned_exec_resolver::tests::matching_full_graph_identity_rejects_a_different_logical_slot ... ok
+test llama::graph_decode_c05_h2d_metadata_owner::tests::c07_26_uses_complete_layout_before_digest_or_payload_diagnostics ... ok
+test llama::graph_decode_c05_owned_exec_resolver::tests::exact_eager_preserves_its_reason_without_owner_identity_lookup ... ok
+test llama::graph_decode_c05_owned_exec_resolver::tests::full_graph_requires_complete_signature_equality_before_slot_equality ... ok
+test llama::graph_decode_c05_owned_h2d_exec_resolver::tests::matching_full_graph_identity_rejects_a_different_logical_slot ... ok
+test llama::graph_decode_binding::tests::every_supported_active_count_binds_only_its_exact_selected_bucket ... ok
+test llama::graph_decode_c05_owned_h2d_exec_resolver::tests::exact_eager_preserves_its_reason_without_h2d_owner_identity_lookup ... ok
+test llama::graph_decode_c06_identity::tests::ineligible_reason_is_preserved_without_constructing_partial_identity ... ok
+test llama::gemm_policy::tests::canonical_attention_promotes_only_the_reviewed_dense_llama_shape ... ok
+test llama::graph_decode_c05_owned_h2d_exec_resolver::tests::full_graph_requires_complete_signature_equality_before_slot_equality ... ok
+test llama::graph_decode_c06_identity::tests::observed_sampling_backend_is_part_of_iteration_identity_without_admission_claim ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::bound_candidate_preserves_c06_disabled_precedence ... ok
+test llama::graph_decode_c05_owned_h2d_exec_resolver::tests::selected_piecewise_graph_never_borrows_a_c07_full_h2d_owner ... ok
+test llama::graph_decode_c06_identity::tests::same_bucket_padding_topology_is_retained_while_c06_iteration_bucket_is_shared ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::c07_22_observes_bound_full_and_eager_decisions_once ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::bound_candidate_preserves_c06_preflight_precedence ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::caller_request_mismatches_and_require_errors_are_not_repaired_by_c07 ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::bound_candidate_preserves_the_exact_c06_full_decision_and_slot ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::bound_candidate_preserves_c06_miss_poison_and_capacity_outcomes ... ok
+test llama::graph_decode_c06_registry_observation::tests::require_error_is_observed_once_and_retained_unchanged ... ok
+test llama::graph_decode_c06_registry_dispatch::tests::ineligible_candidate_short_circuits_before_c06_request_or_registry_handling ... ok
+test llama::graph_decode_c06_identity::tests::distinct_cold_geometry_changes_metadata_identity_without_changing_bucket_identity ... ok
+test llama::graph_decode_c06_signature::tests::ineligible_candidate_short_circuits_before_static_metadata_comparison ... ok
+test llama::gemm_policy::tests::smollm2_rope_geometry_requires_exact_reviewed_table_contract ... ok
+test llama::gemm_policy::tests::smollm2_rms_norm_geometry_requires_bf16_hidden576_and_exact_epsilon ... ok
+test llama::graph_decode_capture_inventory::tests::canonical_operations_have_dense_stable_slots ... ok
+test llama::graph_decode_c06_registry_observation::tests::ineligible_candidate_preserves_the_closed_reason_without_metric_observation ... ok
+test llama::graph_decode_capture_inventory::tests::default_inventory_leaves_every_operation_unknown ... ok
+test llama::graph_decode_c06_signature::tests::schema_or_digest_mismatch_rejects_without_rebuilding_static_identity ... ok
+test llama::graph_decode_capture_inventory::tests::each_unknown_operation_keeps_the_chain_unknown ... ok
+test llama::graph_decode_capture_inventory::tests::each_unsupported_operation_rejects_the_chain ... ok
+test llama::graph_decode_c06_signature::tests::matching_metadata_preserves_unvalidated_static_facts_in_the_complete_key ... ok
+test llama::graph_decode_capture_inventory::tests::only_complete_supported_evidence_is_admitted ... ok
+test llama::graph_decode_exact_h2d_gpu::c07_23_exact_h2d_is_byte_exact_and_releases_every_cuda_allocation ... ignored, requires a remote CUDA GPU
+test llama::graph_decode_capture_inventory::tests::unsupported_evidence_wins_over_unknown_evidence ... ok
+test llama::graph_decode_exact_field_sources::tests::successful_c07_9_grouping_reborrows_all_nine_fields_in_canonical_packer_order ... ok
+test llama::graph_decode_exact_host_slab::tests::ending_a_lease_allows_a_later_exact_write_at_the_same_payload_address ... ok
+test llama::graph_decode_exact_host_slab::tests::leased_write_binds_the_just_written_payload_to_its_layout_and_digest ... ok
+test llama::graph_decode_exact_host_slab::tests::exact_write_forwards_canonical_bytes_through_the_cold_owner ... ok
+test llama::graph_decode_exact_host_slab::tests::preflight_ineligibility_preserves_c07_11_identity_and_cold_payload ... ok
+test llama::graph_decode_exact_host_slab::tests::prepare_error_is_a_closed_error_type ... ok
+test llama::graph_decode_exact_host_slab::tests::moving_the_owner_and_reusing_exact_writes_preserves_payload_address ... ok
+test llama::graph_decode_exact_host_slab::tests::leased_write_preserves_ineligible_and_opaque_error_identity_without_mutation ... ok
+test llama::graph_decode_exact_host_slab::tests::opaque_error_preserves_c07_11_identity_and_cold_payload ... ok
+test llama::graph_decode_exact_host_slab::tests::prepare_exposes_an_exact_zeroed_layout_aligned_payload ... ok
+test llama::graph_decode_exact_projection::tests::eligible_batch_preserves_c07_7_typed_layout_mismatch ... ok
+test llama::graph_decode_exact_projection::tests::exact_rows_reject_a_shorter_dynamic_block_span_than_cold_capacity ... ok
+test llama::graph_decode_exact_slab_writer::tests::eligible_layout_mismatch_preserves_c07_7_error_before_opaque_or_destination_checks ... ok
+test llama::graph_decode_exact_projection::tests::padded_rows_remain_ineligible_before_any_native_field_projection ... ok
+test llama::graph_decode_exact_projection::tests::prefill_and_over_catalog_batches_preserve_preflight_reason_before_layout_use ... ok
+test llama::graph_decode_exact_slab_writer::tests::exact_m2_b2_metadata_writes_canonical_bytes_and_preserves_callers ... ok
+test llama::graph_decode_final_norm_owner::tests::c07_final_norm_owner_gpu_parity_binding_and_recovery ... ignored, requires CUDA; G02C canonical final norm owner parity and lifecycle
+test llama::graph_decode_exact_slab_writer::tests::valid_exact_sources_preserve_original_destination_too_small_error_without_writing ... ok
+test llama::graph_decode_exact_slab_writer::tests::prefill_and_over_catalog_batches_short_circuit_before_opaque_or_destination_checks ... ok
+test llama::graph_decode_exact_slab_writer::tests::opaque_length_errors_precede_destination_checks_with_header_then_control_order ... ok
+test llama::graph_decode_exact_sources::tests::control_status_length_mismatches_fail_after_an_exact_header ... ok
+test llama::graph_decode_exact_slab_writer::tests::row_and_block_tails_short_circuit_before_opaque_or_destination_checks ... ok
+test llama::graph_decode_final_norm_owner::tests::final_norm_binding_rejects_profile_geometry_weight_and_epsilon_substitution ... ok
+test llama::graph_decode_exact_sources::tests::exact_native_fields_bind_arbitrary_exact_length_opaque_bytes_without_mutation ... ok
+test llama::graph_decode_exact_projection::tests::every_exact_initial_bucket_projects_all_seven_native_fields_without_mutation ... ok
+test llama::graph_decode_exact_sources::tests::header_length_mismatches_fail_closed_before_control_status ... ok
+test llama::graph_decode_c06_signature::tests::every_supported_c07_candidate_assembles_one_exact_complete_c06_signature ... ok
+test llama::graph_decode_layout::tests::exact_catalog_buckets_have_stable_fixed_geometry ... ok
+test llama::graph_decode_layout::tests::layout_rejects_non_exact_buckets_and_invalid_cold_capacities ... ok
+test llama::graph_decode_layout::tests::layout_fails_closed_on_fixed_field_multiplication_and_offset_overflow ... ok
+test llama::graph_decode_layout::tests::layout_uses_canonical_fixed_order_alignment_and_final_padding ... ok
+test llama::graph_decode_packer::tests::copies_exact_sized_values_without_interpreting_metadata_semantics ... ok
+test llama::graph_decode_layout_signature::tests::same_cold_layout_derives_one_deterministic_copyable_identity ... ok
+test llama::graph_decode_layout::tests::geometry_digest_is_canonical_and_changes_with_every_cold_geometry_input ... ok
+test llama::graph_decode_packer::tests::rejects_wrong_destination_length_before_source_mutation ... ok
+test llama::graph_decode_layout_signature::tests::every_changed_cold_geometry_changes_the_derived_c06_identity ... ok
+test llama::graph_decode_packer::tests::writes_fixed_fields_little_endian_and_zeroes_alignment_gaps ... ok
+test llama::graph_decode_layout_signature::tests::every_exact_c07_bucket_derives_its_own_c06_metadata_identity ... ok
+test llama::graph_decode_padding::tests::boundary_and_exact_buckets_preserve_the_reviewed_trailing_shape ... ok
+test llama::graph_decode_padding::tests::every_supported_active_count_has_one_contiguous_trailing_padding_plan ... ok
+test llama::graph_decode_padding::tests::padding_plan_is_a_copyable_value_only_topology ... ok
+test llama::graph_decode_padding::tests::unsupported_counts_have_no_maximum_bucket_fallback ... ok
+test llama::graph_decode_preflight::tests::count_classifier_accepts_coherent_counts_and_rejects_empty ... ok
+test llama::graph_decode_preflight::tests::count_classifier_closes_when_host_rows_do_not_fit_the_c07_width ... ok
+test llama::graph_decode_preflight::tests::count_classifier_rejects_every_non_pure_decode_shape_closed ... ok
+test llama::graph_decode_packer::tests::rejects_every_short_or_long_source_field_before_mutating_destination ... ok
+test llama::graph_decode_preflight::tests::one_token_prefill_with_an_output_stays_ineligible_without_writing_metadata ... ok
+test llama::graph_decode_preflight_binding::tests::eligible_candidate_preserves_the_typed_layout_bucket_mismatch ... ok
+test llama::graph_decode_preflight_binding::tests::ineligible_candidate_short_circuits_before_layout_binding ... ok
+test llama::graph_decode_preflight::tests::over_catalog_pure_decode_batch_stays_ineligible_without_maximum_fallback ... ok
+test llama::graph_metrics::tests::counters_saturate_without_wrapping_or_retaining_graph_identity ... ok
+test llama::graph_registry_dispatch::tests::closed_preflight_rejection_bypasses_the_registry_lookup_source ... ok
+test llama::graph_registry_dispatch::tests::disabled_policy_bypasses_the_registry_lookup_source ... ok
+test llama::multi_descriptor::shape_progress::tests::rejects_cross_stage_overlap_overflow_and_context_exhaustion ... ok
+test llama::multi_descriptor::tests::checked_overflow_and_no_catalog_fallback ... ok
+test llama::graph_decode_c06_identity::tests::every_supported_c07_candidate_derives_its_exact_c06_partial_identity ... ok
+test llama::multi_descriptor::tests::duplicate_physical_tags_cookies_slots_and_sparse_output_rejected ... ok
+test llama::multi_descriptor::tests::canonical_target_table_and_generation_bounds ... ok
+test llama::multi_descriptor::tests::explicit_ownership_blocks_forged_off_batch_reassignment ... ok
+test llama::multi_descriptor::shape_progress::tests::chunked_requests_publish_only_after_complete_prompt_then_exact_output_budget ... ok
+test llama::multi_descriptor::tests::greedy_tokens_scatter_independently_from_execution_rows ... ok
+test llama::multi_descriptor::tests::old_wire_version_is_not_admitted ... ok
+test llama::graph_decode_preflight::tests::every_supported_active_count_is_a_read_only_exact_or_padded_candidate ... ok
+test llama::multi_descriptor::tests::unknown_completion_retains_snapshot_no_late_publication ... ok
+test llama::multi_descriptor::tests::prefill_then_decode_requires_new_binding_and_respects_o1_terminal ... ok
+test llama::multi_descriptor::tests::two_row_owner_has_exact_catalog_capacity_and_pool_bounds ... ok
+test llama::plan::tests::error_context_names_the_exact_layer_and_operation ... ok
+test llama::graph_decode_preflight_binding::tests::every_supported_candidate_binds_its_exact_cold_bucket_and_digest ... ok
+test llama::multi_descriptor::tests::unknown_stage_mode_version_and_lengths_rejected ... ok
+test llama::multi_descriptor::variable_wire::tests::rejects_stale_replay_foreign_page_and_overlapping_reservations_without_writes ... ok
+test llama::plan::tests::smollm_plan_freezes_all_bindings_and_exact_workspace_bytes ... ok
+test llama::plan::tests::qwen2_reuses_the_plan_with_qkv_bias_and_a_tied_head ... ok
+test llama::plan::tests::workspace_arithmetic_is_checked ... ok
+test llama::plan::tests::workspace_spec_remains_plain_copyable_metadata ... ok
+test llama::source_contract_tests::absolute_rope_builders_share_cold_table_shape_preflight ... ok
+test llama::plan::tests::tied_head_must_use_the_embedding_physical_identity ... ok
+test llama::source_contract_tests::batch_executor_facade_reexports_the_allocation_report_nominal_type ... ok
+test llama::source_contract_tests::batch_executor_facade_reexports_the_executor_error_vocabulary ... ok
+test llama::source_contract_tests::batch_executor_facade_reexports_the_executor_metric_value_types ... ok
+test llama::source_contract_tests::batch_executor_facade_reexports_the_executor_shape_policy ... ok
+test llama::source_contract_tests::batch_prepare_normalization_preserves_fused_residual_norm_selection ... ok
+test llama::source_contract_tests::batch_prepare_normalization_preserves_iteration_completion_selection ... ok
+test llama::source_contract_tests::batch_ragged_attention_launch_is_explicit_reversible_and_preserved ... ok
+test llama::multi_descriptor::tests::p128_compatibility_view_and_all_prompt_tokens ... ok
+test llama::source_contract_tests::batch_ragged_attention_profile_is_explicit_reversible_and_preserved ... ok
+test llama::source_contract_tests::cold_output_capacity_reuses_canonical_output_sizing ... ok
+test llama::source_contract_tests::absolute_rope_position_shape_is_shared_as_value_only_arithmetic ... ok
+test llama::multi_descriptor::variable_wire::tests::single_decode_completion_is_bound_to_its_generated_index ... ok
+test llama::source_contract_tests::batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace ... ok
+test llama::source_contract_tests::diagnostic_trace_names_match_the_pinned_hugging_face_artifact ... ok
+test llama::source_contract_tests::exact_paged_cache_is_default_and_contiguous_is_explicit ... ok
+test llama::source_contract_tests::cold_zeroed_host_bytes_share_one_checked_allocator ... ok
+test llama::source_contract_tests::batch_executor_facade_reexports_host_only_config_types ... ok
+test llama::multi_descriptor::tests::shrinking_and_growing_buckets_need_fresh_replay_and_result_shape ... ok
+test llama::source_contract_tests::executor_usize_u64_conversions_share_one_typed_error_facade ... ok
+test llama::plan::tests::projection_biases_are_bound_semantically_and_mlp_bias_fails_closed ... ok
+test llama::source_contract_tests::executor_byte_lengths_share_one_typed_overflow_facade ... ok
+test llama::plan::tests::fixed_sequence_bounds_fail_before_weight_lookup ... ok
+test llama::multi_descriptor::tests::malformed_last_row_never_exposes_earlier_rows ... ok
+test llama::source_contract_tests::iteration_completion_guards_synchronous_and_packed_async_bodies ... ok
+test llama::source_contract_tests::llama_reduction_profile_has_stable_ids_and_cuda_mapping ... ok
+test llama::source_contract_tests::optimized_attention_is_default_and_reference_is_explicit ... ok
+test llama::source_contract_tests::packed_metadata_encoders_share_checked_region_validation ... ok
+test paged_kv::tests::device_failure_poison_rolls_back_tentative_blocks_and_invalidates_sidecars ... ok
+test llama::source_contract_tests::packed_slab_capacity_validation_is_shared_before_write_or_bind ... ok
+test paged_kv::tests::layout_is_checked_layer_block_head_token_major ... ok
+test paged_kv::tests::lost_reservation_requires_poisoned_recovery_then_reset ... ok
+test paged_kv::tests::hot_reservation_source_contains_no_heap_preparation ... ok
+test paged_kv::tests::oom_and_explicit_rollback_leave_committed_state_unchanged ... ok
+test paged_kv::tests::sidecar_is_optional_versioned_generation_bound_and_invalidated ... ok
+test llama::multi_descriptor::tests::caller_changes_cannot_rewrite_admitted_snapshot ... ok
+test paged_kv::tests::stale_double_free_wrong_owner_and_foreign_pool_are_distinct ... ok
+test paged_kv::tests::truncate_reset_close_and_dropped_owner_account_exactly ... ok
+test reference::tests::bfloat16_cast_rounds_to_even_and_preserves_special_values ... ok
+test reference::tests::embedding_gathers_odd_rows_and_fails_before_writing ... ok
+test reference::tests::gemm_rejects_overflow_and_length_mismatch ... ok
+test llama::multi_descriptor::tests::owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter ... ok
+test reference::tests::gemm_supports_bias_odd_shapes_and_transposed_storage ... ok
+test llama::source_contract_tests::packed_metadata_transport_keeps_the_exact_synchronous_fallback ... ok
+test reference::tests::llama_rope_pairs_vector_halves ... ok
+test reference::tests::elementwise_primitives_match_scalar_formulas ... ok
+test paged_kv::tests::block_boundaries_publish_exact_v1_tables_and_reuse_deterministically ... ok
+test reference::tests::rms_norm_uses_rowwise_f32_accumulation ... ok
+test reference::tests::row_bias_bf16_is_in_place_rowwise_and_rounds_ties_to_even ... ok
+test reference::tests::row_bias_bf16_validates_boundaries_before_writing ... ok
+test rng::tests::construction_snapshot_and_fork_consume_zero_draws ... ok
+test llama::source_contract_tests::sequence_block_offset_count_is_shared_before_capacity_or_allocation ... ok
+test rng::tests::derivation_and_first_block_match_known_answers ... ok
+test rng::tests::f64_open_interval_mapping_is_exact ... ok
+test rng::tests::raw_philox_known_answers_match_random123 ... ok
+test rng::tests::request_streams_are_isolated_from_batch_order ... ok
+test rng::tests::restore_rejects_every_noncanonical_snapshot_field ... ok
+test rng::tests::fork_is_position_independent_and_matches_known_answer ... ok
+test rng::tests::sampling_greedy_consumes_zero_and_stochastic_consumes_one_draw ... ok
+test sampling::tests::all_masked_is_an_error ... ok
+test rng::tests::terminal_draw_exhausts_without_counter_wrap ... ok
+test rng::tests::snapshot_restore_replays_suffix_without_consumption ... ok
+test sampling::tests::constraints_precede_one_penalty_per_unique_history_token ... ok
+test sampling::tests::categorical_walks_ascending_ids_and_consumes_exactly_one_word ... ok
+test sampling::tests::empty_vocabulary_and_input_shapes_are_rejected ... ok
+test sampling::tests::errors_happen_before_draw_and_rng_errors_propagate ... ok
+test sampling::tests::greedy_uses_lower_token_tie_and_zero_rng_words ... ok
+test sampling::tests::invalid_float_parameters_are_rejected ... ok
+test sampling::tests::nonfinite_bf16_and_history_bounds_are_rejected ... ok
+test sampling::tests::probability_and_log_probability_views_use_stable_f64_normalization ... ok
+test sampling::tests::signed_zero_logits_use_the_numeric_tie_break ... ok
+test sampling::tests::repeated_processing_preserves_all_preallocated_capacities ... ok
+test sampling::tests::stable_algorithm_identifiers_are_explicit ... ok
+test sampling::tests::top_k_boundaries_and_ties_are_deterministic ... ok
+test sampling::tests::top_p_keeps_the_minimal_sorted_prefix_and_accepts_one ... ok
+test tests::cpu_build_does_not_claim_cuda ... ok
+test llama::multi_descriptor::tests::independent_golden_request_exact_and_result_scatter ... ok
+test llama::source_contract_tests::continuous_batch_dispatch_source_is_allocation_free_and_not_serial_dispatch ... ok
+test llama::multi_descriptor::tests::any_repeated_result_attempt_invalidates_ready_output ... ok
+test llama::multi_descriptor::tests::bf16_bits_preserved_and_nonfinite_rejected ... ok
+test llama::source_contract_tests::decode_hot_source_contains_no_preparation_or_allocation ... ok
+test paged_kv::tests::deterministic_property_sequence_preserves_accounting_and_tables ... ok
+test llama::multi_descriptor::variable_wire::tests::result_binds_replay_and_suppresses_partial_output ... ok
+test llama::source_contract_tests::hot_execute_source_uses_only_prebound_direct_index_state ... ok
+test llama::multi_descriptor::tests::unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt ... ok
+test llama::multi_descriptor::tests::eighth_row_identity_and_cross_row_block_alias_are_rejected ... ok
+test llama::multi_descriptor::tests::inactive_rows_logits_and_arbitrary_spans_rejected ... ok
+test llama::multi_descriptor::tests::all_exact_bucket_and_output_mode_sizes ... ok
+test llama::multi_descriptor::variable_wire::lane_argmax_tests::independent_lanes_match_scalar_and_reject_nonfinite ... ok
+test llama::multi_descriptor::tests::every_request_byte_is_bound_in_both_stages ... ok
+test llama::multi_descriptor::tests::result_header_every_byte_and_row_identity_rejected ... ok
+test sampling::greedy_fast_comparison::greedy_fast_preserves_full_distribution_and_errors ... ok
+test llama::multi_descriptor::variable_wire::tests::batch_results_bind_all_rows_before_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::variable_shapes_and_partial_output_round_trip_with_every_byte_bound ... ok
+
+test result: ok. 310 passed; 0 failed; 23 ignored; 0 measured; 0 filtered out; finished in 3.64s
+

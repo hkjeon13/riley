@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-10",
+  "scope": "G02P5/P6/P7 cold pointwise resource audit; full graph and performance pending",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "gpu": {
+    "passed": 43,
+    "primitive_matrix": 1,
+    "actual_models": 2,
+    "graph_regression": 40,
+    "exit_code": 0
+  },
+  "cpu": {
+    "cuda_lib": 82,
+    "graph_contracts": 32,
+    "runtime_lib": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "pointwise_diagnostics": [],
+    "baseline_warnings_remain": true
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "README.md": "8d7aca35414ed0a468bdebaa3d866c7dedbc513d9f90c0b33325f93f680ff6aa",
+    "clippy-final.jsonl": "00ea9b704484d5a366b2d5b2b27371576c3064a101dc3bf0ac06bd37092e5ed1",
+    "clippy-final.log": "b7c7dc0a0a420c6e5fefd039402cbc2355403ade5ee4706f99b46730813449bf",
+    "clippy.jsonl": "00917202d306b0eb3fff3f5fb715b4efd53d4211531a047b2921a4dde1734d0e",
+    "clippy.log": "384327b2b4c188f72e6734bc5d211d9fed9f58c8dc79795f6afb2e6fd0765064",
+    "cuda-cpu.log": "f61669d3a0dbdf63d229234eae114d948516b5817a2e1679fe3db6c11249ea82",
+    "gpu-model-final.log": "67159e78a2e82d99c6aeb38674d1f56b668e8a1e53b9fdd5998d63fe0456d9b9",
+    "gpu-model.log": "8c1bdf9d95893bb01202e890221ef82bbafd3f8a400107727809b6da54fd38ba",
+    "gpu-pointwise-final.log": "2e6be19dba172d73f38a9dcbcb465397597cf78982f28d519a9afb42d19c44ce",
+    "gpu-pointwise.log": "307aaad3cb3cdad536a14de9d05ea98ef7427c0660bd4efaf184128b785b0565",
+    "gpu-regression.log": "690e8901f1743f3368faf9038014c83e970a3e089e1586cfc88bf59b081c9d5d",
+    "model-preservation.json": "37d3dc67453dbf16a4702404e274511dc860ff5ec59135d585849e245106b28b",
+    "remote-source-verification.json": "b054c9a0d845286b421a24379bd41f6c8f2d0cd6f6001e51de19173c2c4c8d51",
+    "runtime-cpu.log": "af511decabed6b41bad45ba5bbf5084fa2536b999009f3432fa8feb5fb42993d",
+    "runtime-identities.json": "203f4e8d8c6e5ade08004a9d1b5cf31ad9d952586f7481969f0fd3b285d25776",
+    "source-hashes.json": "dc6c42da8a5b070edde99660e23936c7edb848ee45448cfe54891d52dbb83059",
+    "source-overlay.tar.gz": "7c3aae7fff2d720b5500f43b7671889aa1b7ebb6ee9e21cad040f2348f775987"
+  }
+}

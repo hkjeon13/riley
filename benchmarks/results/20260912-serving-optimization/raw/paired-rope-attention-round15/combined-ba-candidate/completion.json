@@ -1,0 +1,86 @@
+{
+  "lane": "candidate",
+  "mode": "rope_attention",
+  "completed": true,
+  "responses": [
+    {
+      "phase": "warmup-nonstream",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/warmup-nonstream.jsonl",
+        "sha256": "43549910d2616118c705dcffb956d42464caf451efabc3517d9e07a90f8b0496"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/warmup-nonstream-accounting.json",
+        "sha256": "e51b35684258ac7b6258fc01a6771605338c13ab28d55aba892a988186d8bf0b"
+      }
+    },
+    {
+      "phase": "warmup-stream",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/warmup-stream.jsonl",
+        "sha256": "7cab0fd46857eccb732f5e1ef6a8a2028e8b3f34197765167afc56f97566befb"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/warmup-stream-accounting.json",
+        "sha256": "77e53ae06e9bd7dc335dae636720b198501a0d39d72af04197adec30f6269bc0"
+      }
+    },
+    {
+      "phase": "retained",
+      "raw": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/retained.jsonl",
+        "sha256": "615078958ac8cd7af19d4adc937e3a560276ff71c0fd5fbab3d647653a86f4c1"
+      },
+      "accounting": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/retained-accounting.json",
+        "sha256": "3356f7d3f80a0cda6af8a446dabec291ac75d54d655db896d2a46293e0295448"
+      }
+    }
+  ],
+  "cleanup": {
+    "returncode": 0,
+    "remaining_owned_pids": [],
+    "zombie_pids": [],
+    "cleanup_verified": true,
+    "log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/server.log",
+      "sha256": "09b40884409c987fb9655ba00b11f2e9abe57ba6ccff18f227afc9137eae08dd"
+    }
+  },
+  "native": {
+    "full": {
+      "replays": 512,
+      "prefill": 16,
+      "decode": 496,
+      "operator_replays": 496,
+      "first_replay_id": 1,
+      "last_replay_id": 512
+    },
+    "retained": {
+      "replays": 192,
+      "prefill": 6,
+      "decode": 186,
+      "operator_replays": 186,
+      "first_replay_id": 321,
+      "last_replay_id": 512
+    },
+    "raw_log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/server.log",
+      "sha256": "09b40884409c987fb9655ba00b11f2e9abe57ba6ccff18f227afc9137eae08dd"
+    },
+    "retained_log": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/retained-native.log",
+      "sha256": "21cf93ecc08be4b5820ab41bb47fe1f409d323fd7fdfe98cc557da7376f7c863"
+    },
+    "summary": {
+      "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/native-summary.json",
+      "sha256": "ed9bbe00f4b54e583624758561833d4fdc9ae5f00e176a16ee9c235e49b5e8c5"
+    },
+    "performance_claim_eligible": false
+  },
+  "binary": {
+    "path": "/tmp/riley-opt-260912/decode8-profile-target/release/riley",
+    "sha256": "f21de3ba19553cff39f0ff3f09288b7e0a4bcb03605ef75055173e286b6fe7f4"
+  },
+  "performance_claim_eligible": false
+}

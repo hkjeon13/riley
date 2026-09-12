@@ -1,0 +1,66 @@
+   Compiling riley-cuda v0.1.0 (/private/var/folders/vk/_qcwxfzx7m9c2zwf88m3cq8r0000gn/T/riley-local-typecheck-6mngh9bf/crates/riley-cuda)
+    Checking riley-core v0.1.0 (/private/var/folders/vk/_qcwxfzx7m9c2zwf88m3cq8r0000gn/T/riley-local-typecheck-6mngh9bf/crates/riley-core)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+    Checking typenum v1.20.1
+   Compiling libc v0.2.189
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.145
+    Checking tinyvec_macros v0.1.1
+    Checking tinyvec v1.12.0
+    Checking ryu v1.0.23
+    Checking memchr v2.8.3
+    Checking itoa v1.0.18
+    Checking cfg-if v1.0.4
+    Checking unicode-normalization v0.1.25
+    Checking hybrid-array v0.4.14
+    Checking block-buffer v0.12.1
+    Checking crypto-common v0.2.2
+    Checking digest v0.11.3
+error: couldn't read `crates/riley-cuda/src/../../../kernels/include/riley_cuda.h`: No such file or directory (os error 2)
+    --> crates/riley-cuda/src/batch.rs:1372:22
+     |
+1372 |         let header = include_str!("../../../kernels/include/riley_cuda.h");
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: this error originates in the macro `include_str` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+    Checking riley-tensor v0.1.0 (/private/var/folders/vk/_qcwxfzx7m9c2zwf88m3cq8r0000gn/T/riley-local-typecheck-6mngh9bf/crates/riley-tensor)
+error: could not compile `riley-cuda` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

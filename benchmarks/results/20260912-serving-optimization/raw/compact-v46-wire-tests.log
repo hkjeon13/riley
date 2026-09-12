@@ -1,0 +1,36 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling typenum v1.20.1
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.228
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-core)
+   Compiling serde_json v1.0.145
+   Compiling tinyvec_macros v0.1.1
+   Compiling serde v1.0.228
+   Compiling cpufeatures v0.3.0
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-cuda)
+   Compiling itoa v1.0.18
+   Compiling ryu v1.0.23
+   Compiling tinyvec v1.12.0
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-tensor)
+   Compiling unicode-normalization v0.1.25
+   Compiling hybrid-array v0.4.14
+   Compiling syn v2.0.119
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.0
+   Compiling serde_derive v1.0.228
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.28s
+     Running unittests src/lib.rs (target/debug/deps/riley_runtime-c5c3438158af577d)
+
+running 2 tests
+test llama::multi_descriptor::variable_wire::tests::compact_eight_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_sixteen_identity_status_and_publication ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 303 filtered out; finished in 2.58s
+

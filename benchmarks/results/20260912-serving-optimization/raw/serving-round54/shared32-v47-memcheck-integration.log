@@ -1,0 +1,13 @@
+========= COMPUTE-SANITIZER
+
+running 3 tests
+test loaded_v5_compact32 ... LOADED_SHARED rows_max=32 logits_checked=4096 iterations=190 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v5_full32 ... LOADED_SHARED rows_max=32 logits_checked=4096 iterations=190 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v5_prefill32 ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 80.70s
+
+========= ERROR SUMMARY: 0 errors

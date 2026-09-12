@@ -1,0 +1,41 @@
+{
+  "source_root": "/tmp/riley-g04-vllm-profile-source-260911",
+  "source_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+  "source_clean": true,
+  "binaries": {
+    "riley": {
+      "path": "/tmp/riley-g04-vllm-profile-target/release/riley",
+      "sha256": "4753c83893f9e69de6b70e9083e5c9903e006cb8c17cab5a2880ee364266f8ae"
+    },
+    "riley-profile": {
+      "path": "/tmp/riley-g04-vllm-profile-target/release/riley-profile",
+      "sha256": "bcc0230a559e8bf4069f9da89927b5fd8a5706413dde08c5dc456c9c86a13c43"
+    }
+  },
+  "gpu": {
+    "model": "NVIDIA GeForce RTX 4090",
+    "uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "pci_bus_id": "00000000:01:00.0",
+    "compute_capability": "8.9",
+    "vram_bytes": 25757220864,
+    "driver": "580.173.02",
+    "power_limit_watts": 450.0
+  },
+  "host": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i7-13700K",
+    "physical_core_count": 16,
+    "logical_core_count": 24,
+    "ram_bytes": 67185594368,
+    "os_release": "Ubuntu 22.04.5 LTS",
+    "kernel_release": "6.8.0-138-generic",
+    "architecture": "x86_64"
+  },
+  "software": {
+    "cuda_runtime_version": "13000",
+    "cuda_toolkit_version": "Cuda compilation tools, release 13.3, V13.3.73",
+    "cublas_version": "13.1.1",
+    "container_image_sha256": null
+  },
+  "environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+  "numerical_profile": "vllm-smol-p128-v1"
+}

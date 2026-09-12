@@ -1,0 +1,61 @@
+{
+  "cleanup_allocations_zero": true,
+  "environment": {
+    "gpu": {
+      "compute_capability": "8.9",
+      "device_index": 0,
+      "model": "NVIDIA GeForce RTX 4090",
+      "pci_bus_id": "00000000:01:00.0",
+      "uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+      "vram_bytes": 25757220864
+    },
+    "host": {
+      "architecture": "x86_64",
+      "cpu_model": "13th Gen Intel(R) Core(TM) i7-13700K",
+      "environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+      "kernel_release": "6.8.0-138-generic",
+      "logical_core_count": 24,
+      "os_release": "Ubuntu 22.04.5 LTS",
+      "physical_core_count": 16,
+      "ram_bytes": 67185594368
+    },
+    "software": {
+      "container_image_sha256": null,
+      "cublas_version": "13.1.1",
+      "cuda_runtime_version": "13.0",
+      "cuda_toolkit_version": "Cuda compilation tools, release 13.3, V13.3.73",
+      "nvidia_driver_version": "580.173.02"
+    }
+  },
+  "performance_trials": 0,
+  "prepared": true,
+  "schema_version": "riley.native-profile-preparation.v1",
+  "source": {
+    "correctness_gate_id": "g04-vllm-smol-p128-v1",
+    "correctness_report_sha256": "8fb6d15ca85a23d424c05c7cbc3c23c4a2885b77869a43ec332adeeddbc47807",
+    "executable_sha256": "bcc0230a559e8bf4069f9da89927b5fd8a5706413dde08c5dc456c9c86a13c43",
+    "git_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+    "git_dirty": false,
+    "implementation_id": "g04-vllm-smol-p128-v1",
+    "runtime_flag": {
+      "name": "graph_numerics",
+      "value": "vllm-smol-p128-v1"
+    },
+    "semantic_class": "VLLM_REFERENCE"
+  },
+  "workload": {
+    "concurrency": 1,
+    "dtype": "bf16",
+    "measured_iterations": 30,
+    "model_id": "HuggingFaceTB/SmolLM2-135M",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "output_tokens": 32,
+    "prompt_tokens": 128,
+    "sampling_id": "greedy",
+    "seed": null,
+    "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    "warmups": 5,
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "workload_id": "g04-c1-p128-o32"
+  }
+}

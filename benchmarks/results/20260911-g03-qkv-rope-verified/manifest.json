@@ -1,0 +1,41 @@
+{
+  "status": "remote_validation_passed",
+  "cuda_build_passed": true,
+  "gpu_tests": {
+    "gpu-rope-native.log": 1,
+    "gpu-qkv-native.log": 1,
+    "gpu-tail-native.log": 1,
+    "gpu-model.log": 14,
+    "gpu-aggregate.log": 3,
+    "gpu-swiglu.log": 2
+  },
+  "gpu_total_passed": 22,
+  "all_test_exit_codes": 0,
+  "model_replays": {
+    "G03_QKV_ROPE": 640,
+    "G03_NORM_QKV": 640,
+    "G03_LAYER_TAIL": 640,
+    "G03_NORM_MLP": 640,
+    "G03_MLP": 640
+  },
+  "model_parity_matches_prior": true,
+  "full_decode_graph_complete": false,
+  "performance_measurement_started": false,
+  "artifacts": {
+    "README.md": "d68c76c492d3cc4b1d9a5559f98a2500e835dc925bcef6eb001d2ab39dfb0a94",
+    "authorized-transfer.json": "0dbde6721573a546b97826d5bc6e1f65b1e8286a6406847dd26c3da36f97159f",
+    "build.log": "871416fc8107ad6e4da0b153099ddb2f5649d3e3e6f3856be5cadca25aceabe8",
+    "gpu-aggregate.log": "ccafbbf12e7552272b8b5a9ad47faaa02b790b57b95ee6f044b9bc45013a7dfb",
+    "gpu-model.log": "f6f36d0a72daa191c5395b1a5398c4a596bb8832b4f5629114ec2e5894442a93",
+    "gpu-qkv-native.log": "daa073bacd634610c3c34cc7468460792a9be03493ddb6e2ac4d9e33e07166bb",
+    "gpu-rope-native.log": "d55823a07628042345d08994dac0188775bac3eacbfab4355629b9ccefc07be3",
+    "gpu-swiglu.log": "0a3f626585997cac199b27837e31b22abcecca039c61a45850f21d74bbadc4c3",
+    "gpu-tail-native.log": "3cb07fcaa17790bce44a7a0aab5a96e78daca583f4090d525cebf535cbdc0bb0",
+    "local-checks.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-parity.json": "e92fe6d0f21a9c8df8836694424cd946ff3b75377e2504c7dc1a140f48e2b012",
+    "model-preservation.json": "b3a4299929af2f0d7ba3e525f3cee0af85043e27e95d6b263f15e2a5614a6314",
+    "remote-before.txt": "131574d49b0d657e7f70ef777ec8bef8aed5ee00eff4d742db94b0096beecda2",
+    "remote-hashes.txt": "d34be4243fcf14ce88d9b615d12251416cffc42d4baa99f747fd402515a92790",
+    "runtime-identities.txt": "3879f6a988e848639b162187d931376cc83562cec292ec871b5a6bf1a3a2cfd9"
+  }
+}

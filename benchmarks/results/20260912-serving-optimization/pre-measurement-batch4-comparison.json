@@ -1,0 +1,2989 @@
+{
+  "schema_version": "riley.optimization-batches-comparison.v1",
+  "scope": "SmolLM2-135M BF16 c1 P128 O32; GUI retained; five fresh AB/BA process pairs",
+  "campaign_labels": {
+    "baseline": "original baseline",
+    "candidate": "rejected batch1",
+    "batch2": "P128 parallel prefill batch",
+    "batch3": "HTTP readiness and worker wakeup batch",
+    "batch4": "packed decode projections and RoPE KV fusion batch"
+  },
+  "goal_complete": false,
+  "high_concurrency_claim": false,
+  "canonical_qualification": false,
+  "aggregation": {
+    "process_values": "Arrays follow pair_indices; each lane has one fresh process per pair.",
+    "latency": "Each value is a retained process median, P95 or P99; summary median/range spans processes.",
+    "paired_ratio": "Riley/vLLM within the same pair, then median/range; not a ratio of campaign medians.",
+    "changes": "100 * (new/previous - 1), using medians of process statistics or same-pair ratios; campaigns are separate trials.",
+    "tails": "Nearest-rank tails from 30 requests per process, not pooled 150-request percentiles or high-concurrency stability.",
+    "evidence": "Completed runner summaries only; raw artifacts are not revalidated by this analysis."
+  },
+  "modes": {
+    "http": {
+      "status": "partial",
+      "semantics": {
+        "latency": "HTTP E2E and first nonempty text event; first text is not token-aligned TTFT.",
+        "token_ttft": "unmeasured",
+        "tpot": "unmeasured",
+        "throughput": "Observed retained-request wall interval, including gaps between requests."
+      },
+      "campaigns": {
+        "baseline": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/baseline-http/summary.json",
+          "summary_sha256": "a4bcee023f6c80fcef4b6ea5eeaae9d19812181a45e78efe3109ad8126ed9985",
+          "status": "complete",
+          "source_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency HTTP serving diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "shared_runner_sha256": null,
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      512.9888659999999,
+                      512.9183365,
+                      512.962528,
+                      512.8686465000001,
+                      512.8402985
+                    ],
+                    "median": 512.9183365,
+                    "range": [
+                      512.8402985,
+                      512.9888659999999
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      35.0938625,
+                      35.4966395,
+                      35.5327305,
+                      35.438448,
+                      35.209603
+                    ],
+                    "median": 35.438448,
+                    "range": [
+                      35.0938625,
+                      35.5327305
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      14.617623409221482,
+                      14.449771688951007,
+                      14.4363385752187,
+                      14.472096704122032,
+                      14.565353051552442
+                    ],
+                    "median": 14.472096704122032,
+                    "range": [
+                      14.4363385752187,
+                      14.617623409221482
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      513.390796,
+                      514.105479,
+                      514.963954,
+                      513.997162,
+                      513.77192
+                    ],
+                    "median": 513.997162,
+                    "range": [
+                      513.390796,
+                      514.963954
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      37.20482,
+                      37.115544,
+                      42.586423,
+                      48.720379,
+                      44.490022
+                    ],
+                    "median": 42.586423,
+                    "range": [
+                      37.115544,
+                      48.720379
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      13.799039909345082,
+                      13.851487102007718,
+                      12.092209622771087,
+                      10.549941781035816,
+                      11.548025757325991
+                    ],
+                    "median": 12.092209622771087,
+                    "range": [
+                      10.549941781035816,
+                      13.851487102007718
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      513.457143,
+                      514.111036,
+                      515.484034,
+                      514.18852,
+                      513.922572
+                    ],
+                    "median": 514.111036,
+                    "range": [
+                      513.457143,
+                      515.484034
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      39.781195,
+                      40.887382,
+                      47.26243,
+                      54.632104,
+                      48.631397
+                    ],
+                    "median": 47.26243,
+                    "range": [
+                      39.781195,
+                      54.632104
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      12.907031651512732,
+                      12.573831114939077,
+                      10.90684575465121,
+                      9.411838138249262,
+                      10.567711472487618
+                    ],
+                    "median": 10.90684575465121,
+                    "range": [
+                      9.411838138249262,
+                      12.907031651512732
+                    ]
+                  }
+                }
+              }
+            },
+            "first_text_event_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      441.51131499999997,
+                      441.4284325,
+                      441.42465649999997,
+                      441.304298,
+                      441.2086755
+                    ],
+                    "median": 441.42465649999997,
+                    "range": [
+                      441.2086755,
+                      441.51131499999997
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.185532,
+                      7.5336675,
+                      7.6867325,
+                      7.2929145,
+                      7.2624955
+                    ],
+                    "median": 7.2929145,
+                    "range": [
+                      7.185532,
+                      7.6867325
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      61.4444852517531,
+                      58.59409543890807,
+                      57.4268268734472,
+                      60.51137689876935,
+                      60.7516624967272
+                    ],
+                    "median": 60.51137689876935,
+                    "range": [
+                      57.4268268734472,
+                      61.4444852517531
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      441.946546,
+                      442.285408,
+                      443.952448,
+                      442.426987,
+                      442.226801
+                    ],
+                    "median": 442.285408,
+                    "range": [
+                      441.946546,
+                      443.952448
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      9.296041,
+                      8.897596,
+                      10.390885,
+                      16.519267,
+                      15.806424
+                    ],
+                    "median": 10.390885,
+                    "range": [
+                      8.897596,
+                      16.519267
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      47.54137228955853,
+                      49.708416520597254,
+                      42.72518154132203,
+                      26.782482963681137,
+                      27.97766281608035
+                    ],
+                    "median": 42.72518154132203,
+                    "range": [
+                      26.782482963681137,
+                      49.708416520597254
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      441.949155,
+                      442.591851,
+                      443.977145,
+                      442.607632,
+                      443.73651
+                    ],
+                    "median": 442.607632,
+                    "range": [
+                      441.949155,
+                      443.977145
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      12.072029,
+                      9.586249,
+                      17.321844,
+                      16.716936,
+                      17.981656
+                    ],
+                    "median": 16.716936,
+                    "range": [
+                      9.586249,
+                      17.981656
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      36.609351667395764,
+                      46.169450741369225,
+                      25.63105550425232,
+                      26.47660025736774,
+                      24.677177118725883
+                    ],
+                    "median": 26.47660025736774,
+                    "range": [
+                      24.677177118725883,
+                      46.169450741369225
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      62.37594683470223,
+                      62.367424100792064,
+                      62.35495765128561,
+                      62.37799880730733,
+                      62.375869266849115
+                    ],
+                    "median": 62.375869266849115,
+                    "range": [
+                      62.35495765128561,
+                      62.37799880730733
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      902.3654503579679,
+                      893.7430914648199,
+                      868.6401864058408,
+                      865.184158350446,
+                      883.7312622241839
+                    ],
+                    "median": 883.7312622241839,
+                    "range": [
+                      865.184158350446,
+                      902.3654503579679
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.06912492805432403,
+                      0.06978227266470234,
+                      0.07178456468758458,
+                      0.0720979437790872,
+                      0.07058239527462329
+                    ],
+                    "median": 0.07058239527462329,
+                    "range": [
+                      0.06912492805432403,
+                      0.0720979437790872
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "candidate": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/candidate-http/summary.json",
+          "summary_sha256": "b484eef93e319a472d5e2cb3e394d0fddecca35269acd6f028eb07202b84484e",
+          "status": "complete",
+          "source_commit": "321581f97af9fa3aa6c386c82d96f8efd8a0f2e9",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency HTTP serving diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "shared_runner_sha256": null,
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      533.3562715,
+                      542.7056625,
+                      543.142285,
+                      543.0505025,
+                      543.0910135
+                    ],
+                    "median": 543.0505025,
+                    "range": [
+                      533.3562715,
+                      543.142285
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      35.351576,
+                      35.485483,
+                      35.478106,
+                      35.3622355,
+                      35.388410500000006
+                    ],
+                    "median": 35.388410500000006,
+                    "range": [
+                      35.351576,
+                      35.485483
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      15.087199266589982,
+                      15.293737512322997,
+                      15.309224370658345,
+                      15.356792205628517,
+                      15.346578323996777
+                    ],
+                    "median": 15.309224370658345,
+                    "range": [
+                      15.087199266589982,
+                      15.356792205628517
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      543.022919,
+                      543.202579,
+                      543.584796,
+                      543.934152,
+                      543.349222
+                    ],
+                    "median": 543.349222,
+                    "range": [
+                      543.022919,
+                      543.934152
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      46.267292,
+                      39.002651,
+                      39.710069,
+                      42.145089,
+                      40.302564
+                    ],
+                    "median": 40.302564,
+                    "range": [
+                      39.002651,
+                      46.267292
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      11.736647975853007,
+                      13.927324555451372,
+                      13.688840379501734,
+                      12.90622857624052,
+                      13.481753220465082
+                    ],
+                    "median": 13.481753220465082,
+                    "range": [
+                      11.736647975853007,
+                      13.927324555451372
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      543.157748,
+                      544.376642,
+                      543.691899,
+                      544.002406,
+                      543.9895
+                    ],
+                    "median": 543.9895,
+                    "range": [
+                      543.157748,
+                      544.376642
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      56.426886,
+                      46.101545,
+                      41.294812,
+                      46.342413,
+                      44.242688
+                    ],
+                    "median": 46.101545,
+                    "range": [
+                      41.294812,
+                      56.426886
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      9.625867853136533,
+                      11.80820820647117,
+                      13.16610665281634,
+                      11.738758747845088,
+                      12.295579780324378
+                    ],
+                    "median": 11.80820820647117,
+                    "range": [
+                      9.625867853136533,
+                      13.16610665281634
+                    ]
+                  }
+                }
+              }
+            },
+            "first_text_event_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      466.812628,
+                      476.0172405,
+                      476.40051,
+                      476.328354,
+                      476.3366925
+                    ],
+                    "median": 476.328354,
+                    "range": [
+                      466.812628,
+                      476.40051
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.46645,
+                      7.344781,
+                      7.321213,
+                      7.5673485,
+                      7.348675
+                    ],
+                    "median": 7.348675,
+                    "range": [
+                      7.321213,
+                      7.5673485
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      62.52136262882628,
+                      64.81027010880243,
+                      65.071253902871,
+                      62.945211787193365,
+                      64.81939839494875
+                    ],
+                    "median": 64.81027010880243,
+                    "range": [
+                      62.52136262882628,
+                      65.071253902871
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      476.662105,
+                      476.913342,
+                      476.823763,
+                      477.225338,
+                      476.542649
+                    ],
+                    "median": 476.823763,
+                    "range": [
+                      476.542649,
+                      477.225338
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      16.801752,
+                      11.40418,
+                      9.045028,
+                      11.084331,
+                      9.940759
+                    ],
+                    "median": 11.084331,
+                    "range": [
+                      9.045028,
+                      16.801752
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      28.3697857818637,
+                      41.819169988548055,
+                      52.716670749941294,
+                      43.05404972117848,
+                      47.938255921906965
+                    ],
+                    "median": 43.05404972117848,
+                    "range": [
+                      28.3697857818637,
+                      52.716670749941294
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      478.710487,
+                      477.754896,
+                      477.048167,
+                      477.36722,
+                      477.238834
+                    ],
+                    "median": 477.36722,
+                    "range": [
+                      477.048167,
+                      478.710487
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      17.402767,
+                      16.710155,
+                      9.660871,
+                      11.717082,
+                      16.816375
+                    ],
+                    "median": 16.710155,
+                    "range": [
+                      9.660871,
+                      17.402767
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      27.507722593769138,
+                      28.59069206718908,
+                      49.37941589324606,
+                      40.74113503686327,
+                      28.37941197196185
+                    ],
+                    "median": 28.59069206718908,
+                    "range": [
+                      27.507722593769138,
+                      49.37941589324606
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      59.575817117690946,
+                      59.3866509939851,
+                      58.93669490081997,
+                      58.91373604147317,
+                      58.91739369001316
+                    ],
+                    "median": 58.93669490081997,
+                    "range": [
+                      58.91373604147317,
+                      59.575817117690946
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      859.8863791461774,
+                      886.8984891271276,
+                      889.5842571341516,
+                      880.6704558858501,
+                      876.3741475885233
+                    ],
+                    "median": 880.6704558858501,
+                    "range": [
+                      859.8863791461774,
+                      889.5842571341516
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.06928335947924497,
+                      0.06695991900091358,
+                      0.06625195357063537,
+                      0.06689646013185822,
+                      0.06722858479124849
+                    ],
+                    "median": 0.06695991900091358,
+                    "range": [
+                      0.06625195357063537,
+                      0.06928335947924497
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "batch2": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch2-http/summary.json",
+          "summary_sha256": "53afe8cf59d67d8af95347192814651778e3ab144fe822092ca4e493e1b7b54e",
+          "status": "complete",
+          "source_commit": "1bfb23053fb15a3528eb6413abe6e1bbdb0db004",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency HTTP serving diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "shared_runner_sha256": null,
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      90.412262,
+                      90.411108,
+                      90.4631905,
+                      90.41828,
+                      90.4621215
+                    ],
+                    "median": 90.41828,
+                    "range": [
+                      90.411108,
+                      90.4631905
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      35.676818999999995,
+                      35.3409775,
+                      35.714716,
+                      35.227612,
+                      35.6387345
+                    ],
+                    "median": 35.6387345,
+                    "range": [
+                      35.227612,
+                      35.714716
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.534201886104252,
+                      2.5582514801691603,
+                      2.5329388171531306,
+                      2.5666877448292547,
+                      2.5383090272186855
+                    ],
+                    "median": 2.5383090272186855,
+                    "range": [
+                      2.5329388171531306,
+                      2.5666877448292547
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      90.574153,
+                      90.632773,
+                      90.559756,
+                      90.791023,
+                      90.994253
+                    ],
+                    "median": 90.632773,
+                    "range": [
+                      90.559756,
+                      90.994253
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      45.015625,
+                      43.846687,
+                      41.909093,
+                      36.229494,
+                      39.133619
+                    ],
+                    "median": 41.909093,
+                    "range": [
+                      36.229494,
+                      45.015625
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.012060323498785,
+                      2.067038109401515,
+                      2.160861749024251,
+                      2.5059975444316165,
+                      2.325219474334842
+                    ],
+                    "median": 2.160861749024251,
+                    "range": [
+                      2.012060323498785,
+                      2.5059975444316165
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      91.028172,
+                      90.782687,
+                      90.667415,
+                      91.221115,
+                      91.283371
+                    ],
+                    "median": 91.028172,
+                    "range": [
+                      90.667415,
+                      91.283371
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      45.659325,
+                      43.934782,
+                      41.989142,
+                      36.890591,
+                      39.857871
+                    ],
+                    "median": 41.989142,
+                    "range": [
+                      36.890591,
+                      45.659325
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.993638145110555,
+                      2.066305620908737,
+                      2.1593062082573633,
+                      2.4727474547642783,
+                      2.2902219488843243
+                    ],
+                    "median": 2.1593062082573633,
+                    "range": [
+                      1.993638145110555,
+                      2.4727474547642783
+                    ]
+                  }
+                }
+              }
+            },
+            "first_text_event_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      23.651325999999997,
+                      23.627314499999997,
+                      23.664109500000002,
+                      23.6506745,
+                      23.60634
+                    ],
+                    "median": 23.6506745,
+                    "range": [
+                      23.60634,
+                      23.664109500000002
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.713741000000001,
+                      7.3683495,
+                      7.7852405000000005,
+                      7.3468,
+                      7.611515000000001
+                    ],
+                    "median": 7.611515000000001,
+                    "range": [
+                      7.3468,
+                      7.7852405000000005
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      3.066129132414479,
+                      3.206595249044579,
+                      3.039611878399903,
+                      3.2191803914629498,
+                      3.1013983418544138
+                    ],
+                    "median": 3.1013983418544138,
+                    "range": [
+                      3.039611878399903,
+                      3.2191803914629498
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      23.788986,
+                      23.774309,
+                      23.747464,
+                      23.95759,
+                      23.818293
+                    ],
+                    "median": 23.788986,
+                    "range": [
+                      23.747464,
+                      23.95759
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      16.235251,
+                      10.4632,
+                      13.342108,
+                      8.57067,
+                      9.197815
+                    ],
+                    "median": 10.4632,
+                    "range": [
+                      8.57067,
+                      16.235251
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.46526752188802,
+                      2.2721833664653257,
+                      1.7798884554074965,
+                      2.7952995506769014,
+                      2.5895599117833963
+                    ],
+                    "median": 2.2721833664653257,
+                    "range": [
+                      1.46526752188802,
+                      2.7952995506769014
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      24.240909,
+                      23.859922,
+                      23.782409,
+                      24.224091,
+                      23.922998
+                    ],
+                    "median": 23.922998,
+                    "range": [
+                      23.782409,
+                      24.240909
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      17.349706,
+                      15.783541,
+                      14.164009,
+                      9.082275,
+                      11.067591
+                    ],
+                    "median": 14.164009,
+                    "range": [
+                      9.082275,
+                      17.349706
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.3971942233487988,
+                      1.5116963930970877,
+                      1.6790732764996126,
+                      2.667183167213061,
+                      2.161536146393556
+                    ],
+                    "median": 1.6790732764996126,
+                    "range": [
+                      1.3971942233487988,
+                      2.667183167213061
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      353.5171994749256,
+                      353.4888529954262,
+                      353.408098080407,
+                      353.324357905825,
+                      353.35563235827743
+                    ],
+                    "median": 353.408098080407,
+                    "range": [
+                      353.324357905825,
+                      353.5171994749256
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      862.7984005119702,
+                      882.9152908619986,
+                      866.6194538406405,
+                      904.305173681558,
+                      882.0191099142373
+                    ],
+                    "median": 882.0191099142373,
+                    "range": [
+                      862.7984005119702,
+                      904.305173681558
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.4097332578098828,
+                      0.40036553523760093,
+                      0.40780079020173243,
+                      0.3907136309608737,
+                      0.4006212885712145
+                    ],
+                    "median": 0.4006212885712145,
+                    "range": [
+                      0.3907136309608737,
+                      0.4097332578098828
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "batch3": {
+          "status": "pending",
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch3-http/summary.json",
+          "reason": "summary absent"
+        },
+        "batch4": {
+          "status": "pending",
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch4-http/summary.json",
+          "reason": "summary absent"
+        }
+      },
+      "changes": {
+        "rejected_batch1_vs_baseline": {
+          "status": "computed",
+          "metrics": {
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": 5.874651743903869,
+                "vllm_change_pct": -0.1411955173657553,
+                "riley_over_vllm_change_pct": 5.7844255994909055
+              },
+              "p95": {
+                "riley_change_pct": 5.710549039957558,
+                "vllm_change_pct": -5.362880559374538,
+                "riley_over_vllm_change_pct": 11.491229816900606
+              },
+              "p99": {
+                "riley_change_pct": 5.811675281757611,
+                "vllm_change_pct": -2.4562533073310022,
+                "riley_over_vllm_change_pct": 8.264189960104407
+              }
+            },
+            "first_text_event_ms": {
+              "median": {
+                "riley_change_pct": 7.90705661454143,
+                "vllm_change_pct": 0.7645845841192767,
+                "riley_over_vllm_change_pct": 7.104272667972467
+              },
+              "p95": {
+                "riley_change_pct": 7.809065000851212,
+                "vllm_change_pct": 6.673599024529664,
+                "riley_over_vllm_change_pct": 0.7697291573550924
+              },
+              "p99": {
+                "riley_change_pct": 7.8533639022293045,
+                "vllm_change_pct": -0.04056365353076741,
+                "riley_over_vllm_change_pct": 7.98475555498499
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "rate": {
+                "riley_change_pct": -5.513629559719757,
+                "vllm_change_pct": -0.34635035210028864,
+                "riley_over_vllm_change_pct": -5.132265998646424
+              }
+            }
+          }
+        },
+        "batch2_vs_baseline": {
+          "status": "computed",
+          "metrics": {
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": -82.37179808836879,
+                "vllm_change_pct": 0.5651672443443223,
+                "riley_over_vllm_change_pct": -82.46066842204206
+              },
+              "p95": {
+                "riley_change_pct": -82.3670674275046,
+                "vllm_change_pct": -1.5904834270772272,
+                "riley_over_vllm_change_pct": -82.13013323094327
+              },
+              "p99": {
+                "riley_change_pct": -82.29406380609188,
+                "vllm_change_pct": -11.15746270346235,
+                "riley_over_vllm_change_pct": -80.2022852726552
+              }
+            },
+            "first_text_event_ms": {
+              "median": {
+                "riley_change_pct": -94.64219450550787,
+                "vllm_change_pct": 4.3686306757058535,
+                "riley_over_vllm_change_pct": -94.87468555368885
+              },
+              "p95": {
+                "riley_change_pct": -94.62134956982348,
+                "vllm_change_pct": 0.6959464954140016,
+                "riley_over_vllm_change_pct": -94.68186375225167
+              },
+              "p99": {
+                "riley_change_pct": -94.5949874628461,
+                "vllm_change_pct": -15.271500710417275,
+                "riley_over_vllm_change_pct": -93.65827462673433
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "rate": {
+                "riley_change_pct": 466.57823327238617,
+                "vllm_change_pct": -0.19374128574306537,
+                "riley_over_vllm_change_pct": 467.5937845584154
+              }
+            }
+          }
+        },
+        "batch2_vs_rejected_batch1": {
+          "status": "computed",
+          "metrics": {
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": -83.34993162077039,
+                "vllm_change_pct": 0.7073615244742149,
+                "riley_over_vllm_change_pct": -83.41974115890804
+              },
+              "p95": {
+                "riley_change_pct": -83.31960931748606,
+                "vllm_change_pct": 3.986170706161518,
+                "riley_over_vllm_change_pct": -83.97195295234971
+              },
+              "p99": {
+                "riley_change_pct": -83.26655716700414,
+                "vllm_change_pct": -8.920314926538797,
+                "riley_over_vllm_change_pct": -81.71351512015164
+              }
+            },
+            "first_text_event_ms": {
+              "median": {
+                "riley_change_pct": -95.0347959970487,
+                "vllm_change_pct": 3.5766992008763543,
+                "riley_over_vllm_change_pct": -95.21464987470684
+              },
+              "p95": {
+                "riley_change_pct": -95.01094789187341,
+                "vllm_change_pct": -5.603685057763075,
+                "riley_over_vllm_change_pct": -94.72248631387717
+              },
+              "p99": {
+                "riley_change_pct": -94.98855451365094,
+                "vllm_change_pct": -15.237117788554322,
+                "riley_over_vllm_change_pct": -94.12720310318569
+              }
+            },
+            "output_tokens_per_wall_second": {
+              "rate": {
+                "riley_change_pct": 499.6401709921642,
+                "vllm_change_pct": 0.15313946543495938,
+                "riley_over_vllm_change_pct": 498.3001391709397
+              }
+            }
+          }
+        },
+        "batch3_vs_batch2": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_batch3": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_batch2": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_baseline": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        }
+      }
+    },
+    "engine": {
+      "status": "partial",
+      "semantics": {
+        "latency": "Engine request TTFT, mean TPOT and E2E from exact-token-validated runs.",
+        "throughput": "Output tokens divided by sum of request E2E service durations; excludes inter-request gaps."
+      },
+      "campaigns": {
+        "baseline": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/baseline-engine/summary.json",
+          "summary_sha256": "6f59b78c66ba2970639e7390bfdee0ff77d7c04551d269db496930a6b897eb8c",
+          "status": "complete",
+          "source_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency engine-only diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "dcecda3438756d970c0438c4fcab66e0395e87780a7393ab5f17fa0b60f868d6",
+          "shared_runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "ttft_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      435.821777,
+                      435.80039050000005,
+                      435.8705025,
+                      435.85941049999997,
+                      436.009186
+                    ],
+                    "median": 435.85941049999997,
+                    "range": [
+                      435.80039050000005,
+                      436.009186
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.057321548927575,
+                      6.966552988160402,
+                      7.118362525943667,
+                      7.067615515552461,
+                      7.1759140701033175
+                    ],
+                    "median": 7.067615515552461,
+                    "range": [
+                      6.966552988160402,
+                      7.1759140701033175
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      61.75455857842089,
+                      62.55610073455828,
+                      61.23184944731619,
+                      61.66993797849935,
+                      60.76009017673792
+                    ],
+                    "median": 61.66993797849935,
+                    "range": [
+                      60.76009017673792,
+                      62.55610073455828
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      436.078779,
+                      436.066484,
+                      436.143864,
+                      436.225663,
+                      436.169209
+                    ],
+                    "median": 436.143864,
+                    "range": [
+                      436.066484,
+                      436.225663
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      8.676002966240048,
+                      11.292012059129775,
+                      10.495399008505046,
+                      8.020498091354966,
+                      10.817456990480423
+                    ],
+                    "median": 10.495399008505046,
+                    "range": [
+                      8.020498091354966,
+                      11.292012059129775
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      50.26263599688291,
+                      38.6172527727185,
+                      41.555720144281004,
+                      54.3888494244757,
+                      40.32086370981993
+                    ],
+                    "median": 41.555720144281004,
+                    "range": [
+                      38.6172527727185,
+                      54.3888494244757
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      436.118012,
+                      436.391906,
+                      436.274169,
+                      437.125775,
+                      436.217033
+                    ],
+                    "median": 436.274169,
+                    "range": [
+                      436.118012,
+                      437.125775
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      16.234089038334787,
+                      15.815763035789132,
+                      10.526273981668055,
+                      9.32611699681729,
+                      12.278028996661305
+                    ],
+                    "median": 12.278028996661305,
+                    "range": [
+                      9.32611699681729,
+                      16.234089038334787
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      26.864335348300816,
+                      27.592213225027376,
+                      41.44621066863637,
+                      46.87114424461726,
+                      35.52826215988071
+                    ],
+                    "median": 35.52826215988071,
+                    "range": [
+                      26.864335348300816,
+                      46.87114424461726
+                    ]
+                  }
+                }
+              }
+            },
+            "tpot_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      2.313837935483871,
+                      2.313483483870968,
+                      2.313698,
+                      2.313589822580645,
+                      2.3137055483870967
+                    ],
+                    "median": 2.313698,
+                    "range": [
+                      2.313483483870968,
+                      2.313837935483871
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      0.9327899521937775,
+                      0.9086120633348342,
+                      0.903422469198103,
+                      0.9317029504135492,
+                      0.9349760986233671
+                    ],
+                    "median": 0.9317029504135492,
+                    "range": [
+                      0.903422469198103,
+                      0.9349760986233671
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.4805562388853812,
+                      2.5461729787957066,
+                      2.561036590172135,
+                      2.4831839606751553,
+                      2.474614647148449
+                    ],
+                    "median": 2.4831839606751553,
+                    "range": [
+                      2.474614647148449,
+                      2.561036590172135
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      2.315185483870968,
+                      2.315854548387097,
+                      2.316237935483871,
+                      2.3146991935483867,
+                      2.3154017741935484
+                    ],
+                    "median": 2.3154017741935484,
+                    "range": [
+                      2.3146991935483867,
+                      2.316237935483871
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      1.1006346753528042,
+                      1.0844755790106233,
+                      0.9334121582909457,
+                      1.0950439346713885,
+                      1.1778221307923236
+                    ],
+                    "median": 1.0950439346713885,
+                    "range": [
+                      0.9334121582909457,
+                      1.1778221307923236
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.1035004036456,
+                      2.13546030284967,
+                      2.4814739286499594,
+                      2.113795730253512,
+                      1.9658331369915527
+                    ],
+                    "median": 2.113795730253512,
+                    "range": [
+                      1.9658331369915527,
+                      2.4814739286499594
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      2.3153016774193547,
+                      2.316131129032258,
+                      2.316487064516129,
+                      2.31724364516129,
+                      2.3158082903225807
+                    ],
+                    "median": 2.316131129032258,
+                    "range": [
+                      2.3153016774193547,
+                      2.31724364516129
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      1.107477902194425,
+                      1.1857450646798937,
+                      0.934291097726072,
+                      1.1205834546877491,
+                      1.2040647392671917
+                    ],
+                    "median": 1.1205834546877491,
+                    "range": [
+                      0.934291097726072,
+                      1.2040647392671917
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.090607562310429,
+                      1.953312898382188,
+                      2.479406118878923,
+                      2.067890290069463,
+                      1.9233253950547622
+                    ],
+                    "median": 2.067890290069463,
+                    "range": [
+                      1.9233253950547622,
+                      2.479406118878923
+                    ]
+                  }
+                }
+              }
+            },
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      507.54455299999995,
+                      507.54668749999996,
+                      507.59382949999997,
+                      507.5870875,
+                      507.723982
+                    ],
+                    "median": 507.5870875,
+                    "range": [
+                      507.54455299999995,
+                      507.723982
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      35.92492645839229,
+                      35.272363980766386,
+                      35.33848706865683,
+                      35.87214555591345,
+                      36.38996393419802
+                    ],
+                    "median": 35.87214555591345,
+                    "range": [
+                      35.272363980766386,
+                      36.38996393419802
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      14.127921836884772,
+                      14.389358416032431,
+                      14.363767993627716,
+                      14.14989484553776,
+                      13.952307919790453
+                    ],
+                    "median": 14.14989484553776,
+                    "range": [
+                      13.952307919790453,
+                      14.389358416032431
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      507.795158,
+                      507.800355,
+                      507.868371,
+                      507.924447,
+                      507.941345
+                    ],
+                    "median": 507.868371,
+                    "range": [
+                      507.795158,
+                      507.941345
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      42.23115893546492,
+                      42.34125604853034,
+                      38.47152600064874,
+                      41.17270198184997,
+                      44.14899891708046
+                    ],
+                    "median": 42.23115893546492,
+                    "range": [
+                      38.47152600064874,
+                      44.14899891708046
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      12.024182399919017,
+                      11.993039470014157,
+                      13.201149624047561,
+                      12.336437069976771,
+                      11.505161101251755
+                    ],
+                    "median": 12.024182399919017,
+                    "range": [
+                      11.505161101251755,
+                      13.201149624047561
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      507.802544,
+                      508.113496,
+                      507.977503,
+                      508.875625,
+                      507.952581
+                    ],
+                    "median": 507.977503,
+                    "range": [
+                      507.802544,
+                      508.875625
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      50.56590400636196,
+                      52.57386004086584,
+                      39.27726298570633,
+                      42.18206403311342,
+                      44.84037193469703
+                    ],
+                    "median": 44.84037193469703,
+                    "range": [
+                      39.27726298570633,
+                      52.57386004086584
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      10.042390301894152,
+                      9.664755367116694,
+                      12.933118664222143,
+                      12.063791487313818,
+                      11.328018905368431
+                    ],
+                    "median": 11.328018905368431,
+                    "range": [
+                      9.664755367116694,
+                      12.933118664222143
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      63.04698043568494,
+                      63.04553448341014,
+                      63.038003107100614,
+                      63.0400199982906,
+                      63.02521228114415
+                    ],
+                    "median": 63.0400199982906,
+                    "range": [
+                      63.02521228114415,
+                      63.04698043568494
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      864.7767832944756,
+                      864.3813512016175,
+                      895.5567695313763,
+                      880.7247537903236,
+                      844.1982113310396
+                    ],
+                    "median": 864.7767832944756,
+                    "range": [
+                      844.1982113310396,
+                      895.5567695313763
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.07290549613913032,
+                      0.07293717569885971,
+                      0.070389734354961,
+                      0.0715774363409101,
+                      0.07465688914665299
+                    ],
+                    "median": 0.07290549613913032,
+                    "range": [
+                      0.070389734354961,
+                      0.07465688914665299
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "candidate": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/candidate-engine/summary.json",
+          "summary_sha256": "9e520603958c20836f2be1bcce4ea9adbf29d48bb07728268f9e4f3a8a80ae90",
+          "status": "complete",
+          "source_commit": "321581f97af9fa3aa6c386c82d96f8efd8a0f2e9",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency engine-only diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "dcecda3438756d970c0438c4fcab66e0395e87780a7393ab5f17fa0b60f868d6",
+          "shared_runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "ttft_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      466.746555,
+                      466.0604915,
+                      467.13277500000004,
+                      466.6819675,
+                      465.618419
+                    ],
+                    "median": 466.6819675,
+                    "range": [
+                      465.618419,
+                      467.13277500000004
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.020657998509705,
+                      6.950059032533318,
+                      7.185155001934618,
+                      7.0195464650169015,
+                      7.160184497479349
+                    ],
+                    "median": 7.020657998509705,
+                    "range": [
+                      6.950059032533318,
+                      7.185155001934618
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      66.48188176935518,
+                      67.05849393772984,
+                      65.0135974622988,
+                      66.48320797159597,
+                      65.02882979676222
+                    ],
+                    "median": 66.48188176935518,
+                    "range": [
+                      65.0135974622988,
+                      67.05849393772984
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      466.968551,
+                      466.289304,
+                      467.533273,
+                      466.950056,
+                      465.892189
+                    ],
+                    "median": 466.950056,
+                    "range": [
+                      465.892189,
+                      467.533273
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      8.820965886116028,
+                      10.438197990879416,
+                      8.945418056100607,
+                      9.422166971489787,
+                      7.833987940102816
+                    ],
+                    "median": 8.945418056100607,
+                    "range": [
+                      7.833987940102816,
+                      10.438197990879416
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      52.93848281796401,
+                      44.67143700545147,
+                      52.2651115987979,
+                      49.558669190742236,
+                      59.47062882431313
+                    ],
+                    "median": 52.2651115987979,
+                    "range": [
+                      44.67143700545147,
+                      59.47062882431313
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      466.968838,
+                      466.489247,
+                      467.539338,
+                      467.063035,
+                      466.171579
+                    ],
+                    "median": 466.968838,
+                    "range": [
+                      466.171579,
+                      467.539338
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      16.454521915875375,
+                      14.889103011228144,
+                      9.911660919897258,
+                      11.006784974597394,
+                      7.957940921187401
+                    ],
+                    "median": 11.006784974597394,
+                    "range": [
+                      7.957940921187401,
+                      16.454521915875375
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      28.379362243850245,
+                      31.330916754905378,
+                      47.17063484904268,
+                      42.43410188151552,
+                      58.57942194052413
+                    ],
+                    "median": 42.43410188151552,
+                    "range": [
+                      28.379362243850245,
+                      58.57942194052413
+                    ]
+                  }
+                }
+              }
+            },
+            "tpot_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      2.1517184193548387,
+                      2.151595161290323,
+                      2.1520573548387096,
+                      2.151214693548387,
+                      2.1518005000000002
+                    ],
+                    "median": 2.1517184193548387,
+                    "range": [
+                      2.151214693548387,
+                      2.1520573548387096
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      0.9216269677234512,
+                      0.9058674350531111,
+                      0.9336117899135477,
+                      0.9047523077066627,
+                      0.9250127102038073
+                    ],
+                    "median": 0.9216269677234512,
+                    "range": [
+                      0.9047523077066627,
+                      0.9336117899135477
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.3346955923717023,
+                      2.375176629640268,
+                      2.30508802276157,
+                      2.377683566236175,
+                      2.326238846519088
+                    ],
+                    "median": 2.3346955923717023,
+                    "range": [
+                      2.30508802276157,
+                      2.377683566236175
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      2.153197451612903,
+                      2.153406806451613,
+                      2.153412548387097,
+                      2.1534641612903225,
+                      2.1535763870967743
+                    ],
+                    "median": 2.153412548387097,
+                    "range": [
+                      2.153197451612903,
+                      2.1535763870967743
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      1.116914836119019,
+                      0.9921864501290744,
+                      1.086635451253143,
+                      1.1114508379250765,
+                      1.0809616125639407
+                    ],
+                    "median": 1.086635451253143,
+                    "range": [
+                      0.9921864501290744,
+                      1.116914836119019
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.9278080852562487,
+                      2.1703650621024653,
+                      1.9817249160274608,
+                      1.9375253387820008,
+                      1.992278321511058
+                    ],
+                    "median": 1.9817249160274608,
+                    "range": [
+                      1.9278080852562487,
+                      2.1703650621024653
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      2.153231709677419,
+                      2.154210193548387,
+                      2.1534156774193547,
+                      2.153477064516129,
+                      2.153920193548387
+                    ],
+                    "median": 2.153477064516129,
+                    "range": [
+                      2.153231709677419,
+                      2.154210193548387
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      1.117803550685846,
+                      1.088707711577656,
+                      1.2138157091554134,
+                      1.1513580966200079,
+                      1.1499451300609977
+                    ],
+                    "median": 1.1499451300609977,
+                    "range": [
+                      1.088707711577656,
+                      1.2138157091554134
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.9263060207281233,
+                      1.9786855283928337,
+                      1.7740878299537954,
+                      1.8703799198859141,
+                      1.873063450804939
+                    ],
+                    "median": 1.873063450804939,
+                    "range": [
+                      1.7740878299537954,
+                      1.9786855283928337
+                    ]
+                  }
+                }
+              }
+            },
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      533.4585850000001,
+                      532.786744,
+                      533.8413834999999,
+                      533.352429,
+                      532.3229135
+                    ],
+                    "median": 533.352429,
+                    "range": [
+                      532.3229135,
+                      533.8413834999999
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      35.963683505542576,
+                      35.0824220222421,
+                      36.115219991188496,
+                      35.05447698989883,
+                      35.90824652928859
+                    ],
+                    "median": 35.90824652928859,
+                    "range": [
+                      35.05447698989883,
+                      36.115219991188496
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      14.8332576922435,
+                      15.186714978293562,
+                      14.781617933664759,
+                      15.214958966687448,
+                      14.824530990835502
+                    ],
+                    "median": 14.8332576922435,
+                    "range": [
+                      14.781617933664759,
+                      15.214958966687448
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      533.68265,
+                      532.97828,
+                      534.26991,
+                      533.638921,
+                      532.597261
+                    ],
+                    "median": 533.638921,
+                    "range": [
+                      532.597261,
+                      534.26991
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      42.0522220665589,
+                      41.195977944880724,
+                      40.83725600503385,
+                      41.39130190014839,
+                      40.49158305861056
+                    ],
+                    "median": 41.195977944880724,
+                    "range": [
+                      40.49158305861056,
+                      42.0522220665589
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      12.690950056225432,
+                      12.93762902565665,
+                      13.082904246410253,
+                      12.892537719333898,
+                      13.153283244793831
+                    ],
+                    "median": 12.93762902565665,
+                    "range": [
+                      12.690950056225432,
+                      13.153283244793831
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      533.69143,
+                      533.137969,
+                      534.277722,
+                      533.72595,
+                      532.892561
+                    ],
+                    "median": 533.69143,
+                    "range": [
+                      532.892561,
+                      534.277722
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      46.66322795674205,
+                      48.639042070135474,
+                      45.656573958694935,
+                      46.69888596981764,
+                      42.87022503558546
+                    ],
+                    "median": 46.66322795674205,
+                    "range": [
+                      42.87022503558546,
+                      48.639042070135474
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      11.437087689148829,
+                      10.961111615463915,
+                      11.70209842033605,
+                      11.429093840588768,
+                      12.430365377313969
+                    ],
+                    "median": 11.437087689148829,
+                    "range": [
+                      10.961111615463915,
+                      12.430365377313969
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      59.98598635130378,
+                      60.05992245655529,
+                      59.93838830047488,
+                      59.99464076123345,
+                      60.111977429366114
+                    ],
+                    "median": 59.99464076123345,
+                    "range": [
+                      59.93838830047488,
+                      60.111977429366114
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      866.6341272472046,
+                      890.6700089200917,
+                      870.916387830783,
+                      887.2724304988577,
+                      872.0750290303555
+                    ],
+                    "median": 872.0750290303555,
+                    "range": [
+                      866.6341272472046,
+                      890.6700089200917
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.06921719842933553,
+                      0.06743229462657667,
+                      0.0688222074334428,
+                      0.0676169333104402,
+                      0.06892982304080365
+                    ],
+                    "median": 0.0688222074334428,
+                    "range": [
+                      0.06743229462657667,
+                      0.06921719842933553
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "batch2": {
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch2-engine/summary.json",
+          "summary_sha256": "5d65072fcec6c2d2325dca5c8af5b660a5890363fb46f8d13da29978e42d1bab",
+          "status": "complete",
+          "source_commit": "1bfb23053fb15a3528eb6413abe6e1bbdb0db004",
+          "condition": {
+            "condition_id": "serving-gui-retained-512mib-cool48-v1",
+            "gui_retained": true,
+            "idle_memory_limit_mib": 512,
+            "start_temperature_limit_c": 48,
+            "canonical_idle_memory_limit_mib": 256,
+            "canonical_qualification": false,
+            "scope": "single-concurrency engine-only diagnostic",
+            "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+          },
+          "request_sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+          "runner_sha256": "dcecda3438756d970c0438c4fcab66e0395e87780a7393ab5f17fa0b60f868d6",
+          "shared_runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+          "pair_indices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "processes_per_lane": 5,
+          "retained_requests_per_process": 30,
+          "retained_requests_per_lane": 150,
+          "warmups": 5,
+          "metrics": {
+            "ttft_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      13.718862000000001,
+                      13.7370835,
+                      13.731624499999999,
+                      13.7365435,
+                      13.726829
+                    ],
+                    "median": 13.731624499999999,
+                    "range": [
+                      13.718862000000001,
+                      13.7370835
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      7.099256501533091,
+                      7.044763478916138,
+                      7.243266503792256,
+                      7.044852478429675,
+                      7.1443000342696905
+                    ],
+                    "median": 7.099256501533091,
+                    "range": [
+                      7.044763478916138,
+                      7.243266503792256
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.9324364455682648,
+                      1.9499708600739991,
+                      1.8957778914817953,
+                      1.9498695738568437,
+                      1.9213679344589836
+                    ],
+                    "median": 1.9324364455682648,
+                    "range": [
+                      1.8957778914817953,
+                      1.9499708600739991
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      13.751937,
+                      13.75227,
+                      13.749554,
+                      13.76197,
+                      13.745784
+                    ],
+                    "median": 13.751937,
+                    "range": [
+                      13.745784,
+                      13.76197
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      9.328249958343804,
+                      14.761628932319582,
+                      9.544125059619546,
+                      7.685606018640101,
+                      8.27746104914695
+                    ],
+                    "median": 9.328249958343804,
+                    "range": [
+                      7.685606018640101,
+                      14.761628932319582
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.4742247539903621,
+                      0.9316227946829323,
+                      1.4406301168635456,
+                      1.7906161162337406,
+                      1.6606280498796908
+                    ],
+                    "median": 1.4742247539903621,
+                    "range": [
+                      0.9316227946829323,
+                      1.7906161162337406
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      13.753814,
+                      13.758522,
+                      13.79303,
+                      13.764401,
+                      13.746017
+                    ],
+                    "median": 13.758522,
+                    "range": [
+                      13.746017,
+                      13.79303
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      9.568626061081886,
+                      15.608376008458436,
+                      10.175211005844176,
+                      7.7749170595780015,
+                      15.743704978376627
+                    ],
+                    "median": 10.175211005844176,
+                    "range": [
+                      7.7749170595780015,
+                      15.743704978376627
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.4373865079690356,
+                      0.8814832492851293,
+                      1.355552232978551,
+                      1.770359850082708,
+                      0.8731119529284641
+                    ],
+                    "median": 1.355552232978551,
+                    "range": [
+                      0.8731119529284641,
+                      1.770359850082708
+                    ]
+                  }
+                }
+              }
+            },
+            "tpot_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      2.1535045806451616,
+                      2.1541223387096773,
+                      2.1540574516129034,
+                      2.153631806451613,
+                      2.1538003548387095
+                    ],
+                    "median": 2.1538003548387095,
+                    "range": [
+                      2.1535045806451616,
+                      2.1541223387096773
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      0.9211704506719065,
+                      0.94412571014536,
+                      0.9353068702283406,
+                      0.9128483868534527,
+                      0.9320524367203395
+                    ],
+                    "median": 0.9320524367203395,
+                    "range": [
+                      0.9128483868534527,
+                      0.94412571014536
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.33779164222472,
+                      2.2816054213564665,
+                      2.303048892484906,
+                      2.35924370078046,
+                      2.310814574357422
+                    ],
+                    "median": 2.310814574357422,
+                    "range": [
+                      2.2816054213564665,
+                      2.35924370078046
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      2.1559649677419355,
+                      2.1555903870967743,
+                      2.156345870967742,
+                      2.155791290322581,
+                      2.15582464516129
+                    ],
+                    "median": 2.15582464516129,
+                    "range": [
+                      2.1555903870967743,
+                      2.156345870967742
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      0.9863998725890152,
+                      1.1977342242795612,
+                      1.0178461933748857,
+                      1.0526774511221917,
+                      0.9961736110609867
+                    ],
+                    "median": 1.0178461933748857,
+                    "range": [
+                      0.9863998725890152,
+                      1.1977342242795612
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.1856906389121376,
+                      1.7997234640208806,
+                      2.1185380315840434,
+                      2.0479124807170805,
+                      2.164105353950506
+                    ],
+                    "median": 2.1185380315840434,
+                    "range": [
+                      1.7997234640208806,
+                      2.1856906389121376
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      2.1559906774193545,
+                      2.1565736774193547,
+                      2.161532258064516,
+                      2.157293129032258,
+                      2.1565142903225807
+                    ],
+                    "median": 2.1565736774193547,
+                    "range": [
+                      2.1559906774193545,
+                      2.161532258064516
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      1.028579873813977,
+                      1.2656810633357494,
+                      1.1181130652285873,
+                      1.1304036428731297,
+                      1.13049280574365
+                    ],
+                    "median": 1.1304036428731297,
+                    "range": [
+                      1.028579873813977,
+                      1.2656810633357494
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.0960848372668766,
+                      1.7038839719507415,
+                      1.9331964944194726,
+                      1.9084272619195555,
+                      1.9075878053943058
+                    ],
+                    "median": 1.9084272619195555,
+                    "range": [
+                      1.7038839719507415,
+                      2.0960848372668766
+                    ]
+                  }
+                }
+              }
+            },
+            "e2e_ms": {
+              "unit": "ms",
+              "better": "lower",
+              "statistics": {
+                "median": {
+                  "riley": {
+                    "process_values": [
+                      80.4720315,
+                      80.51092299999999,
+                      80.505044,
+                      80.49866,
+                      80.497018
+                    ],
+                    "median": 80.49866,
+                    "range": [
+                      80.4720315,
+                      80.51092299999999
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      36.0059950617142,
+                      37.55450347671285,
+                      36.24173201387748,
+                      35.36458051530644,
+                      36.0310859978199
+                    ],
+                    "median": 36.0310859978199,
+                    "range": [
+                      35.36458051530644,
+                      37.55450347671285
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.2349620212431596,
+                      2.1438420308212556,
+                      2.2213354474662927,
+                      2.2762509501606756,
+                      2.2340991333114566
+                    ],
+                    "median": 2.2340991333114566,
+                    "range": [
+                      2.1438420308212556,
+                      2.2762509501606756
+                    ]
+                  }
+                },
+                "p95": {
+                  "riley": {
+                    "process_values": [
+                      80.584908,
+                      80.568705,
+                      80.584753,
+                      80.573939,
+                      80.567198
+                    ],
+                    "median": 80.573939,
+                    "range": [
+                      80.567198,
+                      80.584908
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      38.65942999254912,
+                      46.31022992543876,
+                      40.42717604897916,
+                      39.68473104760051,
+                      42.10857499856502
+                    ],
+                    "median": 40.42717604897916,
+                    "range": [
+                      38.65942999254912,
+                      46.31022992543876
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      2.0844825703723835,
+                      1.739760418588262,
+                      1.993331240905086,
+                      2.030351141938048,
+                      1.9133204579529368
+                    ],
+                    "median": 1.993331240905086,
+                    "range": [
+                      1.739760418588262,
+                      2.0844825703723835
+                    ]
+                  }
+                },
+                "p99": {
+                  "riley": {
+                    "process_values": [
+                      80.587648,
+                      80.574111,
+                      80.80053,
+                      80.620462,
+                      80.59796
+                    ],
+                    "median": 80.59796,
+                    "range": [
+                      80.574111,
+                      80.80053
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      41.214226046577096,
+                      50.36075401585549,
+                      41.841769008897245,
+                      42.81742998864502,
+                      43.79314207471907
+                    ],
+                    "median": 42.81742998864502,
+                    "range": [
+                      41.214226046577096,
+                      50.36075401585549
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      1.9553357112402436,
+                      1.5999385349677686,
+                      1.9310973678674663,
+                      1.8828888614141526,
+                      1.8404242349746271
+                    ],
+                    "median": 1.8828888614141526,
+                    "range": [
+                      1.5999385349677686,
+                      1.9553357112402436
+                    ]
+                  }
+                }
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "unit": "output_tokens/s",
+              "better": "higher",
+              "statistics": {
+                "rate": {
+                  "riley": {
+                    "process_values": [
+                      397.69056070554944,
+                      397.4663497597903,
+                      397.5425745083311,
+                      397.5449528614177,
+                      397.60605420524325
+                    ],
+                    "median": 397.5449528614177,
+                    "range": [
+                      397.4663497597903,
+                      397.69056070554944
+                    ]
+                  },
+                  "vllm": {
+                    "process_values": [
+                      884.128574137092,
+                      832.1900777235434,
+                      868.374224814516,
+                      883.71285325461,
+                      879.0274053935916
+                    ],
+                    "median": 879.0274053935916,
+                    "range": [
+                      832.1900777235434,
+                      884.128574137092
+                    ]
+                  },
+                  "riley_over_vllm": {
+                    "process_values": [
+                      0.44981077677949133,
+                      0.4776148627571478,
+                      0.45780098389406465,
+                      0.4498576108713443,
+                      0.45232498072936866
+                    ],
+                    "median": 0.45232498072936866,
+                    "range": [
+                      0.44981077677949133,
+                      0.4776148627571478
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "batch3": {
+          "status": "pending",
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch3-engine/summary.json",
+          "reason": "summary absent"
+        },
+        "batch4": {
+          "status": "pending",
+          "summary_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch4-engine/summary.json",
+          "reason": "summary absent"
+        }
+      },
+      "changes": {
+        "rejected_batch1_vs_baseline": {
+          "status": "computed",
+          "metrics": {
+            "ttft_ms": {
+              "median": {
+                "riley_change_pct": 7.071674089734947,
+                "vllm_change_pct": -0.6644039554701942,
+                "riley_over_vllm_change_pct": 7.8027381712844734
+              },
+              "p95": {
+                "riley_change_pct": 7.063309733964296,
+                "vllm_change_pct": -14.768194626506315,
+                "riley_over_vllm_change_pct": 25.771160786851976
+              },
+              "p99": {
+                "riley_change_pct": 7.035637491524294,
+                "vllm_change_pct": -10.353811857013806,
+                "riley_over_vllm_change_pct": 19.43759503506768
+              }
+            },
+            "tpot_ms": {
+              "median": {
+                "riley_change_pct": -7.0008955639483395,
+                "vllm_change_pct": -1.0814587080169358,
+                "riley_over_vllm_change_pct": -5.9797570641153985
+              },
+              "p95": {
+                "riley_change_pct": -6.99616056322977,
+                "vllm_change_pct": -0.767867219936591,
+                "riley_over_vllm_change_pct": -6.248040543170729
+              },
+              "p99": {
+                "riley_change_pct": -7.022662166113647,
+                "vllm_change_pct": 2.6202131800554085,
+                "riley_over_vllm_change_pct": -9.42152686726816
+              }
+            },
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": 5.076043527210494,
+                "vllm_change_pct": 0.1006378983349876,
+                "riley_over_vllm_change_pct": 4.829455301014063
+              },
+              "p95": {
+                "riley_change_pct": 5.074257715489816,
+                "vllm_change_pct": -2.451225627423803,
+                "riley_over_vllm_change_pct": 7.596746251485542
+              },
+              "p99": {
+                "riley_change_pct": 5.062020827327851,
+                "vllm_change_pct": 4.0652116461025845,
+                "riley_over_vllm_change_pct": 0.9628231087141836
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "rate": {
+                "riley_change_pct": -4.83086654658379,
+                "vllm_change_pct": 0.8439456142747437,
+                "riley_over_vllm_change_pct": -5.600796814954945
+              }
+            }
+          }
+        },
+        "batch2_vs_baseline": {
+          "status": "computed",
+          "metrics": {
+            "ttft_ms": {
+              "median": {
+                "riley_change_pct": -96.8495289606693,
+                "vllm_change_pct": 0.4476896898395699,
+                "riley_over_vllm_change_pct": -96.86648550507383
+              },
+              "p95": {
+                "riley_change_pct": -96.84692640775063,
+                "vllm_change_pct": -11.12057816206351,
+                "riley_over_vllm_change_pct": -96.45241437551348
+              },
+              "p99": {
+                "riley_change_pct": -96.8463587859129,
+                "vllm_change_pct": -17.12667392615652,
+                "riley_over_vllm_change_pct": -96.18458052668484
+              }
+            },
+            "tpot_ms": {
+              "median": {
+                "riley_change_pct": -6.910912537474234,
+                "vllm_change_pct": 0.03751048621614128,
+                "riley_over_vllm_change_pct": -6.941466643126493
+              },
+              "p95": {
+                "riley_change_pct": -6.891984398165141,
+                "vllm_change_pct": -7.0497391796128355,
+                "riley_over_vllm_change_pct": 0.2243500288442002
+              },
+              "p99": {
+                "riley_change_pct": -6.88896451556138,
+                "vllm_change_pct": 0.8763459913940119,
+                "riley_over_vllm_change_pct": -7.711387248912072
+              }
+            },
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": -84.14091650824352,
+                "vllm_change_pct": 0.4430748131825979,
+                "riley_over_vllm_change_pct": -84.21119621241573
+              },
+              "p95": {
+                "riley_change_pct": -84.13487753896767,
+                "vllm_change_pct": -4.271686905970284,
+                "riley_over_vllm_change_pct": -83.42231367915285
+              },
+              "p99": {
+                "riley_change_pct": -84.13355719022856,
+                "vllm_change_pct": -4.511429898481023,
+                "riley_over_vllm_change_pct": -83.37848058744113
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "rate": {
+                "riley_change_pct": 530.6231388762211,
+                "vllm_change_pct": 1.6478960090517747,
+                "riley_over_vllm_change_pct": 520.426448873165
+              }
+            }
+          }
+        },
+        "batch2_vs_rejected_batch1": {
+          "status": "computed",
+          "metrics": {
+            "ttft_ms": {
+              "median": {
+                "riley_change_pct": -97.05760550947365,
+                "vllm_change_pct": 1.1195318592654768,
+                "riley_over_vllm_change_pct": -97.09328858609561
+              },
+              "p95": {
+                "riley_change_pct": -97.05494477979033,
+                "vllm_change_pct": 4.279642380515836,
+                "riley_over_vllm_change_pct": -97.17933300265972
+              },
+              "p99": {
+                "riley_change_pct": -97.05365307481182,
+                "vllm_change_pct": -7.555103244702355,
+                "riley_over_vllm_change_pct": -96.80551214029809
+              }
+            },
+            "tpot_ms": {
+              "median": {
+                "riley_change_pct": 0.09675687418686518,
+                "vllm_change_pct": 1.1312026841663103,
+                "riley_over_vllm_change_pct": -1.0228750202942116
+              },
+              "p95": {
+                "riley_change_pct": 0.11201275742540595,
+                "vllm_change_pct": -6.3304816531549175,
+                "riley_over_vllm_change_pct": 6.903738982645291
+              },
+              "p99": {
+                "riley_change_pct": 0.14379595465632278,
+                "vllm_change_pct": -1.6993408360998496,
+                "riley_over_vllm_change_pct": 1.888019922625639
+              }
+            },
+            "e2e_ms": {
+              "median": {
+                "riley_change_pct": -84.90704164394084,
+                "vllm_change_pct": 0.34209264000433226,
+                "riley_over_vllm_change_pct": -84.93858072404625
+              },
+              "p95": {
+                "riley_change_pct": -84.90103779368073,
+                "vllm_change_pct": -1.8662062032614002,
+                "riley_over_vllm_change_pct": -84.59276242229465
+              },
+              "p99": {
+                "riley_change_pct": -84.89802243967081,
+                "vllm_change_pct": -8.241602941961457,
+                "riley_over_vllm_change_pct": -83.53699024970682
+              }
+            },
+            "output_tokens_per_request_service_second": {
+              "rate": {
+                "riley_change_pct": 562.6341083423873,
+                "vllm_change_pct": 0.7972222723733324,
+                "riley_over_vllm_change_pct": 557.2369553342315
+              }
+            }
+          }
+        },
+        "batch3_vs_batch2": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_batch3": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_batch2": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        },
+        "batch4_vs_baseline": {
+          "status": "pending",
+          "reason": "both completed campaigns are required"
+        }
+      }
+    }
+  }
+}

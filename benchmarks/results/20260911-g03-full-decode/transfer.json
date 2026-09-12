@@ -1,0 +1,53 @@
+{
+  "authorization": "User explicitly approved file list and ai-assistant:/tmp/riley-g01-native-260910 destination after automatic review requested specificity.",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "before": "8c2492929f0570d476a66ef8e760cef656cf585fb71b19404399d6609b489eb8",
+      "sha256": "a50d4c5c56a867e907c9aa10eeec2831d2660bd348a61b19053c81e8474c3bbc"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "before": "63c88918a0f06ea6fdf7099949d16704aaa0c0e7b904fe1681503412d6821a3f",
+      "sha256": "bb66f710e2410cc765b5b94f0a50a7e3336232f8bf80cfccccb95c1d5b9b7124"
+    },
+    {
+      "path": "kernels/src/batch_primitives.cu",
+      "before": "78090cbd3cdbe77c5d22c6b66f3ce15a245a5dacf3e8201341e785285cde0482",
+      "sha256": "1894d15bdb4eb5a5193711082b6ddac26a5adfea7af9ab309e81dc9788e7ee39"
+    },
+    {
+      "path": "kernels/src/primitives.cu",
+      "before": "99b7c2e67392f94665853aa8054298c3f1adf841fc4d870b2af38f36c652ca86",
+      "sha256": "ad55c42bc2795df8710223be6fd1638c044cf1511d3335e8e147f2c1ae933ed9"
+    },
+    {
+      "path": "kernels/src/ffi_internal.hpp",
+      "before": "40cecc9ba35c108bef5bb8f6603c30a72c3b58ca579dec3f0a868204e141e8a8",
+      "sha256": "cd861a8af2e221c2458b7ff4b36914a4e504bf64a02116cb994faa4502732f4a"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "before": "3aed32412e38cae5d733c056cd28a508304ae77d39f3b65580bf70d5e44c11f0",
+      "sha256": "8dfd5f80726c6f7cee8f0732dac2bfe3bfb804d18b040c03ac5964dbb3f5630f"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "before": "196376f8ec8b0d17cbcc9b5d3918e46d30ed87ba4fdd8761426dba7604c902e4",
+      "sha256": "1b209556ec09058457092b24ee4552c942432bc60a927bef638c33d81ab43662"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/batch_executor.rs",
+      "before": "7398b8a78e32897579c84ff2fd4393b1d1cd06d749bd7efdfef079dd1f692cfc",
+      "sha256": "f6a3f1748e6f585a1e8ebf1fc9d233052cfde1e893414465f969a1935281a1a8"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_full.rs",
+      "before": null,
+      "sha256": "41d0faa0283258f0e160c9d8e020ea6f2491d9785b3a046af3f9b98f4052042a"
+    }
+  ],
+  "remote_write_performed": true,
+  "automatic_review_block_resolved": true,
+  "status": "verified"
+}

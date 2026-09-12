@@ -1,0 +1,195 @@
+{
+  "schema_version": "riley.decode-operator-summary.v1",
+  "performance_claim_eligible": false,
+  "log_sha256": "919947dbe48073ee6e522cf631ce52cff2f6cb3536a18b1cd24635e07c20d428",
+  "captures": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 1,
+      "phase": "prefill",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+      "tool_sha256": "6cb953a66df57150834e9df38d1a65fa82de976d2af1c583ffa2db3c912509d0",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": false
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 2,
+      "phase": "decode",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+      "tool_sha256": "6cb953a66df57150834e9df38d1a65fa82de976d2af1c583ffa2db3c912509d0",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": false
+    }
+  ],
+  "external_event_inventories": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    }
+  ],
+  "whole_graph": {
+    "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+    "performance_claim_eligible": false,
+    "classification": {
+      "source": "position",
+      "prefill_tokens": 128
+    },
+    "graph_inventories": [
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 1,
+        "inventory_status": 0,
+        "nodes": 403,
+        "kernel_nodes": 397,
+        "memcpy_nodes": 6,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 1152
+      },
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 2,
+        "inventory_status": 0,
+        "nodes": 282,
+        "kernel_nodes": 277,
+        "memcpy_nodes": 5,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 0
+      }
+    ],
+    "groups": {
+      "prefill": {
+        "replays": 6,
+        "successful_replays": 6,
+        "capture_ids": [
+          1
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 3596.0,
+            "sum": 23259
+          },
+          "host_staging_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 2118.5,
+            "sum": 15831
+          },
+          "host_launch_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 14328.0,
+            "sum": 168455
+          },
+          "host_wait_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 4772797.0,
+            "sum": 28637677
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 4784767.8665,
+            "sum": 28789215.564999998
+          }
+        }
+      },
+      "decode": {
+        "replays": 186,
+        "successful_replays": 186,
+        "capture_ids": [
+          2
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 361.5,
+            "sum": 73757
+          },
+          "host_staging_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 1538.5,
+            "sum": 292014
+          },
+          "host_launch_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 4704.0,
+            "sum": 970433
+          },
+          "host_wait_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 969198.0,
+            "sum": 180686595
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 971327.9905000001,
+            "sum": 181188319.865
+          }
+        }
+      }
+    },
+    "failed_replays": 0,
+    "read_records": 192,
+    "projection_groups": [],
+    "unmeasured": [
+      "per_kernel_cuda_time",
+      "Rust_metadata_pack",
+      "request_latency_without_instrumentation"
+    ]
+  },
+  "operator_groups": [],
+  "replay_totals": [],
+  "interpretation": [
+    "CUDA spans include the perturbation from external event nodes; these are not serving performance results.",
+    "Sum is formed per replay before taking its median; failed or missing intervals produce a null replay sum.",
+    "Host wait includes GPU execution and is not added to GPU operator or whole-graph spans.",
+    "Only one family is selected per process. Unselected families and initial norm/embedding/argmax/transfers are unmeasured.",
+    "Position 127 is the batched prefill replay; captured handle IDs bind all decode operator results.",
+    "Different captures/logs require matching binary, workload, GPU and environment receipts for comparison."
+  ]
+}

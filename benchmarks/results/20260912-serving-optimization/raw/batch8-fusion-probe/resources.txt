@@ -1,0 +1,28 @@
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _Z28attention_packed_decode_ropePK13__nv_bfloat16S1_S1_PS_S2_S2_S2_PKfS4_PKj:
+  REG:48 STACK:0 SHARED:1280 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:432 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z32attention_packed_decode_two_warpPK13__nv_bfloat16S1_S1_PS_PKj:
+  REG:55 STACK:0 SHARED:1024 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z23attention_packed_decodePK13__nv_bfloat16S1_S1_PS_PKj:
+  REG:56 STACK:0 SHARED:768 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z9attentionPK13__nv_bfloat16S1_S1_PS_iiPKiPKj:
+  REG:93 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0

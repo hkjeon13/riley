@@ -1,0 +1,41 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 156, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 147, in main
+    nested_pins(plan['token_client_validation'],pins)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 44, in nested_pins
+    JSON_SEEN.add(str(p));nested_pins(read(p),pins)
+                          ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 50, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 50, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 44, in nested_pins
+    JSON_SEEN.add(str(p));nested_pins(read(p),pins)
+                          ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 50, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 44, in nested_pins
+    JSON_SEEN.add(str(p));nested_pins(read(p),pins)
+                          ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 50, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 49, in nested_pins
+    JSON_SEEN.add(key);nested_pins(read(key),pins)
+                       ~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 50, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 52, in nested_pins
+    for item in value:nested_pins(item,pins)
+                      ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan_v3.py", line 42, in nested_pins
+    p=Path(value['path']);assert p.is_absolute() and sha(p)==value['sha256'];pins[str(p)]=value['sha256']
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

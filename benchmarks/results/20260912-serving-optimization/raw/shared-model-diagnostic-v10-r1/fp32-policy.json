@@ -1,0 +1,8 @@
+{
+  "scope": "paired diagnostic flags only, not model/serving acceptance",
+  "rmse_ratio": 1.1,
+  "rmse_abs_slack": 0.0001,
+  "kl_ratio": 1.1,
+  "kl_abs_slack": 1e-05,
+  "inputs": "same native original-policy teacher-forced histories; eight synthetic P128 inputs and mixed output lengths"
+}

@@ -1425,7 +1425,25 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_hf_smollm2_rms_norm_bf16(
+        stream: *mut RawStream,
+        input: *mut RawDeviceBuffer,
+        weight: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16(
         capture: *mut RawGraphCapture,
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
@@ -1498,6 +1516,23 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    // Actual output index parent span and pinned result prefix; whole owners leased.
+    fn riley_cuda_graph_capture_begin_output_parent_d2h(
+        stream: *mut RawStream,
+        input: *mut RawDeviceBuffer,
+        row_indices: *mut RawDeviceBuffer,
+        gathered_logits: *mut RawDeviceBuffer,
+        results: *mut RawDeviceBuffer,
+        pinned_results: *mut RawPinnedHostBuffer,
+        input_row_count: u64,
+        output_row_count: u64,
+        vocabulary_size: u64,
+        indices_offset: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
         capture: *mut RawGraphCapture,
         out_graph_error: *mut RawGraphErrorInfo,
@@ -1517,6 +1552,26 @@ unsafe extern "C" {
         head_size: u64,
         rotary_dimension: u64,
         table_position_count: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_begin_indexed_rope_bf16_positions_span(
+        stream: *mut RawStream,
+        input: *mut RawDeviceBuffer,
+        cos: *mut RawDeviceBuffer,
+        sin: *mut RawDeviceBuffer,
+        positions: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        host_positions_mirror: *const u32,
+        host_positions_mirror_len: u64,
+        active_row_count: u64,
+        head_count: u64,
+        head_size: u64,
+        rotary_dimension: u64,
+        table_position_count: u64,
+        positions_byte_offset: u64,
         mode: u32,
         out_capture: *mut *mut RawGraphCapture,
         out_graph_error: *mut RawGraphErrorInfo,
@@ -1578,6 +1633,75 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_parent_layer_attention_bf16(
+        stream: *mut RawStream,
+        query: *mut RawDeviceBuffer,
+        key_pool: *mut RawDeviceBuffer,
+        value_pool: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        sequence_block_offsets: *mut RawDeviceBuffer,
+        block_ids: *mut RawDeviceBuffer,
+        valid_tokens: *mut RawDeviceBuffer,
+        row_sequence_slots: *mut RawDeviceBuffer,
+        row_positions: *mut RawDeviceBuffer,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        output_row_count: u64,
+        scale: f32,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_begin_packed_parent_attention_bf16(
+        stream: *mut RawStream,
+        query: *mut RawDeviceBuffer,
+        key_pool: *mut RawDeviceBuffer,
+        value_pool: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        metadata_slab: *mut RawDeviceBuffer,
+        metadata_offsets: *const u64,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        output_row_count: u64,
+        scale: f32,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_begin_packed_parent_kv_write_bf16(
+        stream: *mut RawStream,
+        key_source: *mut RawDeviceBuffer,
+        value_source: *mut RawDeviceBuffer,
+        key_parent: *mut RawDeviceBuffer,
+        value_parent: *mut RawDeviceBuffer,
+        metadata_slab: *mut RawDeviceBuffer,
+        metadata_offsets: *const u64,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        key_value_head_count: u64,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
         capture: *mut RawGraphCapture,
         out_graph_error: *mut RawGraphErrorInfo,
@@ -1604,6 +1728,19 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_graph_capture_begin_canonical_gemm_bf16(
+        stream: *mut RawStream,
+        plan: *mut RawGemmPlan,
+        input: *mut RawDeviceBuffer,
+        weight: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        workspace: *mut RawDeviceBuffer,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    // Additive selected-plan contract: effective no-split; optional workspace parent.
+    fn riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
         stream: *mut RawStream,
         plan: *mut RawGemmPlan,
         input: *mut RawDeviceBuffer,
@@ -3189,6 +3326,98 @@ impl StreamHandle {
         ))
     }
 
+    pub(super) fn begin_graph_hf_smollm2_rms_norm_bf16_capture(
+        &mut self,
+        input: &DeviceBufferHandle,
+        weight: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph HF SmolLM2 BF16 RMSNorm capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the by-value graph owner retains the exact stream and three
+        // distinct device allocations for its whole capture/graph/exec
+        // lifecycle. Native validates fixed BF16 geometry, epsilon, and
+        // permanent resource leases before it can enter capture.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_hf_smollm2_rms_norm_bf16(
+                self.as_ptr(),
+                input.as_ptr(),
+                weight.as_ptr(),
+                output.as_ptr(),
+                row_count,
+                hidden_size,
+                epsilon,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        // A non-null owner after an unsuccessful begin can still be actively
+        // capturing after a deferred CUDA error. The generic abort is the one
+        // operation-aware recovery boundary for every graph capture family.
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native HF SmolLM2 BF16 RMSNorm capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph HF SmolLM2 BF16 RMSNorm capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn begin_graph_bf16_argmax_capture(
         &mut self,
         logits: &DeviceBufferHandle,
@@ -3556,6 +3785,101 @@ impl StreamHandle {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_output_parent_d2h_capture(
+        &mut self,
+        input: &DeviceBufferHandle,
+        row_indices: &DeviceBufferHandle,
+        gathered_logits: &DeviceBufferHandle,
+        results: &DeviceBufferHandle,
+        pinned_results: &PinnedHostBufferHandle,
+        input_row_count: u64,
+        output_row_count: u64,
+        vocabulary_size: u64,
+        indices_offset: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 row-gather -> argmax -> D2H capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner retains this stream, four distinct
+        // fixed device allocations, and the exact pinned result destination
+        // through the complete capture/graph/exec lifetime.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_output_parent_d2h(
+                self.as_ptr(),
+                input.as_ptr(),
+                row_indices.as_ptr(),
+                gathered_logits.as_ptr(),
+                results.as_ptr(),
+                pinned_results.as_ptr(),
+                input_row_count,
+                output_row_count,
+                vocabulary_size,
+                indices_offset,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 row-gather -> argmax -> D2H capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 row-gather -> argmax -> D2H capture returned success without a valid owned capture handle",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn begin_graph_indexed_rope_bf16_capture(
         &mut self,
         input: &DeviceBufferHandle,
@@ -3569,6 +3893,39 @@ impl StreamHandle {
         head_size: u64,
         rotary_dimension: u64,
         table_position_count: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        self.begin_graph_indexed_rope_bf16_span_capture(
+            input,
+            cos,
+            sin,
+            positions,
+            output,
+            host_positions_mirror,
+            active_row_count,
+            head_count,
+            head_size,
+            rotary_dimension,
+            table_position_count,
+            0,
+            mode,
+        )
+    }
+
+    pub(super) fn begin_graph_indexed_rope_bf16_span_capture(
+        &mut self,
+        input: &DeviceBufferHandle,
+        cos: &DeviceBufferHandle,
+        sin: &DeviceBufferHandle,
+        positions: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        host_positions_mirror: &[u32],
+        active_row_count: u64,
+        head_count: u64,
+        head_size: u64,
+        rotary_dimension: u64,
+        table_position_count: u64,
+        positions_byte_offset: u64,
         mode: u32,
     ) -> CudaResult<GraphCaptureHandle> {
         const OPERATION: &str = "begin CUDA Graph BF16 indexed RoPE capture";
@@ -3587,7 +3944,7 @@ impl StreamHandle {
         // lifecycle. The temporary host mirror is borrowed only for native
         // begin validation and cannot be retained by the native graph owner.
         let status = unsafe {
-            riley_cuda_graph_capture_begin_indexed_rope_bf16(
+            riley_cuda_graph_capture_begin_indexed_rope_bf16_positions_span(
                 self.as_ptr(),
                 input.as_ptr(),
                 cos.as_ptr(),
@@ -3601,6 +3958,7 @@ impl StreamHandle {
                 head_size,
                 rotary_dimension,
                 table_position_count,
+                positions_byte_offset,
                 mode,
                 &mut capture,
                 &mut graph_error,
@@ -3884,6 +4242,337 @@ impl StreamHandle {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_parent_layer_attention_bf16_capture(
+        &mut self,
+        query: &DeviceBufferHandle,
+        key_pool: &DeviceBufferHandle,
+        value_pool: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        sequence_block_offsets: &DeviceBufferHandle,
+        block_ids: &DeviceBufferHandle,
+        valid_tokens: &DeviceBufferHandle,
+        row_sequence_slots: &DeviceBufferHandle,
+        row_positions: &DeviceBufferHandle,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        output_row_count: u64,
+        scale: f32,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 grouped ragged paged-attention capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: ParentAttentionGraph retains exclusive borrows of the stream
+        // and all nine device allocations through the complete capture/graph/exec
+        // lifecycle. Host packed-batch validation was completed before this
+        // call and no host mirror is passed to or retained by native state.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_parent_layer_attention_bf16(
+                self.as_ptr(),
+                query.as_ptr(),
+                key_pool.as_ptr(),
+                value_pool.as_ptr(),
+                output.as_ptr(),
+                sequence_block_offsets.as_ptr(),
+                block_ids.as_ptr(),
+                valid_tokens.as_ptr(),
+                row_sequence_slots.as_ptr(),
+                row_positions.as_ptr(),
+                sequence_count,
+                block_count,
+                active_row_count,
+                physical_block_count,
+                query_head_count,
+                key_value_head_count,
+                output_row_count,
+                scale,
+                mode,
+                parent_layers,
+                layer_index,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 grouped ragged paged-attention capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 grouped ragged paged-attention capture returned success without a valid owned capture handle",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_packed_parent_attention_bf16_capture(
+        &mut self,
+        query: &DeviceBufferHandle,
+        key_pool: &DeviceBufferHandle,
+        value_pool: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        metadata_slab: &DeviceBufferHandle,
+        metadata_offsets: &[u64; 5],
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        output_row_count: u64,
+        scale: f32,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 grouped ragged paged-attention capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: ParentAttentionGraph retains exclusive borrows of the stream
+        // and all five device allocations through the complete capture/graph/exec
+        // lifecycle. Host packed-batch validation was completed before this
+        // call and no host mirror is passed to or retained by native state.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_packed_parent_attention_bf16(
+                self.as_ptr(),
+                query.as_ptr(),
+                key_pool.as_ptr(),
+                value_pool.as_ptr(),
+                output.as_ptr(),
+                metadata_slab.as_ptr(),
+                metadata_offsets.as_ptr(),
+                sequence_count,
+                block_count,
+                active_row_count,
+                physical_block_count,
+                query_head_count,
+                key_value_head_count,
+                output_row_count,
+                scale,
+                mode,
+                parent_layers,
+                layer_index,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 grouped ragged paged-attention capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 grouped ragged paged-attention capture returned success without a valid owned capture handle",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_packed_parent_kv_write_bf16_capture(
+        &mut self,
+        key_source: &DeviceBufferHandle,
+        value_source: &DeviceBufferHandle,
+        key_parent: &DeviceBufferHandle,
+        value_parent: &DeviceBufferHandle,
+        metadata_slab: &DeviceBufferHandle,
+        metadata_offsets: &[u64; 5],
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        key_value_head_count: u64,
+        mode: u32,
+        parent_layers: u64,
+        layer_index: u64,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 packed parent KV-write capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: PackedParentKvWriteGraph retains exclusive borrows of the stream
+        // and all five device allocations through the complete capture/graph/exec
+        // lifecycle. Host packed-batch validation was completed before this
+        // call and no host mirror is passed to or retained by native state.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_packed_parent_kv_write_bf16(
+                self.as_ptr(),
+                key_source.as_ptr(),
+                value_source.as_ptr(),
+                key_parent.as_ptr(),
+                value_parent.as_ptr(),
+                metadata_slab.as_ptr(),
+                metadata_offsets.as_ptr(),
+                sequence_count,
+                block_count,
+                active_row_count,
+                physical_block_count,
+                key_value_head_count,
+                mode,
+                parent_layers,
+                layer_index,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 packed parent KV-write capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 packed parent KV-write capture returned success without a valid owned capture handle",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn begin_graph_bf16_embedding_status_d2h_capture(
         &mut self,
         table: &DeviceBufferHandle,
@@ -4002,6 +4691,93 @@ impl StreamHandle {
                 weight.as_ptr(),
                 output.as_ptr(),
                 workspace.as_ptr(),
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native canonical cuBLASLt GEMM capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native canonical cuBLASLt GEMM capture returned success without a valid owned capture handle",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_selected_no_split_gemm_bf16_capture(
+        &mut self,
+        plan: &GemmPlanHandle,
+        input: &DeviceBufferHandle,
+        weight: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        workspace: Option<&DeviceBufferHandle>,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph canonical BF16 cuBLASLt GEMM capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the borrowed owner retains the plan, stream, exact I/O and
+        // optional workspace parent through close or known abort. Native
+        // validates null workspace against the selected algorithm requirement.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
+                self.as_ptr(),
+                plan.as_ptr(),
+                input.as_ptr(),
+                weight.as_ptr(),
+                output.as_ptr(),
+                workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr),
                 mode,
                 &mut capture,
                 &mut graph_error,
@@ -4376,6 +5152,30 @@ impl GraphCaptureHandle {
         // other safe operations while this capture is active.
         let status = unsafe {
             riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_hf_smollm2_rms_norm_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph HF SmolLM2 BF16 RMSNorm";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner keeps the captured stream and all
+        // three fixed, distinct device allocations alive and inaccessible to
+        // other safe operations while this capture is active.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16(
                 pointer.as_ptr(),
                 &mut graph_error,
                 &mut error,
@@ -8496,5 +9296,1618 @@ mod tests {
         // Typed references force the test binary to resolve both native
         // symbols without initializing a device or entering graph capture.
         let _ = (begin, enqueue);
+    }
+}
+
+#[cfg(test)]
+mod selected_gemm_native_gpu_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn selected_gemm_native_preflight_abort_and_parent_lease() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut plan = GemmPlanHandle::create(&context, 1, 576, 576, 0, 3)?;
+        let mut input = DeviceBufferHandle::create(&context, 1152)?;
+        let mut weight = DeviceBufferHandle::create(&context, 576 * 1152)?;
+        let mut output = DeviceBufferHandle::create(&context, 1152)?;
+        let mut empty = DeviceBufferHandle::create(&context, 0)?;
+        let mut parent = DeviceBufferHandle::create(&context, 4096)?;
+        let mode = crate::CudaGraphCaptureMode::ThreadLocal as u32;
+        // Bypass public Rust policy preflight: legacy native admission stays strict.
+        assert!(
+            stream
+                .begin_graph_canonical_gemm_bf16_capture(
+                    &plan, &input, &weight, &output, &empty, mode
+                )
+                .is_err()
+        );
+        // Native alias rejection must not retain any resource lease.
+        assert!(
+            stream
+                .begin_graph_selected_no_split_gemm_bf16_capture(
+                    &plan, &input, &weight, &input, None, mode
+                )
+                .is_err()
+        );
+        for workspace in [None, Some(&parent)] {
+            let mut capture = stream.begin_graph_selected_no_split_gemm_bf16_capture(
+                &plan, &input, &weight, &output, workspace, mode,
+            )?;
+            assert!(plan.close().is_err());
+            assert!(input.close().is_err());
+            capture.abort()?;
+        }
+        // A supplied, unused workspace parent is still leased until known abort.
+        let mut capture = stream.begin_graph_selected_no_split_gemm_bf16_capture(
+            &plan,
+            &input,
+            &weight,
+            &output,
+            Some(&parent),
+            mode,
+        )?;
+        assert!(parent.close().is_err());
+        capture.abort()?;
+        parent.close()?;
+        empty.close()?;
+        output.close()?;
+        weight.close()?;
+        input.close()?;
+        plan.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod output_parent_native_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn output_parent_native_bounds_abort_and_completion_gate() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut input = DeviceBufferHandle::create(&context, 8)?;
+        let mut indices = DeviceBufferHandle::create(&context, 32)?;
+        let mut gathered = DeviceBufferHandle::create(&context, 8)?;
+        let mut results = DeviceBufferHandle::create(&context, 8)?;
+        let mut pinned = PinnedHostBufferHandle::create(&context, 64)?;
+        let mode = crate::CudaGraphCaptureMode::ThreadLocal as u32;
+        for offset in [1, 32, u64::MAX] {
+            assert!(
+                stream
+                    .begin_graph_output_parent_d2h_capture(
+                        &input, &indices, &gathered, &results, &pinned, 1, 1, 4, offset, mode
+                    )
+                    .is_err()
+            );
+        }
+        // Legacy exact-host contract remains strict at the native boundary.
+        assert!(
+            stream
+                .begin_graph_bf16_row_gather_argmax_d2h_capture(
+                    &input, &indices, &gathered, &results, &pinned, 1, 1, 4, mode
+                )
+                .is_err()
+        );
+        let mut capture = stream.begin_graph_output_parent_d2h_capture(
+            &input, &indices, &gathered, &results, &pinned, 1, 1, 4, 8, mode,
+        )?;
+        assert!(indices.close().is_err());
+        assert!(pinned.close().is_err());
+        capture.abort()?;
+        let mut capture = stream.begin_graph_output_parent_d2h_capture(
+            &input, &indices, &gathered, &results, &pinned, 1, 1, 4, 8, mode,
+        )?;
+        capture.enqueue_bf16_row_gather_argmax_d2h()?;
+        let mut graph = capture.end().result?;
+        let mut exec = graph.instantiate()?;
+        let mut records = [0; 8];
+        assert!(
+            exec.read_bf16_row_gather_argmax_d2h_results(&mut records)
+                .is_err()
+        );
+        // This test does not run uninitialized buffers; the fixture tests replay.
+        exec.close()?;
+        graph.close()?;
+        pinned.close()?;
+        results.close()?;
+        gathered.close()?;
+        indices.close()?;
+        input.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+#[repr(C)]
+struct RawGraphResources {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_reserve(
+        stream: *mut RawStream,
+        devices: *const *mut RawDeviceBuffer,
+        device_count: u64,
+        pinned: *const *mut RawPinnedHostBuffer,
+        pinned_count: u64,
+        plans: *const *mut RawGemmPlan,
+        plan_count: u64,
+        output: *mut *mut RawGraphResources,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_close(
+        resources: *mut *mut RawGraphResources,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+
+pub(super) struct GraphResourcesHandle {
+    pointer: Option<NonNull<RawGraphResources>>,
+}
+impl GraphResourcesHandle {
+    pub(super) fn reserve(
+        stream: &StreamHandle,
+        devices: &[&DeviceBufferHandle],
+        pinned: &[&PinnedHostBufferHandle],
+        plans: &[&GemmPlanHandle],
+    ) -> CudaResult<Self> {
+        const OP: &str = "reserve aggregate graph resources";
+        let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
+        let pinned: Vec<_> = pinned.iter().map(|v| v.as_ptr()).collect();
+        let plans: Vec<_> = plans.iter().map(|v| v.as_ptr()).collect();
+        let mut raw = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: arrays contain live opaque handles borrowed through this call.
+        // The enclosing safe owner retains exclusive parent borrows until close.
+        let status = unsafe {
+            riley_cuda_graph_resources_reserve(
+                stream.as_ptr(),
+                devices.as_ptr(),
+                devices.len() as u64,
+                pinned.as_ptr(),
+                pinned.len() as u64,
+                plans.as_ptr(),
+                plans.len() as u64,
+                &mut raw,
+                &mut error,
+            )
+        };
+        // A rollback failure may return an owner even on error. Keep its Drop
+        // path; native leases stay busy if cleanup cannot be established.
+        let handle = Self {
+            pointer: NonNull::new(raw),
+        };
+        status_result(status, OP, &error)?;
+        if handle.pointer.is_none() {
+            return Err(CudaError::invalid_state(
+                OP,
+                "native reservation returned no owner",
+            ));
+        }
+        Ok(handle)
+    }
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let mut raw = self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr);
+        let mut error = ErrorInfo::new();
+        // SAFETY: pointer is uniquely owned, thread-confined, and native close
+        // explicitly reports consumption by nulling this in/out handle.
+        let status = unsafe { riley_cuda_graph_resources_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close aggregate graph resources", &error)?;
+        if self.pointer.is_some() {
+            return Err(CudaError::invalid_state(
+                "close aggregate graph resources",
+                "native retained owner on success",
+            ));
+        }
+        Ok(())
+    }
+}
+impl Drop for GraphResourcesHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+#[cfg(test)]
+mod graph_resource_native_gpu_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn aggregate_resource_duplicates_busy_rollback_and_drop() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut other_stream = StreamHandle::create(&context)?;
+        let mut first = DeviceBufferHandle::create(&context, 128)?;
+        let mut second = DeviceBufferHandle::create(&context, 128)?;
+        let mut pinned = PinnedHostBufferHandle::create(&context, 128)?;
+        let mut plan = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
+        for iteration in 0..16 {
+            // Hundreds of occurrences remain four unique leases including stream.
+            let mut ledger = GraphResourcesHandle::reserve(
+                &stream,
+                &vec![&first; 512],
+                &[&pinned, &pinned],
+                &[&plan, &plan],
+            )?;
+            assert!(first.close().is_err());
+            assert!(pinned.close().is_err());
+            assert!(plan.close().is_err());
+            assert!(stream.close().is_err());
+            assert!(context.close().is_err());
+            assert!(
+                stream
+                    .begin_graph_fill_capture(
+                        &second,
+                        32,
+                        crate::CudaGraphCaptureMode::ThreadLocal as u32
+                    )
+                    .is_err()
+            );
+            // Busy plan is discovered after device acquisition as well.
+            assert!(
+                GraphResourcesHandle::reserve(&other_stream, &[&second], &[], &[&plan]).is_err()
+            );
+            // This attempt acquires other_stream and second before discovering
+            // first is busy. Both earlier acquisitions must roll back.
+            assert!(
+                GraphResourcesHandle::reserve(&other_stream, &[&second, &first], &[], &[]).is_err()
+            );
+            GraphResourcesHandle::reserve(&other_stream, &[&second], &[], &[])?.close()?;
+            // A different thread cannot release the ledger's authority.
+            let address = ledger.pointer.unwrap().as_ptr() as usize;
+            std::thread::spawn(move || {
+                let mut raw = address as *mut RawGraphResources;
+                let mut error = ErrorInfo::new();
+                // SAFETY: original owner stays alive and idle until join.
+                let status = unsafe { riley_cuda_graph_resources_close(&mut raw, &mut error) };
+                assert_eq!(status, STATUS_INVALID_STATE);
+                assert_eq!(raw as usize, address);
+            })
+            .join()
+            .unwrap();
+            if iteration % 2 == 0 {
+                ledger.close()?;
+                ledger.close()?;
+            }
+            drop(ledger);
+        }
+        GraphResourcesHandle::reserve(&stream, &[&first, &second], &[&pinned], &[&plan])?
+            .close()?;
+        plan.close()?;
+        pinned.close()?;
+        second.close()?;
+        first.close()?;
+        other_stream.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn aggregate_resource_context_capacity_and_capture_rejection() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut foreign = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut foreign_buffer = DeviceBufferHandle::create(&foreign, 4)?;
+        let mut foreign_plan = GemmPlanHandle::create(&foreign, 1, 64, 64, 0, 0)?;
+        assert!(GraphResourcesHandle::reserve(&stream, &[&foreign_buffer], &[], &[]).is_err());
+        assert!(GraphResourcesHandle::reserve(&stream, &[], &[], &[&foreign_plan]).is_err());
+        let mut buffers = (0..1024)
+            .map(|_| DeviceBufferHandle::create(&context, 4))
+            .collect::<CudaResult<Vec<_>>>()?;
+        let refs: Vec<_> = buffers.iter().collect();
+        // Stream consumes one slot, so 1023 is admitted and 1024 rolls back.
+        GraphResourcesHandle::reserve(&stream, &refs[..1023], &[], &[])?.close()?;
+        assert!(GraphResourcesHandle::reserve(&stream, &refs, &[], &[]).is_err());
+        GraphResourcesHandle::reserve(&stream, &refs[..1023], &[], &[])?.close()?;
+        assert!(
+            GraphResourcesHandle::reserve(&stream, &vec![&buffers[0]; 4097], &[], &[]).is_err()
+        );
+        // Null table with nonzero count is rejected before any resource use.
+        let mut raw = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: live stream, deliberate null-table validation case.
+        let status = unsafe {
+            riley_cuda_graph_resources_reserve(
+                stream.as_ptr(),
+                ptr::null(),
+                1,
+                ptr::null(),
+                0,
+                ptr::null(),
+                0,
+                &mut raw,
+                &mut error,
+            )
+        };
+        assert_eq!(status, STATUS_INVALID_ARGUMENT);
+        assert!(raw.is_null());
+        let mut capture = stream.begin_graph_fill_capture(
+            &buffers[0],
+            1,
+            crate::CudaGraphCaptureMode::ThreadLocal as u32,
+        )?;
+        assert!(GraphResourcesHandle::reserve(&stream, &[&buffers[1]], &[], &[]).is_err());
+        capture.abort()?;
+        GraphResourcesHandle::reserve(&stream, &[&buffers[0]], &[], &[])?.close()?;
+        for buffer in &mut buffers {
+            buffer.close()?;
+        }
+        foreign_plan.close()?;
+        foreign_buffer.close()?;
+        stream.close()?;
+        foreign.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_transfer(
+        resources: *mut RawGraphResources,
+        input: *mut RawPinnedHostBuffer,
+        first: *mut RawDeviceBuffer,
+        second: *mut RawDeviceBuffer,
+        output: *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_replay_transfer(
+        resources: *mut RawGraphResources,
+        source: *const u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_read_transfer(
+        resources: *mut RawGraphResources,
+        destination: *mut u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_transfer(
+        &mut self,
+        input: &PinnedHostBufferHandle,
+        first: &DeviceBufferHandle,
+        second: &DeviceBufferHandle,
+        output: &PinnedHostBufferHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: live borrowed parents, native verifies ledger membership and geometry.
+        let status = unsafe {
+            riley_cuda_graph_resources_record_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                input.as_ptr(),
+                first.as_ptr(),
+                second.as_ptr(),
+                output.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "record aggregate transfer", &error)
+    }
+    pub(super) fn replay_transfer(&mut self, source: &[u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: source slice stays live until the synchronous staging call returns.
+        let status = unsafe {
+            riley_cuda_graph_resources_replay_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                source.as_ptr(),
+                source.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "replay aggregate transfer", &error)
+    }
+    pub(super) fn read_transfer(&mut self, destination: &mut [u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: writable slice has the advertised length, native gates on completion.
+        let status = unsafe {
+            riley_cuda_graph_resources_read_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                destination.as_mut_ptr(),
+                destination.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "read aggregate transfer", &error)
+    }
+}
+
+#[cfg(test)]
+mod aggregate_transfer_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn aggregate_transfer_fresh_replay_membership_completion_and_cleanup() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut first = DeviceBufferHandle::create(&context, 257)?;
+        let mut second = DeviceBufferHandle::create(&context, 257)?;
+        let mut absent = DeviceBufferHandle::create(&context, 257)?;
+        let mut small = DeviceBufferHandle::create(&context, 256)?;
+        let mut input = PinnedHostBufferHandle::create(&context, 257)?;
+        let mut output = PinnedHostBufferHandle::create(&context, 257)?;
+        for cycle in 0..8_u8 {
+            let mut owner = GraphResourcesHandle::reserve(
+                &stream,
+                &[&first, &first, &second, &small],
+                &[&input, &output],
+                &[],
+            )?;
+            let mut result = [0_u8; 257];
+            assert!(owner.read_transfer(&mut result).is_err());
+            assert!(owner.replay_transfer(&result).is_err());
+            assert!(
+                owner
+                    .record_transfer(&input, &first, &absent, &output)
+                    .is_err()
+            );
+            assert!(
+                owner
+                    .record_transfer(&input, &first, &first, &output)
+                    .is_err()
+            );
+            assert!(
+                owner
+                    .record_transfer(&input, &first, &small, &output)
+                    .is_err()
+            );
+            assert!(
+                owner
+                    .record_transfer(&input, &first, &second, &input)
+                    .is_err()
+            );
+            owner.record_transfer(&input, &first, &second, &output)?;
+            assert!(
+                owner
+                    .record_transfer(&input, &first, &second, &output)
+                    .is_err()
+            );
+            assert!(owner.read_transfer(&mut result).is_err());
+            assert!(first.close().is_err());
+            assert!(input.close().is_err());
+            for step in 0..32_u8 {
+                let mut payload = [0_u8; 257];
+                for (i, byte) in payload.iter_mut().enumerate() {
+                    *byte = (i as u8)
+                        .wrapping_mul(17)
+                        .wrapping_add(step)
+                        .wrapping_add(cycle);
+                }
+                owner.replay_transfer(&payload)?;
+                owner.read_transfer(&mut result)?;
+                assert_eq!(result, payload);
+                assert!(owner.replay_transfer(&payload[..256]).is_err());
+                assert!(
+                    owner.read_transfer(&mut result).is_err(),
+                    "rejected replay must invalidate previous output"
+                );
+                owner.replay_transfer(&payload)?;
+                owner.read_transfer(&mut result)?;
+                assert_eq!(result, payload);
+            }
+            if cycle % 2 == 0 {
+                owner.close()?;
+            }
+            drop(owner);
+        }
+        small.close()?;
+        absent.close()?;
+        second.close()?;
+        first.close()?;
+        output.close()?;
+        input.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_swiglu(
+        resources: *mut RawGraphResources,
+        gate: *mut RawDeviceBuffer,
+        up: *mut RawDeviceBuffer,
+        activated: *mut RawDeviceBuffer,
+        product: *mut RawDeviceBuffer,
+        staging: *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_swiglu(
+        &mut self,
+        gate: &DeviceBufferHandle,
+        up: &DeviceBufferHandle,
+        activated: &DeviceBufferHandle,
+        product: &DeviceBufferHandle,
+        staging: &PinnedHostBufferHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: all opaque parents stay borrowed; native validates ledger membership.
+        let status = unsafe {
+            riley_cuda_graph_resources_record_swiglu(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                gate.as_ptr(),
+                up.as_ptr(),
+                activated.as_ptr(),
+                product.as_ptr(),
+                staging.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "record SwiGLU graph", &error)
+    }
+}
+
+#[cfg(test)]
+mod swiglu_native_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn swiglu_native_rejects_absent_odd_and_short_parents() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut a = DeviceBufferHandle::create(&context, 2)?;
+        let mut b = DeviceBufferHandle::create(&context, 2)?;
+        let mut c = DeviceBufferHandle::create(&context, 2)?;
+        let mut d = DeviceBufferHandle::create(&context, 2)?;
+        let mut absent = DeviceBufferHandle::create(&context, 2)?;
+        let mut odd = DeviceBufferHandle::create(&context, 3)?;
+        let mut short = PinnedHostBufferHandle::create(&context, 7)?;
+        let mut host = PinnedHostBufferHandle::create(&context, 8)?;
+        let mut graph =
+            GraphResourcesHandle::reserve(&stream, &[&a, &b, &c, &d, &odd], &[&short, &host], &[])?;
+        assert!(graph.record_swiglu(&a, &b, &c, &absent, &host).is_err());
+        assert!(graph.record_swiglu(&a, &b, &c, &d, &short).is_err());
+        assert!(graph.record_swiglu(&odd, &b, &c, &d, &host).is_err());
+        graph.record_swiglu(&a, &b, &c, &d, &host)?;
+        graph.replay_transfer(&[0; 4])?;
+        let mut output = [1; 4];
+        graph.read_transfer(&mut output)?;
+        assert_eq!(output, [0; 4]);
+        graph.close()?;
+        host.close()?;
+        short.close()?;
+        odd.close()?;
+        absent.close()?;
+        d.close()?;
+        c.close()?;
+        b.close()?;
+        a.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_layer_tail(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        intermediate: *mut RawGemmPlan,
+        down: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        norm_weight: *mut RawDeviceBuffer,
+        epsilon: f32,
+        profile: u32,
+        projection_weight: *mut RawDeviceBuffer,
+        projection_plan: *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_norm_mlp(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        intermediate: *mut RawGemmPlan,
+        down: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        norm_weight: *mut RawDeviceBuffer,
+        epsilon: f32,
+        profile: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_mlp(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        intermediate: *mut RawGemmPlan,
+        down: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_mlp(
+        &mut self,
+        devices: [&DeviceBufferHandle; 11],
+        workspace: Option<&DeviceBufferHandle>,
+        intermediate: &GemmPlanHandle,
+        down: &GemmPlanHandle,
+        staging: &PinnedHostBufferHandle,
+    ) -> CudaResult<()> {
+        self.record_mlp_with_norm(devices, workspace, intermediate, down, staging, None)
+    }
+    pub(super) fn record_mlp_with_norm(
+        &mut self,
+        devices: [&DeviceBufferHandle; 11],
+        workspace: Option<&DeviceBufferHandle>,
+        intermediate: &GemmPlanHandle,
+        down: &GemmPlanHandle,
+        staging: &PinnedHostBufferHandle,
+        norm: Option<(&DeviceBufferHandle, f32, u32)>,
+    ) -> CudaResult<()> {
+        self.record_mlp_with_tail(devices, workspace, intermediate, down, staging, norm, None)
+    }
+    pub(super) fn record_mlp_with_tail(
+        &mut self,
+        devices: [&DeviceBufferHandle; 11],
+        workspace: Option<&DeviceBufferHandle>,
+        intermediate: &GemmPlanHandle,
+        down: &GemmPlanHandle,
+        staging: &PinnedHostBufferHandle,
+        norm: Option<(&DeviceBufferHandle, f32, u32)>,
+        projection: Option<(&DeviceBufferHandle, &GemmPlanHandle)>,
+    ) -> CudaResult<()> {
+        let mut raw_devices = [ptr::null_mut(); 12];
+        for (index, device) in devices.into_iter().enumerate() {
+            raw_devices[index] = device.as_ptr();
+        }
+        raw_devices[11] = workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr);
+        let mut error = ErrorInfo::new();
+        // SAFETY: exactly 12 live/optional slots, all parent borrows retained by
+        // the safe reservation. Native validates geometry and ledger membership.
+        let status = unsafe {
+            if let Some((projection_weight, projection_plan)) = projection {
+                let (weight, epsilon, profile) = norm.ok_or_else(|| {
+                    CudaError::invalid_argument("record layer tail", "norm required")
+                })?;
+                riley_cuda_graph_resources_record_layer_tail(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw_devices.as_ptr(),
+                    intermediate.as_ptr(),
+                    down.as_ptr(),
+                    staging.as_ptr(),
+                    weight.as_ptr(),
+                    epsilon,
+                    profile,
+                    projection_weight.as_ptr(),
+                    projection_plan.as_ptr(),
+                    &mut error,
+                )
+            } else if let Some((weight, epsilon, profile)) = norm {
+                riley_cuda_graph_resources_record_norm_mlp(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw_devices.as_ptr(),
+                    intermediate.as_ptr(),
+                    down.as_ptr(),
+                    staging.as_ptr(),
+                    weight.as_ptr(),
+                    epsilon,
+                    profile,
+                    &mut error,
+                )
+            } else {
+                riley_cuda_graph_resources_record_mlp(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw_devices.as_ptr(),
+                    intermediate.as_ptr(),
+                    down.as_ptr(),
+                    staging.as_ptr(),
+                    &mut error,
+                )
+            }
+        };
+        status_result(status, "record MLP graph", &error)
+    }
+}
+
+#[cfg(test)]
+mod mlp_native_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn mlp_reserved_geometry_capture_close_and_rejection() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut buffers = [
+            128_u64, 128, 256, 256, 256, 256, 128, 128, 16384, 16384, 16384, 4096, 128, 8192,
+        ]
+        .into_iter()
+        .map(|n| DeviceBufferHandle::create(&context, n))
+        .collect::<CudaResult<Vec<_>>>()?;
+        let mut missing = DeviceBufferHandle::create(&context, 128)?;
+        let mut staging = PinnedHostBufferHandle::create(&context, 512)?;
+        let mut short = PinnedHostBufferHandle::create(&context, 511)?;
+        let mut intermediate = GemmPlanHandle::create(&context, 1, 128, 64, 0, 3)?;
+        let mut down = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3)?;
+        let mut wrong_m = GemmPlanHandle::create(&context, 2, 128, 64, 0, 0)?;
+        let mut projection = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
+        for cycle in 0..8 {
+            let refs: Vec<_> = buffers.iter().collect();
+            let mut owner = GraphResourcesHandle::reserve(
+                &stream,
+                &refs,
+                &[&staging, &short],
+                &[&intermediate, &down, &wrong_m, &projection],
+            )?;
+            let d = [
+                &buffers[0],
+                &buffers[1],
+                &buffers[2],
+                &buffers[3],
+                &buffers[4],
+                &buffers[5],
+                &buffers[6],
+                &buffers[7],
+                &buffers[8],
+                &buffers[9],
+                &buffers[10],
+            ];
+            assert!(
+                owner
+                    .record_mlp(d, None, &wrong_m, &down, &staging)
+                    .is_err()
+            );
+            assert!(
+                owner
+                    .record_mlp(d, None, &intermediate, &down, &short)
+                    .is_err()
+            );
+            let mut bad = d;
+            bad[0] = &missing;
+            assert!(
+                owner
+                    .record_mlp(bad, None, &intermediate, &down, &staging)
+                    .is_err()
+            );
+            bad = d;
+            bad[1] = bad[0];
+            assert!(
+                owner
+                    .record_mlp(bad, None, &intermediate, &down, &staging)
+                    .is_err()
+            );
+            for (weight, epsilon, profile) in [
+                (&missing, 1e-5, 0),
+                (&buffers[0], 1e-5, 0),
+                (&buffers[12], f32::NAN, 0),
+                (&buffers[12], 0.0, 0),
+                (&buffers[12], -1.0, 0),
+                (&buffers[12], f32::INFINITY, 0),
+                (&buffers[12], 1e-5, 1),
+                (&buffers[12], 1e-5, 2),
+            ] {
+                assert!(
+                    owner
+                        .record_mlp_with_norm(
+                            d,
+                            None,
+                            &intermediate,
+                            &down,
+                            &staging,
+                            Some((weight, epsilon, profile))
+                        )
+                        .is_err()
+                );
+            }
+            for (weight, plan) in [
+                (&missing, &projection),
+                (&buffers[0], &projection),
+                (&buffers[12], &projection),
+                (&buffers[13], &wrong_m),
+            ] {
+                assert!(
+                    owner
+                        .record_mlp_with_tail(
+                            d,
+                            None,
+                            &intermediate,
+                            &down,
+                            &staging,
+                            Some((&buffers[12], 1e-5, 0)),
+                            Some((weight, plan))
+                        )
+                        .is_err()
+                );
+            }
+            owner.record_mlp_with_tail(
+                d,
+                if cycle % 2 == 0 {
+                    None
+                } else {
+                    Some(&buffers[11])
+                },
+                &intermediate,
+                &down,
+                &staging,
+                if cycle >= 2 {
+                    Some((&buffers[12], 1e-5, 0))
+                } else {
+                    None
+                },
+                if cycle >= 4 {
+                    Some((&buffers[13], &projection))
+                } else {
+                    None
+                },
+            )?;
+            assert!(
+                owner
+                    .record_mlp(d, None, &intermediate, &down, &staging)
+                    .is_err()
+            );
+            assert!(owner.read_transfer(&mut [0; 256]).is_err());
+            assert!(intermediate.close().is_err());
+            assert!(staging.close().is_err());
+            if cycle % 2 == 0 {
+                owner.close()?;
+            } else {
+                drop(owner);
+            }
+            // Successful close means capture TLS/domain and context leases no
+            // longer block normal creation; data wasn't initialized or launched.
+            let mut probe = DeviceBufferHandle::create(&context, 2)?;
+            probe.close()?;
+        }
+        projection.close()?;
+        wrong_m.close()?;
+        down.close()?;
+        intermediate.close()?;
+        short.close()?;
+        staging.close()?;
+        missing.close()?;
+        for b in &mut buffers {
+            b.close()?;
+        }
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_attention_chain(
+        r: *mut RawGraphResources,
+        d: *const *mut RawDeviceBuffer,
+        q: *mut RawGemmPlan,
+        kv: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        epsilon: f32,
+        profile: u32,
+        rope: *const *mut RawDeviceBuffer,
+        offset: u64,
+        caches: *const *mut RawDeviceBuffer,
+        geometry: *const u64,
+        attention: *mut RawDeviceBuffer,
+        fields: *const u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_qkv_kv(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        query: *mut RawGemmPlan,
+        kv: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        epsilon: f32,
+        profile: u32,
+        rope: *const *mut RawDeviceBuffer,
+        offset: u64,
+        caches: *const *mut RawDeviceBuffer,
+        geometry: *const u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_qkv_rope(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        query: *mut RawGemmPlan,
+        kv: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        epsilon: f32,
+        profile: u32,
+        rope: *const *mut RawDeviceBuffer,
+        position_offset: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_norm_qkv(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        query: *mut RawGemmPlan,
+        kv: *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        epsilon: f32,
+        profile: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_norm_qkv(
+        &mut self,
+        devices: [&DeviceBufferHandle; 9],
+        workspace: Option<&DeviceBufferHandle>,
+        plans: [&GemmPlanHandle; 2],
+        staging: &PinnedHostBufferHandle,
+        epsilon: f32,
+        hf: bool,
+    ) -> CudaResult<()> {
+        self.record_qkv_with_rope(devices, workspace, plans, staging, epsilon, hf, None)
+    }
+    pub(super) fn record_qkv_with_rope(
+        &mut self,
+        devices: [&DeviceBufferHandle; 9],
+        workspace: Option<&DeviceBufferHandle>,
+        plans: [&GemmPlanHandle; 2],
+        staging: &PinnedHostBufferHandle,
+        epsilon: f32,
+        hf: bool,
+        rope: Option<([&DeviceBufferHandle; 5], u64)>,
+    ) -> CudaResult<()> {
+        self.record_qkv_with_cache(devices, workspace, plans, staging, epsilon, hf, rope, None)
+    }
+    pub(super) fn record_qkv_with_cache(
+        &mut self,
+        devices: [&DeviceBufferHandle; 9],
+        workspace: Option<&DeviceBufferHandle>,
+        plans: [&GemmPlanHandle; 2],
+        staging: &PinnedHostBufferHandle,
+        epsilon: f32,
+        hf: bool,
+        rope: Option<([&DeviceBufferHandle; 5], u64)>,
+        caches: Option<([&DeviceBufferHandle; 2], [u64; 6])>,
+    ) -> CudaResult<()> {
+        self.record_attention_impl(
+            devices, workspace, plans, staging, epsilon, hf, rope, caches, None,
+        )
+    }
+    pub(super) fn record_attention_impl(
+        &mut self,
+        devices: [&DeviceBufferHandle; 9],
+        workspace: Option<&DeviceBufferHandle>,
+        plans: [&GemmPlanHandle; 2],
+        staging: &PinnedHostBufferHandle,
+        epsilon: f32,
+        hf: bool,
+        rope: Option<([&DeviceBufferHandle; 5], u64)>,
+        caches: Option<([&DeviceBufferHandle; 2], [u64; 6])>,
+        attention: Option<(&DeviceBufferHandle, [u64; 4])>,
+    ) -> CudaResult<()> {
+        let mut raw = [ptr::null_mut(); 10];
+        for (i, d) in devices.iter().enumerate() {
+            raw[i] = d.as_ptr();
+        }
+        raw[9] = workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr);
+        let mut error = ErrorInfo::new();
+        // SAFETY: ten fixed slots; native validates all retained parents and geometry.
+        let status = unsafe {
+            if let Some((output, fields)) = attention {
+                let (parents, offset) = rope.ok_or_else(|| {
+                    CudaError::invalid_argument("attention chain", "RoPE required")
+                })?;
+                let (cache, geometry) = caches.ok_or_else(|| {
+                    CudaError::invalid_argument("attention chain", "cache required")
+                })?;
+                let extra = parents.map(DeviceBufferHandle::as_ptr);
+                let cache = cache.map(DeviceBufferHandle::as_ptr);
+                riley_cuda_graph_resources_record_attention_chain(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    plans[0].as_ptr(),
+                    plans[1].as_ptr(),
+                    staging.as_ptr(),
+                    epsilon,
+                    u32::from(hf),
+                    extra.as_ptr(),
+                    offset,
+                    cache.as_ptr(),
+                    geometry.as_ptr(),
+                    output.as_ptr(),
+                    fields.as_ptr(),
+                    &mut error,
+                )
+            } else if let Some((cache, geometry)) = caches {
+                let (parents, offset) =
+                    rope.ok_or_else(|| CudaError::invalid_argument("QKV KV", "RoPE required"))?;
+                let extra = parents.map(DeviceBufferHandle::as_ptr);
+                let cache = cache.map(DeviceBufferHandle::as_ptr);
+                riley_cuda_graph_resources_record_qkv_kv(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    plans[0].as_ptr(),
+                    plans[1].as_ptr(),
+                    staging.as_ptr(),
+                    epsilon,
+                    u32::from(hf),
+                    extra.as_ptr(),
+                    offset,
+                    cache.as_ptr(),
+                    geometry.as_ptr(),
+                    &mut error,
+                )
+            } else if let Some((parents, offset)) = rope {
+                let extra = parents.map(DeviceBufferHandle::as_ptr);
+                riley_cuda_graph_resources_record_qkv_rope(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    plans[0].as_ptr(),
+                    plans[1].as_ptr(),
+                    staging.as_ptr(),
+                    epsilon,
+                    u32::from(hf),
+                    extra.as_ptr(),
+                    offset,
+                    &mut error,
+                )
+            } else {
+                riley_cuda_graph_resources_record_norm_qkv(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    plans[0].as_ptr(),
+                    plans[1].as_ptr(),
+                    staging.as_ptr(),
+                    epsilon,
+                    u32::from(hf),
+                    &mut error,
+                )
+            }
+        };
+        status_result(status, "record norm QKV", &error)
+    }
+}
+
+#[cfg(test)]
+mod norm_qkv_native_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn norm_qkv_parent_geometry_capture_and_cleanup() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut buffers = [128_u64, 128, 128, 64, 64, 128, 8192, 4096, 4096, 4096]
+            .into_iter()
+            .map(|n| DeviceBufferHandle::create(&context, n))
+            .collect::<CudaResult<Vec<_>>>()?;
+        let mut absent = DeviceBufferHandle::create(&context, 128)?;
+        let mut staging = PinnedHostBufferHandle::create(&context, 512)?;
+        let mut short = PinnedHostBufferHandle::create(&context, 511)?;
+        let mut q = GemmPlanHandle::create(&context, 1, 64, 64, 0, 3)?;
+        let mut kv = GemmPlanHandle::create(&context, 1, 32, 64, 0, 3)?;
+        let mut wrong = GemmPlanHandle::create(&context, 2, 64, 64, 0, 0)?;
+        for cycle in 0..4 {
+            let refs: Vec<_> = buffers.iter().collect();
+            let mut graph = GraphResourcesHandle::reserve(
+                &stream,
+                &refs,
+                &[&staging, &short],
+                &[&q, &kv, &wrong],
+            )?;
+            let d = [
+                &buffers[0],
+                &buffers[1],
+                &buffers[2],
+                &buffers[3],
+                &buffers[4],
+                &buffers[5],
+                &buffers[6],
+                &buffers[7],
+                &buffers[8],
+            ];
+            for (epsilon, hf) in [
+                (0.0, false),
+                (-1.0, false),
+                (f32::NAN, false),
+                (f32::INFINITY, false),
+                (1e-5, true),
+            ] {
+                assert!(
+                    graph
+                        .record_norm_qkv(d, None, [&q, &kv], &staging, epsilon, hf)
+                        .is_err()
+                );
+            }
+            assert!(
+                graph
+                    .record_norm_qkv(d, None, [&wrong, &kv], &staging, 1e-5, false)
+                    .is_err()
+            );
+            assert!(
+                graph
+                    .record_norm_qkv(d, None, [&q, &kv], &short, 1e-5, false)
+                    .is_err()
+            );
+            let mut bad = d;
+            bad[0] = &absent;
+            assert!(
+                graph
+                    .record_norm_qkv(bad, None, [&q, &kv], &staging, 1e-5, false)
+                    .is_err()
+            );
+            bad = d;
+            bad[1] = bad[0];
+            assert!(
+                graph
+                    .record_norm_qkv(bad, None, [&q, &kv], &staging, 1e-5, false)
+                    .is_err()
+            );
+            graph.record_norm_qkv(
+                d,
+                if cycle % 2 == 0 {
+                    None
+                } else {
+                    Some(&buffers[9])
+                },
+                [&q, &kv],
+                &staging,
+                1e-5,
+                false,
+            )?;
+            assert!(
+                graph
+                    .record_norm_qkv(d, None, [&q, &kv], &staging, 1e-5, false)
+                    .is_err()
+            );
+            assert!(graph.read_transfer(&mut [0; 256]).is_err());
+            assert!(q.close().is_err());
+            assert!(staging.close().is_err());
+            if cycle % 2 == 0 {
+                graph.close()?;
+            } else {
+                drop(graph);
+            }
+            let mut probe = DeviceBufferHandle::create(&context, 2)?;
+            probe.close()?;
+        }
+        wrong.close()?;
+        kv.close()?;
+        q.close()?;
+        short.close()?;
+        staging.close()?;
+        absent.close()?;
+        for b in &mut buffers {
+            b.close()?;
+        }
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod qkv_rope_native_gpu_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn qkv_rope_capture_position_guard_and_cleanup() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut buffers = [
+            256_u64, 256, 256, 128, 128, 256, 32768, 16384, 16384, 256, 128, 256, 256, 32, 8192,
+            8192, 256,
+        ]
+        .into_iter()
+        .map(|n| DeviceBufferHandle::create(&context, n))
+        .collect::<CudaResult<Vec<_>>>()?;
+        let mut staging = PinnedHostBufferHandle::create(&context, 1024)?;
+        let mut q = GemmPlanHandle::create(&context, 1, 128, 128, 0, 3)?;
+        let mut kv = GemmPlanHandle::create(&context, 1, 64, 128, 0, 3)?;
+        for cycle in 0..2 {
+            let refs: Vec<_> = buffers.iter().collect();
+            let mut owner = GraphResourcesHandle::reserve(&stream, &refs, &[&staging], &[&q, &kv])?;
+            let d = [
+                &buffers[0],
+                &buffers[1],
+                &buffers[2],
+                &buffers[3],
+                &buffers[4],
+                &buffers[5],
+                &buffers[6],
+                &buffers[7],
+                &buffers[8],
+            ];
+            let rope = [
+                &buffers[9],
+                &buffers[10],
+                &buffers[11],
+                &buffers[12],
+                &buffers[13],
+            ];
+            for offset in [1, 32, u64::MAX] {
+                assert!(
+                    owner
+                        .record_qkv_with_rope(
+                            d,
+                            None,
+                            [&q, &kv],
+                            &staging,
+                            1e-5,
+                            false,
+                            Some((rope, offset))
+                        )
+                        .is_err()
+                );
+            }
+            let mut aliased = rope;
+            aliased[0] = d[2];
+            assert!(
+                owner
+                    .record_qkv_with_rope(
+                        d,
+                        None,
+                        [&q, &kv],
+                        &staging,
+                        1e-5,
+                        false,
+                        Some((aliased, 4))
+                    )
+                    .is_err()
+            );
+            let geometry = [2, 1, 2, 1, 0, 1];
+            for g in [
+                [0, 0, 2, 1, 0, 1],
+                [2, 2, 2, 1, 0, 1],
+                [2, 1, 2, 2, 0, 1],
+                [2, 1, 2, 1, 0, 17],
+            ] {
+                assert!(
+                    owner
+                        .record_qkv_with_cache(
+                            d,
+                            None,
+                            [&q, &kv],
+                            &staging,
+                            1e-5,
+                            false,
+                            Some((rope, 4)),
+                            Some(([&buffers[14], &buffers[15]], g))
+                        )
+                        .is_err()
+                );
+            }
+            assert!(
+                owner
+                    .record_qkv_with_cache(
+                        d,
+                        None,
+                        [&q, &kv],
+                        &staging,
+                        1e-5,
+                        false,
+                        Some((rope, 4)),
+                        Some(([&buffers[14], &buffers[14]], geometry))
+                    )
+                    .is_err()
+            );
+            for fields in [[4, 16, 20, 24], [8, 8, 20, 24], [8, 16, 20, 32]] {
+                assert!(
+                    owner
+                        .record_attention_impl(
+                            d,
+                            None,
+                            [&q, &kv],
+                            &staging,
+                            1e-5,
+                            false,
+                            Some((rope, 4)),
+                            Some(([&buffers[14], &buffers[15]], geometry)),
+                            Some((&buffers[16], fields))
+                        )
+                        .is_err()
+                );
+            }
+            assert!(
+                owner
+                    .record_attention_impl(
+                        d,
+                        None,
+                        [&q, &kv],
+                        &staging,
+                        1e-5,
+                        false,
+                        Some((rope, 4)),
+                        Some(([&buffers[14], &buffers[15]], [2, 1, 2, 1, 1, 1])),
+                        Some((&buffers[16], [8, 16, 20, 24]))
+                    )
+                    .is_err()
+            );
+            if cycle == 1 {
+                owner.record_attention_impl(
+                    d,
+                    None,
+                    [&q, &kv],
+                    &staging,
+                    1e-5,
+                    false,
+                    Some((rope, 4)),
+                    Some(([&buffers[14], &buffers[15]], geometry)),
+                    Some((&buffers[16], [8, 16, 20, 24])),
+                )?;
+                let mut invalid = [0; 512];
+                invalid[256..260].copy_from_slice(&1_u32.to_le_bytes());
+                assert!(owner.replay_transfer(&invalid).is_err());
+            } else {
+                owner.record_qkv_with_rope(
+                    d,
+                    None,
+                    [&q, &kv],
+                    &staging,
+                    1e-5,
+                    false,
+                    Some((rope, 4)),
+                )?;
+            }
+            // Invalid input must be rejected before graph launch; uninitialized
+            // weights/tables in this lifecycle fixture must never execute.
+            for position in [2_u32, u32::MAX] {
+                let mut input = [0; 512];
+                input[256..260].copy_from_slice(&position.to_le_bytes());
+                assert!(owner.replay_transfer(&input).is_err());
+                assert!(owner.read_transfer(&mut [0; 512]).is_err());
+            }
+            assert!(owner.replay_transfer(&[0; 511]).is_err());
+            assert!(q.close().is_err());
+            if cycle == 0 {
+                owner.close()?;
+            } else {
+                drop(owner);
+            }
+            let mut probe = DeviceBufferHandle::create(&context, 2)?;
+            probe.close()?;
+        }
+        kv.close()?;
+        q.close()?;
+        staging.close()?;
+        for b in &mut buffers {
+            b.close()?;
+        }
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+}
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_decode(
+        owner: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        geometry: *const u64,
+        eps: *const f32,
+        profile: u32,
+        publish_logits: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_decode_prefill128(
+        owner: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        geometry: *const u64,
+        eps: *const f32,
+        profile: u32,
+        publish_logits: u32,
+        prefill: *const *mut RawDeviceBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_record_decode_prefill128_packed(
+        owner: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        staging: *mut RawPinnedHostBuffer,
+        geometry: *const u64,
+        eps: *const f32,
+        profile: u32,
+        publish_logits: u32,
+        prefill: *const *mut RawDeviceBuffer,
+        packed: *const *mut RawDeviceBuffer,
+        packed_plans: *const *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn record_decode(
+        &mut self,
+        devices: [&DeviceBufferHandle; 21],
+        workspace: Option<&DeviceBufferHandle>,
+        weights: &[&DeviceBufferHandle],
+        plans: [&GemmPlanHandle; 5],
+        staging: &PinnedHostBufferHandle,
+        geometry: [u64; 4],
+        eps: &[f32],
+        profile: u32,
+        publish_logits: bool,
+        prefill: Option<[&DeviceBufferHandle; 12]>,
+        packed: Option<[&DeviceBufferHandle; 62]>,
+        packed_plans: Option<[&GemmPlanHandle; 2]>,
+    ) -> CudaResult<()> {
+        if packed.is_some() != packed_plans.is_some() || (packed.is_some() && prefill.is_none()) {
+            return Err(CudaError::invalid_argument(
+                "record decode with packed projections",
+                "packed parents and plans must be supplied together with P128 prefill",
+            ));
+        }
+        if prefill.is_some() && profile != 2 {
+            return Err(CudaError::invalid_argument(
+                "record decode with P128 prefill",
+                "P128 prefill requires numerical profile 2",
+            ));
+        }
+        if geometry[0] > 128
+            || weights.len() as u64 != 3 + 9 * geometry[0]
+            || eps.len() as u64 != 1 + 2 * geometry[0]
+        {
+            return Err(CudaError::invalid_argument(
+                "record decode",
+                "descriptor length mismatch",
+            ));
+        }
+        let mut raw = [ptr::null_mut(); 22];
+        for (i, d) in devices.iter().enumerate() {
+            raw[i] = d.as_ptr();
+        }
+        raw[21] = workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr);
+        let weights: Vec<_> = weights.iter().map(|d| d.as_ptr()).collect();
+        let plans = plans.map(GemmPlanHandle::as_ptr);
+        let prefill = prefill.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
+        let packed = packed.map(|buffers| buffers.map(DeviceBufferHandle::as_ptr));
+        let packed_plans = packed_plans.map(|plans| plans.map(GemmPlanHandle::as_ptr));
+        let mut error = ErrorInfo::new();
+        // SAFETY: fixed descriptor lengths above; all handles live under retained parents.
+        let status = unsafe {
+            if let (Some(prefill), Some(packed), Some(packed_plans)) =
+                (prefill.as_ref(), packed.as_ref(), packed_plans.as_ref())
+            {
+                riley_cuda_graph_resources_record_decode_prefill128_packed(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    prefill.as_ptr(),
+                    packed.as_ptr(),
+                    packed_plans.as_ptr(),
+                    &mut error,
+                )
+            } else if let Some(prefill) = prefill.as_ref() {
+                riley_cuda_graph_resources_record_decode_prefill128(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    prefill.as_ptr(),
+                    &mut error,
+                )
+            } else {
+                riley_cuda_graph_resources_record_decode(
+                    self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                    raw.as_ptr(),
+                    weights.as_ptr(),
+                    weights.len() as u64,
+                    plans.as_ptr(),
+                    staging.as_ptr(),
+                    geometry.as_ptr(),
+                    eps.as_ptr(),
+                    profile,
+                    u32::from(publish_logits),
+                    &mut error,
+                )
+            }
+        };
+        status_result(status, "record decode", &error)
+    }
+}
+
+#[cfg(all(test, feature = "cuda-test-fault-injection"))]
+mod aggregate_replay_fault_tests {
+    use super::*;
+    unsafe extern "C" {
+        fn riley_cuda_graph_resources_test_replay_fault(
+            owner: *mut RawGraphResources,
+            fault: u32,
+            error: *mut ErrorInfo,
+        ) -> i32;
+    }
+    #[test]
+    #[ignore = "requires CUDA test-fault-injection; ambiguous completion is process-isolated"]
+    fn aggregate_replay_failure_retains_or_releases_by_completion() -> CudaResult<()> {
+        const CHILD: &str = "RILEY_AGGREGATE_REPLAY_FAULT_CHILD";
+        let Ok(value) = std::env::var(CHILD) else {
+            for fault in [1, 2] {
+                let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                    .args(["--exact", "ffi::aggregate_replay_fault_tests::aggregate_replay_failure_retains_or_releases_by_completion", "--ignored", "--nocapture", "--test-threads=1"])
+                    .env(CHILD, fault.to_string()).output().expect("isolated fault process");
+                assert!(
+                    output.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                println!("G03_REPLAY_FAULT fault={fault} isolated=true passed=true");
+            }
+            return Ok(());
+        };
+        let fault = value.parse::<u32>().expect("test fault id");
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut first = DeviceBufferHandle::create(&context, 32)?;
+        let mut second = DeviceBufferHandle::create(&context, 32)?;
+        let mut input = PinnedHostBufferHandle::create(&context, 32)?;
+        let mut output = PinnedHostBufferHandle::create(&context, 32)?;
+        let mut graph =
+            GraphResourcesHandle::reserve(&stream, &[&first, &second], &[&input, &output], &[])?;
+        graph.record_transfer(&input, &first, &second, &output)?;
+        graph.replay_transfer(&[3; 32])?;
+        let mut bytes = [0; 32];
+        graph.read_transfer(&mut bytes)?;
+        assert_eq!(bytes, [3; 32]);
+        let mut error = ErrorInfo::new();
+        // SAFETY: test-only hook receives this live, thread-confined retained owner.
+        let status = unsafe {
+            riley_cuda_graph_resources_test_replay_fault(
+                graph.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                fault,
+                &mut error,
+            )
+        };
+        status_result(status, "arm aggregate test replay fault", &error)?;
+        assert!(graph.replay_transfer(&[7; 32]).is_err());
+        assert!(graph.read_transfer(&mut bytes).is_err());
+        assert!(graph.replay_transfer(&[9; 32]).is_err());
+        if fault == 2 {
+            assert!(graph.close().is_err());
+            assert!(first.close().is_err());
+            assert!(second.close().is_err());
+            assert!(input.close().is_err());
+            assert!(output.close().is_err());
+            assert!(stream.close().is_err());
+            assert!(context.close().is_err());
+            // Intentionally retained native allocations live until this child exits.
+        } else {
+            graph.close()?;
+            graph.close()?;
+            first.close()?;
+            second.close()?;
+            input.close()?;
+            output.close()?;
+            stream.close()?;
+            context.close()?;
+        }
+        Ok(())
     }
 }

@@ -1,0 +1,25 @@
+{
+  "scope": "natural prose completion, not a representative chat distribution or general quality benchmark",
+  "source_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "source_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c",
+  "selection": "lowest256 SHA256 keys from full validation rows containing16..1024tokens, no truncation, output length selected independently from key",
+  "eligible": 1761,
+  "requests": 256,
+  "prompt_min": 16,
+  "prompt_max": 398,
+  "prompt_median": 137.0,
+  "prompt_buckets": {
+    "32": 16,
+    "64": 32,
+    "128": 69,
+    "256": 106,
+    "512": 33
+  },
+  "output_counts": {
+    "64": 75,
+    "32": 93,
+    "128": 88
+  },
+  "corpus_sha256": "c721b50e944fe0e0d3942a47f253fbde8556ef2f0e1dc55e6f64aa26a7d38b8a",
+  "performance_qualified": false
+}

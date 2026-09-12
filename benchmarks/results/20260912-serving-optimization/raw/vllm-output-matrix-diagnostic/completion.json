@@ -1,0 +1,79 @@
+{
+  "completed": true,
+  "diagnostic_only": true,
+  "performance_claim": false,
+  "concurrent_correctness_qualified": false,
+  "reference_equality_is_observation_only": true,
+  "fresh_process_settings": 7,
+  "requests_recorded": 123,
+  "settings": [
+    {
+      "label": "c1-vllm-budget128",
+      "completed": true,
+      "requests_recorded": 5,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c1-vllm-budget128/completion.json",
+        "sha256": "2574fdc12ccf9f17a9eed59214c3bbf2f83a56c5683ab31d4b6f8feb3f4ace8d"
+      }
+    },
+    {
+      "label": "c2-vllm-budget128",
+      "completed": true,
+      "requests_recorded": 9,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/completion.json",
+        "sha256": "5e74b73137af76a24f16bc71be2ccc950cb0cec18aa3cce62393def5a1feaae0"
+      }
+    },
+    {
+      "label": "c2-vllm-budget256",
+      "completed": true,
+      "requests_recorded": 9,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/completion.json",
+        "sha256": "0b7214af92f9b00aaeb0ebc5f6fdad9a7916ff127c6f28dadad0bf6193c4fd79"
+      }
+    },
+    {
+      "label": "c4-vllm-budget128",
+      "completed": true,
+      "requests_recorded": 17,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/completion.json",
+        "sha256": "aab824b3ac20efc37955230672e25d35dd90ef5093942f513decb40f1aca0d2a"
+      }
+    },
+    {
+      "label": "c4-vllm-budget512",
+      "completed": true,
+      "requests_recorded": 17,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/completion.json",
+        "sha256": "cd822d3f27e5403d51f1fb576dfb9fe11dd8d75844bbba55d548907ccbd49cf6"
+      }
+    },
+    {
+      "label": "c8-vllm-budget128",
+      "completed": true,
+      "requests_recorded": 33,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/completion.json",
+        "sha256": "aed9d245eff21c1f7d89d5bf3fe9b71d4a87f0e295d508b9f0246a31d5053a7c"
+      }
+    },
+    {
+      "label": "c8-vllm-budget1024",
+      "completed": true,
+      "requests_recorded": 33,
+      "completion": {
+        "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/completion.json",
+        "sha256": "1ca0c0aff281a69689bd3b043641a83a549813803dda0faa7ab6fae1dc0d365e"
+      }
+    }
+  ],
+  "blender_sessions_unchanged": true,
+  "preparation": {
+    "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/preparation.json",
+    "sha256": "6fcce68c8646ba07ddf2be3b818825037a1d3f80784f21dca45264c2ae6fa4e6"
+  }
+}

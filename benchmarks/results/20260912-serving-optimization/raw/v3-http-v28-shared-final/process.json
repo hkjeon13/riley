@@ -1,0 +1,33 @@
+{
+  "command": [
+    "/tmp/riley-opt-260912/prefill-shapes-target-v11/release/riley",
+    "serve",
+    "--model",
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+    "--model-id",
+    "v3",
+    "--bind",
+    "127.0.0.1:56997",
+    "--graph-numerics",
+    "variable-smol-v3",
+    "--execution-graph-policy",
+    "require",
+    "--max-active-sequences",
+    "4",
+    "--kv-blocks",
+    "256",
+    "--max-sequence-tokens",
+    "1024",
+    "--max-output-tokens",
+    "128",
+    "--batch-token-budget",
+    "73",
+    "--prefill-chunk-tokens",
+    "73",
+    "--sampling-backend",
+    "cpu",
+    "--shutdown-on-stdin"
+  ],
+  "returncode": 0,
+  "responses": 13
+}

@@ -1,0 +1,3650 @@
+{
+  "schema_version": "riley.rope-arithmetic-fixtures.v2",
+  "source_build": {
+    "path": "/tmp/riley-opt-260912/batch7-build.json",
+    "sha256": "4d3f65c70aa56beb487754f01ed04e04d36f4c6db64fd3ee17b665561fb25395"
+  },
+  "source_root": "/tmp/riley-opt-260912/batch7-source",
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "recipe": {
+    "version": "rope-raw-integer-mixed-fma-v2",
+    "cases": 436,
+    "finite_bf16_encodings": 65280,
+    "exhaustive_phases": 4,
+    "cases_per_exhaustive_phase": 85,
+    "edge_phases": 3,
+    "positions": [
+      128,
+      159
+    ],
+    "qkv_bytes": 1920,
+    "q_bytes": 1152,
+    "kv_cache_bytes_each": 98304,
+    "table_bytes_each": 20480,
+    "metadata_bytes": 116,
+    "guard_bytes_each_side": 256,
+    "allocations_per_case": 13,
+    "input_kind": "synthetic_raw_bits_not_checkpoint_activations_or_actual_trig_table",
+    "fixture_bits_identical_to_v1": true,
+    "first_output": "fma.rn(a,c,-mul.rn(b,s))",
+    "second_output": "fma.rn(a,s,mul.rn(b,c))",
+    "oracle": "full_frozen_precise_TU_enqueue_compiled_packed_decode_rope_kv",
+    "candidates": [
+      "mixed_fma_scalar_table_rn",
+      "mixed_fma_packed_table_rn"
+    ],
+    "comparison": "all Q and entire physical K/V caches as uint16; no tolerance",
+    "performance_claim_eligible": false,
+    "fusion_qualified": false
+  },
+  "tools": {
+    "rope_arithmetic_probe_v2.py": {
+      "path": "/tmp/riley-opt-260912/rope_arithmetic_probe_v2.py",
+      "sha256": "e475dbe7a56457e60a118a829ea2cace4888696acf48c8827c6249e16d1fc3ed"
+    },
+    "rope_arithmetic_probe_v2.cu": {
+      "path": "/tmp/riley-opt-260912/rope_arithmetic_probe_v2.cu",
+      "sha256": "ae96fe6cd787b571fd8a1a1462b7fe95f4f41751288825c39f0b9dc0ee6d83ad"
+    },
+    "rope_arithmetic_candidates_v2.cu": {
+      "path": "/tmp/riley-opt-260912/rope_arithmetic_candidates_v2.cu",
+      "sha256": "9f2c42c8157221fa9913dd9cec017bbfd478f2267411668518fedfd27a0a0f01"
+    },
+    "batch7_attention_probe.py": {
+      "path": "/tmp/riley-opt-260912/batch7_attention_probe.py",
+      "sha256": "bf8f8deca087d6db53c6cce9238d05b2d014328b3f0000f864cbf30ebc56e7f1"
+    },
+    "batch6_projection_probe.py": {
+      "path": "/tmp/riley-opt-260912/batch6_projection_probe.py",
+      "sha256": "e306157697d5584b1f5d59826326f1682e6be57c224108fed68e8a2c3146e3d9"
+    }
+  },
+  "basis": {
+    "receipt.json": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/receipt.json",
+      "sha256": "3d264d8eac757078aafb646f61a306940679b85697b997fc0792439e1fa86201"
+    },
+    "run/native.jsonl": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/run/native.jsonl",
+      "sha256": "4ac563a9166288b5b48ed8681c28ad8d7093f9cc0f52fba3fd3f2ad83cd40b5a"
+    },
+    "inspection.json": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspection.json",
+      "sha256": "2243dd45e353f1a8c44702aae4621ac65f2692bf7b8dd843fbf4c87f454e8922"
+    },
+    "inspect/oracle-rope.sass": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/oracle-rope.sass",
+      "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+    },
+    "inspect/production-0-rope.sass": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/production-0-rope.sass",
+      "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+    },
+    "inspect/production-1-rope.sass": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/production-1-rope.sass",
+      "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+    },
+    "inspect/candidates-rope.sass": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/candidates-rope.sass",
+      "sha256": "48f6bf36c735739cc1dd92ef1ba88ace0c42c11280c3338f729d7f222aee60df"
+    },
+    "inspect/oracle.ptx": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/oracle.ptx",
+      "sha256": "fc669c935a52a8a8c0ebf540b612e0975d15ba81e8cb5b1d2d2e0b8a475c250a"
+    },
+    "inspect/candidates.ptx": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/inspect/candidates.ptx",
+      "sha256": "8fcf1ca75b7e2c5a43557401ab32db990d417c1d915c787848eed7d4d58ba81a"
+    }
+  },
+  "fixtures": [
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-0.bin",
+      "sha256": "cdecd04c5930ef2e6472bb841652ef43eac0632d96dcc1d91acfabcc0c33c286"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-0.bin",
+      "sha256": "5f47db1412e413a71780010f9609385aac8c8c74413a76d9714ec39fae75b085"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-1.bin",
+      "sha256": "fcfde59d546b06cf95ea42700fd797759f44b7ba23a16f98a8f237212d4f68f3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-1.bin",
+      "sha256": "9201632a9ae015fa137ce8cbaac1e2036fc48519b9da6ec3d6fa11d2b9f1774e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-2.bin",
+      "sha256": "f53bcda9161f84264dfb68301ba0bbef388ed6380775441511fa563686bf41b7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-2.bin",
+      "sha256": "c9884df90a96fd3bbd9893016e8efc3e44aa742fc5a72c2597250bb7f232f72d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-3.bin",
+      "sha256": "5dfb7f18d4f73a53a81ac19272f7458f76b9f8fc8a3004e693107286c1d18d68"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-3.bin",
+      "sha256": "48b2ea104ab015745c00ab1a4db3b508b79febb53af49322cc8be0cab3507357"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-4.bin",
+      "sha256": "fde049d01606d08e3c4cebe8a2cb6a123629b22712cea0b167b2fb03ecc5ad5e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-4.bin",
+      "sha256": "72fe7942ae80a791803429d811628d9f1506c8b8156033dc082c9664293d8e12"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-5.bin",
+      "sha256": "906869fb182e1a2f905c4b05818d3ad12cfaed99cfb29bf15532a6b344eee27d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-5.bin",
+      "sha256": "883c04ea6e79fbf49c457d23e3144cbd515cb91ecbc431f001efbc3553edc2e9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/cos-6.bin",
+      "sha256": "383aa08feabf77ba92e50f00d08fa8de58aa492dd632cd9f2a7dbe473870319b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/sin-6.bin",
+      "sha256": "084471e1282f8c94bca88520ddc1eaf8b9260a2bfb54fb299a54e963ae393c63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-000.bin",
+      "sha256": "68128dd567c88182d4cef0080e9e7f3bab27be0b0a1a36fe82e4d68a85619ede"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-000.bin",
+      "sha256": "7e3d8ff7ec6c169dc13ccf42e31e7666e6abe764d8d7a6bd8aa28595159592d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-001.bin",
+      "sha256": "3db789ccc63a4772316d88b2031985ff783f8b5407e1d147b04607f802934897"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-001.bin",
+      "sha256": "0f43564dc04e224fc0c9b9775cd4e3d2d392122eb5ef101a4f3aabe14b2eff24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-002.bin",
+      "sha256": "a37695e5e61a52af9fe6bfe34286a70a343c86014594b286c484c0b543d09e70"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-002.bin",
+      "sha256": "af14edff65cf9e97511480dacb719a2613427e96b2d5ff60d44bf683dc38c639"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-003.bin",
+      "sha256": "fddb4166a057a037103a4b485f7555543ec7487d3a3f3f8caba7c4cfbe90f5b6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-003.bin",
+      "sha256": "09934a7ceac96755b3e4df7c133e8222ccd6f989aa6f362a06fa18070e36b2ed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-004.bin",
+      "sha256": "92f97067ac17ab7c96c07d05df66c4494e8da7e9dffe60fa8c9f276fc62334d2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-004.bin",
+      "sha256": "969a75a160a7b59cc223634e4c647d93db52144a956deedac0085d7aec24bb91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-005.bin",
+      "sha256": "5d40aa5d3e57c65f0ef25b3bab3b2c4f21431a935447e300d4aa42c0ae6af7c6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-005.bin",
+      "sha256": "06cbe2afebbdde105f27c1cf41af46baf66072416902bddd304b811ec07b2572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-006.bin",
+      "sha256": "37ee0229d2ace9a99cd7be6c2e46dfb413f5483dbec259c981fec1f254b0f02b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-006.bin",
+      "sha256": "9e4fc63a719c2a65e70a6371410e41f1529cc3b893023672f420802fbea7d05f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-007.bin",
+      "sha256": "f36a7ead23ebbe46210ab11974cd7cdcb5641746bd95cac3005afa492c24e0d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-007.bin",
+      "sha256": "7c6ebd2aaf036aad228915f84eba362c54e9c44eb4457d67f254a2ff713768db"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-008.bin",
+      "sha256": "38270578bf98e088399d04f0a6d4cb07e34fe6bdf1f3a110c7f1375128533e54"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-008.bin",
+      "sha256": "27a4e0125cc3b12db68f2b17b6f60ba29d8c3d80d9711faa9b163b68b2f2ecaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-009.bin",
+      "sha256": "9594674d56280d871f1f6c56d8e0fe515a33b016d01575cc08bab7672a16207e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-009.bin",
+      "sha256": "17d96ae9692f8eff493c728b8690c16bd338ecf72c0a950be9841cc879028afc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-010.bin",
+      "sha256": "adb2b73f40d30c11906b21e1f8b085adcc3a6a3b6f5a6b21f91302b445cd710a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-010.bin",
+      "sha256": "f4ea4daae63ea4f530ff8e2d89b44b528af4d75674b7eecbb552d32711675c43"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-011.bin",
+      "sha256": "cdd90d14b84e1fa5061cd86c669c484ff1e3138c6981b0b5bb03aaf0ec9409e8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-011.bin",
+      "sha256": "bf7fc97b4466c3f5908e5070cc20e54ddc522744965c2cc332c341ebb7aebee3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-012.bin",
+      "sha256": "5b4ade27066d05e915488124f324dca4c19d4fe3b231120634053aafa4a7fcaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-012.bin",
+      "sha256": "1e3da52ef19e4e6ab0d164340523951f8688a05d8ff204ce02fc3e18f4597aaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-013.bin",
+      "sha256": "138c2bbf1befd6d7bf5f03e78c979c9496ad41f2bef19b132dde1801b260a064"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-013.bin",
+      "sha256": "562c3e2639bc5dab2798984084f61d907d1439b31d4db81e54686ffb2816ab35"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-014.bin",
+      "sha256": "98f2dee8a0be07c8ecfda5b4d10443b078eb80ff9a48aebfc1dd3e4fec316691"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-014.bin",
+      "sha256": "f16b7cdc1acc501bd8e9d08bada29cf72730fd11e7d756fb5be8ea6f95250412"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-015.bin",
+      "sha256": "628bf92e3b278caad3241e6932cd50d7110a99bb96e1135144ee671a345ed1e2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-015.bin",
+      "sha256": "9939e7241224b10cb50e49f767333f1c97737ec1eefc21de3ae9d8804c06e988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-016.bin",
+      "sha256": "24b1c8c49f236369974252c490b9b2aaf624ac3bc076d712ee46c39b0ede891c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-016.bin",
+      "sha256": "69cd336c1647a5cdf482640476f5d32beba5ce05daf697a54c8b784ceda36e47"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-017.bin",
+      "sha256": "db76570710ddab694166b1314e63f7e3aa3765b32079112f0bbef53900f3aece"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-017.bin",
+      "sha256": "329876c50657417f280f4881350abbd19aed1c861c3ce3c7728888f19de2cf08"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-018.bin",
+      "sha256": "96516655ee2c7e2176ac01aaf6eb0803dd61e6ee258231a853cd7fbe0291db1d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-018.bin",
+      "sha256": "57db709a69787efea62005f5907b48756c58bdf9622ebe932ca199931bd22857"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-019.bin",
+      "sha256": "c3fa8e8fda802d19291574c65a90b22db4d6fff8d1369cc5a0e079d26e442f50"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-019.bin",
+      "sha256": "4cb2425e3e9f4c277f1dea2bdf2c52a2b825cbfc91cb439f043541016841c4c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-020.bin",
+      "sha256": "4f85c3571756a04bef5ce804c7ac18b5c63c1e49e7aa17a591426b1a77736657"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-020.bin",
+      "sha256": "a8b06caf20887eac0959cca8b0480915938c2dad89ef43f1db14bacd21485f41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-021.bin",
+      "sha256": "b1044780f86af894ce11da383ff84b9fa2a83405c41ed9efb8d9143d23945daa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-021.bin",
+      "sha256": "edc985dc5b5b2eeb6b74a995dcffe92005c8e174675508a7915703f5215cc578"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-022.bin",
+      "sha256": "06d5cc82605d2aee7a0060f6ac3557cce0e9ed301450d91a2e7a94deacdada40"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-022.bin",
+      "sha256": "3cece673565331810714e7b3ecbda93c316a5062a18d5eb0e9bdb9bde7a6a956"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-023.bin",
+      "sha256": "425f2c4d8b8f8d443103aec1c2564e9bd0b5da2f1d067c35e60df55276a0477e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-023.bin",
+      "sha256": "623b902125f608ca5370b44945ba518537e09626cb408a2bef4403ae616c3b31"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-024.bin",
+      "sha256": "5f5ced4771c3bb0d479da1403870c7b8018fbf14aa96b5b5fdc8bc0f30e370ac"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-024.bin",
+      "sha256": "4859c2777fcb5f2d10cd61564576e148f3d332be366f47a789e7172fae8d3a8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-025.bin",
+      "sha256": "1aa7f32f8ab81830a007c7a3dbaef908de923183486a8299ebbd9fafd3c9e0e7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-025.bin",
+      "sha256": "94cd7668e68857d13d15bbdd39a93ec326d8f52093e978c41c729d36378cc41d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-026.bin",
+      "sha256": "aefb0873a6360087cc33f812c42dc728036e9a572e1adb90c691ded4c4a98d97"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-026.bin",
+      "sha256": "f129867717d87610c3f78a86d9be92a698efbf61f14654e74cc3f08a846c26c8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-027.bin",
+      "sha256": "19adaa47a95ea374bd9605949d66bce0de92c52a0569bf56cd6bee63ecfd128c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-027.bin",
+      "sha256": "bd0071c8d337019a57800c1d798cf4f9cc1572e577ed13a5d1d3ce521e67ceb0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-028.bin",
+      "sha256": "00ab438dce3f6e5781ad8bd7b09129dbb9ab9c29324624dec2eeed69022ca49a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-028.bin",
+      "sha256": "35b86854186f42f8dde8021e83eae1124b2406f9d775ec30098b10359e39b1d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-029.bin",
+      "sha256": "ef071700ba23786c7d34fbf2d6469e1d507737117d672a20ac5821acafa1a702"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-029.bin",
+      "sha256": "6810fcbde83cbecac5a6805df7f7d155d6533aa7afe4f0572692004308a28b44"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-030.bin",
+      "sha256": "a901627773ad0a84f58854027ba9e1a5ba87d710508c584ab6aa579656027989"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-030.bin",
+      "sha256": "ca8c2cc963763cf2c3c249fa371120e00235ede85c05df75cc3271886e951d93"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-031.bin",
+      "sha256": "3f9570a4acceb052ebd599ddcf1c2e70da00ec37e5f892f96f581357e2622f0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-031.bin",
+      "sha256": "585f16e02598b94f92dcfdf20721d242a7031c349906a3607d131ff175e3d408"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-032.bin",
+      "sha256": "9edb09297e0940af179e0f18ac5954e12475155bda03e2a88e7cb1abb7168a84"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-032.bin",
+      "sha256": "bf46b9fa4b7ced0ce5b85d450640113d33b895e13299619e97250658f7c4a962"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-033.bin",
+      "sha256": "1f002fac672179e726edd0dc93e1c7c8346097801d4690f45b663648522f6a3d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-033.bin",
+      "sha256": "6dc859ef6eb6c39906c82a580998c9d9bde6ba93c3e3cfaab9304944aedff8d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-034.bin",
+      "sha256": "74d77a6ec0cdc18f15db1fce6d1165db4e7f1042b0972489b75a8658cd9b64bc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-034.bin",
+      "sha256": "83ab4746c822a2c28b1a85ba1fceffe9d36d62f2d2ee7a8e52e2b161a49f3bd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-035.bin",
+      "sha256": "9fa9819928e5b644f62241f280570d5169bad0a9358bae51be5746e363aec6a8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-035.bin",
+      "sha256": "4248e4546310d429e3d3e141cd49658619ed407f727fc25c35eb49a0bc454e00"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-036.bin",
+      "sha256": "b12141aa2dc51d66d08e108563d73f3edcc7d12c826faf0896491c8e674ae9dc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-036.bin",
+      "sha256": "7f0f17bf4cf4ff6c03805de71d2e9eb39425c8f925ff097da369776078eccb23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-037.bin",
+      "sha256": "8e70183162fbbbd6746005d546b304e9f9b4bbfb4baeb184e0eca141be36c304"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-037.bin",
+      "sha256": "421c70eb7fe47ff9697ad94bbb7a25587be2f305c7fed0e0d63482af4836cb69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-038.bin",
+      "sha256": "521bbea7d78f0570d8ef43a1810ee9d1cbc333a7499f955922ef6b2b56a75a8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-038.bin",
+      "sha256": "f5e54c772ac7f79ac860e3c7f21b52e5b76738710d4a51724a7c9a542e3ff294"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-039.bin",
+      "sha256": "616c54bca97150341fa2545ac77ac4b11f306cc444b1e88d68051abb1bfd3bf9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-039.bin",
+      "sha256": "e82a1678dd3f07868efd3fd1b6ebdc650e9c17f74168bd33a9de69800866d728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-040.bin",
+      "sha256": "1fd62ec2aa5e2d8f5a798fa12bca6046825e37aa3fd4baa563519b22db93e437"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-040.bin",
+      "sha256": "25b3bc147c7bf173a0fe834eab3d8d3e59970298eed9ae7c2f7f0f1cf9ce981e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-041.bin",
+      "sha256": "6175f45d7a3c79e2458a1c7e7b4a396c46bdb536a9f6726ed0e600a2644de7ef"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-041.bin",
+      "sha256": "5563cc0ddbf45d59d5bdd7661ed9aa6cb98e38a79a374e8bdcd1d93e885c688e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-042.bin",
+      "sha256": "7ed07a3e2198f6abed56f6b090b357f1468e1ebfa5cf2af5d26bbe1d80976e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-042.bin",
+      "sha256": "97aebc08d4bd6aae6df502d93974b08d7a46def6e9ab65a966ba927ef9272b20"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-043.bin",
+      "sha256": "91d9ed43cfc5630c2215e6d97f24714a626afb0db0f343ea1fceec3a9793f5f0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-043.bin",
+      "sha256": "516b0a808e1ba8702e769f054f40f3cadffd42765226ee648e749f63fa92ca0a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-044.bin",
+      "sha256": "070810554c21c022e498fcb673e652a4aea3203bc0dc6691b63769d9fab36c12"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-044.bin",
+      "sha256": "9cc2549e5c5241453a2e8e357979f9b3249ac0ad33dbc56ec14f6e77b1c15462"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-045.bin",
+      "sha256": "4b0c96ed10629e0ace25bb0f8d555c18b92ebe8ff7be6e1f9800df1489207657"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-045.bin",
+      "sha256": "c46b138b041223c21a59fb22f8b691814a8ce05a93b2417022e262eefb6be3d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-046.bin",
+      "sha256": "ba31e1896204858d5c48127ec52e0558d313b65fce1bf132b6bd0ef0d93feaa6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-046.bin",
+      "sha256": "fb222522599af8687c1e48e9330ab47859e3619e7fbef5cd3ac32ba079099f9a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-047.bin",
+      "sha256": "782eec714a932def1a01522271e0a5b630c262f49b805697f00364c6ca41c72a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-047.bin",
+      "sha256": "4c3776a67b5311fa36d363c9cad78f3e51dc6fc6bc97fb3d5d1ecf59c21cc69b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-048.bin",
+      "sha256": "9d3147b5b04fcce46c35a50c4315930b4a7cbea13d55a184cb7bd3d1373bacb2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-048.bin",
+      "sha256": "6cb5d7ce31852db905088f68db0bf2676b82d9697198b53c8a2536bf5db91f8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-049.bin",
+      "sha256": "0a17538a8eaad77ce7784d611f0bc15dd9ba3b284ee2ca8a1a71647d6ea066d8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-049.bin",
+      "sha256": "9d759c6e2c76ddc0509696d92db667c1597e90fcf00b78a7ce0252f4f0c6669f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-050.bin",
+      "sha256": "083a711824385fe4eadf808a60b8700dbcd1e3a6b70db326c8a22be4c015a9d6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-050.bin",
+      "sha256": "2c93e3a03b508061bca2f8ce86c2802ce2093c4899c95640c1a415b5b8c45b63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-051.bin",
+      "sha256": "32420a4638cb8b2c99d8970e38733e515ab30a57e57b98ebd1276d2c4c8139fd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-051.bin",
+      "sha256": "5043195f582971c88afb0342e6722b921f3ad484b2dc2b7a035ca7368f4e4748"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-052.bin",
+      "sha256": "9f8b3433c59e1918ab111fc1ff8cd3a8b26895b19a1c9b873395ce0287372900"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-052.bin",
+      "sha256": "59b9c5b6dbfa5c1953d60a6186d594878367c69d06b876d1ba5a87b0900a2666"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-053.bin",
+      "sha256": "67a1f293d0269748ebdb886e70ac6cae07b4d31e7d7a5f18ad730715336010c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-053.bin",
+      "sha256": "2b59ae4631fdfa038c864f0a4029f0227b09e8ac8913a8f77498bd5df4706b91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-054.bin",
+      "sha256": "e08baffba067c1a68b62d92a8c9262d889d57640450ef393a411c3211448ad52"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-054.bin",
+      "sha256": "0d5cd9766f50469d25cd34ee4b1e2d27ff1adfc227cb025547d35e1952518574"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-055.bin",
+      "sha256": "6a8f729fcd26776df1fd3c8d7c515f4ff60c780837b1d803effb6fdd6aadaaee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-055.bin",
+      "sha256": "5d0d3332cc01ce181cfda551f28c1ca6bcc992bc833b857aafc5817c4098f919"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-056.bin",
+      "sha256": "a4e623981c035c1b6a6e4ad45dd9bf58e7e56868f120308d1b854b7d08b7ae8f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-056.bin",
+      "sha256": "fe80379771b8c57c90fe9ecef7eab73758a90c335c6dfd699e0e51466594aa10"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-057.bin",
+      "sha256": "bd83b2e7e8e3f0ffc60ba58f4cd6152ddf631e6bb759f17dafcc7ea44c6ebd24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-057.bin",
+      "sha256": "5271fe87aa7ba07ac571e15cfaadd562f82621a00b1ce6083eace72448f6baff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-058.bin",
+      "sha256": "eddd0e3d7d8fb5f5564474ae65cb9664a3cfffad4bd9647eaa8ca5262068b474"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-058.bin",
+      "sha256": "7cf9d30d55857de74f9be01215830533b7af448b8463993a82896152836a2374"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-059.bin",
+      "sha256": "21d624deebce9d597988fb8152aedc52c7a0c51266f948ae4888118eccad8050"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-059.bin",
+      "sha256": "20d06656aa2520aba69f50060d3c30982d36833ef20cd23252e6341c9f2cd8d9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-060.bin",
+      "sha256": "098ab78e4769fe98013c8b48ba5b17e4069c47b9f261605690721bd09438869d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-060.bin",
+      "sha256": "bbcb866af5b72c4c29c49370a75a9f015d673484747e5de9a6eea7cad6dc565b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-061.bin",
+      "sha256": "44b67183f95cff587dfca14ba4ba1969ad3d20a4dbf9408c4d24b016fd7b884a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-061.bin",
+      "sha256": "dff9b6209c25039b338e805f51892d8aecc501a8e588601aff644765cc9b8b77"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-062.bin",
+      "sha256": "cb3c96bd5d20999096fada10bbcc5280d166e577694844355acb854435575b05"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-062.bin",
+      "sha256": "4c3fec25675c59bed4fabee96e7aaf6140700d0e16a9f402d28573f7a380ca26"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-063.bin",
+      "sha256": "a69c02f5af1efc77b1c36694c476352273294275ac53f4b0d5f043afd39c5edf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-063.bin",
+      "sha256": "48ae24036511d4a4fb940ef161b4a4b8e8e2796148cf092ee4fb335511f2da6a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-064.bin",
+      "sha256": "aa90892e3920612f04b98cc279c028459a8b3ba66299738817607934a758b308"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-064.bin",
+      "sha256": "ddee9b9ab4f223d3507aad3d92cb03b3c6b608edbd3471bfc466d4741f3cc0d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-065.bin",
+      "sha256": "04df1e090ccaae39db6e1c7a4841effc5aa844c2ca4b6f268a2215b55b66a73f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-065.bin",
+      "sha256": "ca7c1210ab8ceedb9bca9ecb2deffeae187310c3ed9b13efcb0ba5b9d2fd97ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-066.bin",
+      "sha256": "546a14d79266f9d38be8ef91356d7aebaf00b1cb2dbcf59b8de4329dd7774640"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-066.bin",
+      "sha256": "caf09042f4d4eb7897e0e885a5db781d02d52e27ae71caf4120a0eaec8053c89"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-067.bin",
+      "sha256": "58eab790a8e4ed75a128202c593be42e203d366ad2a6a627f92b541a5466fd1c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-067.bin",
+      "sha256": "5d3cd19b57356980c9ee34bcaa1130ff11f0433c9e441fc76c7ef47cc0e224c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-068.bin",
+      "sha256": "077de3cd918f8ea98fcc6da9b34b64fa6e84a098c4960d071c5686c7f9b57d8f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-068.bin",
+      "sha256": "90e9dfc24d2bd1795869aaf12b5f4952375c9bad949648a67e502c5b1476348b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-069.bin",
+      "sha256": "6bf870f1e4e7d072a11a311b6819ee2a4fbed7dbad52fa4f9324011b03c3bc18"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-069.bin",
+      "sha256": "e853049b2321f985721931789df5607020ca64d21213141933c1fa9361d4194a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-070.bin",
+      "sha256": "b521fc1a9123504c075c9183abf2f2cd5ef413c28de156dfaa64a8c70d3e255d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-070.bin",
+      "sha256": "46e67570d4a0ee9f572264eff7eb42898cf98eed6b551a7623d3474112babf5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-071.bin",
+      "sha256": "dd1de4f9084c8e4763c1ef38d9341db7a5feb0110af4c6c7f307fa56211b456f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-071.bin",
+      "sha256": "8b2c2f1e76e9f14c2d1b2a26115ea343afb41ed4ac2e9448ec52bc1ac0036e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-072.bin",
+      "sha256": "e9706e202b6fb6a142e032809e6eca2fcf4772ae2e565aca62697c6e8d4a9814"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-072.bin",
+      "sha256": "052b53b35e75eec0e6d79eeeade412881f282e775d689e6b78cfc05f53f5b428"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-073.bin",
+      "sha256": "d21b80425bd32ef86da14875113a270dca94a786969ce16556088d23b18dca4e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-073.bin",
+      "sha256": "10871181415a5934533fbd1225ba7c5973614e6a9e1bacdc0d5ca45bba599654"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-074.bin",
+      "sha256": "be0529aefccedbc5494298e02e7481496cc98abf121b5109aa0d9e05c0f8fd76"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-074.bin",
+      "sha256": "0c3300581b64197648a23efbf5ca7860e4d7509b38373c0507bb4e88dc15b44a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-075.bin",
+      "sha256": "6c504a13cf41831fc3596f29e0c0e981c5b8053fa79cbc3b8640d26189e64ce3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-075.bin",
+      "sha256": "4294b32fcd45c8bd66a11b6fd2ac92fbf8fd74e55e55742f6a6fa3cebf193a0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-076.bin",
+      "sha256": "df82f77ca4202af75e87e771a98196a34ab60a60fd11a2eef06fcaf9fe6c8d56"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-076.bin",
+      "sha256": "380db54f4a848122018af744135cf478b81a0d2440f1ee00ae89e5065dd1af91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-077.bin",
+      "sha256": "66f98ebd28d8369fd630171fb8d0ca5dfc7e35ff6af4dc3a22bafa2e52773cd1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-077.bin",
+      "sha256": "e2573dcc97572cbc7271c363aca54487e24bec9a9a1f3e797e9523ffcfd7e552"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-078.bin",
+      "sha256": "e9a95b4a8fdf9d85c5e83f20537f7460b2e79d8257215a04c69ba4ca5aca9bbf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-078.bin",
+      "sha256": "0c368692a62f59fa570ef21e193262fe89c8d5dfce13061a66db9116a8c4c839"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-079.bin",
+      "sha256": "03515ccba78afb6e795b312182de117824f89838dd14939fd73495353a599884"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-079.bin",
+      "sha256": "372ee1bfc928c32be69a0f01fdecb498a1888b0b628a5bb826ea196a068dc040"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-080.bin",
+      "sha256": "97ea58659649c1ad6f4f1c6593aa5570a632e074ad54ecd6411887cbb4e64c98"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-080.bin",
+      "sha256": "f9beb25cd1a36c33b021e2db7a3d4e7de2700f79ec0d571efa62bd097953aa32"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-081.bin",
+      "sha256": "af4250f1d286ff860760901c9a710c473c2ea49ba2859ca5b30ce128f69d6950"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-081.bin",
+      "sha256": "942c243e89d09b409d8c52ae9527300f1ed036762a9f89296ffeb6bf054fe184"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-082.bin",
+      "sha256": "655e9079179acdf345402376bff9e2bb575e78c82b49e6fb7a2e2beef29a4d4c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-082.bin",
+      "sha256": "a9bd4b0b7ed2c34a0ddd7f84028662d8557c07da3d3c668d8e82aaf7b7f7c1d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-083.bin",
+      "sha256": "a1e9dbbcf0a20d963fceeecf904fddbc110d28e04b9a7af9356e864a353f5e8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-083.bin",
+      "sha256": "e8289750f8c70c483d3750db7cb4282766c5e5ba6a6311e5401f2a6abbb313b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-084.bin",
+      "sha256": "7c26f138ea37470a56ba7ead4332be4aba09e787a2e1b7be5a6e59800391b9b7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-084.bin",
+      "sha256": "641bd5f9509bbd4fc751e371f0724cb910ce645c798e000ee8322aae8dcdee90"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-085.bin",
+      "sha256": "fe9b19b339f234dd3d963f91b8f26405fd1d7a58cfbb05bf766ea7115073c3fd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-085.bin",
+      "sha256": "ddee9b9ab4f223d3507aad3d92cb03b3c6b608edbd3471bfc466d4741f3cc0d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-086.bin",
+      "sha256": "a70b03de1ad473a78172d5f1f59cd49e1d1439cdfb0bc14b87c4855579d50f61"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-086.bin",
+      "sha256": "ca7c1210ab8ceedb9bca9ecb2deffeae187310c3ed9b13efcb0ba5b9d2fd97ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-087.bin",
+      "sha256": "4b04591dd07ab35f6bcc84c3799ea2656b593679b5135e1a03557aefa8d08e3a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-087.bin",
+      "sha256": "caf09042f4d4eb7897e0e885a5db781d02d52e27ae71caf4120a0eaec8053c89"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-088.bin",
+      "sha256": "3f03181070003c38c41e517cc43f290ab1c0dc6610c58b4fbe346ecb88d94008"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-088.bin",
+      "sha256": "5d3cd19b57356980c9ee34bcaa1130ff11f0433c9e441fc76c7ef47cc0e224c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-089.bin",
+      "sha256": "6829abeedf2d7126d124de93a7ce27c8f4a21e2d725ddd5b5e93de8e97c73274"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-089.bin",
+      "sha256": "90e9dfc24d2bd1795869aaf12b5f4952375c9bad949648a67e502c5b1476348b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-090.bin",
+      "sha256": "e84a6ed145751bed28201fc1e32111a2e44162a75de445ef21221705512946c3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-090.bin",
+      "sha256": "e853049b2321f985721931789df5607020ca64d21213141933c1fa9361d4194a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-091.bin",
+      "sha256": "52280f508cc0f300ede7dc10a6957bb4a1789c69f05ea4a1f58dab1c9e648495"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-091.bin",
+      "sha256": "46e67570d4a0ee9f572264eff7eb42898cf98eed6b551a7623d3474112babf5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-092.bin",
+      "sha256": "8dc7632827e2ef20ae992dc067cea9f2bb198a56f09eb883740104ce227e95e3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-092.bin",
+      "sha256": "8b2c2f1e76e9f14c2d1b2a26115ea343afb41ed4ac2e9448ec52bc1ac0036e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-093.bin",
+      "sha256": "9e4ee9fb46884496f7cf5a0d8be7405c19ce42d86b894854a9fb0c9c40bf6785"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-093.bin",
+      "sha256": "052b53b35e75eec0e6d79eeeade412881f282e775d689e6b78cfc05f53f5b428"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-094.bin",
+      "sha256": "1606bbf406cb00a9c0030c51f7a001a658b91f6afcbc6946a4c1cdf6043dcced"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-094.bin",
+      "sha256": "10871181415a5934533fbd1225ba7c5973614e6a9e1bacdc0d5ca45bba599654"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-095.bin",
+      "sha256": "907adc6f8a759547c30bf4593746738e18c61e8d97e58d0502518229ce6b5c57"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-095.bin",
+      "sha256": "0c3300581b64197648a23efbf5ca7860e4d7509b38373c0507bb4e88dc15b44a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-096.bin",
+      "sha256": "4ffa8f15ca232444ff8e62db6915141a9a8999ebe2c874b12f10da8481c11fed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-096.bin",
+      "sha256": "4294b32fcd45c8bd66a11b6fd2ac92fbf8fd74e55e55742f6a6fa3cebf193a0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-097.bin",
+      "sha256": "7b42191c8e067781f73ac92fa2cbef2aafa462c0c805f7a3b1a7c2042a1a5e01"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-097.bin",
+      "sha256": "380db54f4a848122018af744135cf478b81a0d2440f1ee00ae89e5065dd1af91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-098.bin",
+      "sha256": "2cb1c2e69ea684a621dc64e34fbc7f3a79ff92a7340aacb91948c714ad18f472"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-098.bin",
+      "sha256": "e2573dcc97572cbc7271c363aca54487e24bec9a9a1f3e797e9523ffcfd7e552"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-099.bin",
+      "sha256": "6fd84d0e9add4cf0db696a877b12969506755cc958c620e54d38977d65e1813f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-099.bin",
+      "sha256": "0c368692a62f59fa570ef21e193262fe89c8d5dfce13061a66db9116a8c4c839"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-100.bin",
+      "sha256": "f275dd02f2804e95dba97db3122af2ed34a509070d58b7e1cbe3e67e572415eb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-100.bin",
+      "sha256": "372ee1bfc928c32be69a0f01fdecb498a1888b0b628a5bb826ea196a068dc040"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-101.bin",
+      "sha256": "d0348032ec1fe8a30c4280a4ecadc972e0c47d3a84442bb058867bf873ea6320"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-101.bin",
+      "sha256": "f9beb25cd1a36c33b021e2db7a3d4e7de2700f79ec0d571efa62bd097953aa32"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-102.bin",
+      "sha256": "144eeb220dd2bb3c6988c2ab2710d4a3e9b0ee5abcc683ad5b920629431292c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-102.bin",
+      "sha256": "942c243e89d09b409d8c52ae9527300f1ed036762a9f89296ffeb6bf054fe184"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-103.bin",
+      "sha256": "8864868b09a76acb7fcfb7db410a954c8e44f8e2d56f2b532d70d515475f25f6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-103.bin",
+      "sha256": "a9bd4b0b7ed2c34a0ddd7f84028662d8557c07da3d3c668d8e82aaf7b7f7c1d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-104.bin",
+      "sha256": "4a28961cc13037875e86092bb09272b214b2b075bec24a7f1d0c172718e31219"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-104.bin",
+      "sha256": "e8289750f8c70c483d3750db7cb4282766c5e5ba6a6311e5401f2a6abbb313b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-105.bin",
+      "sha256": "0754199c70f2d5eb1d91566dae53f61ee4ed3414a86e14c467c1a51aacd256be"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-105.bin",
+      "sha256": "641bd5f9509bbd4fc751e371f0724cb910ce645c798e000ee8322aae8dcdee90"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-106.bin",
+      "sha256": "bff7c8736eecd71d7bee0e57386949cbff91b494b9e06973447b0f4c95b673ab"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-106.bin",
+      "sha256": "bc3540ae5e647428177519ce1f6cc1dcd064b2dd0b3e427e91334716530c3fe9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-107.bin",
+      "sha256": "336a5127815a22bb8c1aec19ab0eaad1a134cb88014740d24cf888a40cd54f64"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-107.bin",
+      "sha256": "8d09b614cff3481be46f59c6510de5a62f1356bea664a7b3052c94cab4c4024f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-108.bin",
+      "sha256": "d5a133d195404982f3b0a5e9bd33cea63df647fdc760a6bc722d291eb9b27f87"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-108.bin",
+      "sha256": "7133db5c8473672626d4a224000250850e5b62c83dbf8e2ed20df3aae9c7f8d2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-109.bin",
+      "sha256": "9a6c0eb8a9b740e84b2b158c3b73ab41556fd7c395c65f92182b680e3aca00e7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-109.bin",
+      "sha256": "a32fdb69b185d46c0c780feba1ce4c45f11003dadfd9bf631039408090a68b06"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-110.bin",
+      "sha256": "cdfed0db2f364bbf6626ab400e4a81536fc85ce294e3cb6afdde9b359bca20ec"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-110.bin",
+      "sha256": "30ffc6f2d44bba5d70e78270a4354cbfa2b08cce6bab9b8af99d045efc3ef772"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-111.bin",
+      "sha256": "83f757a2e9f34196b279eba117bbed64d309fd03dc001194fa9a0e8d3a8d3b7a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-111.bin",
+      "sha256": "aaafe5c89d8637fb09c3d6ad4cf5eb31d3a749cbd187bad291f5b370e9502180"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-112.bin",
+      "sha256": "d5af0f2797fc300a20dfceda2538141be5dd627e5c20eed1c32053211ddde25b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-112.bin",
+      "sha256": "677a491742e264d759c0ff353ce153e3680f662331d5e220e1fdb46642313e17"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-113.bin",
+      "sha256": "d54db53aeca36be50e56725fe75f805cdd0d9af3aaa441ec7ea22cefcfbfbcdd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-113.bin",
+      "sha256": "8e760697a4b8f3196ca67c657285416f969357af44683607383f0f77014b58cb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-114.bin",
+      "sha256": "8a7ebfff9f2716e92dcc6fcdfe1aae4e05be01e1c17c53115ba57dbb21c0c298"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-114.bin",
+      "sha256": "a1e26ef6fd8d83843572f6626dc3fd79778c6f3ca43957a7d0c23a7fe725139b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-115.bin",
+      "sha256": "852e1746b3408111fbac94438855581a17de0f661fca2cdccdc2752e66a50854"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-115.bin",
+      "sha256": "2f3c236d38a94b331a2657cad2813142d0fac825ebaeaba273f01251c6b1658e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-116.bin",
+      "sha256": "6909a3bb977195065e3d5c9c1ca25b63ea523c9008df29fc5bb23c7ba4d9d804"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-116.bin",
+      "sha256": "39059fcc4f420975bd5c8c197e7402e48b233c9b7458899c74ab01579b8d1e01"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-117.bin",
+      "sha256": "12aeb21edd68675aa48922761eaa02df63abb55faf48784771c940adee8021ae"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-117.bin",
+      "sha256": "7e3d8ff7ec6c169dc13ccf42e31e7666e6abe764d8d7a6bd8aa28595159592d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-118.bin",
+      "sha256": "db53ec35b17fa95e615d967581a1d1547ee93224b8e7fac0e408a92583e20c45"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-118.bin",
+      "sha256": "0f43564dc04e224fc0c9b9775cd4e3d2d392122eb5ef101a4f3aabe14b2eff24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-119.bin",
+      "sha256": "4588c1699e7267c7822ed8b40a32a075b13e8fac7e443d84802d29371e07e2cd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-119.bin",
+      "sha256": "af14edff65cf9e97511480dacb719a2613427e96b2d5ff60d44bf683dc38c639"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-120.bin",
+      "sha256": "4c07e9ad7e127d9100aef5afa53f39300b3cd103457daa2e49358b4806877b30"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-120.bin",
+      "sha256": "09934a7ceac96755b3e4df7c133e8222ccd6f989aa6f362a06fa18070e36b2ed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-121.bin",
+      "sha256": "57fc68e08c391608d7198d26c69fa56da1bd67dc927e5566b7f59919318abe1e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-121.bin",
+      "sha256": "969a75a160a7b59cc223634e4c647d93db52144a956deedac0085d7aec24bb91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-122.bin",
+      "sha256": "9c7c5ce3e90333293434b84e1b4ecbcf5d8c7ee1e5771d2347cda9160f2008f1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-122.bin",
+      "sha256": "06cbe2afebbdde105f27c1cf41af46baf66072416902bddd304b811ec07b2572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-123.bin",
+      "sha256": "3d52dc9c7f04426ecb0fde5e782245d7b2f57a8b5040ea00f4100b3cbcdaad71"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-123.bin",
+      "sha256": "9e4fc63a719c2a65e70a6371410e41f1529cc3b893023672f420802fbea7d05f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-124.bin",
+      "sha256": "a4a5043f53d868049dacaa0cfd90605853977cf00d07d4c9fe7df31e7efbffad"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-124.bin",
+      "sha256": "7c6ebd2aaf036aad228915f84eba362c54e9c44eb4457d67f254a2ff713768db"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-125.bin",
+      "sha256": "fd8acbdc0ee0dd4df237e4bcd23057a5d695bd8314c2ae95e7424e4665a1b923"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-125.bin",
+      "sha256": "27a4e0125cc3b12db68f2b17b6f60ba29d8c3d80d9711faa9b163b68b2f2ecaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-126.bin",
+      "sha256": "5516e2bf2f22c0cda98990725a4ef4d0b7c65a3225d9269678432e71e639e5c5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-126.bin",
+      "sha256": "17d96ae9692f8eff493c728b8690c16bd338ecf72c0a950be9841cc879028afc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-127.bin",
+      "sha256": "9b213d2e7d2da2a5ad24b9361a6769a1b0f825982b3b609f9a18fb9fd8fc3fca"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-127.bin",
+      "sha256": "f4ea4daae63ea4f530ff8e2d89b44b528af4d75674b7eecbb552d32711675c43"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-128.bin",
+      "sha256": "d01497b6c001fc06bd38f18a10f4d059764cec09df4d5e2a2edcdbc228975297"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-128.bin",
+      "sha256": "bf7fc97b4466c3f5908e5070cc20e54ddc522744965c2cc332c341ebb7aebee3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-129.bin",
+      "sha256": "773e153fe8c400d637159be53aba0cf14f6e54e22893847b7e83de8a073c45cb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-129.bin",
+      "sha256": "1e3da52ef19e4e6ab0d164340523951f8688a05d8ff204ce02fc3e18f4597aaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-130.bin",
+      "sha256": "d576ad5609b945ff98dd1534a9951079b4ed3e328d647724317f9b82fc399681"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-130.bin",
+      "sha256": "562c3e2639bc5dab2798984084f61d907d1439b31d4db81e54686ffb2816ab35"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-131.bin",
+      "sha256": "6016b12cb6d45d52b5e05a084090fa67c5161483a5d0a8ff4cf50e318c48dba6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-131.bin",
+      "sha256": "f16b7cdc1acc501bd8e9d08bada29cf72730fd11e7d756fb5be8ea6f95250412"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-132.bin",
+      "sha256": "0b5e6697eabcf56d410fbcd6596c5853d7bc21426e38394b2316a5dfe2a8ccb4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-132.bin",
+      "sha256": "9939e7241224b10cb50e49f767333f1c97737ec1eefc21de3ae9d8804c06e988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-133.bin",
+      "sha256": "bf20ff57cb201c01396a3db9d6ccd43ec34797b6b083ab201bb0a645f5471480"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-133.bin",
+      "sha256": "69cd336c1647a5cdf482640476f5d32beba5ce05daf697a54c8b784ceda36e47"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-134.bin",
+      "sha256": "56a0c3f285bcd94820cc3bd5f9832e8b3f1217c7adba9b5fd7af9ad27627d0a1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-134.bin",
+      "sha256": "329876c50657417f280f4881350abbd19aed1c861c3ce3c7728888f19de2cf08"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-135.bin",
+      "sha256": "908c66ef05e6405bb90744922c90b033c03acf987f19b2b7994439e7c25152c5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-135.bin",
+      "sha256": "57db709a69787efea62005f5907b48756c58bdf9622ebe932ca199931bd22857"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-136.bin",
+      "sha256": "bc9b93a3cdc96e34b26d7b2f44d1a64019ed33971dd36d8a56d96eed1750ff8a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-136.bin",
+      "sha256": "4cb2425e3e9f4c277f1dea2bdf2c52a2b825cbfc91cb439f043541016841c4c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-137.bin",
+      "sha256": "0e0fea13661351b0b14d225fb63c08d65f8de869f2ad49af0c62560e3baa58f2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-137.bin",
+      "sha256": "a8b06caf20887eac0959cca8b0480915938c2dad89ef43f1db14bacd21485f41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-138.bin",
+      "sha256": "27764d756344bd8b9b64c3a4be8b0e70b785486892b19e858a43554dcec30693"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-138.bin",
+      "sha256": "edc985dc5b5b2eeb6b74a995dcffe92005c8e174675508a7915703f5215cc578"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-139.bin",
+      "sha256": "99dd62fb269fde52d6d6efa903f004eda60d91385fa81e5b9f755ec8ed2f16d9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-139.bin",
+      "sha256": "3cece673565331810714e7b3ecbda93c316a5062a18d5eb0e9bdb9bde7a6a956"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-140.bin",
+      "sha256": "fda0169b52c34fec733e74febf5e7179bc78364c72077a078129b2f517d973e7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-140.bin",
+      "sha256": "623b902125f608ca5370b44945ba518537e09626cb408a2bef4403ae616c3b31"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-141.bin",
+      "sha256": "89b245d64bdf5cea81b8e4a246bb5b940d5e8e8fa92e8c389549678f795143b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-141.bin",
+      "sha256": "4859c2777fcb5f2d10cd61564576e148f3d332be366f47a789e7172fae8d3a8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-142.bin",
+      "sha256": "f3fff6d766f54f8f92a50a31689fdd308d62232517c72a1ca5b75f7dae912884"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-142.bin",
+      "sha256": "94cd7668e68857d13d15bbdd39a93ec326d8f52093e978c41c729d36378cc41d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-143.bin",
+      "sha256": "425a41cee61fddf790343958ffc8e30c3948aa7c69ca36f55f42c3cbe57f73bf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-143.bin",
+      "sha256": "f129867717d87610c3f78a86d9be92a698efbf61f14654e74cc3f08a846c26c8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-144.bin",
+      "sha256": "2742977364e9802cf4033d3b66bd84974fe39c69f45d4e1b7667873afa55e834"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-144.bin",
+      "sha256": "bd0071c8d337019a57800c1d798cf4f9cc1572e577ed13a5d1d3ce521e67ceb0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-145.bin",
+      "sha256": "66272e7c7cedc71b3782ef5f12c6843b0e09fe35d421810a7e0db3e1edf19227"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-145.bin",
+      "sha256": "35b86854186f42f8dde8021e83eae1124b2406f9d775ec30098b10359e39b1d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-146.bin",
+      "sha256": "2cd16cc2ce4ca46a89ebdd9cfbdb7b953645fae5dfb97ce975208e16a7eb1e05"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-146.bin",
+      "sha256": "6810fcbde83cbecac5a6805df7f7d155d6533aa7afe4f0572692004308a28b44"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-147.bin",
+      "sha256": "aa6d76f77ee494d94866c94bc92ae7509caf210aa2d40d5a702a63cee7636e6b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-147.bin",
+      "sha256": "ca8c2cc963763cf2c3c249fa371120e00235ede85c05df75cc3271886e951d93"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-148.bin",
+      "sha256": "de78e06082d764b9a5e3ae836ea58dbfb6994da4f29cff002f838484e1bce47a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-148.bin",
+      "sha256": "585f16e02598b94f92dcfdf20721d242a7031c349906a3607d131ff175e3d408"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-149.bin",
+      "sha256": "d379144528098340047488ec5fad5fd0203c1eb0a65f92f5243bc22e1483f544"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-149.bin",
+      "sha256": "bf46b9fa4b7ced0ce5b85d450640113d33b895e13299619e97250658f7c4a962"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-150.bin",
+      "sha256": "b61779285f382d714a989a5d2cf7a9a4c79344cf832dcccb4b36aed0071096e8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-150.bin",
+      "sha256": "6dc859ef6eb6c39906c82a580998c9d9bde6ba93c3e3cfaab9304944aedff8d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-151.bin",
+      "sha256": "b4a107257fa22fc7277952fdfc9926353ae7b14b53a266f3baae604064911ef6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-151.bin",
+      "sha256": "83ab4746c822a2c28b1a85ba1fceffe9d36d62f2d2ee7a8e52e2b161a49f3bd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-152.bin",
+      "sha256": "56dd88cc3641562ee8ed71f0c3353bff36e97d89e4758460862de48870f80d3f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-152.bin",
+      "sha256": "4248e4546310d429e3d3e141cd49658619ed407f727fc25c35eb49a0bc454e00"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-153.bin",
+      "sha256": "f9297d7c3e7bed3929edff6090a8f3e677edbe1dd25f05876a501627e9535dee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-153.bin",
+      "sha256": "7f0f17bf4cf4ff6c03805de71d2e9eb39425c8f925ff097da369776078eccb23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-154.bin",
+      "sha256": "9f8857a539add9a5519e4201a68dc1c723cee4b1b2979fd482376fc029eae48f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-154.bin",
+      "sha256": "421c70eb7fe47ff9697ad94bbb7a25587be2f305c7fed0e0d63482af4836cb69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-155.bin",
+      "sha256": "3643dacd09f58f957695f550538d906c4fc39c022e2f0241a4a39b6556815b81"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-155.bin",
+      "sha256": "f5e54c772ac7f79ac860e3c7f21b52e5b76738710d4a51724a7c9a542e3ff294"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-156.bin",
+      "sha256": "5564956e884571a5aaeaae83850a5a1793dbaffd589db506bb0f439b7fb9c0f8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-156.bin",
+      "sha256": "e82a1678dd3f07868efd3fd1b6ebdc650e9c17f74168bd33a9de69800866d728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-157.bin",
+      "sha256": "853b537ed3323384be942469a87d54dcb8905e9b2b4fe9842e2912ec9c74b29d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-157.bin",
+      "sha256": "25b3bc147c7bf173a0fe834eab3d8d3e59970298eed9ae7c2f7f0f1cf9ce981e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-158.bin",
+      "sha256": "c30861531c3e618c0831c42b78cd9bb0891d8634c11d798e0604863a241dc4a3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-158.bin",
+      "sha256": "5563cc0ddbf45d59d5bdd7661ed9aa6cb98e38a79a374e8bdcd1d93e885c688e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-159.bin",
+      "sha256": "16c5b39bd98fb4fad7d6dcc8d697d215ee464d0224973db4fb86afc9f422e23c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-159.bin",
+      "sha256": "97aebc08d4bd6aae6df502d93974b08d7a46def6e9ab65a966ba927ef9272b20"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-160.bin",
+      "sha256": "78895e7ddd5ed84ca90e5504a48114cf2dbc70642fca62dda3e6be5c06050710"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-160.bin",
+      "sha256": "516b0a808e1ba8702e769f054f40f3cadffd42765226ee648e749f63fa92ca0a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-161.bin",
+      "sha256": "0b52e4845303e22c6b911ab0de25c4c4ff746a202edece1aa818a4e19acc857d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-161.bin",
+      "sha256": "9cc2549e5c5241453a2e8e357979f9b3249ac0ad33dbc56ec14f6e77b1c15462"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-162.bin",
+      "sha256": "23a77dc44f701dba77e9b067e5e9478bf115a8d8bc2daae2a93d5a630d41d69e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-162.bin",
+      "sha256": "c46b138b041223c21a59fb22f8b691814a8ce05a93b2417022e262eefb6be3d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-163.bin",
+      "sha256": "cba6f00aa7ff7a785da3e8954f01eaa1cf43d3406d30d4a6d3f39667427eda6d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-163.bin",
+      "sha256": "fb222522599af8687c1e48e9330ab47859e3619e7fbef5cd3ac32ba079099f9a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-164.bin",
+      "sha256": "32b18bddecf41ded939f24dc51427b70bf7cfeac931c288921b3b1495f5ff4cf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-164.bin",
+      "sha256": "4c3776a67b5311fa36d363c9cad78f3e51dc6fc6bc97fb3d5d1ecf59c21cc69b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-165.bin",
+      "sha256": "f9f5af948fe1949a4c03640f2b34ab3abde1e2259cc62154e9d9dcf2f77231a5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-165.bin",
+      "sha256": "6cb5d7ce31852db905088f68db0bf2676b82d9697198b53c8a2536bf5db91f8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-166.bin",
+      "sha256": "b608c697dcb70dfaa03d8e578219936c9296c81d22720e4ce2717c9df9933925"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-166.bin",
+      "sha256": "9d759c6e2c76ddc0509696d92db667c1597e90fcf00b78a7ce0252f4f0c6669f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-167.bin",
+      "sha256": "87b31b3d944219f23f10b79fd7137da58ad8ac7c9d8728cfa39f164289eb96e9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-167.bin",
+      "sha256": "2c93e3a03b508061bca2f8ce86c2802ce2093c4899c95640c1a415b5b8c45b63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-168.bin",
+      "sha256": "022c7211025bf4b4b43073ae194220846c7b1c530986b53abba0544ed7a19729"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-168.bin",
+      "sha256": "5043195f582971c88afb0342e6722b921f3ad484b2dc2b7a035ca7368f4e4748"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-169.bin",
+      "sha256": "5ae336b180bb0de6d479ffc880632a0cac76099fe25a1e58fb49b33a9197bd70"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-169.bin",
+      "sha256": "59b9c5b6dbfa5c1953d60a6186d594878367c69d06b876d1ba5a87b0900a2666"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-170.bin",
+      "sha256": "ce5fd34b2b7eabb5498d1c55bc997eeb66789ea2dade01e38da81184363fdd33"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-170.bin",
+      "sha256": "bf46b9fa4b7ced0ce5b85d450640113d33b895e13299619e97250658f7c4a962"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-171.bin",
+      "sha256": "901b5b668d037b614cd8544ceb3981e0a8c2997c317678b28f1381daff950363"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-171.bin",
+      "sha256": "6dc859ef6eb6c39906c82a580998c9d9bde6ba93c3e3cfaab9304944aedff8d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-172.bin",
+      "sha256": "7a232228d6b71a27b7d47736ef763d1b93536834827cb1c67035cc2eb15c3f22"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-172.bin",
+      "sha256": "83ab4746c822a2c28b1a85ba1fceffe9d36d62f2d2ee7a8e52e2b161a49f3bd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-173.bin",
+      "sha256": "6e54db70f64426c825d8b75f53c9c4331c1f3d900d4f6d90ab661cbbaf09360c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-173.bin",
+      "sha256": "4248e4546310d429e3d3e141cd49658619ed407f727fc25c35eb49a0bc454e00"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-174.bin",
+      "sha256": "5e9c4379b74f2b6d4689d332ffd65040be92369cd7c2b33bfba7eb94ff4f7448"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-174.bin",
+      "sha256": "7f0f17bf4cf4ff6c03805de71d2e9eb39425c8f925ff097da369776078eccb23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-175.bin",
+      "sha256": "6e573e2226ecc5b0aed40fbed4a2b4cad16d623e895aac9f0349035f8915f1ef"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-175.bin",
+      "sha256": "421c70eb7fe47ff9697ad94bbb7a25587be2f305c7fed0e0d63482af4836cb69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-176.bin",
+      "sha256": "45f81f34e7bee18cd469e5312f17a422f0e4aa5e1c152c893e27261a4251b871"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-176.bin",
+      "sha256": "f5e54c772ac7f79ac860e3c7f21b52e5b76738710d4a51724a7c9a542e3ff294"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-177.bin",
+      "sha256": "ca1ac62dd33cafeb36496d56e13fa0cbb68e4de8b583b5eb34d4846ed4762a7c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-177.bin",
+      "sha256": "e82a1678dd3f07868efd3fd1b6ebdc650e9c17f74168bd33a9de69800866d728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-178.bin",
+      "sha256": "3822e7b3c021dd0f3269029eaad14ad0397a4fd4c4b0dee01b2e34d3f05e2867"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-178.bin",
+      "sha256": "25b3bc147c7bf173a0fe834eab3d8d3e59970298eed9ae7c2f7f0f1cf9ce981e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-179.bin",
+      "sha256": "af279890b517e8fce9f0295e7771a340fd7789d3d821961963f10268006bb388"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-179.bin",
+      "sha256": "5563cc0ddbf45d59d5bdd7661ed9aa6cb98e38a79a374e8bdcd1d93e885c688e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-180.bin",
+      "sha256": "d46580e77098fcc44d751f5395bcce55d96b4a9b54af3f59519eba4906114e6b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-180.bin",
+      "sha256": "97aebc08d4bd6aae6df502d93974b08d7a46def6e9ab65a966ba927ef9272b20"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-181.bin",
+      "sha256": "8c60d02ca1f902e091894c43980ffd8c6c21145b1b94c8eef579d8b5e07d3d71"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-181.bin",
+      "sha256": "516b0a808e1ba8702e769f054f40f3cadffd42765226ee648e749f63fa92ca0a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-182.bin",
+      "sha256": "bd6d68f3115da359a7e1dacfe157c6fe6d42f9b99952a2d38acc93cbaf444e9b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-182.bin",
+      "sha256": "9cc2549e5c5241453a2e8e357979f9b3249ac0ad33dbc56ec14f6e77b1c15462"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-183.bin",
+      "sha256": "63f722ad1179ad1056055a6bef031f93edd453dd5a4f5de240a541e18331dbc5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-183.bin",
+      "sha256": "c46b138b041223c21a59fb22f8b691814a8ce05a93b2417022e262eefb6be3d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-184.bin",
+      "sha256": "b89fd53690eebeaae68e3cac49fbe480cccd8b55f9af218207b7b493a101f7de"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-184.bin",
+      "sha256": "fb222522599af8687c1e48e9330ab47859e3619e7fbef5cd3ac32ba079099f9a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-185.bin",
+      "sha256": "9184413a7397aea6d27eb8a58c074e6eb23b26a4600f07dc13677ed5a1ca1720"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-185.bin",
+      "sha256": "4c3776a67b5311fa36d363c9cad78f3e51dc6fc6bc97fb3d5d1ecf59c21cc69b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-186.bin",
+      "sha256": "9fb938614faa17d6689ba19185cb5e29b6bb52f4820e4544bad295f190d3d6fc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-186.bin",
+      "sha256": "6cb5d7ce31852db905088f68db0bf2676b82d9697198b53c8a2536bf5db91f8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-187.bin",
+      "sha256": "624e1f142fc6114f0641b77672f6b578322526e6db1cae73d70b4260911633f1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-187.bin",
+      "sha256": "9d759c6e2c76ddc0509696d92db667c1597e90fcf00b78a7ce0252f4f0c6669f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-188.bin",
+      "sha256": "2aaefb3bf5280213ad0ba080af3a473b0aa524b3733bb570e1f13c4b9f738e4a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-188.bin",
+      "sha256": "2c93e3a03b508061bca2f8ce86c2802ce2093c4899c95640c1a415b5b8c45b63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-189.bin",
+      "sha256": "99c8a529be956fce568e2724591ec682ac47ba43df334556c0e01430499e0251"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-189.bin",
+      "sha256": "5043195f582971c88afb0342e6722b921f3ad484b2dc2b7a035ca7368f4e4748"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-190.bin",
+      "sha256": "2c8fa9c8bad109e1f1b84dba3cef01aa8f41e1f37a694d9cd9918d2bd7651347"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-190.bin",
+      "sha256": "59b9c5b6dbfa5c1953d60a6186d594878367c69d06b876d1ba5a87b0900a2666"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-191.bin",
+      "sha256": "607e754d3b51fb7764a68df6de60a7e5533dc50ea2c017371e5b2ac32072bcbe"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-191.bin",
+      "sha256": "2b59ae4631fdfa038c864f0a4029f0227b09e8ac8913a8f77498bd5df4706b91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-192.bin",
+      "sha256": "8a4d5fa4a5949458c2b40b58053ba1f36d59ea674b51a8d37475f573d8c2fa1c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-192.bin",
+      "sha256": "0d5cd9766f50469d25cd34ee4b1e2d27ff1adfc227cb025547d35e1952518574"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-193.bin",
+      "sha256": "5345be1d5661dc7d7fd14cae6d934972835053e94ddf9e36fda39da8edaaaaf6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-193.bin",
+      "sha256": "5d0d3332cc01ce181cfda551f28c1ca6bcc992bc833b857aafc5817c4098f919"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-194.bin",
+      "sha256": "0d41a5fd54d389184594f43d0085072a0289864560b4ce85685bbf98ae7c5cad"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-194.bin",
+      "sha256": "fe80379771b8c57c90fe9ecef7eab73758a90c335c6dfd699e0e51466594aa10"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-195.bin",
+      "sha256": "5044849f804b2e5a8fbaf79f7b919d9c258d1389a7992c76f9b21d8c9c276dd7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-195.bin",
+      "sha256": "5271fe87aa7ba07ac571e15cfaadd562f82621a00b1ce6083eace72448f6baff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-196.bin",
+      "sha256": "55371a79b2267839eef91212eaf42ce237205ab87dc0a84fb9ae6e9e4b8f7787"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-196.bin",
+      "sha256": "7cf9d30d55857de74f9be01215830533b7af448b8463993a82896152836a2374"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-197.bin",
+      "sha256": "e53bb56fba252fed09d04a919260cf9a1102906add09cf3a1541e34c283ee39e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-197.bin",
+      "sha256": "20d06656aa2520aba69f50060d3c30982d36833ef20cd23252e6341c9f2cd8d9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-198.bin",
+      "sha256": "c32f91e8fbbc39b91a08e4fffc9be541c388c2b0c7bbd5d7980d1ba0899148eb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-198.bin",
+      "sha256": "bbcb866af5b72c4c29c49370a75a9f015d673484747e5de9a6eea7cad6dc565b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-199.bin",
+      "sha256": "5cd46f2a005a3612ea3034116381cd3064cd4065f2f28fc165b7df2989f9a784"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-199.bin",
+      "sha256": "dff9b6209c25039b338e805f51892d8aecc501a8e588601aff644765cc9b8b77"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-200.bin",
+      "sha256": "cc4c3b19adcb508af77d0faf1df506cd969151269c1d1b108f737e6b72c74b97"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-200.bin",
+      "sha256": "4c3fec25675c59bed4fabee96e7aaf6140700d0e16a9f402d28573f7a380ca26"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-201.bin",
+      "sha256": "655192fc0850c8297cf870b22c1c03c37e0b4f1d5d2523f48be1133cb0219f23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-201.bin",
+      "sha256": "48ae24036511d4a4fb940ef161b4a4b8e8e2796148cf092ee4fb335511f2da6a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-202.bin",
+      "sha256": "ef36b2454d3b8f8c17bb20a86d46d8f92284af119e94d1a87f17f8d0d96f4853"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-202.bin",
+      "sha256": "ddee9b9ab4f223d3507aad3d92cb03b3c6b608edbd3471bfc466d4741f3cc0d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-203.bin",
+      "sha256": "13a2c05218c1218b40daebbd2121fb519f9263e284caebf51a63157a80b19783"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-203.bin",
+      "sha256": "ca7c1210ab8ceedb9bca9ecb2deffeae187310c3ed9b13efcb0ba5b9d2fd97ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-204.bin",
+      "sha256": "1465b6c3ab1ae1ba74e518ef599bbe87c42549dd099e203a94093e6240b139e5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-204.bin",
+      "sha256": "caf09042f4d4eb7897e0e885a5db781d02d52e27ae71caf4120a0eaec8053c89"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-205.bin",
+      "sha256": "bff95dfed9485355a15b6f44c6968df1b8d7cec997e870fd481b4ca44bff43a3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-205.bin",
+      "sha256": "5d3cd19b57356980c9ee34bcaa1130ff11f0433c9e441fc76c7ef47cc0e224c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-206.bin",
+      "sha256": "b981de72edcb038f240385a981f1012c17f1b189a14837956dae55ac2507773b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-206.bin",
+      "sha256": "90e9dfc24d2bd1795869aaf12b5f4952375c9bad949648a67e502c5b1476348b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-207.bin",
+      "sha256": "f1af8af76c43d9214981380452ec3ce36576ff5b12507353c7c20853eb1db453"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-207.bin",
+      "sha256": "e853049b2321f985721931789df5607020ca64d21213141933c1fa9361d4194a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-208.bin",
+      "sha256": "ff4e2b21f64eaaa054f24beb43f0f9c98c1c6b067eb9974686b4603c3cb382ea"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-208.bin",
+      "sha256": "46e67570d4a0ee9f572264eff7eb42898cf98eed6b551a7623d3474112babf5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-209.bin",
+      "sha256": "70cd546fa1fb503e2621052f7e66d00ea9dfad3783032bf603418fb49d3ea556"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-209.bin",
+      "sha256": "8b2c2f1e76e9f14c2d1b2a26115ea343afb41ed4ac2e9448ec52bc1ac0036e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-210.bin",
+      "sha256": "2f71a8c2a77c2890e9e1cbee41e3e58fa0e479691eb0f94603346fe6845ceaba"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-210.bin",
+      "sha256": "052b53b35e75eec0e6d79eeeade412881f282e775d689e6b78cfc05f53f5b428"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-211.bin",
+      "sha256": "de55e2c1db7f053232de063231a2ec5d384669c554fd504734f41243752e3c0c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-211.bin",
+      "sha256": "10871181415a5934533fbd1225ba7c5973614e6a9e1bacdc0d5ca45bba599654"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-212.bin",
+      "sha256": "94b2b4d7541d9f55759ed3e8c9cdc2003642c343c0327f67b25a5154b6642e36"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-212.bin",
+      "sha256": "0c3300581b64197648a23efbf5ca7860e4d7509b38373c0507bb4e88dc15b44a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-213.bin",
+      "sha256": "984850bdca15099fee37bb6cb9fd1a9d13a316100a7d9439850ba4a497eae330"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-213.bin",
+      "sha256": "4294b32fcd45c8bd66a11b6fd2ac92fbf8fd74e55e55742f6a6fa3cebf193a0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-214.bin",
+      "sha256": "c02f0524f0aec51175344d70e7d679f96b1986f792c265a5538ed9616d1b26b9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-214.bin",
+      "sha256": "380db54f4a848122018af744135cf478b81a0d2440f1ee00ae89e5065dd1af91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-215.bin",
+      "sha256": "9343b6827efa6f887a8dfeabf7b596f538cf0cdf59312f994802d5e03c794c86"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-215.bin",
+      "sha256": "e2573dcc97572cbc7271c363aca54487e24bec9a9a1f3e797e9523ffcfd7e552"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-216.bin",
+      "sha256": "c27c85cb5fe3a1cbdc7a106b212385936d4d3d7b2ba3c378c211a728d8e0fbc9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-216.bin",
+      "sha256": "0c368692a62f59fa570ef21e193262fe89c8d5dfce13061a66db9116a8c4c839"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-217.bin",
+      "sha256": "85e9921794d310d1d011c19de4f50b897ff2489ba93a6ec85d69f5c679e9ae2e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-217.bin",
+      "sha256": "372ee1bfc928c32be69a0f01fdecb498a1888b0b628a5bb826ea196a068dc040"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-218.bin",
+      "sha256": "ffcc215bc4aaa0359983bc42896736293d9697a6728bbc39d33ec8de690d8cf8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-218.bin",
+      "sha256": "f9beb25cd1a36c33b021e2db7a3d4e7de2700f79ec0d571efa62bd097953aa32"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-219.bin",
+      "sha256": "c9d8b2505c81344a0669face2106a18b629c9d81af848ca240726ad43a8944ac"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-219.bin",
+      "sha256": "942c243e89d09b409d8c52ae9527300f1ed036762a9f89296ffeb6bf054fe184"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-220.bin",
+      "sha256": "e010f9e5ba01ef51f43e0d2259d8ddc3a825a5e1a6384856d5c18f39da0f04e5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-220.bin",
+      "sha256": "a9bd4b0b7ed2c34a0ddd7f84028662d8557c07da3d3c668d8e82aaf7b7f7c1d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-221.bin",
+      "sha256": "4c75f5a7ff6e184f83d864ad787af39a895e64391f218327c6b88e0c9894e04a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-221.bin",
+      "sha256": "e8289750f8c70c483d3750db7cb4282766c5e5ba6a6311e5401f2a6abbb313b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-222.bin",
+      "sha256": "9d5556f0211a2b60b7e552aeaaab5adbcc91e2cf9f7b5c2a97b0b0a58f2c5e3c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-222.bin",
+      "sha256": "641bd5f9509bbd4fc751e371f0724cb910ce645c798e000ee8322aae8dcdee90"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-223.bin",
+      "sha256": "2febef0e952ee3f973cbc9417405aed88e7ab4e567e273331ad9bb5bba7a0007"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-223.bin",
+      "sha256": "bc3540ae5e647428177519ce1f6cc1dcd064b2dd0b3e427e91334716530c3fe9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-224.bin",
+      "sha256": "34745f8ee1c2e80f20de9fa947f00a9c416dd0ba518d57bdedb226eea279b566"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-224.bin",
+      "sha256": "8d09b614cff3481be46f59c6510de5a62f1356bea664a7b3052c94cab4c4024f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-225.bin",
+      "sha256": "1a30beaf4c06381a5f478ccb21f40d18c8a70732d63ec023748be29d3ea76555"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-225.bin",
+      "sha256": "7133db5c8473672626d4a224000250850e5b62c83dbf8e2ed20df3aae9c7f8d2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-226.bin",
+      "sha256": "feca7e6ea8381c6efaeb0f5de1ac55d36af737d96358ad15b0b1f68f42ec0864"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-226.bin",
+      "sha256": "a32fdb69b185d46c0c780feba1ce4c45f11003dadfd9bf631039408090a68b06"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-227.bin",
+      "sha256": "851aa07e13895863752a165f06fd20fc610c7c1e21c7ac901db4a7d55f41ac41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-227.bin",
+      "sha256": "30ffc6f2d44bba5d70e78270a4354cbfa2b08cce6bab9b8af99d045efc3ef772"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-228.bin",
+      "sha256": "30eeead15930e3f2ad3d92f14d79460768d3995fa9bf113ed7756a7bfddb5e62"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-228.bin",
+      "sha256": "aaafe5c89d8637fb09c3d6ad4cf5eb31d3a749cbd187bad291f5b370e9502180"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-229.bin",
+      "sha256": "8716bf3e834dc0c4cb04342aaeb1f7396d713ea944dba59194d94e4fac09b17f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-229.bin",
+      "sha256": "677a491742e264d759c0ff353ce153e3680f662331d5e220e1fdb46642313e17"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-230.bin",
+      "sha256": "e0b4e40e6b7790fa3b4b0a13ac20de9b2fc4bf8ded41e24000518977eabe4091"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-230.bin",
+      "sha256": "8e760697a4b8f3196ca67c657285416f969357af44683607383f0f77014b58cb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-231.bin",
+      "sha256": "8ebecec211ddae1d82bde47439ecedc5a0a3d75be610efd5675d748af8241b42"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-231.bin",
+      "sha256": "a1e26ef6fd8d83843572f6626dc3fd79778c6f3ca43957a7d0c23a7fe725139b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-232.bin",
+      "sha256": "fd32ca3116f13ae38f1dd92137d48565bcba3634524a9ef73a1db1e1bf710ca9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-232.bin",
+      "sha256": "2f3c236d38a94b331a2657cad2813142d0fac825ebaeaba273f01251c6b1658e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-233.bin",
+      "sha256": "70918630ead1aeaa14bc729b88728b0ca7fdd949737ef7cced4daf0b7ba94adb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-233.bin",
+      "sha256": "39059fcc4f420975bd5c8c197e7402e48b233c9b7458899c74ab01579b8d1e01"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-234.bin",
+      "sha256": "9e538c8a39cd1635d9eb90df5c69beaaa574fea48045708ea9d24916f8c64822"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-234.bin",
+      "sha256": "7e3d8ff7ec6c169dc13ccf42e31e7666e6abe764d8d7a6bd8aa28595159592d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-235.bin",
+      "sha256": "86fefab2e41e109b2b2c13535ce077e6cc550dd9f8618d66ecf8d9dc75723dc3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-235.bin",
+      "sha256": "0f43564dc04e224fc0c9b9775cd4e3d2d392122eb5ef101a4f3aabe14b2eff24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-236.bin",
+      "sha256": "8344ce2f2c90191d282001aaaed84e724a91a94ddc923036ac134830c5b31ec1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-236.bin",
+      "sha256": "af14edff65cf9e97511480dacb719a2613427e96b2d5ff60d44bf683dc38c639"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-237.bin",
+      "sha256": "c4c0666b018f8156ed59c07535391fb417cb9cf0e62f38ef5b132db9448c41d1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-237.bin",
+      "sha256": "09934a7ceac96755b3e4df7c133e8222ccd6f989aa6f362a06fa18070e36b2ed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-238.bin",
+      "sha256": "45a815e52a78080b394dbb72048ac7fbcdfe6ec932b3cf42efeffa9a83d6213a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-238.bin",
+      "sha256": "969a75a160a7b59cc223634e4c647d93db52144a956deedac0085d7aec24bb91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-239.bin",
+      "sha256": "b3a0a0384937a10b4c419b1232f346737e44174a0f526172ab985b5ebb1b9be2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-239.bin",
+      "sha256": "06cbe2afebbdde105f27c1cf41af46baf66072416902bddd304b811ec07b2572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-240.bin",
+      "sha256": "a48483e79ab8e6675e484ff39f8a4b0ce3ff797b43d53074a56f83f149bab405"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-240.bin",
+      "sha256": "9e4fc63a719c2a65e70a6371410e41f1529cc3b893023672f420802fbea7d05f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-241.bin",
+      "sha256": "8e26082c8779ac4ddd66ac192d11759af32dcead178416c01d7f59b1b6baf791"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-241.bin",
+      "sha256": "7c6ebd2aaf036aad228915f84eba362c54e9c44eb4457d67f254a2ff713768db"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-242.bin",
+      "sha256": "76c817bef7426ce5b8bf03d07ff5f91f7a1e76b5f43015d29fdc674b60761148"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-242.bin",
+      "sha256": "27a4e0125cc3b12db68f2b17b6f60ba29d8c3d80d9711faa9b163b68b2f2ecaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-243.bin",
+      "sha256": "748e31577c698443c9d47c029b8392a395be6d50587f1e98a03453f7108ffc63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-243.bin",
+      "sha256": "17d96ae9692f8eff493c728b8690c16bd338ecf72c0a950be9841cc879028afc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-244.bin",
+      "sha256": "051c2a9c2b1e9ccd0ce644941b49bb26167511deb0066405564ea9c1e96d7d8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-244.bin",
+      "sha256": "f4ea4daae63ea4f530ff8e2d89b44b528af4d75674b7eecbb552d32711675c43"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-245.bin",
+      "sha256": "fdfe0f444a112d883f0fb7117c16bbef645039209636ebb62177b0d959ea0362"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-245.bin",
+      "sha256": "bf7fc97b4466c3f5908e5070cc20e54ddc522744965c2cc332c341ebb7aebee3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-246.bin",
+      "sha256": "3069ea5926e366ab3a8150334ddf6809b40ee362744734a4a3cd7f84b51c7bbb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-246.bin",
+      "sha256": "1e3da52ef19e4e6ab0d164340523951f8688a05d8ff204ce02fc3e18f4597aaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-247.bin",
+      "sha256": "8158529bac79686574372a63fca7e11f8a97ff050e485e192e1750fe85058f96"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-247.bin",
+      "sha256": "562c3e2639bc5dab2798984084f61d907d1439b31d4db81e54686ffb2816ab35"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-248.bin",
+      "sha256": "ed5fcc7121f738b21e28ae7ef129e4000ef89db772b4a54db5de552ecfea8b9c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-248.bin",
+      "sha256": "f16b7cdc1acc501bd8e9d08bada29cf72730fd11e7d756fb5be8ea6f95250412"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-249.bin",
+      "sha256": "337ecd0676e945850a08edb985b2e3b880fc95d76a898918f1b4eeeefa2047d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-249.bin",
+      "sha256": "9939e7241224b10cb50e49f767333f1c97737ec1eefc21de3ae9d8804c06e988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-250.bin",
+      "sha256": "e9a2fe65bb76b91c3e30832edceae79120712e01907568158fdb514788930020"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-250.bin",
+      "sha256": "69cd336c1647a5cdf482640476f5d32beba5ce05daf697a54c8b784ceda36e47"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-251.bin",
+      "sha256": "045b12ca57b3e82540fbfd343661e03cabc0f52ccbd7bee74408deb1eb230740"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-251.bin",
+      "sha256": "329876c50657417f280f4881350abbd19aed1c861c3ce3c7728888f19de2cf08"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-252.bin",
+      "sha256": "6c952fecc90241fc2e34ee762c0a626c8be9895fd289732de4031803c575a2fe"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-252.bin",
+      "sha256": "57db709a69787efea62005f5907b48756c58bdf9622ebe932ca199931bd22857"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-253.bin",
+      "sha256": "c21ccbe509c73d67337fb4c4d7182cd16e572c4dc7a151589a964dc6d3a58ab7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-253.bin",
+      "sha256": "4cb2425e3e9f4c277f1dea2bdf2c52a2b825cbfc91cb439f043541016841c4c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-254.bin",
+      "sha256": "8a4333ae9bd47d790a318732f1de487d6ed646c87282cb9a8e26053200ba40e8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-254.bin",
+      "sha256": "a8b06caf20887eac0959cca8b0480915938c2dad89ef43f1db14bacd21485f41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-255.bin",
+      "sha256": "49538a99a086b06cbc8c1c6e54feb1336817030da7a38fc717da12527186271b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-255.bin",
+      "sha256": "7e3d8ff7ec6c169dc13ccf42e31e7666e6abe764d8d7a6bd8aa28595159592d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-256.bin",
+      "sha256": "25a4b14561f475681ff21e905015210fa809e50c084e17a8f527788ec3343a04"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-256.bin",
+      "sha256": "0f43564dc04e224fc0c9b9775cd4e3d2d392122eb5ef101a4f3aabe14b2eff24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-257.bin",
+      "sha256": "91d5dd60abb85a75ad4c146022e85995d6509ee38c9fd45c9729955a31dd9c8e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-257.bin",
+      "sha256": "af14edff65cf9e97511480dacb719a2613427e96b2d5ff60d44bf683dc38c639"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-258.bin",
+      "sha256": "44083fc0c66628b3c44d8babf372043cea52e54d5b4b3757c512e2d3bd6f9c85"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-258.bin",
+      "sha256": "09934a7ceac96755b3e4df7c133e8222ccd6f989aa6f362a06fa18070e36b2ed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-259.bin",
+      "sha256": "969761595a0f70b6a216fec53a686c9613facba94d1ac3a39a4e7f6e769d8d3d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-259.bin",
+      "sha256": "969a75a160a7b59cc223634e4c647d93db52144a956deedac0085d7aec24bb91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-260.bin",
+      "sha256": "05526ff735b0032d513f3ec55f5b3b8785d591df1f8c2f293489e2ac1552807c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-260.bin",
+      "sha256": "06cbe2afebbdde105f27c1cf41af46baf66072416902bddd304b811ec07b2572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-261.bin",
+      "sha256": "e0e5e4db9cd6d466071ffd99d3936d7cbdf67af5764d5be254b029edc060f806"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-261.bin",
+      "sha256": "9e4fc63a719c2a65e70a6371410e41f1529cc3b893023672f420802fbea7d05f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-262.bin",
+      "sha256": "802df88c2126e1e242a3145033c939355a6a0b5da1cadf3ee9f2ede2eaae8d41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-262.bin",
+      "sha256": "7c6ebd2aaf036aad228915f84eba362c54e9c44eb4457d67f254a2ff713768db"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-263.bin",
+      "sha256": "e80ba9b1f61ce0cd9107f4350c79c61dcbd6d58ee4c43c299c67cfb740e8310b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-263.bin",
+      "sha256": "27a4e0125cc3b12db68f2b17b6f60ba29d8c3d80d9711faa9b163b68b2f2ecaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-264.bin",
+      "sha256": "a95da7261d0e34dde26d4031845a9c74981ca62228545e0d5ec301dddb64cceb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-264.bin",
+      "sha256": "17d96ae9692f8eff493c728b8690c16bd338ecf72c0a950be9841cc879028afc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-265.bin",
+      "sha256": "14e31d064a73bb54dce5c581ee56de91b81f3be8f705fb6464193da5c72eee9e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-265.bin",
+      "sha256": "f4ea4daae63ea4f530ff8e2d89b44b528af4d75674b7eecbb552d32711675c43"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-266.bin",
+      "sha256": "0d6cdf88fef33f844f6bd2a676a8e1ad2f76f299b614d51bbfff2da44dfc4abd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-266.bin",
+      "sha256": "bf7fc97b4466c3f5908e5070cc20e54ddc522744965c2cc332c341ebb7aebee3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-267.bin",
+      "sha256": "eec248dedfa131ffd235471d43e9208a8fc2353c774035edb5a1e0711d45319d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-267.bin",
+      "sha256": "1e3da52ef19e4e6ab0d164340523951f8688a05d8ff204ce02fc3e18f4597aaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-268.bin",
+      "sha256": "9ccccb9713b466e668783b525207a5b81adb3a8cb58a5cf1185ccaffd947392c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-268.bin",
+      "sha256": "562c3e2639bc5dab2798984084f61d907d1439b31d4db81e54686ffb2816ab35"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-269.bin",
+      "sha256": "5d60b0b5a9f5e6aa132f91a6acd9d48cf104d51ce3bc7c47058f55bff39baecf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-269.bin",
+      "sha256": "f16b7cdc1acc501bd8e9d08bada29cf72730fd11e7d756fb5be8ea6f95250412"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-270.bin",
+      "sha256": "f539101a0e9c7d9467821bb3bace3db138622db3f8cbabbf98b26fcc5ee1d818"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-270.bin",
+      "sha256": "9939e7241224b10cb50e49f767333f1c97737ec1eefc21de3ae9d8804c06e988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-271.bin",
+      "sha256": "8519d337bb9a32306b7352eddb7f5e32ce7e5c4c0d6aae30b1ebaff605edf215"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-271.bin",
+      "sha256": "69cd336c1647a5cdf482640476f5d32beba5ce05daf697a54c8b784ceda36e47"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-272.bin",
+      "sha256": "80e98f27fbc8c7658106c3b27306a12674fc9a92ddbacfd0f645bbe8d8ccac97"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-272.bin",
+      "sha256": "329876c50657417f280f4881350abbd19aed1c861c3ce3c7728888f19de2cf08"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-273.bin",
+      "sha256": "cb4e1b9eb95a07dbc4cc80c787917fea4d5f170672a9b1a3baad4ce2485cafd5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-273.bin",
+      "sha256": "57db709a69787efea62005f5907b48756c58bdf9622ebe932ca199931bd22857"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-274.bin",
+      "sha256": "4b3e068a9d05d0ecce5b479248d5edb107b38b198189a591f45a896ffb9612d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-274.bin",
+      "sha256": "4cb2425e3e9f4c277f1dea2bdf2c52a2b825cbfc91cb439f043541016841c4c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-275.bin",
+      "sha256": "55ec74b40d86e2d41ae132bd6a860362cb3ed7b33a09c2dbb946b44eb504ae0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-275.bin",
+      "sha256": "a8b06caf20887eac0959cca8b0480915938c2dad89ef43f1db14bacd21485f41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-276.bin",
+      "sha256": "ab4a341cc6a4f8d4329ade32e997a661c40a66414831bc18e71b0e49ad14ab66"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-276.bin",
+      "sha256": "edc985dc5b5b2eeb6b74a995dcffe92005c8e174675508a7915703f5215cc578"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-277.bin",
+      "sha256": "d7a075d04673835ceb9b18927987b6e46fa687c241e7109ead3525b72be2dabf"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-277.bin",
+      "sha256": "3cece673565331810714e7b3ecbda93c316a5062a18d5eb0e9bdb9bde7a6a956"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-278.bin",
+      "sha256": "35f61680341f34bf2af10dd9ae7e8b139839798f9c2656a9b2e3a16f4f6c4511"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-278.bin",
+      "sha256": "623b902125f608ca5370b44945ba518537e09626cb408a2bef4403ae616c3b31"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-279.bin",
+      "sha256": "0208174d9a99affb4983115c409e926ac5463f4fc05619a0f66abd5ba384c419"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-279.bin",
+      "sha256": "4859c2777fcb5f2d10cd61564576e148f3d332be366f47a789e7172fae8d3a8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-280.bin",
+      "sha256": "db47349cd9306cffd1662a686a4458daefb4663c3fa61f9cc24b160f4751c2b2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-280.bin",
+      "sha256": "94cd7668e68857d13d15bbdd39a93ec326d8f52093e978c41c729d36378cc41d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-281.bin",
+      "sha256": "5fc4f0db99c16939049671e7643050b3d48ced78a22a4fef2d14c05bd6fdb0d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-281.bin",
+      "sha256": "f129867717d87610c3f78a86d9be92a698efbf61f14654e74cc3f08a846c26c8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-282.bin",
+      "sha256": "8bcb1b6d6fbacf6ed14b248568620e6b1e305fe79f6505be5363dfe23cbaa726"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-282.bin",
+      "sha256": "bd0071c8d337019a57800c1d798cf4f9cc1572e577ed13a5d1d3ce521e67ceb0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-283.bin",
+      "sha256": "a34ee4957e808d37ccfe5441bade008adc0888c81e27c34310f32a388fdf5131"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-283.bin",
+      "sha256": "35b86854186f42f8dde8021e83eae1124b2406f9d775ec30098b10359e39b1d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-284.bin",
+      "sha256": "d51b5fb7430b588cbef3a29089354e5c9ab0e1d7a525c9003218931ab129ba67"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-284.bin",
+      "sha256": "6810fcbde83cbecac5a6805df7f7d155d6533aa7afe4f0572692004308a28b44"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-285.bin",
+      "sha256": "df4c16778fa4ac7b6fb03f03cfe593c3a48a1148d6a1f1aebde2a0cc01105b8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-285.bin",
+      "sha256": "ca8c2cc963763cf2c3c249fa371120e00235ede85c05df75cc3271886e951d93"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-286.bin",
+      "sha256": "691b4a638265cc1b58d9a7e7e4e41071d9b25efd9d72d5d5e7c979f6e8453739"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-286.bin",
+      "sha256": "585f16e02598b94f92dcfdf20721d242a7031c349906a3607d131ff175e3d408"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-287.bin",
+      "sha256": "a1d90944e932354610dc8039da35da0a2ccf7e446da587bdc4b7ac6b7ec0c7ab"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-287.bin",
+      "sha256": "bf46b9fa4b7ced0ce5b85d450640113d33b895e13299619e97250658f7c4a962"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-288.bin",
+      "sha256": "b492dcf62d2a69934e97ad50c1b9f79bbf2e26fefc98103ed6782825b268d515"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-288.bin",
+      "sha256": "6dc859ef6eb6c39906c82a580998c9d9bde6ba93c3e3cfaab9304944aedff8d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-289.bin",
+      "sha256": "68870c3be5f77a5abb4ab323f36ee55c627c42de87070cdc2cb118fb45e62fc8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-289.bin",
+      "sha256": "83ab4746c822a2c28b1a85ba1fceffe9d36d62f2d2ee7a8e52e2b161a49f3bd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-290.bin",
+      "sha256": "e59d47cb76a93b4ce9d1143a8db5231fe91c4ba277c5a3e6263f642eb6e14ffd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-290.bin",
+      "sha256": "4248e4546310d429e3d3e141cd49658619ed407f727fc25c35eb49a0bc454e00"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-291.bin",
+      "sha256": "d594bd5dc9b36a6bcba89341052bbb36149058517749de48feae685d9e023746"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-291.bin",
+      "sha256": "7f0f17bf4cf4ff6c03805de71d2e9eb39425c8f925ff097da369776078eccb23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-292.bin",
+      "sha256": "f7cacfd96959d01aeba64fab8bb56995b622fda545c9877e1b4fb1de0892c9f9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-292.bin",
+      "sha256": "421c70eb7fe47ff9697ad94bbb7a25587be2f305c7fed0e0d63482af4836cb69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-293.bin",
+      "sha256": "4b13bbd8df63ef0f26acb4202661e274b314c3915828cc11c31aa34ba5db17f4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-293.bin",
+      "sha256": "f5e54c772ac7f79ac860e3c7f21b52e5b76738710d4a51724a7c9a542e3ff294"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-294.bin",
+      "sha256": "4658137fa44a357f6bf57e1b17144a2184d7c020d6cb7718d18773c45dba633f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-294.bin",
+      "sha256": "e82a1678dd3f07868efd3fd1b6ebdc650e9c17f74168bd33a9de69800866d728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-295.bin",
+      "sha256": "745b3da27cc64ca6bdc26f8536ebfc9ee24bc29522f33d9c9ed118afa3053de2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-295.bin",
+      "sha256": "25b3bc147c7bf173a0fe834eab3d8d3e59970298eed9ae7c2f7f0f1cf9ce981e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-296.bin",
+      "sha256": "20ef7858f0240778affb597b6fe81387f17861e3e7ae8b286f858a992bf0feee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-296.bin",
+      "sha256": "5563cc0ddbf45d59d5bdd7661ed9aa6cb98e38a79a374e8bdcd1d93e885c688e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-297.bin",
+      "sha256": "cc543c8865c7cb284cac33586addd3370637f2d1c5e6c49521b2eabeb181642e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-297.bin",
+      "sha256": "97aebc08d4bd6aae6df502d93974b08d7a46def6e9ab65a966ba927ef9272b20"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-298.bin",
+      "sha256": "98589c30586736d50d8cbb85bf664154542c508a7670d0ef6a3d00112e32e9a9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-298.bin",
+      "sha256": "516b0a808e1ba8702e769f054f40f3cadffd42765226ee648e749f63fa92ca0a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-299.bin",
+      "sha256": "75dd4570bec7f9784a06bda918aa4e79bccd5c00e9b23d52761cf8e21018b560"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-299.bin",
+      "sha256": "9cc2549e5c5241453a2e8e357979f9b3249ac0ad33dbc56ec14f6e77b1c15462"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-300.bin",
+      "sha256": "2a9dd50f14a857c157434e990b25fd4d86a0b16803c15cb335f0e26cfe974852"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-300.bin",
+      "sha256": "c46b138b041223c21a59fb22f8b691814a8ce05a93b2417022e262eefb6be3d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-301.bin",
+      "sha256": "d9018b105e228ffd522573317b9f8aa330488e0878fd9e2dcc530ece9acebb1f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-301.bin",
+      "sha256": "fb222522599af8687c1e48e9330ab47859e3619e7fbef5cd3ac32ba079099f9a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-302.bin",
+      "sha256": "7dc08080f6e75cba62160e1c17a1563433514d54437edfb6a48b19f8d04c9571"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-302.bin",
+      "sha256": "4c3776a67b5311fa36d363c9cad78f3e51dc6fc6bc97fb3d5d1ecf59c21cc69b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-303.bin",
+      "sha256": "ddb36d53d1bc2cb8cb7e259c2a4b32d86865f00785b732608a9c7405a257b31a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-303.bin",
+      "sha256": "6cb5d7ce31852db905088f68db0bf2676b82d9697198b53c8a2536bf5db91f8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-304.bin",
+      "sha256": "0d1a8297984edb4f05f7606b04b06bf8b1dc56cdd3f5b46880ee54efe352fc7a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-304.bin",
+      "sha256": "9d759c6e2c76ddc0509696d92db667c1597e90fcf00b78a7ce0252f4f0c6669f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-305.bin",
+      "sha256": "19aa08493710cfe1cfe9295030f1e4b7d4914ab929f80475c68b49d8782beac1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-305.bin",
+      "sha256": "2c93e3a03b508061bca2f8ce86c2802ce2093c4899c95640c1a415b5b8c45b63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-306.bin",
+      "sha256": "cb5b52e86ade52a12dd2a1ed83757913027c8a01a64e3bdcd6978563dae205be"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-306.bin",
+      "sha256": "5043195f582971c88afb0342e6722b921f3ad484b2dc2b7a035ca7368f4e4748"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-307.bin",
+      "sha256": "0095f1a066bf396910cc8487c4b1ce22b29b3cc89e158997275fdb9c0d8623a3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-307.bin",
+      "sha256": "59b9c5b6dbfa5c1953d60a6186d594878367c69d06b876d1ba5a87b0900a2666"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-308.bin",
+      "sha256": "177f68195a0a26470eeaf98d9cc6c059f9bd08e129b47e4851c11571785b2b72"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-308.bin",
+      "sha256": "2b59ae4631fdfa038c864f0a4029f0227b09e8ac8913a8f77498bd5df4706b91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-309.bin",
+      "sha256": "4a711157bb20e138cbea4e731d8650e22d4d3cf4fef6a6217bf6f5e8e30bd7d1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-309.bin",
+      "sha256": "0d5cd9766f50469d25cd34ee4b1e2d27ff1adfc227cb025547d35e1952518574"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-310.bin",
+      "sha256": "3b5c5368f4822f5faf2075e58e6089a6cf23dd390bed434663328783b2a19572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-310.bin",
+      "sha256": "5d0d3332cc01ce181cfda551f28c1ca6bcc992bc833b857aafc5817c4098f919"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-311.bin",
+      "sha256": "57dc6ed4c180f5b6f65f7e327f036638987f1e22c341dde031a5cf6b36e078a4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-311.bin",
+      "sha256": "fe80379771b8c57c90fe9ecef7eab73758a90c335c6dfd699e0e51466594aa10"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-312.bin",
+      "sha256": "b672346da47a3be551dd7113494a775d875c8663284470869c229303c1e2f4e4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-312.bin",
+      "sha256": "5271fe87aa7ba07ac571e15cfaadd562f82621a00b1ce6083eace72448f6baff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-313.bin",
+      "sha256": "0870a56c9131fcf90e5a0c64c85ce30a1fcc8d41ac08681f2c32150c3cb2c49d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-313.bin",
+      "sha256": "7cf9d30d55857de74f9be01215830533b7af448b8463993a82896152836a2374"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-314.bin",
+      "sha256": "46bb402c00baf04f69277b5e4d6858c0f3cb54c3114bd6c01fc16d84488d503a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-314.bin",
+      "sha256": "20d06656aa2520aba69f50060d3c30982d36833ef20cd23252e6341c9f2cd8d9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-315.bin",
+      "sha256": "8046f31995045c2d116a5693cb23e1322e384ce6f6c7bbfff295b50244663ba8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-315.bin",
+      "sha256": "bbcb866af5b72c4c29c49370a75a9f015d673484747e5de9a6eea7cad6dc565b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-316.bin",
+      "sha256": "28a342cffae1e2b3c3ed1edb46199412708cd2b0351fcc2fc98904e983541dfe"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-316.bin",
+      "sha256": "dff9b6209c25039b338e805f51892d8aecc501a8e588601aff644765cc9b8b77"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-317.bin",
+      "sha256": "7fc31d1d4eefc3cb1c6b5906db879a646419da901fd389d181ff7f240d5a5e1a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-317.bin",
+      "sha256": "4c3fec25675c59bed4fabee96e7aaf6140700d0e16a9f402d28573f7a380ca26"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-318.bin",
+      "sha256": "99ff42e2eeb64b4566834c770014c4012aa3489ea9c90fc8eb4be9b982ede057"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-318.bin",
+      "sha256": "48ae24036511d4a4fb940ef161b4a4b8e8e2796148cf092ee4fb335511f2da6a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-319.bin",
+      "sha256": "6413f4945d26a91d1ed48870a779cf53cd85a5e0e1d47c53b85cd8964fedb6cc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-319.bin",
+      "sha256": "ddee9b9ab4f223d3507aad3d92cb03b3c6b608edbd3471bfc466d4741f3cc0d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-320.bin",
+      "sha256": "16947be23eaf085126caa9f0f85581b4a18ef430685bab657668df36c554c31b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-320.bin",
+      "sha256": "ca7c1210ab8ceedb9bca9ecb2deffeae187310c3ed9b13efcb0ba5b9d2fd97ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-321.bin",
+      "sha256": "f6ec345f81f2d14a98ebc32e43464cd8bb4ec47985039290c3d34f3f18a28bec"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-321.bin",
+      "sha256": "caf09042f4d4eb7897e0e885a5db781d02d52e27ae71caf4120a0eaec8053c89"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-322.bin",
+      "sha256": "2c1709cf9c89fd65a6f40d4f75a5007f94c6f2c0503190d267cc3cb57a5442f9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-322.bin",
+      "sha256": "5d3cd19b57356980c9ee34bcaa1130ff11f0433c9e441fc76c7ef47cc0e224c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-323.bin",
+      "sha256": "f41eda1b661cf7b9587b65d81e794a9e45b9850d023ff2616c7e29c2da47eb3f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-323.bin",
+      "sha256": "90e9dfc24d2bd1795869aaf12b5f4952375c9bad949648a67e502c5b1476348b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-324.bin",
+      "sha256": "4f5eb84311889a8ac1cea7a853f61628d40e164889f8426709b6d4958a52e0ad"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-324.bin",
+      "sha256": "e853049b2321f985721931789df5607020ca64d21213141933c1fa9361d4194a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-325.bin",
+      "sha256": "3dc9795edf94e812791a0a3d4d71c5b3d6107d6beecaf5d25981536a0e6db841"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-325.bin",
+      "sha256": "46e67570d4a0ee9f572264eff7eb42898cf98eed6b551a7623d3474112babf5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-326.bin",
+      "sha256": "4a38202645971f3f94165083542e82f28915d6462ea44352ffa05ce89a2236f0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-326.bin",
+      "sha256": "8b2c2f1e76e9f14c2d1b2a26115ea343afb41ed4ac2e9448ec52bc1ac0036e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-327.bin",
+      "sha256": "dba5d88edcf4c7f9d7972c449ff3c7d6bb46945a48e91b90457393f6dee22fde"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-327.bin",
+      "sha256": "052b53b35e75eec0e6d79eeeade412881f282e775d689e6b78cfc05f53f5b428"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-328.bin",
+      "sha256": "2d7e77890f8875f34e9856b11c7a56964d1dcc5b39656f40790d78ebd5896982"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-328.bin",
+      "sha256": "10871181415a5934533fbd1225ba7c5973614e6a9e1bacdc0d5ca45bba599654"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-329.bin",
+      "sha256": "1811d60ff6471d26f50be8d9deb9a66abd546c41fda5023454a740767dd00fcc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-329.bin",
+      "sha256": "0c3300581b64197648a23efbf5ca7860e4d7509b38373c0507bb4e88dc15b44a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-330.bin",
+      "sha256": "a71317e96690cd26079f8577979a634639804131b6abb0b5beabfb1e1fc1c01c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-330.bin",
+      "sha256": "4294b32fcd45c8bd66a11b6fd2ac92fbf8fd74e55e55742f6a6fa3cebf193a0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-331.bin",
+      "sha256": "01961a47a20e9d5ade43cba5146a18beaf3d311627bbb558156e0eced1d5b8c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-331.bin",
+      "sha256": "380db54f4a848122018af744135cf478b81a0d2440f1ee00ae89e5065dd1af91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-332.bin",
+      "sha256": "1176e93228f0b3ca4109f6c15c47554621838270e603e9892645c60559d75db4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-332.bin",
+      "sha256": "e2573dcc97572cbc7271c363aca54487e24bec9a9a1f3e797e9523ffcfd7e552"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-333.bin",
+      "sha256": "d578739b99c711b722acfcd4ffef4668311dfb0ae56f2bdb7d9c7255e65b1e60"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-333.bin",
+      "sha256": "0c368692a62f59fa570ef21e193262fe89c8d5dfce13061a66db9116a8c4c839"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-334.bin",
+      "sha256": "d3323653ed54c3d644993c5e15cd7ee118b50a335daf83ba4bc962ce4bc0ae3b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-334.bin",
+      "sha256": "372ee1bfc928c32be69a0f01fdecb498a1888b0b628a5bb826ea196a068dc040"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-335.bin",
+      "sha256": "6ed92cca9ba723bc1c5011db8b555f565d110a89b21ee6b28b3ed211d7ab6ffb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-335.bin",
+      "sha256": "f9beb25cd1a36c33b021e2db7a3d4e7de2700f79ec0d571efa62bd097953aa32"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-336.bin",
+      "sha256": "db19c32d28925467022fc1b81da3d0cd439000289e703a0b5ca78e2612475e51"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-336.bin",
+      "sha256": "942c243e89d09b409d8c52ae9527300f1ed036762a9f89296ffeb6bf054fe184"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-337.bin",
+      "sha256": "74ec716e3b8bb545678d1c304aec1377dc93800ffac0b4c5dd500592ff2ebc2a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-337.bin",
+      "sha256": "a9bd4b0b7ed2c34a0ddd7f84028662d8557c07da3d3c668d8e82aaf7b7f7c1d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-338.bin",
+      "sha256": "23e64af28a0d7e6d1158a30e4dd9820d694ed90fcc015dfb01b143c95504510d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-338.bin",
+      "sha256": "e8289750f8c70c483d3750db7cb4282766c5e5ba6a6311e5401f2a6abbb313b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-339.bin",
+      "sha256": "559b3fb1e9e076a76d1f951d975c0d6d9ad6c1c1b92a6ce4091134d4e3006d6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-339.bin",
+      "sha256": "641bd5f9509bbd4fc751e371f0724cb910ce645c798e000ee8322aae8dcdee90"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-340.bin",
+      "sha256": "90b1a9c289f794b3e9879e09e66cc942d490005ddae7e5899e5d4870e40b7b50"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-340.bin",
+      "sha256": "ddee9b9ab4f223d3507aad3d92cb03b3c6b608edbd3471bfc466d4741f3cc0d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-341.bin",
+      "sha256": "5d44bbe05748feea9eb4c0c464e1dff44763192c4fd05ef8f4ae14c12a6cdc31"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-341.bin",
+      "sha256": "ca7c1210ab8ceedb9bca9ecb2deffeae187310c3ed9b13efcb0ba5b9d2fd97ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-342.bin",
+      "sha256": "5d749431434f7f5d87cfb1a9ce7251acc1537d781acb2b45a0682a031c9469f5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-342.bin",
+      "sha256": "caf09042f4d4eb7897e0e885a5db781d02d52e27ae71caf4120a0eaec8053c89"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-343.bin",
+      "sha256": "3ce6b970c0c5b9b5d0dc2e8aa50717c1ef906d10a093a49429f9998d96eaee8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-343.bin",
+      "sha256": "5d3cd19b57356980c9ee34bcaa1130ff11f0433c9e441fc76c7ef47cc0e224c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-344.bin",
+      "sha256": "9a532f9cff23340c24b7eed6e08ad0020d3349988ffe651c995916fda59a186e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-344.bin",
+      "sha256": "90e9dfc24d2bd1795869aaf12b5f4952375c9bad949648a67e502c5b1476348b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-345.bin",
+      "sha256": "c38306b84c5f9b942e6a7e2fa87147e690b2e2bcc124184e564aca9207f690c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-345.bin",
+      "sha256": "e853049b2321f985721931789df5607020ca64d21213141933c1fa9361d4194a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-346.bin",
+      "sha256": "e043fcf5b5cb48ad39b86c3e46bd89dbc672f222ad926e00b4f6b33892dcf5cc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-346.bin",
+      "sha256": "46e67570d4a0ee9f572264eff7eb42898cf98eed6b551a7623d3474112babf5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-347.bin",
+      "sha256": "b8ebe98ace41149386189190627e463f4f0ec03915d7e8aaad5362dc11ece5ee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-347.bin",
+      "sha256": "8b2c2f1e76e9f14c2d1b2a26115ea343afb41ed4ac2e9448ec52bc1ac0036e6e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-348.bin",
+      "sha256": "f7e24615257f56bbf7d61fa9f3804421726fb8f07ee97fe5cd42d343b830e488"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-348.bin",
+      "sha256": "052b53b35e75eec0e6d79eeeade412881f282e775d689e6b78cfc05f53f5b428"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-349.bin",
+      "sha256": "5c0674d4112743f0ef95c915015c3c562dddea83013095c436cace3ac82f8ef2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-349.bin",
+      "sha256": "10871181415a5934533fbd1225ba7c5973614e6a9e1bacdc0d5ca45bba599654"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-350.bin",
+      "sha256": "22cdfd378df7d8292a57cab6774bf8f12bf9a389184aa5a93061306672779fd2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-350.bin",
+      "sha256": "0c3300581b64197648a23efbf5ca7860e4d7509b38373c0507bb4e88dc15b44a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-351.bin",
+      "sha256": "9f9717cbb616225a285c8ee6bc9f8bdf5d90033d5b93d307b9beff76d45e53e1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-351.bin",
+      "sha256": "4294b32fcd45c8bd66a11b6fd2ac92fbf8fd74e55e55742f6a6fa3cebf193a0f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-352.bin",
+      "sha256": "59f797f4be6604ca7a50de1a1e2f56db906ee2ada8f1b3b8ee23be129c31959c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-352.bin",
+      "sha256": "380db54f4a848122018af744135cf478b81a0d2440f1ee00ae89e5065dd1af91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-353.bin",
+      "sha256": "b7ed45772ad7a6769da3809ada21216a6e5937bcf7d07c4737d1618102114737"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-353.bin",
+      "sha256": "e2573dcc97572cbc7271c363aca54487e24bec9a9a1f3e797e9523ffcfd7e552"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-354.bin",
+      "sha256": "ddcb5c7d3a0143e173bd03b98b534347a3e7bdcf0839531fa10f80e2fd5d9988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-354.bin",
+      "sha256": "0c368692a62f59fa570ef21e193262fe89c8d5dfce13061a66db9116a8c4c839"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-355.bin",
+      "sha256": "b838dc1a6bf5e927f51e28624ce0483b1d49e5f420dcc28281417daf632dc48c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-355.bin",
+      "sha256": "372ee1bfc928c32be69a0f01fdecb498a1888b0b628a5bb826ea196a068dc040"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-356.bin",
+      "sha256": "8c0ed200ba2a1270cdb1d3c552f869f0ae15fb05990611b10c4e4e589477df6f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-356.bin",
+      "sha256": "f9beb25cd1a36c33b021e2db7a3d4e7de2700f79ec0d571efa62bd097953aa32"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-357.bin",
+      "sha256": "ed3eb0361875c927c1f2130fd230828954466af6db427aaf01df727c1e65c85e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-357.bin",
+      "sha256": "942c243e89d09b409d8c52ae9527300f1ed036762a9f89296ffeb6bf054fe184"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-358.bin",
+      "sha256": "1fc5ae2954d7e226e75af2dffafd1b7ef46e8cb2e47281e67cea860a8a135f0b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-358.bin",
+      "sha256": "a9bd4b0b7ed2c34a0ddd7f84028662d8557c07da3d3c668d8e82aaf7b7f7c1d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-359.bin",
+      "sha256": "a0b52b70531c19aeb90a08fd8c6b0edc6f39d1d7dca6ec65eae6d2dffd7d889b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-359.bin",
+      "sha256": "e8289750f8c70c483d3750db7cb4282766c5e5ba6a6311e5401f2a6abbb313b3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-360.bin",
+      "sha256": "0c30a9dff6288a54477a2a0422913715353fa8e6766f8e077508173504e7ca03"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-360.bin",
+      "sha256": "641bd5f9509bbd4fc751e371f0724cb910ce645c798e000ee8322aae8dcdee90"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-361.bin",
+      "sha256": "6a800253215aea8230e747e09eff782ceef18436665d9553196c4c20e4829a69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-361.bin",
+      "sha256": "bc3540ae5e647428177519ce1f6cc1dcd064b2dd0b3e427e91334716530c3fe9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-362.bin",
+      "sha256": "a5a3c6e3f91271d2f56427988f415485dc6e78aee5da46adadbc906dd4e6818d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-362.bin",
+      "sha256": "8d09b614cff3481be46f59c6510de5a62f1356bea664a7b3052c94cab4c4024f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-363.bin",
+      "sha256": "5959d945d107a7ca3f4332ef70446492acb173034a4ba591ba29c4ea932dab5a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-363.bin",
+      "sha256": "7133db5c8473672626d4a224000250850e5b62c83dbf8e2ed20df3aae9c7f8d2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-364.bin",
+      "sha256": "2226068a697c56ef3da546d2c80f98e8dbaf6a0324aa2879ae70f6faec03176c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-364.bin",
+      "sha256": "a32fdb69b185d46c0c780feba1ce4c45f11003dadfd9bf631039408090a68b06"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-365.bin",
+      "sha256": "9878d642afe8d73b14b49946e1d55618186f68231a6d142ccbd8b3a780f332cb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-365.bin",
+      "sha256": "30ffc6f2d44bba5d70e78270a4354cbfa2b08cce6bab9b8af99d045efc3ef772"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-366.bin",
+      "sha256": "455e9b7ad7711a56e088e616e065b24042bf0643c9bb66bfc25244b868934db1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-366.bin",
+      "sha256": "aaafe5c89d8637fb09c3d6ad4cf5eb31d3a749cbd187bad291f5b370e9502180"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-367.bin",
+      "sha256": "95254d0dae16d07697da9a415ab96c81eb79acd5929845ee123794117dd11ecd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-367.bin",
+      "sha256": "677a491742e264d759c0ff353ce153e3680f662331d5e220e1fdb46642313e17"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-368.bin",
+      "sha256": "08937460fa162c69c7506cd137290a6ed54c4feb7f296f66fe5ac47feadf13cd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-368.bin",
+      "sha256": "8e760697a4b8f3196ca67c657285416f969357af44683607383f0f77014b58cb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-369.bin",
+      "sha256": "17f86e697405f459def4478109f3e0373ed4ce45e0758fd10b7b79e2312b30ce"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-369.bin",
+      "sha256": "a1e26ef6fd8d83843572f6626dc3fd79778c6f3ca43957a7d0c23a7fe725139b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-370.bin",
+      "sha256": "9340fa0d558d746ef8d50a338d5e361e0d6a5a13b0521595a7e5eef305d2304f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-370.bin",
+      "sha256": "2f3c236d38a94b331a2657cad2813142d0fac825ebaeaba273f01251c6b1658e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-371.bin",
+      "sha256": "b963c1484773fbd2befae3ffb3dfcc2b9f4a0f36f2ec5987f710019cb074117b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-371.bin",
+      "sha256": "39059fcc4f420975bd5c8c197e7402e48b233c9b7458899c74ab01579b8d1e01"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-372.bin",
+      "sha256": "3b1a9835bf1e28dd4b36783b9e2ec82317dc3da4b3b0e0a0cd6800727521c731"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-372.bin",
+      "sha256": "7e3d8ff7ec6c169dc13ccf42e31e7666e6abe764d8d7a6bd8aa28595159592d4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-373.bin",
+      "sha256": "357a6cc0575a4c0ed853bed37d720b8c1869fe0a516d8b93807284deb444f000"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-373.bin",
+      "sha256": "0f43564dc04e224fc0c9b9775cd4e3d2d392122eb5ef101a4f3aabe14b2eff24"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-374.bin",
+      "sha256": "b4f2e36a810680c47126ea72f8cae50095a3ffe1cf6712fb1fc25e9b6e9a5dd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-374.bin",
+      "sha256": "af14edff65cf9e97511480dacb719a2613427e96b2d5ff60d44bf683dc38c639"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-375.bin",
+      "sha256": "109bef9e3fe4d522ab2e1b1550c8c3f45c35508b0c064f1a8409811c6d2ac45e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-375.bin",
+      "sha256": "09934a7ceac96755b3e4df7c133e8222ccd6f989aa6f362a06fa18070e36b2ed"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-376.bin",
+      "sha256": "60f0023b574a3236c7da20516f2a122ea02e4153b1ab198d84fafccbb86489e3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-376.bin",
+      "sha256": "969a75a160a7b59cc223634e4c647d93db52144a956deedac0085d7aec24bb91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-377.bin",
+      "sha256": "2290665e3cb6b46b93fe327cad835825aecdf2d46f2c6e3c08521e6cb583caab"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-377.bin",
+      "sha256": "06cbe2afebbdde105f27c1cf41af46baf66072416902bddd304b811ec07b2572"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-378.bin",
+      "sha256": "aad7ca30ed17aba0bfec407914257457b967ec9b562dcf21aa1eff788eb39989"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-378.bin",
+      "sha256": "9e4fc63a719c2a65e70a6371410e41f1529cc3b893023672f420802fbea7d05f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-379.bin",
+      "sha256": "ad679d4a036fe703dfe15da7bf6aa19ea9acfc6ff76a0227d1e9903b2a3c1e81"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-379.bin",
+      "sha256": "7c6ebd2aaf036aad228915f84eba362c54e9c44eb4457d67f254a2ff713768db"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-380.bin",
+      "sha256": "05d4c1ee93ecaea6444f9331948e7521748dbaa6c92022e84c623c8eefd6a1e7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-380.bin",
+      "sha256": "27a4e0125cc3b12db68f2b17b6f60ba29d8c3d80d9711faa9b163b68b2f2ecaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-381.bin",
+      "sha256": "0704a1b9d51c31b59d1d02996a90b07f990248f071c5cd1254bda29cc6a2b180"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-381.bin",
+      "sha256": "17d96ae9692f8eff493c728b8690c16bd338ecf72c0a950be9841cc879028afc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-382.bin",
+      "sha256": "5d83e29ab13d25fffb7a68da348b3cce380fde09f5169d59b3c2d2232d2acd6b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-382.bin",
+      "sha256": "f4ea4daae63ea4f530ff8e2d89b44b528af4d75674b7eecbb552d32711675c43"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-383.bin",
+      "sha256": "62321fb6da868662dffce68a62f9654a33cc3fd6eb700d0b14da5dd276fe6315"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-383.bin",
+      "sha256": "bf7fc97b4466c3f5908e5070cc20e54ddc522744965c2cc332c341ebb7aebee3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-384.bin",
+      "sha256": "07ba76c5c445a16f310d1f742692c74babea51e351e2f2a41a4f33d6b5716870"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-384.bin",
+      "sha256": "1e3da52ef19e4e6ab0d164340523951f8688a05d8ff204ce02fc3e18f4597aaa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-385.bin",
+      "sha256": "c0f44ad62af2d4343d81eeee9b26f67e9d2745ae7bcd0a9f3ce6485bb74ee6a8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-385.bin",
+      "sha256": "562c3e2639bc5dab2798984084f61d907d1439b31d4db81e54686ffb2816ab35"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-386.bin",
+      "sha256": "14431c4c576b3a4b766bca8ff41f7f99e402bcaa042f9ad6bc5d3b6184bf4bbd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-386.bin",
+      "sha256": "f16b7cdc1acc501bd8e9d08bada29cf72730fd11e7d756fb5be8ea6f95250412"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-387.bin",
+      "sha256": "5384c5a9acf7e77ac75bd8b2d5597ce432e047a9e7a96191bbf171e6b9da2dfa"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-387.bin",
+      "sha256": "9939e7241224b10cb50e49f767333f1c97737ec1eefc21de3ae9d8804c06e988"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-388.bin",
+      "sha256": "f0464c59b1a26ce015b54550fd72c1b819ea3e8b3ac80d3e6933909df9f9c32f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-388.bin",
+      "sha256": "69cd336c1647a5cdf482640476f5d32beba5ce05daf697a54c8b784ceda36e47"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-389.bin",
+      "sha256": "30dcf6a95e48d81cf49d232bf4f1950dc4e5234bce1ed6f27cdf6d940039cbf3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-389.bin",
+      "sha256": "329876c50657417f280f4881350abbd19aed1c861c3ce3c7728888f19de2cf08"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-390.bin",
+      "sha256": "8bc956a2fb4a42c95e65b13181959190904047b451cdd9130451ed570ef4a172"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-390.bin",
+      "sha256": "57db709a69787efea62005f5907b48756c58bdf9622ebe932ca199931bd22857"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-391.bin",
+      "sha256": "b6ae17b49ee72734ecc1e2f5cafb68ea73ec2570a590a0ff7468e6511bc9968e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-391.bin",
+      "sha256": "4cb2425e3e9f4c277f1dea2bdf2c52a2b825cbfc91cb439f043541016841c4c4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-392.bin",
+      "sha256": "78e640625e17c6993d76ef8f27309bebb0b31cc99ba43ab411487ae9b8349659"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-392.bin",
+      "sha256": "a8b06caf20887eac0959cca8b0480915938c2dad89ef43f1db14bacd21485f41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-393.bin",
+      "sha256": "9f26693296588ca6f7f67f24d74ec557d8da6d629dadb05ed8ec1cbb038c2cb0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-393.bin",
+      "sha256": "edc985dc5b5b2eeb6b74a995dcffe92005c8e174675508a7915703f5215cc578"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-394.bin",
+      "sha256": "481ce812b3d32db7a204c474016d371b5d8c7af2cbb7f21843a5903c03adc3ca"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-394.bin",
+      "sha256": "3cece673565331810714e7b3ecbda93c316a5062a18d5eb0e9bdb9bde7a6a956"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-395.bin",
+      "sha256": "4408c58f98a0e5875d3e4f041ad31e14c65aebad11aac2c48fa9a17329bbbfc6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-395.bin",
+      "sha256": "623b902125f608ca5370b44945ba518537e09626cb408a2bef4403ae616c3b31"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-396.bin",
+      "sha256": "b71a4a35ab9b86ceac878aeaacbc759424c14eaa9fdd3c1c3205fbf0d5486303"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-396.bin",
+      "sha256": "4859c2777fcb5f2d10cd61564576e148f3d332be366f47a789e7172fae8d3a8d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-397.bin",
+      "sha256": "a65ba0f4f538508ebe062c6adcaf7d91f5f87d4a9074b011a5214aa69247e728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-397.bin",
+      "sha256": "94cd7668e68857d13d15bbdd39a93ec326d8f52093e978c41c729d36378cc41d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-398.bin",
+      "sha256": "f0c04cdf75991808df7f684623496c341086329910eed8b0fbdcab74db9cfb58"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-398.bin",
+      "sha256": "f129867717d87610c3f78a86d9be92a698efbf61f14654e74cc3f08a846c26c8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-399.bin",
+      "sha256": "4bf5e917adf133fa1dfbe95b35b0c77daa27b7d922efdcdc7234f994999a6655"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-399.bin",
+      "sha256": "bd0071c8d337019a57800c1d798cf4f9cc1572e577ed13a5d1d3ce521e67ceb0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-400.bin",
+      "sha256": "b67f9ae42b61f12c27c4443121cfc8983894e40158236b624c5a81e0c3024e5f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-400.bin",
+      "sha256": "35b86854186f42f8dde8021e83eae1124b2406f9d775ec30098b10359e39b1d5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-401.bin",
+      "sha256": "71ffba89ebf8627a6a015fdeb1f144edbd590a5fac076d5c2fe7c5ea7f999c11"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-401.bin",
+      "sha256": "6810fcbde83cbecac5a6805df7f7d155d6533aa7afe4f0572692004308a28b44"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-402.bin",
+      "sha256": "f00213b45641801ec2c165b9ca30a3337863d98e3e6aed8e91668e0f201159f7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-402.bin",
+      "sha256": "ca8c2cc963763cf2c3c249fa371120e00235ede85c05df75cc3271886e951d93"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-403.bin",
+      "sha256": "a554d1ad06f7dd5fd865893874be39feedf8a5ebc829853e51d059d475af0ff6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-403.bin",
+      "sha256": "585f16e02598b94f92dcfdf20721d242a7031c349906a3607d131ff175e3d408"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-404.bin",
+      "sha256": "f3de8111a31e6dbba89870e6f91c1478dbdc2f687b35ca711dc0682815ee8fc0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-404.bin",
+      "sha256": "bf46b9fa4b7ced0ce5b85d450640113d33b895e13299619e97250658f7c4a962"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-405.bin",
+      "sha256": "da53ccc6cc88fc9ec3b3f05bdc8d7e7ac6a719015df77ce46455af3066e7b578"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-405.bin",
+      "sha256": "6dc859ef6eb6c39906c82a580998c9d9bde6ba93c3e3cfaab9304944aedff8d0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-406.bin",
+      "sha256": "32c321b84af5058a8e818fb364f1eb7ea671d7d842f106b67d7cbf2e5f29744e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-406.bin",
+      "sha256": "83ab4746c822a2c28b1a85ba1fceffe9d36d62f2d2ee7a8e52e2b161a49f3bd0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-407.bin",
+      "sha256": "6edd0ecb25ef80ad75da9b99320932b155fed4acb3661a103622809cc5cd7d41"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-407.bin",
+      "sha256": "4248e4546310d429e3d3e141cd49658619ed407f727fc25c35eb49a0bc454e00"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-408.bin",
+      "sha256": "44f1d6f1e2605dfcbc86d7b6575ffe8da8acff1a94c887f2eb1c0b9eb9d84c7f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-408.bin",
+      "sha256": "7f0f17bf4cf4ff6c03805de71d2e9eb39425c8f925ff097da369776078eccb23"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-409.bin",
+      "sha256": "520c9a3e2205890307101e06b54e3c89aeabfe9ef189e5ecc030e2101fe528f3"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-409.bin",
+      "sha256": "421c70eb7fe47ff9697ad94bbb7a25587be2f305c7fed0e0d63482af4836cb69"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-410.bin",
+      "sha256": "923d427ae3b5b2640a29ac5a6d8cd8660c5a15c1397df26c60cfd656fc1e86a0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-410.bin",
+      "sha256": "f5e54c772ac7f79ac860e3c7f21b52e5b76738710d4a51724a7c9a542e3ff294"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-411.bin",
+      "sha256": "fa516e34200031a2fa2f87035df78fc60a3c91c7b7dfe4a49e9721344cb9433c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-411.bin",
+      "sha256": "e82a1678dd3f07868efd3fd1b6ebdc650e9c17f74168bd33a9de69800866d728"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-412.bin",
+      "sha256": "7e7f69474e658bca8978fcb4c80a8ce6cd64247e60b42dbea6588efa461e5e98"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-412.bin",
+      "sha256": "25b3bc147c7bf173a0fe834eab3d8d3e59970298eed9ae7c2f7f0f1cf9ce981e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-413.bin",
+      "sha256": "173b228b487f97c25cc2d9fef46e607c69756cca3866e2c9cc78747faefe0beb"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-413.bin",
+      "sha256": "5563cc0ddbf45d59d5bdd7661ed9aa6cb98e38a79a374e8bdcd1d93e885c688e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-414.bin",
+      "sha256": "5a9d52a06e4d838ddd50fae2d1ead9dbecbe9727072f9790a6000311dfcf4236"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-414.bin",
+      "sha256": "97aebc08d4bd6aae6df502d93974b08d7a46def6e9ab65a966ba927ef9272b20"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-415.bin",
+      "sha256": "fc49c2767d72cf1ca4807541d0a732184ef5649861ef9b372bee189754289a2f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-415.bin",
+      "sha256": "516b0a808e1ba8702e769f054f40f3cadffd42765226ee648e749f63fa92ca0a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-416.bin",
+      "sha256": "24b4fa4b1c8c14efde3fbe120be22aab87ccf94f5c93a3b1167dfa3dff0826bd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-416.bin",
+      "sha256": "9cc2549e5c5241453a2e8e357979f9b3249ac0ad33dbc56ec14f6e77b1c15462"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-417.bin",
+      "sha256": "64dbbe1f0e975504a87c3439a59de104008fca2db5f310814c1cfe22756b12ff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-417.bin",
+      "sha256": "c46b138b041223c21a59fb22f8b691814a8ce05a93b2417022e262eefb6be3d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-418.bin",
+      "sha256": "84d761f07ed19f60c80c720b15c5278512bd60aac45942084f8668c474a9957c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-418.bin",
+      "sha256": "fb222522599af8687c1e48e9330ab47859e3619e7fbef5cd3ac32ba079099f9a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-419.bin",
+      "sha256": "f5c298b627d16cd4f393766ea3902300e1bfc6f2e47ab25355e467410f48ee66"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-419.bin",
+      "sha256": "4c3776a67b5311fa36d363c9cad78f3e51dc6fc6bc97fb3d5d1ecf59c21cc69b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-420.bin",
+      "sha256": "11fb3ee21059d704d29d3547e1f7b0e55f4b47be9c9bff703a744375bce7bae0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-420.bin",
+      "sha256": "6cb5d7ce31852db905088f68db0bf2676b82d9697198b53c8a2536bf5db91f8b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-421.bin",
+      "sha256": "6c68c546d075641ab71eb31b940406cde583d40d250df5b9f1569931984ca91b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-421.bin",
+      "sha256": "9d759c6e2c76ddc0509696d92db667c1597e90fcf00b78a7ce0252f4f0c6669f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-422.bin",
+      "sha256": "bb6e89324a0816bfe1a80bb262fe4b0f80c2a14bc84c353188f1c646c0f765b2"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-422.bin",
+      "sha256": "2c93e3a03b508061bca2f8ce86c2802ce2093c4899c95640c1a415b5b8c45b63"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-423.bin",
+      "sha256": "5eec25365d3b7c8bd8dfc33cd11ed4c7d7838f6ce67ba1ee07850d2240b28079"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-423.bin",
+      "sha256": "5043195f582971c88afb0342e6722b921f3ad484b2dc2b7a035ca7368f4e4748"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-424.bin",
+      "sha256": "9aa38996dee4a88c69240be64019abaa12ace96c49896410cc5d6815454415dc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-424.bin",
+      "sha256": "59b9c5b6dbfa5c1953d60a6186d594878367c69d06b876d1ba5a87b0900a2666"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-425.bin",
+      "sha256": "98fc7b09f1bdddbe4b82539e919f9d7c05e22cfb824f7eb306f7a6fb65252233"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-425.bin",
+      "sha256": "2b59ae4631fdfa038c864f0a4029f0227b09e8ac8913a8f77498bd5df4706b91"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-426.bin",
+      "sha256": "73622f254d4208ceb7ffa96e576f1186b7ab2322c1f35eb0d29f53a4a5fbb2fd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-426.bin",
+      "sha256": "0d5cd9766f50469d25cd34ee4b1e2d27ff1adfc227cb025547d35e1952518574"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-427.bin",
+      "sha256": "1e82d4d2deb92b7f940e5e1397e072c8218e59629bedb795194941776635f8a0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-427.bin",
+      "sha256": "5d0d3332cc01ce181cfda551f28c1ca6bcc992bc833b857aafc5817c4098f919"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-428.bin",
+      "sha256": "a762c984eeff0e7e4f4fc302e5db12c475de18cb6c0d420bb4e05f1a53de7756"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-428.bin",
+      "sha256": "fe80379771b8c57c90fe9ecef7eab73758a90c335c6dfd699e0e51466594aa10"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-429.bin",
+      "sha256": "ec733ec222ca519938887d026449d5ece340d051b5578a8fb1a69f136ac55007"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-429.bin",
+      "sha256": "5271fe87aa7ba07ac571e15cfaadd562f82621a00b1ce6083eace72448f6baff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-430.bin",
+      "sha256": "0e77ede9800fb9aac92ac571880d9408c2adb51380f3b1d5aa97dd62e607809a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-430.bin",
+      "sha256": "7cf9d30d55857de74f9be01215830533b7af448b8463993a82896152836a2374"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-431.bin",
+      "sha256": "1cb486b644649686356d285c9b2a91f5a6c780480cb8e1aec911381f5b9396e0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-431.bin",
+      "sha256": "20d06656aa2520aba69f50060d3c30982d36833ef20cd23252e6341c9f2cd8d9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-432.bin",
+      "sha256": "b640a24b68812aad93736fc922c527de60bf052ce2d96dff5de8b71c4ce72d10"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-432.bin",
+      "sha256": "bbcb866af5b72c4c29c49370a75a9f015d673484747e5de9a6eea7cad6dc565b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-433.bin",
+      "sha256": "e4cd6944983f912989152ed8dfaa0a675004b2e54083e40c08af714dfe791e9e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-433.bin",
+      "sha256": "dff9b6209c25039b338e805f51892d8aecc501a8e588601aff644765cc9b8b77"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-434.bin",
+      "sha256": "2b9dd3b4c4e0fe62dd9af72e764a356231232ce47b51da065e20d3b8e148a8f1"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-434.bin",
+      "sha256": "4c3fec25675c59bed4fabee96e7aaf6140700d0e16a9f402d28573f7a380ca26"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/qkv-435.bin",
+      "sha256": "a81099ac4f5f30067adac98c5f403d160b5fc8e65e01a1d5228e81e38bc01dda"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures/metadata-435.bin",
+      "sha256": "48ae24036511d4a4fb940ef161b4a4b8e8e2796148cf092ee4fb335511f2da6a"
+    }
+  ],
+  "case_index": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/cases.tsv",
+    "sha256": "2017d5437684de374a553efc3961d730fdec5da8d09fa9e68e58ddcc245fc071"
+  }
+}

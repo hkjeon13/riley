@@ -1,0 +1,26 @@
+{
+  "binaries": {
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_18_gpu-6109903a45b9a6e5": "a52bd21ba71ddce094208154c3910147b4303a42e651b8a2ebf6adb93af0c764",
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_19_gpu-efa9551e2e4a4424": "7b0191af94e8ff48612d492381332445b021be9897382f09a0a39406a3459dbc",
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_kv_parent_gpu-c79ec46f7ea9ee2f": "8d6b074f357f2aa6309997243e0a2c0aa213afe1b60d4293a4afe6ff29ec4394",
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_parent_attention_gpu-7a7a22e0e1e8bdad": "f2bdd5441bb0e7a4009a71956c59c51c22fb81dffc602e5e4be003511de59993",
+    "/tmp/riley-g01-native-260910-target/debug/deps/riley_cuda-6dbae6b0417c0677": "df5554ae0b1164a962a52131fffb655064f487c08c8ddc2a0bca64fcb8256041",
+    "/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a": "022a74f9c6e8fea3c32a970a2891a223a538cb9355828add1369cbc75edf7069"
+  },
+  "models": {
+    "hf": {
+      "path": "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+      "manifest_hashes": {
+        "riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0"
+      }
+    },
+    "canonical": {
+      "path": "/tmp/riley-g02c-canonical-fixture",
+      "manifest_hashes": {
+        "riley-checkpoint.json": "cc56fa4028435c98f68150c4769de0aca17d45f7af500909bad3e6c35953555b"
+      }
+    }
+  },
+  "gpu": "NVIDIA GeForce RTX 4090, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02, 804 MiB, 0 %",
+  "io_pressure": "some avg10=62.01 avg60=63.83 avg300=63.42 total=430078728242\nfull avg10=56.87 avg60=58.74 avg300=58.16 total=393640727558\n"
+}

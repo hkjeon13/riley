@@ -1,0 +1,234 @@
+{
+  "schema_version": "riley.serving-optimization.v1",
+  "measurement_started": true,
+  "condition": {
+    "condition_id": "serving-gui-retained-512mib-cool48-v1",
+    "gui_retained": true,
+    "idle_memory_limit_mib": 512,
+    "start_temperature_limit_c": 48,
+    "canonical_idle_memory_limit_mib": 256,
+    "canonical_qualification": false,
+    "scope": "single-concurrency HTTP serving diagnostic",
+    "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+  },
+  "inputs": {
+    "/tmp/riley-opt-260912/batch2-http-plan.json": "4ba0b664f05f7b5203b198c6e659fd476e15c8670f42bf5b0621734045bed305",
+    "/tmp/riley-g04-vllm-profile-260911/request.json": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+    "/tmp/riley-opt-260912/batch2-binding.json": "3496b04726505b3418b279d1410a218b7fe77ca0d4d5e2ff33bcbba612df2df8"
+  },
+  "runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+  "source_commit": "1bfb23053fb15a3528eb6413abe6e1bbdb0db004",
+  "pairs": 5,
+  "warmups_per_transport": 5,
+  "iterations": 30,
+  "reference_input_token_ids_sha256": "9c517926bf0e7df0c944a4a02da912a0541c060b7a9995ca863bedb3fe9ba372",
+  "reference_generated_token_ids_sha256": "be8cb5992ba0d835b7c1a518448cab1aa858934bbc99726270ce29f3e02c78f9",
+  "http_generated_token_ids_verified": false,
+  "legacy_vllm_raw": "not used; HTTP envelope binds actual environment; old raw remains uncanonical",
+  "warmup_note": "one nonstream calibration then paired nonstream and stream warmups; all validated",
+  "tail_estimator": "nearest rank within each process; small samples do not establish tail stability",
+  "completed": true,
+  "pair_results": [
+    {
+      "index": 1,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 90.412262,
+          "p95": 90.574153,
+          "p99": 91.028172
+        },
+        "first_text_event_ms": {
+          "median": 23.651325999999997,
+          "p95": 23.788986,
+          "p99": 24.240909
+        },
+        "output_tokens_per_request_service_second": 353.9139550368674,
+        "output_tokens_per_wall_second": 353.5171994749256,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "vllm": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 35.676818999999995,
+          "p95": 45.015625,
+          "p99": 45.659325
+        },
+        "first_text_event_ms": {
+          "median": 7.713741000000001,
+          "p95": 16.235251,
+          "p99": 17.349706
+        },
+        "output_tokens_per_request_service_second": 864.9448870722819,
+        "output_tokens_per_wall_second": 862.7984005119702,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley_over_vllm_e2e": 2.534201886104252
+    },
+    {
+      "index": 2,
+      "order": [
+        "vllm",
+        "riley"
+      ],
+      "vllm": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 35.3409775,
+          "p95": 43.846687,
+          "p99": 43.934782
+        },
+        "first_text_event_ms": {
+          "median": 7.3683495,
+          "p95": 10.4632,
+          "p99": 15.783541
+        },
+        "output_tokens_per_request_service_second": 884.8413207284971,
+        "output_tokens_per_wall_second": 882.9152908619986,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 90.411108,
+          "p95": 90.632773,
+          "p99": 90.782687
+        },
+        "first_text_event_ms": {
+          "median": 23.627314499999997,
+          "p95": 23.774309,
+          "p99": 23.859922
+        },
+        "output_tokens_per_request_service_second": 353.89605411989623,
+        "output_tokens_per_wall_second": 353.4888529954262,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley_over_vllm_e2e": 2.5582514801691603
+    },
+    {
+      "index": 3,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 90.4631905,
+          "p95": 90.559756,
+          "p99": 90.667415
+        },
+        "first_text_event_ms": {
+          "median": 23.664109500000002,
+          "p95": 23.747464,
+          "p99": 23.782409
+        },
+        "output_tokens_per_request_service_second": 353.79524795453415,
+        "output_tokens_per_wall_second": 353.408098080407,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "vllm": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 35.714716,
+          "p95": 41.909093,
+          "p99": 41.989142
+        },
+        "first_text_event_ms": {
+          "median": 7.7852405000000005,
+          "p95": 13.342108,
+          "p99": 14.164009
+        },
+        "output_tokens_per_request_service_second": 868.7135562729643,
+        "output_tokens_per_wall_second": 866.6194538406405,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley_over_vllm_e2e": 2.5329388171531306
+    },
+    {
+      "index": 4,
+      "order": [
+        "vllm",
+        "riley"
+      ],
+      "vllm": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 35.227612,
+          "p95": 36.229494,
+          "p99": 36.890591
+        },
+        "first_text_event_ms": {
+          "median": 7.3468,
+          "p95": 8.57067,
+          "p99": 9.082275
+        },
+        "output_tokens_per_request_service_second": 906.4668506536283,
+        "output_tokens_per_wall_second": 904.305173681558,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 90.41828,
+          "p95": 90.791023,
+          "p99": 91.221115
+        },
+        "first_text_event_ms": {
+          "median": 23.6506745,
+          "p95": 23.95759,
+          "p99": 24.224091
+        },
+        "output_tokens_per_request_service_second": 353.73931875559884,
+        "output_tokens_per_wall_second": 353.324357905825,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley_over_vllm_e2e": 2.5666877448292547
+    },
+    {
+      "index": 5,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 90.4621215,
+          "p95": 90.994253,
+          "p99": 91.283371
+        },
+        "first_text_event_ms": {
+          "median": 23.60634,
+          "p95": 23.818293,
+          "p99": 23.922998
+        },
+        "output_tokens_per_request_service_second": 353.74717392994876,
+        "output_tokens_per_wall_second": 353.35563235827743,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "vllm": {
+        "requests": 30,
+        "e2e_ms": {
+          "median": 35.6387345,
+          "p95": 39.133619,
+          "p99": 39.857871
+        },
+        "first_text_event_ms": {
+          "median": 7.611515000000001,
+          "p95": 9.197815,
+          "p99": 11.067591
+        },
+        "output_tokens_per_request_service_second": 884.1362570088613,
+        "output_tokens_per_wall_second": 882.0191099142373,
+        "http_tpot": "unmeasured; SSE events are not token boundaries"
+      },
+      "riley_over_vllm_e2e": 2.5383090272186855
+    }
+  ],
+  "paired_e2e_ratio_median": 2.5383090272186855
+}

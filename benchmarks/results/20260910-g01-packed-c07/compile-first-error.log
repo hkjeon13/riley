@@ -1,0 +1,37 @@
+   Compiling typenum v1.20.1
+   Compiling tinyvec_macros v0.1.1
+   Compiling itoa v1.0.18
+   Compiling cfg-if v1.0.4
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling cpufeatures v0.3.0
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling serde_core v1.0.228
+   Compiling riley-tensor v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-tensor)
+   Compiling tinyvec v1.12.0
+   Compiling unicode-normalization v0.1.25
+   Compiling hybrid-array v0.4.14
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+   Compiling serde_json v1.0.145
+   Compiling serde v1.0.228
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.0
+   Compiling riley-model v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+error[E0277]: the trait bound `PureDecodeGraphV1ExactSlabWriteError: std::error::Error` is not satisfied
+   --> crates/riley-runtime/src/llama/graph_decode_attention_owner.rs:318:84
+    |
+318 |         let source = match host.write_exact_v1_leased(&packed, &[1, 2, 3], &[0; 5])? {
+    |                                                                                    ^ the trait `std::error::Error` is not implemented for `PureDecodeGraphV1ExactSlabWriteError`
+    |
+    = help: the trait `FromResidual<Result<Infallible, E>>` is implemented for `Result<T, F>`
+    = note: required for `Box<dyn std::error::Error>` to implement `From<PureDecodeGraphV1ExactSlabWriteError>`
+    = note: required for `Result<(), Box<dyn std::error::Error>>` to implement `FromResidual<Result<Infallible, PureDecodeGraphV1ExactSlabWriteError>>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `riley-runtime` (lib test) due to 1 previous error

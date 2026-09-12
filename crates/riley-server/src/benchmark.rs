@@ -862,6 +862,8 @@ mod cuda_executor {
         context: Option<CudaContext>,
         stream: Option<CudaStream>,
         executor: Option<PreparedLlamaBatchExecutor>,
+        decode_graph: Option<riley_runtime::llama::OwnedLlamaDecodeExecutor>,
+        graph_quiescence_unknown: bool,
         timer: Option<LlamaIterationCudaTimer>,
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
@@ -955,6 +957,8 @@ mod cuda_executor {
                 context: Some(context),
                 stream: Some(stream),
                 executor: Some(executor),
+                decode_graph: None,
+                graph_quiescence_unknown: false,
                 timer: Some(timer),
                 sampling,
                 allowed_tokens,
@@ -966,6 +970,64 @@ mod cuda_executor {
                 clock: Instant::now(),
                 terminal: false,
             })
+        }
+
+        /// Enables the same persistent M=1 graph used by the server, before any trial.
+        /// # Errors
+        /// Required unsupported buckets fail without running a request.
+        pub fn with_execution_graph_policy(
+            mut self,
+            policy: riley_runtime::llama::ExecutionGraphPolicy,
+        ) -> NativeBenchmarkResult<Self> {
+            use riley_runtime::llama::ExecutionGraphPolicy;
+            if self
+                .executor
+                .as_ref()
+                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
+                && policy != ExecutionGraphPolicy::Require
+            {
+                return Err(invalid(
+                    "graph numerics",
+                    "vllm-smol-p128-v1 requires an explicitly required graph",
+                ));
+            }
+            if policy == ExecutionGraphPolicy::Disabled {
+                return Ok(self);
+            }
+            let supported = self
+                .executor
+                .as_ref()
+                .is_some_and(PreparedLlamaBatchExecutor::supports_owned_decode_graph);
+            if !supported {
+                return if policy == ExecutionGraphPolicy::Auto {
+                    Ok(self)
+                } else {
+                    Err(invalid(
+                        "execution_graph_policy",
+                        "required graph unsupported",
+                    ))
+                };
+            }
+            let executor = self.executor.take().ok_or(NativeBenchmarkError::Terminal)?;
+            let context = self
+                .context
+                .as_ref()
+                .ok_or(NativeBenchmarkError::Terminal)?;
+            self.decode_graph = Some(
+                executor
+                    .into_owned_decode_graph(context)
+                    .map_err(|_| NativeBenchmarkError::Preparation)?,
+            );
+            Ok(self)
+        }
+
+        /// Number of successful graph launches, retained across independent requests.
+        #[must_use]
+        pub fn graph_replay_count(&self) -> u64 {
+            self.decode_graph.as_ref().map_or(
+                0,
+                riley_runtime::llama::OwnedLlamaDecodeExecutor::replay_count,
+            )
         }
 
         /// Validates inputs, hashes prompts, and reserves complete trace storage.
@@ -990,6 +1052,25 @@ mod cuda_executor {
                 .as_ref()
                 .ok_or(NativeBenchmarkError::Terminal)?;
             ensure_scheduler_idle(scheduler)?;
+            if self
+                .executor
+                .as_ref()
+                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
+            {
+                return Err(invalid(
+                    "graph numerics",
+                    "owned graph preparation is required before trials",
+                ));
+            }
+            if let Some(graph) = &self.decode_graph {
+                for request in &requests {
+                    graph
+                        .validate_request_shape(request.prompt_token_ids().len(), output_tokens)
+                        .map_err(|_| {
+                            invalid("graph numerics", "request outside numerical profile bounds")
+                        })?;
+                }
+            }
             PreparedNativeBenchmarkTrial::prepare(
                 requests,
                 output_tokens,
@@ -1090,7 +1171,15 @@ mod cuda_executor {
                 let iteration_id = plan.iteration_id();
 
                 let execution_started_ns = self.now_ns()?;
-                let (mut downloaded, timing) = {
+                let (mut downloaded, timing) = if let Some(graph) = self.decode_graph.as_mut() {
+                    let downloaded = riley_scheduler::execute_llama_iteration_graph(
+                        &plan,
+                        graph,
+                        self.gpu_greedy.then_some(&mut self.greedy_token_workspace),
+                    )
+                    .map_err(|_| NativeBenchmarkError::Execution)?;
+                    (downloaded, riley_scheduler::IterationTiming::default())
+                } else {
                     let executor = self
                         .executor
                         .as_mut()
@@ -1198,7 +1287,11 @@ mod cuda_executor {
                     commit_started_ns,
                     commit_observed_ns,
                     metric,
-                    gpu_timing_validity: NativeGpuTimingValidity::MeasuredCudaEvents,
+                    gpu_timing_validity: if self.decode_graph.is_some() {
+                        NativeGpuTimingValidity::UnavailableExecutionBridgeBoundary
+                    } else {
+                        NativeGpuTimingValidity::MeasuredCudaEvents
+                    },
                 });
             }
             let batch_finished_ns = self.now_ns()?;
@@ -1263,7 +1356,23 @@ mod cuda_executor {
             u64::try_from(self.clock.elapsed().as_nanos()).unwrap_or(u64::MAX)
         }
 
+        fn release_graph(&mut self) -> bool {
+            if self.graph_quiescence_unknown {
+                return false;
+            }
+            if let Some(graph) = self.decode_graph.take() {
+                if graph.close().is_err() {
+                    self.graph_quiescence_unknown = true;
+                    return false;
+                }
+            }
+            true
+        }
+
         fn contain_failure(&mut self) {
+            if !self.release_graph() {
+                return;
+            }
             let now_ns = self.cleanup_now_ns();
             let inflight = self
                 .scheduler
@@ -1313,6 +1422,9 @@ mod cuda_executor {
 
         fn close_resources(&mut self) -> (NativeBenchmarkCleanupReport, usize) {
             let mut report = NativeBenchmarkCleanupReport::default();
+            if !self.release_graph() {
+                return (report, 1);
+            }
             let mut failure_count = 0_usize;
             let now_ns = self.cleanup_now_ns();
             let mut inflight_abort = None;
@@ -1412,6 +1524,16 @@ mod cuda_executor {
             )
         })?;
         let metadata = config.executor.metadata();
+        if config.executor.vllm_smol_p128_batched_prefill()
+            && (scheduler.max_active_sequences != 1
+                || scheduler.iteration_token_budget != 128
+                || scheduler.max_prefill_chunk_tokens != 128)
+        {
+            return Err(invalid(
+                "P128 graph scheduler",
+                "requires one sequence and complete 128-token prefill scheduling",
+            ));
+        }
         if scheduler.overload_policy != OverloadPolicy::RejectImmediately {
             return Err(invalid(
                 "overload_policy",
@@ -1679,5 +1801,54 @@ mod tests {
             Err(NativeBenchmarkError::Commit)
         );
         scheduler.close(13, None).expect("scheduler cleanup");
+    }
+}
+
+#[cfg(all(test, feature = "cuda"))]
+mod graph_prepare_tests {
+    use super::*;
+    use riley_runtime::llama::{
+        ExecutionGraphPolicy, LlamaBatchMetadataConfig, PreparedLlamaBatchExecutorConfig,
+        PreparedLlamaForwardConfig,
+    };
+    use riley_scheduler::{OverloadPolicy, SchedulerConfig};
+    #[test]
+    #[ignore = "requires CUDA checkpoint; prepares only and never measures"]
+    fn full_graph_native_measurement_preparation_only() -> Result<(), Box<dyn std::error::Error>> {
+        let model = riley_model::LoadedModel::load(
+            std::path::Path::new(&std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint")?),
+            riley_model::LoadLimits::default(),
+        )?;
+        let config = NativeBenchmarkConfig {
+            device_ordinal: 0,
+            gpu_greedy: true,
+            executor: PreparedLlamaBatchExecutorConfig::new(
+                LlamaBatchMetadataConfig::new(1, 1, 10, 1, 10)?,
+                PreparedLlamaForwardConfig::default(),
+            )
+            .with_grouped_ragged_attention_heads()
+            .with_separate_residual_norm(),
+            scheduler: SchedulerConfig {
+                max_waiting_requests: 1,
+                max_waiting_prompt_tokens: 128,
+                max_active_sequences: 1,
+                max_sequence_tokens: 160,
+                iteration_token_budget: 1,
+                max_prefill_chunk_tokens: 1,
+                aging_threshold_ns: 100_000_000,
+                overload_policy: OverloadPolicy::RejectImmediately,
+                admission_timeout_ns: None,
+                max_promised_kv_blocks: 10,
+                metrics_window_samples: 32,
+            },
+        };
+        let executor = NativeBenchmarkExecutor::prepare(model, config)?
+            .with_execution_graph_policy(ExecutionGraphPolicy::Require)?;
+        let _trial =
+            executor.prepare_trial(vec![PretokenizedBenchmarkRequest::new(vec![504; 128])], 32)?;
+        assert_eq!(executor.graph_replay_count(), 0);
+        assert!(executor.close()?.allocations_are_zero());
+        println!("G04_NATIVE measurement_prepared=true measured_trials=0 zero_allocations=true");
+        Ok(())
     }
 }

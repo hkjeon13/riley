@@ -1,0 +1,6 @@
+SERVER_EXIT 1
+Traceback (most recent call last):
+  File "/tmp/run_v3_http_shared_v22.py", line 27, in <module>
+    if p.poll() is not None:raise RuntimeError('server stopped during startup')
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: server stopped during startup

@@ -1,0 +1,991 @@
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index fd42c33..9a734d7 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -205,6 +205,10 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/decode_shared_attention.cuh"),
+         kernels_dir.join("src/decode_shared_model.cuh"),
+         kernels_dir.join("src/decode_shared_result.cuh"),
++        kernels_dir.join("src/decode_shared16.cuh"),
++        kernels_dir.join("src/decode_shared16_attention.cuh"),
++        kernels_dir.join("src/decode_shared16_model.cuh"),
++        kernels_dir.join("src/decode_shared16_result.cuh"),
+ 
+         kernels_dir.join("src/decode_shape.cuh"),
+         kernels_dir.join("src/prefill_shape_model.cuh"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index c66f039..f1ebcfc 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11249,6 +11249,7 @@ impl GraphResourcesHandle {
+ unsafe extern "C" {
+     fn riley_cuda_graph_resources_record_v3_prefill(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_graph_resources_record_v3_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
++    fn riley_cuda_graph_resources_record_v4_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ }
+ impl GraphResourcesHandle {
+     pub(super) fn record_v3_prefill(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+@@ -11267,4 +11268,12 @@ impl GraphResourcesHandle {
+         let status=unsafe{riley_cuda_graph_resources_record_v3_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V3 prefill",&error)
+     }
++    pub(super) fn record_v4_shared(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
++        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V4 shared","parent count mismatch"));}
++        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
++        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
++        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
++        let status=unsafe{riley_cuda_graph_resources_record_v4_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        status_result(status,"record V4 shared",&error)
++    }
+ }
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index 317ec44..4be4b67 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1221,4 +1221,17 @@ impl BorrowedGraphResourceReservation<'_> {
+         }
+         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V3 prefill"))}
+     }
++    pub fn record_v4_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
++        #[cfg(feature="cuda")]{
++            let bad=||crate::CudaError::invalid_argument("record V4 shared","parent index out of range");
++            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
++            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
++            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
++            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
++            self.native.record_v4_shared(&devices,workspace,&weights,head,shared_head,staging,capacity,physical)
++        }
++        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V4 shared"))}
++    }
+ }
+diff --git a/crates/riley-cuda/tests/v4_shared_recorder_gpu.rs b/crates/riley-cuda/tests/v4_shared_recorder_gpu.rs
+new file mode 100644
+index 0000000..26cf97d
+--- /dev/null
++++ b/crates/riley-cuda/tests/v4_shared_recorder_gpu.rs
+@@ -0,0 +1,34 @@
++#![cfg(feature="cuda")]
++use riley_cuda::{BorrowedGraphResourceParents,BorrowedGraphResourceReservation,CudaRuntime,CudaGemmConfig};
++fn p32(p:&mut[u8],i:usize,v:u32){p[i..i+4].copy_from_slice(&v.to_le_bytes());}
++fn p64(p:&mut[u8],i:usize,v:u64){p[i..i+8].copy_from_slice(&v.to_le_bytes());}
++fn packet(start:u32,count:u32,prompt:u32,replay:u64)->Vec<u8>{let mut p=vec![0;30848];let target=start+count;let live=target.div_ceil(16);
++for(i,v)in[(0,0x34444d52),(4,4),(8,30848),(12,1664),(20,1),(24,16),(28,4),(128,33),(132,target-1),(136,count),(140,live),(144,start),(148,target),(156,32),(160,prompt),(164,64),(172,if target==prompt{count-1}else{u32::MAX})]{p32(&mut p,i,v);}
++for(i,v)in[(40,1),(48,replay),(56,replay),(176,1),(184,replay)]{p64(&mut p,i,v);}p[64]=1;
++for i in 0..live{p32(&mut p,256+i as usize*4,(i*3+1)%4);let valid=if i+1<live{16u16}else{((target-1)%16+1)as u16};p[1280+i as usize*2..1282+i as usize*2].copy_from_slice(&valid.to_le_bytes());}
++for i in 0..count{p32(&mut p,26752+i as usize*4,33);}p}
++#[test]
++#[ignore="requires GPU; native shared capture/transfer/ledger"]
++fn sixteen_recorder_owns_resources_and_transfers_all_records()->Result<(),Box<dyn std::error::Error>>{
++let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;let mut upload=context.allocate_pinned_host_buffer(1<<20)?;
++let mut sizes=vec![1152*32;5];sizes.extend([384*32,384*32,16*9*4096*4,3072*32,3072*32,2304*32,3072*32]);sizes.extend([30*16*16*384,30*16*16*384,64*128,64*128,30848,1152,128,4,98304,8,56623104,1152,663552,221184,1769472,16*1152,16*98304,1574912]);
++let mut buffers=vec![];for size in sizes{let mut b=context.allocate_device_buffer(size)?;b.upload_from_slice(0,&vec![0;size as usize],&mut upload,&mut stream)?;buffers.push(b);}
++let mut weights=vec![22,23,22];for _ in 0..30{weights.extend([23,24,25,25,24,23,26,26,26]);}
++let mut head=context.prepare_gemm(CudaGemmConfig::new(1,49152,576,0)?)?;let mut shared=context.prepare_gemm(CudaGemmConfig::new(16,49152,576,0)?)?;let mut staging=context.allocate_pinned_host_buffer(3149824)?;
++let mut owner=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream:&mut stream,devices:buffers.iter_mut().collect(),pinned:vec![&mut staging],plans:vec![&mut head,&mut shared]})?;
++let devices=std::array::from_fn(|i|if i<22{i}else{i+5});
++let mut bad=devices;bad[24]=bad[23];assert!(owner.record_v4_shared(&bad,None,&weights,0,1,0,32,16).is_err());
++assert!(owner.record_v4_shared(&devices,None,&weights,0,0,0,32,16).is_err());
++owner.record_v4_shared(&devices,None,&weights,0,1,0,32,16)?;
++for (i,(start,count,prompt)) in [(0,17,33),(17,16,33),(0,1,1)].into_iter().enumerate(){let mut p=packet(start,count,prompt,i as u64+1);p32(&mut p,28,16);let mut out=vec![255;1574912];owner.replay_transfer(&p)?;owner.read_transfer(&mut out)?;assert_eq!(&out[..4],&0u32.to_le_bytes());assert_eq!(&out[4..8],&u32::from(start+count==prompt).to_le_bytes());assert!(out[128..].iter().all(|&x|x==0));}
++for active in [1usize,2,4,8,9,15,16] {
++let mut p=packet(1,1,1,4);p[26752..].fill(0);p32(&mut p,28,16);p32(&mut p,16,1);p32(&mut p,20,active as u32);p32(&mut p,152,1);p32(&mut p,172,0);
++let row=p[128..1792].to_vec();for i in 1..active {let b=128+i*1664;p[b..b+1664].copy_from_slice(&row);p32(&mut p,b+40,i as u32);p64(&mut p,b+48,i as u64+1);p64(&mut p,b+56,i as u64+4);p32(&mut p,b+128,((i+1)%16)as u32);}
++let mut out=vec![255;1574912];owner.replay_transfer(&p)?;owner.read_transfer(&mut out)?;
++for i in 0..active {let b=i*98432;assert_eq!(&out[b..b+4],&0u32.to_le_bytes());assert_eq!(&out[b+4..b+8],&1u32.to_le_bytes());assert_eq!(&out[b+124..b+128],&0x34524d52u32.to_le_bytes());assert_eq!(&out[b+40..b+48],&((i+1)as u64).to_le_bytes());assert_eq!(&out[b+116..b+120],&(i as u32).to_le_bytes());assert!(out[b+128..b+98432].iter().all(|&x|x==0));}
++assert!(out[active*98432..].iter().all(|&x|x==0));
++let mut wrong=p.clone();p32(&mut wrong,0,0x33444d52);assert!(owner.replay_transfer(&wrong).is_err());assert!(owner.read_transfer(&mut out).is_err());
++let mut wrong=p.clone();p32(&mut wrong,128+(active-1)*1664+36,128);assert!(owner.replay_transfer(&wrong).is_err());assert!(owner.read_transfer(&mut out).is_err());
++}
++owner.close()?;head.close()?;shared.close()?;drop(buffers);drop(staging);drop(upload);stream.close()?;assert!(context.allocation_stats()?.is_zero());
++eprintln!("SHARED16_NATIVE prefill_replays=3 decode_rows=1,2,4,8,9,15,16 inactive_zero=true cold_rejections=2 foreign_context_rejected=true stale_output_hidden=true allocation_zero=true");Ok(())}
+diff --git a/crates/riley-runtime/src/llama/executor/config.rs b/crates/riley-runtime/src/llama/executor/config.rs
+index 1a806c5..1bb8aeb 100644
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -133,6 +133,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
+     vllm_smol_p128_graph: bool,
+     shared_rows_graph: bool,
+     variable_graph: bool,
++    variable_graph_rows: usize,
+     shape_policy: LlamaBatchShapePolicy,
+     shape_buckets: LlamaBatchShapeBuckets,
+ }
+@@ -154,6 +155,7 @@ impl PreparedLlamaBatchExecutorConfig {
+             vllm_smol_p128_graph: false,
+             shared_rows_graph: false,
+             variable_graph: false,
++            variable_graph_rows: 8,
+             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
+             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
+         }
+@@ -169,7 +171,9 @@ impl PreparedLlamaBatchExecutorConfig {
+     }
+     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
+     #[must_use]
+-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
++    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
++    pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
++    pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
+     pub const fn variable_graph(self)->bool {self.variable_graph}
+     /// Opt-in arithmetic-changing QKV/gate-up/head graph; bounded P128 geometry.
+     #[must_use]
+@@ -445,6 +449,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
+         vllm_smol_p128_graph: config.vllm_smol_p128_graph,
+         shared_rows_graph: config.shared_rows_graph,
+         variable_graph: config.variable_graph,
++        variable_graph_rows: config.variable_graph_rows,
+         shape_policy: config.shape_policy,
+         shape_buckets: config.shape_buckets,
+     }
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 4b60316..7a0fcaf 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2054,11 +2054,13 @@ pub use multi_session::OwnedLlamaMultiDecodeExecutor;
+ impl PreparedLlamaBatchExecutor {
+     /// Captures V3 using this loader's actual immutable weights, RoPE and KV pool.
+     /// Unsupported model geometry/numerics are rejected before capture.
+-    pub fn prepare_variable_session<'a>(
++    pub fn prepare_variable_session<'a>(&'a mut self,stream:&'a mut CudaStream,scratch:&'a mut crate::llama::variable_session::VariableGraphBuffers)->LlamaBatchExecutorResult<crate::llama::variable_session::BorrowedVariableSession<'a>>{self.prepare_variable_session_rows::<8>(stream,scratch)}
++    pub fn prepare_variable_session_rows<'a,const ROWS:usize>(
+         &'a mut self, stream:&'a mut CudaStream,
+         scratch:&'a mut crate::llama::variable_session::VariableGraphBuffers,
+-    )->LlamaBatchExecutorResult<crate::llama::variable_session::BorrowedVariableSession<'a>> {
++    )->LlamaBatchExecutorResult<crate::llama::variable_session::BorrowedVariableSession<'a,ROWS>> {
+         use sha2::{Digest,Sha256};
++        if !matches!(ROWS,8|16) || scratch.wire_rows!=ROWS || (ROWS==16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
+         let context=self.maximum_position_count()?.min(4096);
+         let physical=self.owner.layout.physical_block_count();
+         let f=&mut self.owner.forward;
+@@ -2085,6 +2087,10 @@ include_bytes!("../../../../kernels/src/decode_shared.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared_attention.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared_result.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared16_attention.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared16_model.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared16_result.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+             include_bytes!("variable_session.rs").as_slice(),
+             include_bytes!("graph_decode_full.rs").as_slice(),
+@@ -2104,7 +2110,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+         for v in [m.backend_id(),m.algorithm_id() as u32,m.tile_id(),m.stages_id(),m.split_k(),m.reduction_scheme(),m.cta_swizzling(),m.custom_option(),u32::from(m.deterministic())] {hash.update(v.to_le_bytes());}
+         let (mr,n,k)=m.dimensions();for v in [mr,n,k,m.workspace_bytes(),m.numerical_implementation_flags()] {hash.update(v.to_le_bytes());}
+         }
+-        hash.update([u8::from(scratch.shared_head.is_some())]);
++        hash.update([u8::from(scratch.shared_head.is_some())]);hash.update((ROWS as u32).to_le_bytes());
+         hash.update(scratch.capacity.to_le_bytes());hash.update((physical as u64).to_le_bytes());hash.update((context as u64).to_le_bytes());
+         for &w in &weights {hash.update((w as u64).to_le_bytes());}
+         let mut chunk=vec![0;f.io_staging.byte_len().min(1024*1024) as usize];
+@@ -2150,7 +2156,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
+         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
+             pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
+-        if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
++        if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+         (if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
+             .map_err(|_|rejected("V3 session identity rejected"))
+     }
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index c3ce149..f8056fa 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -10,25 +10,25 @@ pub struct VariableSessionIdentity {
+ }
+ /// Owns the prepared reservation; no mutable native handle escapes while active.
+ /// A result remains outstanding until scheduler commit is explicitly confirmed.
+-pub struct VariableSession<G: VariableGraph> {
++pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
+     graph:G, identity:VariableSessionIdentity,
+-    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation>,
++    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
+     shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
+ }
+ fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
+-impl<G: VariableGraph> VariableSession<G> {
++impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+     /// The caller must have recorded the V3 model and bound the digest to its
+     /// actual prepared model/kernel catalog. This constructor does not create it.
+     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
+-        if catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
++        if !matches!(ROWS,8|16) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
+         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
+         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens},
+-            shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
++            shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+     }
+-    pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::BATCH_RESULT_BYTES];Ok(s)}
++    pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
+     pub fn issue(&mut self)->Result<(VariableSessionIdentity,u64,u64)>{let(i,r,c)=self.issue_rows(1)?;Ok((i,r,c[0]))}
+     pub fn issue_rows(&mut self,rows:usize)->Result<(VariableSessionIdentity,u64,Vec<u64>)> {
+-        if rows==0||rows>if self.shared{8}else{1}{return Err(bad("unsupported row count"));}
++        if rows==0||rows>if self.shared{ROWS}else{1}{return Err(bad("unsupported row count"));}
+         if self.poisoned || self.retained.is_some() || self.issued.is_some() {return Err(bad("session busy or poisoned"));}
+         let replay=self.identity.last_accepted_replay.checked_add(1).ok_or_else(||bad("replay exhausted"))?;
+         let cookie=self.next_cookie;self.next_cookie=cookie.checked_add(rows as u64).ok_or_else(||bad("cookie exhausted"))?;
+@@ -39,14 +39,14 @@ impl<G: VariableGraph> VariableSession<G> {
+         self.issued=None;Ok(())
+     }
+     pub fn submission_started(&self)->bool {self.started}
+-    pub fn execute(&mut self,e:wire::Expectation)->Result<(Option<u32>,&[u8])> {
++    pub fn execute(&mut self,e:wire::Expectation<ROWS>)->Result<(Option<u32>,&[u8])> {
+         if e.rows.len()!=1{return Err(bad("single result requires one row"));}
+         let rows=self.execute_rows(e)?;Ok((rows[0].token,rows[0].logits))
+     }
+-    pub fn execute_rows(&mut self,e:wire::Expectation)->Result<Vec<wire::RowResult<'_>>> {
++    pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
+         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
+         let i=self.identity;
+-        if e.rows.is_empty() || e.rows.len()>if self.shared{8}else{1} || e.max_active_rows!=8 || e.owner_generation!=i.generation
++        if e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
+             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
+             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
+@@ -79,6 +79,7 @@ pub struct VariableGraphBuffers {
+     pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
+     pub(crate) head:riley_cuda::CudaPreparedGemm,
+     pub(crate) capacity:u32,
++    pub(crate) wire_rows:usize,
+ }
+ impl VariableGraphBuffers {
+     pub fn prepare(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self> {Self::prepare_base(context,capacity,true)}
+@@ -94,14 +95,18 @@ impl VariableGraphBuffers {
+         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
+         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
+         Ok(Self{devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
+-            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
++            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8})
+     }
+-    pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
+-        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},true)?;
+-        s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(8*9*4096*4))?;
+-        s.staging=context.allocate_pinned_host_buffer(2*wire::BATCH_RESULT_BYTES as u64)?;
+-        for bytes in [8*1152,8*98304,wire::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}
+-        s.shared_head=Some(context.prepare_gemm(riley_cuda::CudaGemmConfig::new(8,49152,576,0)?)?);Ok(s)
++    pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
++    pub fn prepare_shared16(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<16>(context,capacity)}
++    fn prepare_shared_rows<const ROWS:usize>(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
++        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(ROWS as u32)},true)?;
++        s.wire_rows=ROWS;
++        s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(ROWS as u64*9*4096*4))?;
++        s.devices[12]=context.allocate_device_buffer(wire::Layout::<ROWS>::REQUEST_BYTES as u64)?;
++        s.staging=context.allocate_pinned_host_buffer(wire::Layout::<ROWS>::STAGING_BYTES as u64)?;
++        for bytes in [ROWS as u64*1152,ROWS as u64*98304,wire::Layout::<ROWS>::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}
++        s.shared_head=Some(context.prepare_gemm(riley_cuda::CudaGemmConfig::new(ROWS as u64,49152,576,0)?)?);Ok(s)
+     }
+     pub fn close(self)->riley_cuda::CudaResult<()> {let a=self.head.close();let b=self.shared_head.map_or(Ok(()),|h|h.close());a.and(b)}
+ }
+@@ -124,18 +129,18 @@ impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelPa
+     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::replay_transfer(self,input)}
+     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_transfer(self,output)}
+ }
+-pub type BorrowedVariableSession<'a> = VariableSession<BorrowedGraphResourceReservation<'a>>;
+-pub type OwnedVariableSession = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>>;
++pub type BorrowedVariableSession<'a,const ROWS:usize=8> = VariableSession<BorrowedGraphResourceReservation<'a>,ROWS>;
++pub type OwnedVariableSession<const ROWS:usize=8> = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>,ROWS>;
+ /// No fields are exposed while the native graph owns parent leases.
+ pub struct VariableModelParents {
+     executor:super::PreparedLlamaBatchExecutor,
+     stream:riley_cuda::CudaStream,
+     scratch:VariableGraphBuffers,
+ }
+-impl VariableSession<BorrowedGraphResourceReservation<'_>> {
++impl<const ROWS:usize> VariableSession<BorrowedGraphResourceReservation<'_>,ROWS> {
+     pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
+ }
+-impl OwnedVariableSession {
++impl<const ROWS:usize> OwnedVariableSession<ROWS> {
+     pub fn close(self)->super::LlamaBatchExecutorResult<()> {
+         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+         let parents=self.graph.close().map_err(cuda)?;
+@@ -148,14 +153,17 @@ impl OwnedVariableSession {
+ impl super::PreparedLlamaBatchExecutor {
+     /// Moves the loaded model and every graph parent into an owned session.
+     /// The native reservation is destroyed before model/stream/scratch release.
+-    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session(context,capacity,false)}
+-    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session(context,capacity,true)}
+-    fn into_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession>{
++    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session::<8>(context,capacity,false)}
++    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session::<8>(context,capacity,true)}
++    pub fn into_owned_variable_shared_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true)}
++    pub fn into_owned_variable_shared16_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true)}
++    fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+-        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
++        if !matches!(ROWS,8|16) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
++        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
+         let mut identity=None;
+         let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
+-            let session=p.executor.prepare_variable_session(&mut p.stream,&mut p.scratch)?;
++            let session=p.executor.prepare_variable_session_rows::<ROWS>(&mut p.stream,&mut p.scratch)?;
+             let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
+         })?;
+         let i=identity.expect("successful recording provides identity");
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index b39bbd7..9973799 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -157,10 +157,11 @@ pub(crate) struct VariableOwnerGeometry {
+ }
+ impl AuthorizedExecution<'_> {
+     #[allow(dead_code)]
+-    pub(crate) fn variable_descriptor_expectation(
++    pub(crate) fn variable_descriptor_expectation(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64],mode:crate::descriptor::ResultMode)->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation>{self.variable_descriptor_expectation_rows::<8>(owner,replay,cookies,mode)}
++    pub(crate) fn variable_descriptor_expectation_rows<const ROWS:usize>(
+         &self, owner: &VariableOwnerGeometry, replay: u64, cookies: &[u64],
+         mode: crate::descriptor::ResultMode,
+-    ) -> crate::descriptor::Result<crate::descriptor::variable_wire::Expectation> {
++    ) -> crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<ROWS>> {
+         use crate::descriptor::{Error, BlockOwnership, shape_progress::{Progress, InputStage}, variable_wire::{self, Row, Expectation}};
+         let bad = || Error { field: "scheduler V3 authority", reason: "incompatible live reservation or owner geometry" };
+         let prefill = self.plan.prefill_items();
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index 49b47ab..e2b1561 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -31,6 +31,8 @@ pub enum ExecutionShapePolicy {
+     /// Alternates ready classes after dispatch; never mixes them in one plan.
+     /// This is a host contract only; GPU support must be checked separately.
+     VariablePrefillDecodeN,
++    /// Variable prefill and up to sixteen decode rows on a prepared V4 session.
++    VariablePrefillDecode16,
+ }
+ 
+ /// All host-memory, work, and KV promises enforced by one scheduler.
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 2169afe..bc31a95 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -647,7 +647,7 @@ thread_local! {
+ #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+ enum DownloadedLlamaOutput {
+     Logits(Vec<u8>),
+-    ValidatedLogits { logits:Vec<u8>, argmax:[u32;8] },
++    ValidatedLogits { logits:Vec<u8>, argmax:[u32;16] },
+     GreedyTokens(Vec<u32>),
+ }
+ 
+@@ -2134,21 +2134,21 @@ pub fn execute_llama_iteration_multi_graph(
+ /// Executes V3 single-request work on a prepared retained reservation. Caller
+ /// must confirm the runtime commit after successful scheduler settlement.
+ #[cfg(feature = "cuda")]
+-pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_session::VariableGraph>(
++pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_session::VariableGraph,const ROWS:usize>(
+     authority:&crate::AuthorizedExecution<'_>,
+-    executor:&mut riley_runtime::llama::variable_session::VariableSession<G>,
++    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,ROWS>,
+ ) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+     let id=authority.plan().iteration_id();
+     let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,
+         IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
+     let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+     let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+-    if prepared.output_count>8{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
+-    let mut argmax=[0u32;8];
++    if prepared.output_count>ROWS || ROWS>16{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
++    let mut argmax=[0u32;16];
+     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+-        catalog_digest:identity.catalog_digest,max_active_rows:8,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+-    let expectation=match authority.variable_descriptor_expectation(&owner,replay,&cookies,crate::descriptor::ResultMode::FullLogits) {
++        catalog_digest:identity.catalog_digest,max_active_rows:ROWS as u32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
++    let expectation=match authority.variable_descriptor_expectation_rows::<ROWS>(&owner,replay,&cookies,crate::descriptor::ResultMode::FullLogits) {
+         Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
+     };
+     // Allocate before admission so allocation failure cannot follow GPU mutation.
+@@ -2164,7 +2164,7 @@ mod validated_argmax_routing_tests {
+  use super::*;
+  #[test]
+  fn validated_logits_keep_distinct_dense_argmax_and_full_rows(){
+-  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0]},commit_outputs:vec![]};
++  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},commit_outputs:vec![]};
+   assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),Some(3));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(1)),Some(1));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(2)),None);
+   assert_eq!(d.logits_for_slot(OutputSlot::new(1)).unwrap().len(),8);assert!(d.greedy_token_ids().is_empty());
+   d.output=DownloadedLlamaOutput::Logits(vec![0;16]);assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),None);
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index 9ac4fd6..65447df 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1582,7 +1582,7 @@ impl Scheduler {
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16) {
+             // Alternate classes immediately when both are ready. Neither aging
+             // nor decode subtraction changes the independently bounded prefill chunk.
+             // A NotDispatched abort retains the previous class so a retry cannot
+@@ -1606,7 +1606,7 @@ impl Scheduler {
+                 // Admission capacity is independent of the eight-row V3 wire.
+                 // Ready timestamps already rotate committed decode work and roll
+                 // back on NotDispatched, preserving fairness across batches.
+-                let limit=if self.execution_shape_policy==ExecutionShapePolicy::VariablePrefillDecodeN {8}else{self.config.max_active_sequences};
++                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,_=>self.config.max_active_sequences};
+                 for item in decode.into_iter().take(limit) {
+                     selected.push(Candidate {
+                         request_id: item.request_id,
+@@ -1681,7 +1681,7 @@ impl Scheduler {
+     }
+ 
+     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16) {
+             self.last_dispatched_shape = Some(if inflight.prefill_count == 1 {
+                 WorkKind::Prefill
+             } else {
+@@ -2102,7 +2102,7 @@ impl Scheduler {
+             }
+         }
+         for output in result.outputs() {
+-            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN)
++            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16)
+                 && output.token_id() >= 49_152
+             {
+                 return Err(SchedulerError::InvalidIterationResult {
+@@ -2666,7 +2666,7 @@ fn validate_descriptor(
+     policy: ExecutionShapePolicy,
+     descriptor: &RequestDescriptor,
+ ) -> SchedulerResult<usize> {
+-    if policy == ExecutionShapePolicy::VariablePrefillDecodeN
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16)
+         && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
+         return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
+     }
+@@ -2728,7 +2728,7 @@ fn validate_execution_shape_config(
+     if policy == ExecutionShapePolicy::General {
+         return Ok(());
+     }
+-    if policy == ExecutionShapePolicy::VariablePrefillDecodeN {
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16) {
+         for (valid,field,reason) in [
+             (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
+             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
+diff --git a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+index 620ed43..1d32dfc 100644
+--- a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
++++ b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+@@ -8,22 +8,25 @@ fn read32(f:&mut File)->std::io::Result<u32>{let mut b=[0;4];f.read_exact(&mut b
+ #[test]
+ #[ignore="requires pinned checkpoint and GPU; owned shared scheduler"]
+ fn loaded_shared_scheduler_matches_every_logit()->Result<(),Box<dyn std::error::Error>>{
+-run_shared(4,3,64)
++run_shared::<8>(4,3,64)
+ }
+ #[test]
+ #[ignore="requires pinned checkpoint and GPU; 32 active owners over 8-row dispatch"]
+-fn loaded_32_active_owners_match_every_logit()->Result<(),Box<dyn std::error::Error>>{run_shared(32,32,2048)}
+-fn run_shared(active:usize,request_count:usize,physical:usize)->Result<(),Box<dyn std::error::Error>>{
++fn loaded_32_active_owners_match_every_logit()->Result<(),Box<dyn std::error::Error>>{run_shared::<8>(32,32,2048)}
++#[test]
++#[ignore="requires pinned checkpoint and GPU; 32 active owners over sixteen-row dispatch"]
++fn loaded_32_owners_sixteen_rows_match_every_logit()->Result<(),Box<dyn std::error::Error>>{run_shared::<16>(32,32,2048)}
++fn run_shared<const ROWS:usize>(active:usize,request_count:usize,physical:usize)->Result<(),Box<dyn std::error::Error>>{
+ let root=PathBuf::from(std::env::var_os("RILEY_V3_MODEL_FIXTURE").ok_or("fixture missing")?);let model=LoadedModel::load(PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?).as_path(),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
+ let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let mut requests=vec![];for _ in 0..count{let n=read32(&mut f)?;let mut tokens=vec![];for _ in 0..n{tokens.push(read32(&mut f)?);}requests.push(tokens);}
+ let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
+ let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,physical as usize)?,PreparedLlamaForwardConfig::default());
+-let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=executor.into_owned_variable_shared_session(&context,128)?;
+-let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN)?;
++let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=executor.into_owned_variable_shared_session_rows::<ROWS>(&context,128)?;
++let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,if ROWS==16{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16}else{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN})?;
+ let mut refs=std::collections::BTreeMap::new();for prompt in requests.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
+ let(mut iteration,mut widest,mut checked)=(0u64,0usize,0usize);let mut peak_active=0;
+ loop {
+- iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};peak_active=peak_active.max(scheduler.metrics_snapshot()?.gauges.active_sequences);widest=widest.max(plan.decode_items().len());assert!(plan.decode_items().len()<=8);
++ iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};peak_active=peak_active.max(scheduler.metrics_snapshot()?.gauges.active_sequences);widest=widest.max(plan.decode_items().len());assert!(plan.decode_items().len()<=ROWS);
+  let slots:std::collections::BTreeMap<_,_>=plan.prefill_items().iter().chain(plan.decode_items()).filter_map(|w|w.output_slot().map(|slot|(slot.get(),w.request_id()))).collect();
+  let authority=scheduler.authorize_execution(&plan)?;let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session).unwrap();
+  assert!(session.issue_rows(1).is_err());assert!(session.confirm_scheduler_commit(plan.iteration_id().get()+1).is_err());
+@@ -34,7 +37,7 @@ loop {
+  }
+  drop(authority);let result=downloaded.into_result(&samples,IterationTiming::new(0,0)).unwrap();assert!(scheduler.complete_iteration(&result,iteration*2+1)?.settlement_failures().is_empty());session.confirm_scheduler_commit(plan.iteration_id().get()).unwrap();
+ }
+-assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(8));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
++assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(ROWS));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
+ scheduler.submit(RequestDescriptor::new(vec![17;128],4),iteration*2+1)?;
+ let plan=scheduler.plan_iteration(iteration*2+2)?.into_parts().0.unwrap();let authority=scheduler.authorize_execution(&plan)?;
+ let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session).unwrap();assert_eq!(downloaded.output_count(),0);drop(authority);drop(downloaded);assert!(session.issue_rows(2).is_err());
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 568488c..dbeb402 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2230,7 +2230,9 @@ mod cuda_backend {
+                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
+                 )));
+             }
+-            let shape_policy = if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
++            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
++                riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16
++            } else if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
+                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN
+             } else if config.executor.vllm_smol_p128_batched_prefill()
+                 && config.scheduler.max_active_sequences > 1
+@@ -2448,6 +2450,18 @@ mod cuda_backend {
+         native_fallback_request_local: bool,
+     }
+ 
++    enum VariableServingSession {
++        Eight(riley_runtime::llama::variable_session::OwnedVariableSession),
++        Sixteen(riley_runtime::llama::variable_session::OwnedVariableSession<16>),
++    }
++    impl VariableServingSession {
++        fn execute(&mut self,authority:&riley_scheduler::AuthorizedExecution<'_>)->Result<riley_scheduler::execution::DownloadedLlamaIteration,riley_scheduler::execution::IterationExecutionFailure>{
++            match self {Self::Eight(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g),Self::Sixteen(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)}
++        }
++        fn confirm_scheduler_commit(&mut self,id:u64)->riley_runtime::llama::multi_descriptor::Result<()>{match self{Self::Eight(g)=>g.confirm_scheduler_commit(id),Self::Sixteen(g)=>g.confirm_scheduler_commit(id)}}
++        fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close()}}
++    }
++
+     struct CudaBackend {
+         metadata: ModelMetadata,
+         model: LoadedModel,
+@@ -2457,7 +2471,7 @@ mod cuda_backend {
+         executor: Option<PreparedLlamaBatchExecutor>,
+         decode_graph: Option<riley_runtime::llama::OwnedLlamaDecodeExecutor>,
+         multi_graph: Option<riley_runtime::llama::OwnedLlamaMultiDecodeExecutor>,
+-        variable_graph: Option<riley_runtime::llama::variable_session::OwnedVariableSession>,
++        variable_graph: Option<VariableServingSession>,
+         timer: Option<LlamaIterationCudaTimer>,
+         sampling: SamplingWorkspace,
+         allowed_tokens: Vec<bool>,
+@@ -2556,7 +2570,7 @@ mod cuda_backend {
+                 && resources.executor.config().vllm_smol_p128_batched_prefill()
+                 && resources.scheduler.config().max_active_sequences > 1;
+             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
+-                let graph=if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32)}
++                let graph=if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
+                 (None,None,None,Some(graph))
+             } else if use_multi {
+@@ -3364,7 +3378,7 @@ mod cuda_backend {
+                 if let Some(graph)=self.variable_graph.as_mut() {
+                     let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
+                         .map_err(|e|internal(format!("V3 authority failed: {e}")))?;
+-                    let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,graph)
++                    let downloaded=graph.execute(&authority)
+                         .map_err(|e|internal(format!("V3 iteration failed: {}",e.error())))?;
+                     (downloaded,riley_scheduler::IterationTiming::default(),None)
+                 } else if let Some(graph) = self.multi_graph.as_mut() {
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index 089ac19..b327aa8 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -46,7 +46,7 @@ serve options:
+   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+-  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3
++  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4
+   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+@@ -89,6 +89,7 @@ struct ServeOptions {
+     vllm_smol_p128_graph: bool,
+     shared_rows_graph: bool,
+     variable_graph: bool,
++    variable_graph16: bool,
+     max_weight_bytes: u64,
+     shutdown_on_stdin: bool,
+     c02_runtime_config: Option<C02RuntimeConfigOptions>,
+@@ -366,13 +367,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+             "--graph-numerics" => {
+                 let value = next_value(&mut arguments, "--graph-numerics")?;
+                 let enabled = match value.to_str() {
+-                    Some("existing") => (false, false, false),
+-                    Some("vllm-smol-p128-v1") => (true, false, false),
+-                    Some("shared-smol-p128-v1") => (true, true, false),
+-                    Some("variable-smol-v3") => (false, false, true),
++                    Some("existing") => (false, false, false, false),
++                    Some("vllm-smol-p128-v1") => (true, false, false, false),
++                    Some("shared-smol-p128-v1") => (true, true, false, false),
++                    Some("variable-smol-v3") => (false, false, true, false),
++                    Some("variable-smol-v4") => (false, false, true, true),
+                     _ => {
+                         return Err(
+-                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 or variable-smol-v3".to_owned()
++                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3 or variable-smol-v4".to_owned()
+                         );
+                     }
+                 };
+@@ -504,7 +506,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     )?;
+     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
+ 
+-    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph) = graph_numerics.unwrap_or((false, false, false));
++    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16) = graph_numerics.unwrap_or((false, false, false, false));
+     if (vllm_smol_p128_graph || variable_graph)
+         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
+     {
+@@ -537,6 +539,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         vllm_smol_p128_graph,
+         shared_rows_graph,
+         variable_graph,
++        variable_graph16,
+         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+         shutdown_on_stdin,
+         c02_runtime_config,
+@@ -1063,7 +1066,9 @@ fn run_serve(
+             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+         }
+     };
+-    let executor = if options.variable_graph {
++    let executor = if options.variable_graph16 {
++        executor.with_variable_graph16()
++    } else if options.variable_graph {
+         executor.with_variable_graph()
+     } else if options.shared_rows_graph {
+         executor.with_shared_rows_graph()
+@@ -2930,6 +2935,13 @@ mod tests {
+         values.iter().map(OsString::from)
+     }
+ 
++    #[test]
++    fn variable_v4_cli_selects_sixteen_row_profile_explicitly(){
++        for capacity in ["1","4","8","16","32"] {
++            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v4","--execution-graph-policy","require","--max-active-sequences",capacity,"--batch-token-budget","512","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
++            let super::CliCommand::Serve(options)=result else{panic!("serve")};assert!(options.variable_graph&&options.variable_graph16);
++        }
++    }
+     #[test]
+     fn c02_generation_audit_v2_schema_is_narrow_and_canonical() {
+         let schema: serde_json::Value = serde_json::from_str(include_str!(
+@@ -3868,6 +3880,7 @@ mod tests {
+                 vllm_smol_p128_graph: false,
+                 shared_rows_graph: false,
+                 variable_graph: false,
++                variable_graph16: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4257,6 +4270,7 @@ mod tests {
+                 vllm_smol_p128_graph: false,
+                 shared_rows_graph: false,
+                 variable_graph: false,
++                variable_graph16: false,
+                 max_weight_bytes: 4096,
+                 shutdown_on_stdin: true,
+                 c02_runtime_config: None,
+@@ -4413,6 +4427,7 @@ mod tests {
+                 vllm_smol_p128_graph: false,
+                 shared_rows_graph: false,
+                 variable_graph: false,
++                variable_graph16: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4536,6 +4551,7 @@ mod tests {
+                 vllm_smol_p128_graph: false,
+                 shared_rows_graph: false,
+                 variable_graph: false,
++                variable_graph16: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 078ee18..ae93775 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2743,6 +2743,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_v4_shared(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
++    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
++    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ 
+ RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+diff --git a/kernels/src/decode_shared16_result.cuh b/kernels/src/decode_shared16_result.cuh
+index 898dbe7..744b5cf 100644
+--- a/kernels/src/decode_shared16_result.cuh
++++ b/kernels/src/decode_shared16_result.cuh
+@@ -6,6 +6,7 @@
+ namespace riley_shared16_result {
+ constexpr uint32_t record_bytes=98432,batch_bytes=16*record_bytes;
+ // Each record follows descriptor row order; its output slot is explicit.
++template<uint32_t Magic>
+ __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint32_t* status,uint8_t* bytes){
+  uint32_t row=blockIdx.x,active=m[5];if(active<1||active>16||row>=active)return;
+  auto* shape=m+32+row*416;auto* result=reinterpret_cast<uint32_t*>(bytes+row*record_bytes);
+@@ -22,12 +23,13 @@ __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint3
+  for(int i=0;i<4;++i)result[10+i]=shape[12+i];
+  result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
+  for(int i=0;i<8;++i)result[20+i]=m[16+i];
+- result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=0x33524d52;
++ result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=Magic;
+  }
+ }
++template<uint32_t Magic=0x33524d52>
+ inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const __nv_bfloat16* logits,const uint32_t* status,void* result){
+  if(!metadata||!logits||!status||!result)return cudaErrorInvalidValue;
+  auto e=cudaMemsetAsync(result,0,batch_bytes,stream);if(e!=cudaSuccess)return e;
+- finish<<<16,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
++ finish<Magic><<<16,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
+ }
+ }
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 6a28d2d..1b20767 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2403,3 +2403,10 @@ cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t,void*const*,const voi
+ }
+ 
+ namespace riley_cuda_internal { cudaError_t enqueue_compiled_v3_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept; }
++
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_v4_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
++cudaError_t enqueue_compiled_v4_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v4_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
++}
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 659f5d3..8c4ac93 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1370,7 +1370,7 @@ RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
+     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
+-  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
++  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8&&rows!=16) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "requires shared-row algorithm21 with exact M/N/K and no workspace");
+   *state = RileyCudaCanonicalGemmBf16GraphState{};
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index 768b5d2..b9b5d7d 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -298,6 +298,7 @@ cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t s,void*const* d,const
+ }
+ }
+ 
++template<uint32_t Magic>
+ __global__ void v3_prefill_result_header(const uint32_t* m,uint32_t* result,const uint32_t* publish,const uint32_t* argmax){
+  if(threadIdx.x)return;
+  result[1]=*publish;result[2]=argmax[0];result[3]=argmax[1];
+@@ -305,11 +306,11 @@ __global__ void v3_prefill_result_header(const uint32_t* m,uint32_t* result,cons
+  for(int i=0;i<4;++i)result[10+i]=m[44+i]; // request and reservation cookie
+  result[14]=m[37];result[15]=m[40];result[16]=m[38];result[17]=m[34];
+  result[18]=m[41];result[19]=m[4];for(int i=0;i<8;++i)result[20+i]=m[16+i];
+- result[28]=m[33];result[29]=m[42];result[30]=m[8];result[31]=0x33524d52;
++ result[28]=m[33];result[29]=m[42];result[30]=m[8];result[31]=Magic;
+ }
+ namespace riley_cuda_internal {
+ cudaError_t enqueue_compiled_v3_result_header(cudaStream_t stream,const void* metadata,void* status,const void* publish,const void* argmax) noexcept {
+- v3_prefill_result_header<<<1,32,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<uint32_t*>(status),static_cast<const uint32_t*>(publish),static_cast<const uint32_t*>(argmax));return cudaGetLastError();
++ v3_prefill_result_header<0x33524d52><<<1,32,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<uint32_t*>(status),static_cast<const uint32_t*>(publish),static_cast<const uint32_t*>(argmax));return cudaGetLastError();
+ }
+ }
+ 
+@@ -323,3 +324,20 @@ cudaError_t enqueue_compiled_v3_shared_result(cudaStream_t s,const void* m,const
+  return riley_shared_result::enqueue(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+ }
+ }
++
++#include "decode_shared16_model.cuh"
++#include "decode_shared16_result.cuh"
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_v4_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
++ return enqueue_v3_prefill_model<16>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
++}
++cudaError_t enqueue_compiled_v4_result_header(cudaStream_t stream,const void* metadata,void* status,const void* publish,const void* argmax) noexcept {
++ v3_prefill_result_header<0x34524d52><<<1,32,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<uint32_t*>(status),static_cast<const uint32_t*>(publish),static_cast<const uint32_t*>(argmax));return cudaGetLastError();
++}
++cudaError_t enqueue_compiled_v4_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
++ return riley_shared16_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled);
++}
++cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
++ return riley_shared16_result::enqueue<0x34524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
++}
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 6040509..1d856cd 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -54,6 +54,7 @@ struct RileyCudaGraphResources {
+   uint64_t decode_capacity = 0, decode_physical = 0, decode_vocab = 0;
+   uint32_t multi_bucket=0, multi_physical=0, multi_full=0;
+   bool v3_shared=false;
++  uint32_t variable_rows=8;
+   uint32_t v3_prefill_capacity=0,v3_prefill_physical=0,v3_prefill_context=0;
+ #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+   uint32_t test_replay_fault = 0;
+@@ -336,13 +337,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   // Any attempted replay invalidates the previous result, even preflight errors.
+   r->completion_visible = false;
+   r->last_catalog = 0;
+-  if (r->exec == nullptr || source == nullptr || bytes != (r->v3_prefill_capacity?17536:r->transfer_bytes))
++  if (r->exec == nullptr || source == nullptr || bytes != (r->v3_prefill_capacity?(128+r->variable_rows*1664+4096):r->transfer_bytes))
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
+   if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
+     return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   if(r->v3_prefill_capacity){
+-    if(!valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    if(!(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8)))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
+     if((!r->v3_shared&&value(20)!=1)||value(136)>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
+       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -1187,14 +1188,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+  return status;
+ }
+ 
+-extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
++template<uint32_t Rows>
++static RileyCudaStatus record_variable_shared(
+  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ static_assert(Rows==8||Rows==16,"wire capacity");
++ constexpr uint64_t request_bytes=128+Rows*1664+4096;
+  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+- if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<8||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
++ if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
+     r->graph||r->exec||r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
+-    !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses)||!holds_plan(r,head)||staging->byte_len<1574912)
++    !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses)||!holds_plan(r,head)||staging->byte_len<2*Rows*98432)
+    return reject(error,"V3 recorder lifecycle",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  for(size_t i=0;i<26;++i){if(i==22&&!d[i])continue;
+   if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses))return reject(error,"V3 device parent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -1204,8 +1208,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+   for(size_t j=0;j<26;++j)if(w[i]==d[j])return reject(error,"V3 weight/mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
+- for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],8*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+- if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>8192*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=17536||d[17]->byte_len!=1152||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],Rows*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>8192*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=request_bytes||d[17]->byte_len!=1152||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
+  for(size_t i=3;i<273;++i)if(w[i]->byte_len!=sizes[(i-3)%9])return reject(error,"V3 layer weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -1213,34 +1217,34 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+   if(w[i]->byte_len!=1769472)return reject(error,"V3 tiled weight extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t j=0;j<i;++j)if(w[i]==w[j])return reject(error,"V3 tiled weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+- if(d[23]->byte_len!=8*1152||d[24]->byte_len!=8*98304||d[25]->byte_len!=787456)return reject(error,"V3 shared output extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ if(d[23]->byte_len!=Rows*1152||d[24]->byte_len!=Rows*98304||d[25]->byte_len!=Rows*98432)return reject(error,"V3 shared output extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  RileyCudaCanonicalGemmBf16GraphState shared_state{};
+- status=bind_reserved_shared_row_gemm_state(shared_head,r->stream,d[23],w[2],d[24],8,49152,576,&shared_state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++ status=bind_reserved_shared_row_gemm_state(shared_head,r->stream,d[23],w[2],d[24],Rows,49152,576,&shared_state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  RileyCudaCanonicalGemmBf16GraphState state{};
+  status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
+  const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];
+  if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
+- constexpr uint64_t transfer=787456;
++ constexpr uint64_t transfer=Rows*98432;
+  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
+  auto record_shape=[&](uint32_t row_capacity) noexcept {
+   return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
+   auto* host=static_cast<uint8_t*>(staging->host_data);
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+-  auto result=copy(d[16]->device_data,host,17536,cudaMemcpyHostToDevice);
++  auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
+   if(row_capacity==1){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,8*1152,cudaMemcpyDeviceToDevice);
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:enqueue_compiled_v4_shared_model)(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_shared_result(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_result:enqueue_compiled_v4_shared_result)(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
+    return result;
+   }
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:enqueue_compiled_v4_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_result_header:enqueue_compiled_v4_result_header)(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[25]->device_data,d[18]->device_data,128,cudaMemcpyDeviceToDevice);
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(static_cast<uint8_t*>(d[25]->device_data)+128,d[20]->device_data,98304,cudaMemcpyDeviceToDevice);
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
+@@ -1248,6 +1252,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+  },error);};
+  status=record_shape(capacity);
+  if(status==RILEY_CUDA_STATUS_SUCCESS){r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;status=record_shape(1);}
+- if(status==RILEY_CUDA_STATUS_SUCCESS){r->v3_shared=true;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
++ if(status==RILEY_CUDA_STATUS_SUCCESS){r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
+  return status;
+ }
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<8>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
++
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v4_shared(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<16>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
+diff --git a/kernels/src/prefill_shape_model.cuh b/kernels/src/prefill_shape_model.cuh
+index 47297ee..22fd48b 100644
+--- a/kernels/src/prefill_shape_model.cuh
++++ b/kernels/src/prefill_shape_model.cuh
+@@ -7,9 +7,11 @@
+ // Borrowed 30-layer SmolLM2 BF16 prefill sequence. Caller must validate V3 packet,
+ // all allocation extents/aliases and hold the resource ledger until completion.
+ // This enqueues work; it does not authorize scheduler settlement or serving output.
++template<uint32_t WireRows=8>
+ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scratch,const void*const* weights,
+  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
+  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
++ static_assert(WireRows==8||WireRows==16,"wire capacity");
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!publish||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
+@@ -17,7 +19,7 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
+  auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
+  auto shape=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+128);
+  auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
+- auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+13440);
++ auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+(128+WireRows*1664));
+  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
+  riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,reinterpret_cast<const uint32_t*>(metadata)+4);
+  for(int layer=0;layer<30;++layer){int base=3+9*layer;
+diff --git a/kernels/tests/README_shared16.md b/kernels/tests/README_shared16.md
+index 622c66f..2e2df89 100644
+--- a/kernels/tests/README_shared16.md
++++ b/kernels/tests/README_shared16.md
+@@ -8,10 +8,10 @@ The four `decode_shared16*.cuh` headers are independently validated native build
+ 
+ Build with nvcc C++17, `-arch=sm_89 -O3 -Ikernels/src`; the model probe also links `-lcublasLt`. Pass the materialized loaded-RoPE fixture directory (`weights.bin`, `rope.bin`, `requests.bin`) to the model probe; add the second argument `packed` to exercise packed projections. Run compute-sanitizer memcheck and racecheck. These probes require the same pinned CUDA/private-driver environment as the serving campaign.
+ 
+-## Remaining serving integration
++## Serving integration completed in V40
+ 
+-- The Rust V4 wire and native structural parser now exist (see `README_variable_wire16.md`); the graph recorder is still pending. Retain the eight-row baseline. Canonical 16-row input needs128+16*1664+1024*4 = 30848bytes, with token offset26752. The current standalone probe deliberately uses existing prefill token offset13440 in single-row reference setup; that overlapping layout is NOT a serving wire proposal.
+-- Request encoding, identity/digest/max-row checks, zero unused-row validation and result capacities have V4 coverage. Runtime buffers and CPU-validated argmax slot arrays still need integration. A 16-row result is1574912bytes; pinned input/output staging and offsets must be derived, not copied from the eight-row constants.
+-- Bind16-row hidden/logits/head outputs, attention scratch16*9*4096*4, 16-row M16 head leases, mutable alias/extent checks, prefill token reading, compiled native wrappers and resource cleanup. Keep prefill single-request semantics until separately extended.
+-- Connect the scheduler's maximum decode selection to actual prepared execution width. Active16/32 admission and HTTP workers already exist, but current GPU descriptors remain8.
+-- Before performance adoption, run whole Rust-owned GPU32-request correctness, malformed/stale/unused-row fixtures, HTTP cancellation and mixed-context tests, then matched C4/C8/C16/C32 serving against frozen V33/V37 and tuned vLLM. Native parity alone is not sufficient.
++Commit `f09ef11281fbbd9a4f341c3d57c9848ecfac4e1b` connects these building blocks through V4 wire validation, graph resource ownership, M16 head, retained Rust session, sixteen-row scheduler selection and explicit `--graph-numerics variable-smol-v4`. V3 remains available and default selection is unchanged. The standalone probe keeps its historical single-reference metadata setup; V4 serving uses canonical token offset26752 and completion magic0x34524d52.
++
++Whole Rust-owned32-request testing matched all2336 full-vocabulary outputs with maximum16 decode rows. V3 regression2336+224 outputs also matched. Final owned and native recorder memchecks reported zero errors. Native recorder covers partial prefill and active1/2/4/8/9/15/16, cold alias/head rejection, stale-output hiding and cleanup. HTTP32 mixed streaming/nonstreaming, invalid bounds and disconnect recovery passed; all allocations and KV reservations returned to zero.
++
++Round48 measured frozen V40 against V37 and vLLM0.27.1 at client/admission4/8/16/32, fixed and natural mixed lengths, two reversed orders, each96 warmup+384 retained requests. All18432 retained requests completed; all12288 Riley references matched. V40 improves high-concurrency throughput but regresses C4/C8; it is an explicit experimental profile, not a general replacement or vLLM performance win. See the campaign status and Round48 analysis for full latency/throughput results. Further result-transfer/validation and prefill profiling is required; long-run stability remains unqualified.
+diff --git a/kernels/tests/README_variable_wire16.md b/kernels/tests/README_variable_wire16.md
+index 2dc4d9b..da045a3 100644
+--- a/kernels/tests/README_variable_wire16.md
++++ b/kernels/tests/README_variable_wire16.md
+@@ -23,6 +23,10 @@ The native parser is structural only. `valid_prefill_shape_packet` retains V3; `
+ 
+ Run `cargo test -p riley-runtime --lib variable_wire` with `RILEY_V39_WIRE_FIXTURES` set to an output directory. This exports eleven old/new Rust packets. Compile `variable_wire16_packet_test.cpp` with C++17, `-Ikernels/src -fsanitize=address,undefined -fno-omit-frame-pointer`, then pass all eleven fixture paths. Tests include all-byte mutation safety, upper-row aliases, unused records/descriptors, wrong versions/extents, and a maximum1024-token prefill with no descriptor overlap.
+ 
+-## Pending integration; no serving performance claim
++## V40 integration and remaining performance work
+ 
+-The native16 model/result prototype still uses the old single-reference prefill offset/result magic. It is deliberately not connected to this new wire. Production V3 recorder and runtime remain eight-row. Before V4 dispatch, connect canonical token offset26752, result magic0x34524d52, retained transfer sizes/offsets, M16 head and scratch allocation, source digest, scheduler selection, and output slot capacity together. Then rerun native/Rust-owned GPU parity, cleanup/cancellation, and matched serving benchmarks. Do not use V39 CPU evidence as GPU completion or throughput evidence.
++V40 connects the canonical token offset26752, result magic0x34524d52, exact graph extents/aliases, retained transfers, M16 head, source digest, scheduler selection and sixteen output slots. Select it explicitly with `--graph-numerics variable-smol-v4`; V3 remains available. See `README_shared16.md` for GPU/HTTP receipts and the scope of Round48 serving comparisons.
++
++The standalone native16 probe deliberately retains its old reference packet/result format. Its default result template uses the old magic; the compiled V4 serving wrapper explicitly chooses0x34524d52. Do not feed its standalone reference setup into V4 serving.
++
++Round48 found high-concurrency gains but low-concurrency regressions and a remaining vLLM throughput/TPOT gap. V40 is not a completed performance goal. Runtime native intervals include GPU execution, synchronization and host readback; they must not be labeled GPU-only timing. Profile these costs and preserve full correctness/ownership checks in subsequent changes.

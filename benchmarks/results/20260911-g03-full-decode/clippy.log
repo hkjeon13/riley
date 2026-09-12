@@ -1,0 +1,3569 @@
+    Checking riley-cuda v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-cuda)
+warning: item in documentation is missing backticks
+  --> crates/riley-runtime/src/llama/graph_decode_capture_inventory.rs:49:36
+   |
+49 |     /// C07 V1's out-of-place BF16 SiLU from gate projection to activated gate.
+   |                                    ^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+   = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+   |
+49 |     /// C07 V1's out-of-place BF16 `SiLU` from gate projection to activated gate.
+   |                                    ~~~~~~
+
+warning: `riley-runtime` (lib) generated 1 warning (run `cargo clippy --fix --lib -p riley-runtime` to apply 1 suggestion)
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/batch.rs:1081:5
+     |
+1081 | /// RoPE before either path enters native CUDA.
+     |     ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+     = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+     |
+1081 | /// `RoPE` before either path enters native CUDA.
+     |     ~~~~~~
+
+warning: this argument is passed by value, but not consumed in the function body
+  --> crates/riley-cuda/src/graph/borrowed_h2d.rs:41:31
+   |
+41 |     pub fn prepare(resources: BorrowedH2DResources<'a>) -> CudaResult<Self> {
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^ help: consider taking a reference instead: `&BorrowedH2DResources<'a>`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value
+   = note: `-W clippy::needless-pass-by-value` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::needless_pass_by_value)]`
+
+warning: this argument is passed by value, but not consumed in the function body
+  --> crates/riley-cuda/src/graph/borrowed_selected_gemm.rs:47:31
+   |
+47 |     pub fn prepare(resources: BorrowedSelectedGemmResources<'a>) -> CudaResult<Self> {
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider taking a reference instead: `&BorrowedSelectedGemmResources<'a>`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value
+
+warning: this argument is passed by value, but not consumed in the function body
+  --> crates/riley-cuda/src/graph/borrowed_gemm.rs:47:31
+   |
+47 |     pub fn prepare(resources: BorrowedGemmResources<'a>) -> CudaResult<Self> {
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider taking a reference instead: `&BorrowedGemmResources<'a>`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value
+
+warning: this argument is passed by value, but not consumed in the function body
+  --> crates/riley-cuda/src/graph/borrowed_embedding.rs:86:20
+   |
+86 |         resources: BorrowedEmbeddingResources<'a>,
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider taking a reference instead: `&BorrowedEmbeddingResources<'a>`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value
+
+warning: this argument is passed by value, but not consumed in the function body
+  --> crates/riley-cuda/src/graph/borrowed_pointwise.rs:70:20
+   |
+70 |         resources: BorrowedPointwiseResources<'a>,
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider taking a reference instead: `&BorrowedPointwiseResources<'a>`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:159:46
+    |
+159 |     /// One fixed-address, out-of-place BF16 SiLU kernel.
+    |                                              ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+159 |     /// One fixed-address, out-of-place BF16 `SiLU` kernel.
+    |                                              ~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:165:60
+    |
+165 |     /// One fixed-address, out-of-place generic eager BF16 RMSNorm kernel.
+    |                                                            ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+165 |     /// One fixed-address, out-of-place generic eager BF16 `RMSNorm` kernel.
+    |                                                            ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:167:44
+    |
+167 |     /// This is deliberately distinct from SmolLM2 and Fixed37 variants, fused
+    |                                            ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+167 |     /// This is deliberately distinct from `SmolLM2` and Fixed37 variants, fused
+    |                                            ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:168:9
+    |
+168 |     /// RMSNorm, and C07 executor integration.
+    |         ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+168 |     /// `RMSNorm`, and C07 executor integration.
+    |         ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:198:54
+    |
+198 |     /// One fixed-address, out-of-place BF16 indexed RoPE kernel.
+    |                                                      ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+198 |     /// One fixed-address, out-of-place BF16 indexed `RoPE` kernel.
+    |                                                      ~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:233:42
+    |
+233 |     /// One fixed-address canonical BF16 RMSNorm -> cuBLASLt GEMM graph.
+    |                                          ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+233 |     /// One fixed-address canonical BF16 `RMSNorm` -> cuBLASLt GEMM graph.
+    |                                          ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph.rs:235:13
+    |
+235 |     /// The RMSNorm output is the one intentional fixed-allocation dependency
+    |             ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+235 |     /// The `RMSNorm` output is the one intentional fixed-allocation dependency
+    |             ~~~~~~~~~
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:1798:19
+     |
+1798 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphLaunch<'exec>> {
+     |                   ^^^^^   ^^^^^                                          ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+     = note: `-W clippy::needless-lifetimes` implied by `-W clippy::all`
+     = help: to override `-W clippy::all` add `#[allow(clippy::needless_lifetimes)]`
+help: elide the lifetimes
+     |
+1798 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphLaunch<'exec>> {
+1798 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2002:5
+     |
+2002 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+     = note: `-W clippy::missing-errors-doc` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_errors_doc)]`
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2113:5
+     |
+2113 |     pub fn enqueue_h2d(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2151:5
+     |
+2151 |     pub fn end(mut self) -> CudaResult<OwnedCapturedH2DGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2204:5
+     |
+2204 |     pub fn abort(mut self) -> CudaResult<OwnedGraphH2DResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2264:5
+     |
+2264 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphH2DExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2293:5
+     |
+2293 |     pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2344:5
+     |
+2344 | /     pub fn launch_with_source<'exec>(
+2345 | |         &'exec mut self,
+2346 | |         bytes: &[u8],
+2347 | |     ) -> CudaResult<OwnedGraphH2DLaunch<'exec>> {
+     | |_______________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2436:5
+     |
+2436 |     pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2482:5
+     |
+2482 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2624:5
+     |
+2624 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:2699:67
+     |
+2699 | /// By-value owner of one active fixed-address, out-of-place BF16 SiLU CUDA
+     |                                                                   ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+2699 | /// By-value owner of one active fixed-address, out-of-place BF16 `SiLU` CUDA
+     |                                                                   ~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:2724:41
+     |
+2724 |     /// Captures the one immutable BF16 SiLU node.
+     |                                         ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+2724 |     /// Captures the one immutable BF16 `SiLU` node.
+     |                                         ~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2725:5
+     |
+2725 |     pub fn enqueue_silu_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2763:5
+     |
+2763 |     pub fn end(mut self) -> CudaResult<OwnedCapturedSiluBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2807:5
+     |
+2807 |     pub fn abort(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:2842:33
+     |
+2842 | /// By-value fixed-address BF16 SiLU CUDA Graph awaiting instantiate or close.
+     |                                 ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+2842 | /// By-value fixed-address BF16 `SiLU` CUDA Graph awaiting instantiate or close.
+     |                                 ~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2853:5
+     |
+2853 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphSiluBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2879:5
+     |
+2879 |     pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:2896:33
+     |
+2896 | /// By-value fixed-address BF16 SiLU CUDA Graph executable.
+     |                                 ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+2896 | /// By-value fixed-address BF16 `SiLU` CUDA Graph executable.
+     |                                 ~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:2920:40
+     |
+2920 |     /// Replays the fixed-address BF16 SiLU graph once.
+     |                                        ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+2920 |     /// Replays the fixed-address BF16 `SiLU` graph once.
+     |                                        ~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2921:5
+     |
+2921 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:2921:19
+     |
+2921 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                  ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+2921 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'exec>> {
+2921 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:2974:5
+     |
+2974 |     pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3018:5
+     |
+3018 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3144:5
+     |
+3144 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3237:5
+     |
+3237 |     pub fn enqueue_gated_multiply_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3275:5
+     |
+3275 |     pub fn end(mut self) -> CudaResult<OwnedCapturedGatedMultiplyBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3320:5
+     |
+3320 |     pub fn abort(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3369:5
+     |
+3369 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3395:5
+     |
+3395 |     pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:3417:34
+     |
+3417 | /// mutable spans, node updates, SiLU fusion, and model/executor wiring remain
+     |                                  ^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+3417 | /// mutable spans, node updates, `SiLU` fusion, and model/executor wiring remain
+     |                                  ~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3429:5
+     |
+3429 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:3429:19
+     |
+3429 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                           ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+3429 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'exec>> {
+3429 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3472:5
+     |
+3472 |     pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3508:5
+     |
+3508 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3644:5
+     |
+3644 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3737:5
+     |
+3737 |     pub fn enqueue_residual_add_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3775:5
+     |
+3775 |     pub fn end(mut self) -> CudaResult<OwnedCapturedResidualAddBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3820:5
+     |
+3820 |     pub fn abort(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3869:5
+     |
+3869 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphResidualAddBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3895:5
+     |
+3895 |     pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:3917:40
+     |
+3917 | /// mutable spans, node updates, fused RMSNorm, and model/executor wiring stay
+     |                                        ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+3917 | /// mutable spans, node updates, fused `RMSNorm`, and model/executor wiring stay
+     |                                        ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3929:5
+     |
+3929 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:3929:19
+     |
+3929 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                         ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+3929 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'exec>> {
+3929 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:3972:5
+     |
+3972 |     pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4008:5
+     |
+4008 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4096:20
+     |
+4096 | /// canonical BF16 RMSNorm graph lifecycle transition.
+     |                    ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4096 | /// canonical BF16 `RMSNorm` graph lifecycle transition.
+     |                    ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4144:5
+     |
+4144 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4153:64
+     |
+4153 | /// Error from beginning an owned fixed-address canonical BF16 RMSNorm graph
+     |                                                                ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4153 | /// Error from beginning an owned fixed-address canonical BF16 `RMSNorm` graph
+     |                                                                ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4222:5
+     |
+4222 | /// RMSNorm CUDA Graph capture.
+     |     ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4222 | /// `RMSNorm` CUDA Graph capture.
+     |     ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4236:51
+     |
+4236 |     /// Captures the one immutable canonical BF16 RMSNorm node.
+     |                                                   ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4236 |     /// Captures the one immutable canonical BF16 `RMSNorm` node.
+     |                                                   ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4237:5
+     |
+4237 |     pub fn enqueue_canonical_rms_norm_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4276:5
+     |
+4276 |     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalRmsNormBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4321:5
+     |
+4321 |     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4358:43
+     |
+4358 | /// By-value fixed-address canonical BF16 RMSNorm CUDA Graph awaiting
+     |                                           ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4358 | /// By-value fixed-address canonical BF16 `RMSNorm` CUDA Graph awaiting
+     |                                           ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4370:5
+     |
+4370 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4396:5
+     |
+4396 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4415:43
+     |
+4415 | /// By-value fixed-address canonical BF16 RMSNorm CUDA Graph executable.
+     |                                           ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4415 | /// By-value fixed-address canonical BF16 `RMSNorm` CUDA Graph executable.
+     |                                           ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4417:52
+     |
+4417 | /// It replays only the capture-time generic eager RMSNorm input and weight
+     |                                                    ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4417 | /// It replays only the capture-time generic eager `RMSNorm` input and weight
+     |                                                    ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4418:18
+     |
+4418 | /// allocations. SmolLM2 and Fixed37 profiles, fused RMSNorm, C07 executor
+     |                  ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4418 | /// allocations. `SmolLM2` and Fixed37 profiles, fused RMSNorm, C07 executor
+     |                  ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4418:54
+     |
+4418 | /// allocations. SmolLM2 and Fixed37 profiles, fused RMSNorm, C07 executor
+     |                                                      ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4418 | /// allocations. SmolLM2 and Fixed37 profiles, fused `RMSNorm`, C07 executor
+     |                                                      ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+    --> crates/riley-cuda/src/graph.rs:4430:50
+     |
+4430 |     /// Replays the fixed-address canonical BF16 RMSNorm graph once.
+     |                                                  ^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+     |
+4430 |     /// Replays the fixed-address canonical BF16 `RMSNorm` graph once.
+     |                                                  ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4431:5
+     |
+4431 | /     pub fn launch<'exec>(
+4432 | |         &'exec mut self,
+4433 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Launch<'exec>> {
+     | |________________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:4431:19
+     |
+4431 |     pub fn launch<'exec>(
+     |                   ^^^^^
+4432 |         &'exec mut self,
+     |          ^^^^^
+4433 |     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Launch<'exec>> {
+     |                                                          ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+4431 ~     pub fn launch(
+4432 ~         &mut self,
+4433 ~     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4476:5
+     |
+4476 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4512:5
+     |
+4512 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4656:5
+     |
+4656 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4748:5
+     |
+4748 |     pub fn enqueue_bf16_argmax(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4786:5
+     |
+4786 |     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16ArgmaxGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4830:5
+     |
+4830 |     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4877:5
+     |
+4877 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16ArgmaxExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4903:5
+     |
+4903 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4938:5
+     |
+4938 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:4938:19
+     |
+4938 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                    ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+4938 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'exec>> {
+4938 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:4981:5
+     |
+4981 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5015:5
+     |
+5015 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5180:5
+     |
+5180 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5272:5
+     |
+5272 |     pub fn enqueue_bf16_row_gather(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5310:5
+     |
+5310 |     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5355:5
+     |
+5355 |     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5404:5
+     |
+5404 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5430:5
+     |
+5430 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5465:5
+     |
+5465 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:5465:19
+     |
+5465 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                       ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+5465 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'exec>> {
+5465 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5508:5
+     |
+5508 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5542:5
+     |
+5542 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5752:5
+     |
+5752 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5847:5
+     |
+5847 |     pub fn enqueue_bf16_row_gather_argmax(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5889:5
+     |
+5889 |     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5934:5
+     |
+5934 |     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:5983:5
+     |
+5983 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6009:5
+     |
+6009 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6046:5
+     |
+6046 | /     pub fn launch<'exec>(
+6047 | |         &'exec mut self,
+6048 | |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'exec>> {
+     | |_______________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:6046:19
+     |
+6046 |     pub fn launch<'exec>(
+     |                   ^^^^^
+6047 |         &'exec mut self,
+     |          ^^^^^
+6048 |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'exec>> {
+     |                                                         ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+6046 ~     pub fn launch(
+6047 ~         &mut self,
+6048 ~     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6091:5
+     |
+6091 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6127:5
+     |
+6127 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6377:5
+     |
+6377 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6470:5
+     |
+6470 |     pub fn enqueue_bf16_row_gather_argmax_d2h(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6510:5
+     |
+6510 |     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxD2HGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6556:5
+     |
+6556 |     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6603:5
+     |
+6603 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6628:5
+     |
+6628 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6662:5
+     |
+6662 | /     pub fn launch<'exec>(
+6663 | |         &'exec mut self,
+6664 | |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec>> {
+     | |__________________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:6662:19
+     |
+6662 |     pub fn launch<'exec>(
+     |                   ^^^^^
+6663 |         &'exec mut self,
+     |          ^^^^^
+6664 |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HLaunch<'exec>> {
+     |                                                            ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+6662 ~     pub fn launch(
+6663 ~         &mut self,
+6664 ~     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6706:5
+     |
+6706 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6745:5
+     |
+6745 |     pub fn finish(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxD2HCompletion<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:6811:5
+     |
+6811 |     pub fn read_result_bytes(&mut self, destination: &mut [u8]) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+    --> crates/riley-cuda/src/graph.rs:6819:28
+     |
+6819 |           let expected_len = match self.exec.resources.as_ref() {
+     |  ____________________________^
+6820 | |             Some(resources) => resources.pinned_results.byte_len(),
+6821 | |             None => {
+6822 | |                 self.exec.terminal = true;
+...    |
+6828 | |         };
+     | |_________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_match_else
+     = note: `-W clippy::single-match-else` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::single_match_else)]`
+help: try
+     |
+6819 ~         let expected_len = if let Some(resources) = self.exec.resources.as_ref() { resources.pinned_results.byte_len() } else {
+6820 +             self.exec.terminal = true;
+6821 +             return Err(CudaError::invalid_state(
+6822 +                 OPERATION,
+6823 +                 "the graph executable lost its retained pinned result allocation",
+6824 +             ));
+6825 ~         };
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7087:5
+     |
+7087 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7182:5
+     |
+7182 |     pub fn enqueue_indexed_rope_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7220:5
+     |
+7220 |     pub fn end(mut self) -> CudaResult<OwnedCapturedIndexedRopeBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7265:5
+     |
+7265 |     pub fn abort(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7314:5
+     |
+7314 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7340:5
+     |
+7340 |     pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7375:5
+     |
+7375 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:7375:19
+     |
+7375 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'exec>> {
+     |                   ^^^^^   ^^^^^                                                         ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+7375 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'exec>> {
+7375 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7418:5
+     |
+7418 |     pub fn close(mut self) -> CudaResult<OwnedGraphIndexedRopeBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7454:5
+     |
+7454 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7738:5
+     |
+7738 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7851:5
+     |
+7851 |     pub fn enqueue_ragged_paged_kv_cache_write_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7889:5
+     |
+7889 |     pub fn end(mut self) -> CudaResult<OwnedCapturedRaggedPagedKvCacheWriteBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7936:5
+     |
+7936 |     pub fn abort(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:7985:5
+     |
+7985 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8011:5
+     |
+8011 |     pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8047:5
+     |
+8047 | /     pub fn launch<'exec>(
+8048 | |         &'exec mut self,
+8049 | |     ) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec>> {
+     | |_______________________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:8047:19
+     |
+8047 |     pub fn launch<'exec>(
+     |                   ^^^^^
+8048 |         &'exec mut self,
+     |          ^^^^^
+8049 |     ) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec>> {
+     |                                                                 ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+8047 ~     pub fn launch(
+8048 ~         &mut self,
+8049 ~     ) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8092:5
+     |
+8092 |     pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8129:5
+     |
+8129 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8433:5
+     |
+8433 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8546:5
+     |
+8546 |     pub fn enqueue_grouped_ragged_paged_attention_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8584:5
+     |
+8584 |     pub fn end(mut self) -> CudaResult<OwnedCapturedGroupedRaggedPagedAttentionBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8631:5
+     |
+8631 |     pub fn abort(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8680:5
+     |
+8680 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8706:5
+     |
+8706 |     pub fn close(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8743:5
+     |
+8743 | /     pub fn launch<'exec>(
+8744 | |         &'exec mut self,
+8745 | |     ) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'exec>> {
+     | |___________________________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:8743:19
+     |
+8743 |     pub fn launch<'exec>(
+     |                   ^^^^^
+8744 |         &'exec mut self,
+     |          ^^^^^
+8745 |     ) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'exec>> {
+     |                                                                     ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+8743 ~     pub fn launch(
+8744 ~         &mut self,
+8745 ~     ) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8788:5
+     |
+8788 |     pub fn close(mut self) -> CudaResult<OwnedGraphGroupedRaggedPagedAttentionBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:8825:5
+     |
+8825 |     pub fn finish(mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9165:5
+     |
+9165 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9260:5
+     |
+9260 |     pub fn enqueue_bf16_embedding_status_d2h(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9300:5
+     |
+9300 |     pub fn end(mut self) -> CudaResult<OwnedCapturedBf16EmbeddingStatusD2HGraph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9346:5
+     |
+9346 |     pub fn abort(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9393:5
+     |
+9393 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HExec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9418:5
+     |
+9418 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9452:5
+     |
+9452 | /     pub fn launch<'exec>(
+9453 | |         &'exec mut self,
+9454 | |     ) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec>> {
+     | |__________________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+    --> crates/riley-cuda/src/graph.rs:9452:19
+     |
+9452 |     pub fn launch<'exec>(
+     |                   ^^^^^
+9453 |         &'exec mut self,
+     |          ^^^^^
+9454 |     ) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec>> {
+     |                                                            ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+     |
+9452 ~     pub fn launch(
+9453 ~         &mut self,
+9454 ~     ) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HLaunch<'_>> {
+     |
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9496:5
+     |
+9496 |     pub fn close(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HResources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9535:5
+     |
+9535 |     pub fn finish(mut self) -> CudaResult<OwnedGraphBf16EmbeddingStatusD2HCompletion<'exec>> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9603:5
+     |
+9603 |     pub fn read_status(&mut self) -> CudaResult<Bf16EmbeddingStatusD2HStatus> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9740:5
+     |
+9740 |     pub fn close(self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9844:5
+     |
+9844 |     pub fn enqueue_canonical_gemm_bf16(&mut self) -> CudaResult<()> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9881:5
+     |
+9881 |     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalGemmBf16Graph> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9925:5
+     |
+9925 |     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+    --> crates/riley-cuda/src/graph.rs:9982:5
+     |
+9982 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Exec> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10007:5
+      |
+10007 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10047:5
+      |
+10047 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'exec>> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+     --> crates/riley-cuda/src/graph.rs:10047:19
+      |
+10047 |     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'exec>> {
+      |                   ^^^^^   ^^^^^                                                           ^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+      |
+10047 -     pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'exec>> {
+10047 +     pub fn launch(&mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Launch<'_>> {
+      |
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10089:5
+      |
+10089 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalGemmBf16Resources> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10136:5
+      |
+10136 |     pub fn finish(mut self) -> CudaResult<()> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:10191:55
+      |
+10191 | /// By-value resource bundle for one C05-22 canonical RMSNorm -> GEMM graph.
+      |                                                       ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+10191 | /// By-value resource bundle for one C05-22 canonical `RMSNorm` -> GEMM graph.
+      |                                                       ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10273:5
+      |
+10273 |     pub fn close(self) -> CudaResult<()> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:10295:56
+      |
+10295 | /// Error from beginning one by-value C05-22 canonical RMSNorm -> GEMM graph
+      |                                                        ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+10295 | /// Error from beginning one by-value C05-22 canonical `RMSNorm` -> GEMM graph
+      |                                                        ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:10389:40
+      |
+10389 |     /// Records exactly canonical BF16 RMSNorm followed by the dependent,
+      |                                        ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+10389 |     /// Records exactly canonical BF16 `RMSNorm` followed by the dependent,
+      |                                        ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10392:5
+      |
+10392 |     pub fn enqueue_canonical_rms_norm_gemm_bf16(&mut self) -> CudaResult<()> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10433:5
+      |
+10433 |     pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalRmsNormGemmBf16Graph> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10480:5
+      |
+10480 |     pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10537:5
+      |
+10537 |     pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Exec> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10562:5
+      |
+10562 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:10581:49
+      |
+10581 | /// By-value executable for one fixed canonical RMSNorm -> GEMM graph.
+      |                                                 ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+10581 | /// By-value executable for one fixed canonical `RMSNorm` -> GEMM graph.
+      |                                                 ~~~~~~~~~
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10602:5
+      |
+10602 | /     pub fn launch<'exec>(
+10603 | |         &'exec mut self,
+10604 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec>> {
+      | |____________________________________________________________________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: the following explicit lifetimes could be elided: 'exec
+     --> crates/riley-cuda/src/graph.rs:10602:19
+      |
+10602 |     pub fn launch<'exec>(
+      |                   ^^^^^
+10603 |         &'exec mut self,
+      |          ^^^^^
+10604 |     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec>> {
+      |                                                              ^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+      |
+10602 ~     pub fn launch(
+10603 ~         &mut self,
+10604 ~     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'_>> {
+      |
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10647:5
+      |
+10647 |     pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: docs for function returning `Result` missing `# Errors` section
+     --> crates/riley-cuda/src/graph.rs:10693:5
+      |
+10693 |     pub fn finish(mut self) -> CudaResult<()> {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11133:27
+      |
+11133 |     /// out-of-place BF16 SiLU node.
+      |                           ^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11133 |     /// out-of-place BF16 `SiLU` node.
+      |                           ~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11208:55
+      |
+11208 |     /// selection, fresh input staging, node updates, SiLU fusion, executor
+      |                                                       ^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11208 |     /// selection, fresh input staging, node updates, `SiLU` fusion, executor
+      |                                                       ~~~~~~
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11224:10
+      |
+11224 |     ) -> Result<OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError>
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphGatedMultiplyBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphGatedMultiplyBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+      = note: `-W clippy::result-large-err` implied by `-W clippy::all`
+      = help: to override `-W clippy::all` add `#[allow(clippy::result_large_err)]`
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11304:10
+      |
+11304 |     ) -> Result<OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError> {
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphResidualAddBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphResidualAddBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11360:37
+      |
+11360 |     /// out-of-place canonical BF16 RMSNorm node.
+      |                                     ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11360 |     /// out-of-place canonical BF16 `RMSNorm` node.
+      |                                     ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11366:26
+      |
+11366 |     /// profile-specific SmolLM2 and Fixed37 RMSNorm, fused RMSNorm, C07
+      |                          ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11366 |     /// profile-specific `SmolLM2` and Fixed37 RMSNorm, fused RMSNorm, C07
+      |                          ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11366:46
+      |
+11366 |     /// profile-specific SmolLM2 and Fixed37 RMSNorm, fused RMSNorm, C07
+      |                                              ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11366 |     /// profile-specific SmolLM2 and Fixed37 `RMSNorm`, fused RMSNorm, C07
+      |                                              ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:11366:61
+      |
+11366 |     /// profile-specific SmolLM2 and Fixed37 RMSNorm, fused RMSNorm, C07
+      |                                                             ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+11366 |     /// profile-specific SmolLM2 and Fixed37 RMSNorm, fused `RMSNorm`, C07
+      |                                                             ~~~~~~~~~
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11385:10
+      |
+11385 |       ) -> Result<
+      |  __________^
+11386 | |         OwnedGraphCanonicalRmsNormBf16Capture,
+11387 | |         OwnedGraphCanonicalRmsNormBf16CaptureBeginError,
+11388 | |     > {
+      | |_____^ the `Err`-variant is at least 128 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphCanonicalRmsNormBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphCanonicalRmsNormBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many arguments (8/7)
+     --> crates/riley-cuda/src/graph.rs:11376:5
+      |
+11376 | /     pub fn begin_owned_graph_canonical_rms_norm_bf16_capture(
+11377 | |         self,
+11378 | |         input: CudaDeviceBuffer,
+11379 | |         weight: CudaDeviceBuffer,
+...     |
+11387 | |         OwnedGraphCanonicalRmsNormBf16CaptureBeginError,
+11388 | |     > {
+      | |_____^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+      = note: `-W clippy::too-many-arguments` implied by `-W clippy::all`
+      = help: to override `-W clippy::all` add `#[allow(clippy::too_many_arguments)]`
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11556:10
+      |
+11556 |     ) -> Result<OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError> {
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphBf16RowGatherCaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphBf16RowGatherCaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many arguments (8/7)
+     --> crates/riley-cuda/src/graph.rs:11547:5
+      |
+11547 | /     pub fn begin_owned_graph_bf16_row_gather_capture(
+11548 | |         self,
+11549 | |         input: CudaDeviceBuffer,
+11550 | |         row_indices: CudaDeviceBuffer,
+...     |
+11555 | |         mode: CudaGraphCaptureMode,
+11556 | |     ) -> Result<OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError> {
+      | |_________________________________________________________________________________________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11656:10
+      |
+11656 |     ) -> Result<OwnedGraphBf16RowGatherArgmaxCapture, OwnedGraphBf16RowGatherArgmaxCaptureBeginError>
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 152 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphBf16RowGatherArgmaxCaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphBf16RowGatherArgmaxCaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many arguments (9/7)
+     --> crates/riley-cuda/src/graph.rs:11646:5
+      |
+11646 | /     pub fn begin_owned_graph_bf16_row_gather_argmax_capture(
+11647 | |         self,
+11648 | |         input: CudaDeviceBuffer,
+11649 | |         row_indices: CudaDeviceBuffer,
+...     |
+11655 | |         mode: CudaGraphCaptureMode,
+11656 | |     ) -> Result<OwnedGraphBf16RowGatherArgmaxCapture, OwnedGraphBf16RowGatherArgmaxCaptureBeginError>
+      | |_____________________________________________________________________________________________________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11771:10
+      |
+11771 |       ) -> Result<
+      |  __________^
+11772 | |         OwnedGraphBf16RowGatherArgmaxD2HCapture,
+11773 | |         OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError,
+11774 | |     > {
+      | |_____^ the `Err`-variant is at least 176 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many arguments (10/7)
+     --> crates/riley-cuda/src/graph.rs:11760:5
+      |
+11760 | /     pub fn begin_owned_graph_bf16_row_gather_argmax_d2h_capture(
+11761 | |         self,
+11762 | |         input: CudaDeviceBuffer,
+11763 | |         row_indices: CudaDeviceBuffer,
+...     |
+11773 | |         OwnedGraphBf16RowGatherArgmaxD2HCaptureBeginError,
+11774 | |     > {
+      | |_____^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:11901:10
+      |
+11901 |     ) -> Result<OwnedGraphIndexedRopeBf16Capture, OwnedGraphIndexedRopeBf16CaptureBeginError> {
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 176 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphIndexedRopeBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphIndexedRopeBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many arguments (12/7)
+     --> crates/riley-cuda/src/graph.rs:11888:5
+      |
+11888 | /     pub fn begin_owned_graph_indexed_rope_bf16_capture(
+11889 | |         self,
+11890 | |         input: CudaDeviceBuffer,
+11891 | |         cos: CudaDeviceBuffer,
+...     |
+11900 | |         mode: CudaGraphCaptureMode,
+11901 | |     ) -> Result<OwnedGraphIndexedRopeBf16Capture, OwnedGraphIndexedRopeBf16CaptureBeginError> {
+      | |_____________________________________________________________________________________________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:12023:10
+      |
+12023 |       ) -> Result<
+      |  __________^
+12024 | |         OwnedGraphRaggedPagedKvCacheWriteBf16Capture,
+12025 | |         OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError,
+12026 | |     > {
+      | |_____^ the `Err`-variant is at least 272 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many lines (102/100)
+     --> crates/riley-cuda/src/graph.rs:12008:5
+      |
+12008 | /     pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture(
+12009 | |         self,
+12010 | |         key_source: CudaDeviceBuffer,
+12011 | |         value_source: CudaDeviceBuffer,
+...     |
+12129 | |     }
+      | |_____^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+      = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+      = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:12165:10
+      |
+12165 |       ) -> Result<
+      |  __________^
+12166 | |         OwnedGraphGroupedRaggedPagedAttentionBf16Capture,
+12167 | |         OwnedGraphGroupedRaggedPagedAttentionBf16CaptureBeginError,
+12168 | |     > {
+      | |_____^ the `Err`-variant is at least 272 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphGroupedRaggedPagedAttentionBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphGroupedRaggedPagedAttentionBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many lines (113/100)
+     --> crates/riley-cuda/src/graph.rs:12148:5
+      |
+12148 | /     pub fn begin_owned_graph_grouped_ragged_paged_attention_bf16_capture(
+12149 | |         self,
+12150 | |         query: CudaDeviceBuffer,
+12151 | |         key_pool: CudaDeviceBuffer,
+...     |
+12282 | |     }
+      | |_____^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:12312:10
+      |
+12312 |       ) -> Result<
+      |  __________^
+12313 | |         OwnedGraphBf16EmbeddingStatusD2HCapture,
+12314 | |         OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError,
+12315 | |     > {
+      | |_____^ the `Err`-variant is at least 176 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:12423:10
+      |
+12423 |     ) -> Result<OwnedGraphCanonicalGemmBf16Capture, OwnedGraphCanonicalGemmBf16CaptureBeginError>
+      |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 328 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphCanonicalGemmBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphCanonicalGemmBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:12481:56
+      |
+12481 |     /// Begins one C05-22 fixed-address canonical BF16 RMSNorm -> cuBLASLt
+      |                                                        ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+12481 |     /// Begins one C05-22 fixed-address canonical BF16 `RMSNorm` -> cuBLASLt
+      |                                                        ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:12485:19
+      |
+12485 |     /// canonical RMSNorm input/weight, the one intermediate allocation, GEMM
+      |                   ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+12485 |     /// canonical `RMSNorm` input/weight, the one intermediate allocation, GEMM
+      |                   ~~~~~~~~~
+
+warning: item in documentation is missing backticks
+     --> crates/riley-cuda/src/graph.rs:12487:58
+      |
+12487 |     /// intermediate is supplied exactly once: it is the RMSNorm output and
+      |                                                          ^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+      |
+12487 |     /// intermediate is supplied exactly once: it is the `RMSNorm` output and
+      |                                                          ~~~~~~~~~
+
+warning: the `Err`-variant returned from this function is very large
+     --> crates/riley-cuda/src/graph.rs:12513:10
+      |
+12513 |       ) -> Result<
+      |  __________^
+12514 | |         OwnedGraphCanonicalRmsNormGemmBf16Capture,
+12515 | |         OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError,
+12516 | |     > {
+      | |_____^ the `Err`-variant is at least 376 bytes
+      |
+      = help: try reducing the size of `graph::OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<graph::OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError>`
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: item in documentation is missing backticks
+   --> crates/riley-cuda/src/graph_resources.rs:655:66
+    |
+655 |     /// Replay uses an exact-sized payload: token/position u32, [0,live_blocks] u32,
+    |                                                                  ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#doc_markdown
+help: try
+    |
+655 |     /// Replay uses an exact-sized payload: token/position u32, [`0,live_blocks`] u32,
+    |                                                                  ~~~~~~~~~~~~~~~
+
+warning: `riley-cuda` (lib) generated 216 warnings (run `cargo clippy --fix --lib -p riley-cuda` to apply 55 suggestions)
+    Checking riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-runtime)
+warning: casting `u64` to `u32` may truncate the value
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:658:37
+    |
+658 |     let raw_row_slots = vec![0_u32, SEQUENCE_COUNT as u32, 0, 1, 0];
+    |                                     ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+    = note: `-W clippy::cast-possible-truncation` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_truncation)]`
+help: ... or use `try_from` and handle the error accordingly
+    |
+658 |     let raw_row_slots = vec![0_u32, u32::try_from(SEQUENCE_COUNT), 0, 1, 0];
+    |                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:846:9
+    |
+846 |         _graph_query,
+    |         ^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:811:9
+    |
+811 |         _graph_query,
+    |         ^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+    = note: `-W clippy::used-underscore-binding` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::used_underscore_binding)]`
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:847:9
+    |
+847 |         _graph_key_pool,
+    |         ^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:812:9
+    |
+812 |         _graph_key_pool,
+    |         ^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:848:9
+    |
+848 |         _graph_value_pool,
+    |         ^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:813:9
+    |
+813 |         _graph_value_pool,
+    |         ^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:849:9
+    |
+849 |         _graph_offsets,
+    |         ^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:815:9
+    |
+815 |         _graph_offsets,
+    |         ^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:850:9
+    |
+850 |         _graph_block_ids,
+    |         ^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:816:9
+    |
+816 |         _graph_block_ids,
+    |         ^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:851:9
+    |
+851 |         _graph_valid_tokens,
+    |         ^^^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:817:9
+    |
+817 |         _graph_valid_tokens,
+    |         ^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:852:9
+    |
+852 |         _graph_row_slots,
+    |         ^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:818:9
+    |
+818 |         _graph_row_slots,
+    |         ^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:853:9
+    |
+853 |         _graph_row_positions,
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:819:9
+    |
+819 |         _graph_row_positions,
+    |         ^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:873:5
+    |
+873 |     _stream.close()?;
+    |     ^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_19_gpu.rs:835:9
+    |
+835 |         _stream,
+    |         ^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: this function has too many lines (114/100)
+   --> crates/riley-runtime/tests/graph_decode_c05_capture_capability_evidence_cpu.rs:117:1
+    |
+117 | / fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
+118 | |     let source = production_source();
+119 | |     for token in REQUIRED_PRODUCTION_TOKENS {
+120 | |         assert!(
+...   |
+233 | |     );
+234 | | }
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+    = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: `riley-cuda` (test "graph_c05_19_gpu") generated 10 warnings
+warning: `riley-runtime` (test "graph_decode_c05_capture_capability_evidence_cpu") generated 1 warning
+warning: casting `u64` to `u32` may truncate the value
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:462:37
+    |
+462 |     let raw_row_slots = vec![0_u32, SEQUENCE_COUNT as u32, 1];
+    |                                     ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#cast_possible_truncation
+    = note: `-W clippy::cast-possible-truncation` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_truncation)]`
+help: ... or use `try_from` and handle the error accordingly
+    |
+462 |     let raw_row_slots = vec![0_u32, u32::try_from(SEQUENCE_COUNT), 1];
+    |                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:702:9
+    |
+702 |         _graph_key_source,
+    |         ^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:655:9
+    |
+655 |         _graph_key_source,
+    |         ^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+    = note: `-W clippy::used-underscore-binding` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::used_underscore_binding)]`
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:703:9
+    |
+703 |         _graph_value_source,
+    |         ^^^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:656:9
+    |
+656 |         _graph_value_source,
+    |         ^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:704:9
+    |
+704 |         _graph_offsets,
+    |         ^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:659:9
+    |
+659 |         _graph_offsets,
+    |         ^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:705:9
+    |
+705 |         _graph_block_ids,
+    |         ^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:660:9
+    |
+660 |         _graph_block_ids,
+    |         ^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:706:9
+    |
+706 |         _graph_valid_tokens,
+    |         ^^^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:661:9
+    |
+661 |         _graph_valid_tokens,
+    |         ^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:707:9
+    |
+707 |         _graph_row_slots,
+    |         ^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:662:9
+    |
+662 |         _graph_row_slots,
+    |         ^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:708:9
+    |
+708 |         _graph_row_positions,
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:663:9
+    |
+663 |         _graph_row_positions,
+    |         ^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: used underscore-prefixed binding
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:727:5
+    |
+727 |     _stream.close()?;
+    |     ^^^^^^^
+    |
+note: binding is defined here
+   --> crates/riley-cuda/tests/graph_c05_18_gpu.rs:692:9
+    |
+692 |         _stream,
+    |         ^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#used_underscore_binding
+
+warning: `riley-cuda` (test "graph_c05_18_gpu") generated 9 warnings
+warning: `riley-cuda` (lib test) generated 216 warnings (216 duplicates)
+warning: redundant field names in struct initialization
+   --> crates/riley-runtime/src/llama/executor/dispatch.rs:408:21
+    |
+408 |                     produce_greedy_tokens: produce_greedy_tokens,
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace it with: `produce_greedy_tokens`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_field_names
+    = note: `-W clippy::redundant-field-names` implied by `-W clippy::all`
+    = help: to override `-W clippy::all` add `#[allow(clippy::redundant_field_names)]`
+
+warning: this function has too many lines (507/100)
+   --> crates/riley-cuda/tests/graph_cpu.rs:316:1
+    |
+316 | / fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
+317 | |     fn begin(stream: &mut CudaStream) -> CudaResult<GraphCapture<'_>> {
+318 | |         stream.begin_graph_capture(CudaGraphCaptureMode::ThreadLocal)
+...   |
+899 | | }
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+    = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:325:5
+    |
+325 | /     fn begin_fill<'stream, 'buffer>(
+326 | |         stream: &'stream mut CudaStream,
+327 | |         buffer: &'buffer mut CudaDeviceBuffer,
+328 | |     ) -> CudaResult<GraphFillCapture<'stream, 'buffer>> {
+329 | |         stream.begin_graph_fill_capture(buffer, 16, CudaGraphCaptureMode::ThreadLocal)
+330 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+    = note: `-W clippy::items-after-statements` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::items_after_statements)]`
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:332:5
+    |
+332 | /     fn end_fill<'stream, 'buffer>(
+333 | |         capture: GraphFillCapture<'stream, 'buffer>,
+334 | |     ) -> CudaResult<CapturedGraph<'stream, 'buffer>> {
+335 | |         capture.end()
+336 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:338:5
+    |
+338 | /     fn instantiate_fill<'stream, 'buffer>(
+339 | |         graph: CapturedGraph<'stream, 'buffer>,
+340 | |     ) -> CudaResult<GraphExec<'stream, 'buffer>> {
+341 | |         graph.instantiate()
+342 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:344:5
+    |
+344 | /     fn launch_fill<'exec, 'stream, 'buffer>(
+345 | |         exec: &'exec mut GraphExec<'stream, 'buffer>,
+346 | |     ) -> CudaResult<GraphLaunch<'exec, 'stream, 'buffer>> {
+347 | |         exec.launch()
+348 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:350:5
+    |
+350 | /     fn finish_fill<'exec, 'stream, 'buffer>(
+351 | |         launch: GraphLaunch<'exec, 'stream, 'buffer>,
+352 | |     ) -> CudaResult<()> {
+353 | |         launch.finish()
+354 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:356:5
+    |
+356 | /     fn close_exec<'stream, 'buffer>(exec: GraphExec<'stream, 'buffer>) -> CudaResult<()> {
+357 | |         exec.close()
+358 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:360:5
+    |
+360 | /     fn begin_owned_fill(
+361 | |         stream: CudaStream,
+362 | |         buffer: CudaDeviceBuffer,
+363 | |     ) -> Result<OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError> {
+364 | |         stream.begin_owned_graph_fill_capture(buffer, 16, CudaGraphCaptureMode::ThreadLocal)
+365 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:367:5
+    |
+367 | /     fn end_owned_fill(capture: OwnedGraphFillCapture) -> CudaResult<OwnedCapturedGraph> {
+368 | |         capture.end()
+369 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:371:5
+    |
+371 | /     fn instantiate_owned_fill(graph: OwnedCapturedGraph) -> CudaResult<OwnedGraphExec> {
+372 | |         graph.instantiate()
+373 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:375:5
+    |
+375 | /     fn launch_owned_fill(exec: &mut OwnedGraphExec) -> CudaResult<OwnedGraphLaunch<'_>> {
+376 | |         exec.launch()
+377 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:379:5
+    |
+379 | /     fn finish_owned_fill(launch: OwnedGraphLaunch<'_>) -> CudaResult<()> {
+380 | |         launch.finish()
+381 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:383:5
+    |
+383 | /     fn close_owned_exec(exec: OwnedGraphExec) -> CudaResult<OwnedGraphFillResources> {
+384 | |         exec.close()
+385 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:387:5
+    |
+387 | /     fn begin_owned_h2d(
+388 | |         stream: CudaStream,
+389 | |         source: CudaPinnedHostBuffer,
+390 | |         destination: CudaDeviceBuffer,
+391 | |     ) -> Result<OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError> {
+392 | |         stream.begin_owned_graph_h2d_capture(source, destination, CudaGraphCaptureMode::ThreadLocal)
+393 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:395:5
+    |
+395 | /     fn end_owned_h2d(capture: OwnedGraphH2DCapture) -> CudaResult<OwnedCapturedH2DGraph> {
+396 | |         capture.end()
+397 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:399:5
+    |
+399 | /     fn instantiate_owned_h2d(graph: OwnedCapturedH2DGraph) -> CudaResult<OwnedGraphH2DExec> {
+400 | |         graph.instantiate()
+401 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:403:5
+    |
+403 | /     fn launch_owned_h2d<'exec>(
+404 | |         exec: &'exec mut OwnedGraphH2DExec,
+405 | |         bytes: &[u8],
+406 | |     ) -> CudaResult<OwnedGraphH2DLaunch<'exec>> {
+407 | |         exec.launch_with_source(bytes)
+408 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:410:5
+    |
+410 | /     fn finish_owned_h2d(launch: OwnedGraphH2DLaunch<'_>) -> CudaResult<()> {
+411 | |         launch.finish()
+412 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:414:5
+    |
+414 | /     fn close_owned_h2d(exec: OwnedGraphH2DExec) -> CudaResult<OwnedGraphH2DResources> {
+415 | |         exec.close()
+416 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:418:5
+    |
+418 | /     fn begin_owned_silu_bf16(
+419 | |         stream: CudaStream,
+420 | |         input: CudaDeviceBuffer,
+421 | |         output: CudaDeviceBuffer,
+...   |
+429 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:431:5
+    |
+431 | /     fn end_owned_silu_bf16(
+432 | |         capture: OwnedGraphSiluBf16Capture,
+433 | |     ) -> CudaResult<OwnedCapturedSiluBf16Graph> {
+434 | |         capture.end()
+435 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:437:5
+    |
+437 | /     fn instantiate_owned_silu_bf16(
+438 | |         graph: OwnedCapturedSiluBf16Graph,
+439 | |     ) -> CudaResult<OwnedGraphSiluBf16Exec> {
+440 | |         graph.instantiate()
+441 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:443:5
+    |
+443 | /     fn launch_owned_silu_bf16(
+444 | |         exec: &mut OwnedGraphSiluBf16Exec,
+445 | |     ) -> CudaResult<OwnedGraphSiluBf16Launch<'_>> {
+446 | |         exec.launch()
+447 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:449:5
+    |
+449 | /     fn finish_owned_silu_bf16(launch: OwnedGraphSiluBf16Launch<'_>) -> CudaResult<()> {
+450 | |         launch.finish()
+451 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:453:5
+    |
+453 | /     fn close_owned_silu_bf16(
+454 | |         exec: OwnedGraphSiluBf16Exec,
+455 | |     ) -> CudaResult<OwnedGraphSiluBf16Resources> {
+456 | |         exec.close()
+457 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:459:5
+    |
+459 | /     fn begin_owned_gated_multiply_bf16(
+460 | |         stream: CudaStream,
+461 | |         activated_gate: CudaDeviceBuffer,
+462 | |         up: CudaDeviceBuffer,
+...   |
+473 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:475:5
+    |
+475 | /     fn end_owned_gated_multiply_bf16(
+476 | |         capture: OwnedGraphGatedMultiplyBf16Capture,
+477 | |     ) -> CudaResult<OwnedCapturedGatedMultiplyBf16Graph> {
+478 | |         capture.end()
+479 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:481:5
+    |
+481 | /     fn instantiate_owned_gated_multiply_bf16(
+482 | |         graph: OwnedCapturedGatedMultiplyBf16Graph,
+483 | |     ) -> CudaResult<OwnedGraphGatedMultiplyBf16Exec> {
+484 | |         graph.instantiate()
+485 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:487:5
+    |
+487 | /     fn launch_owned_gated_multiply_bf16(
+488 | |         exec: &mut OwnedGraphGatedMultiplyBf16Exec,
+489 | |     ) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'_>> {
+490 | |         exec.launch()
+491 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:493:5
+    |
+493 | /     fn finish_owned_gated_multiply_bf16(
+494 | |         launch: OwnedGraphGatedMultiplyBf16Launch<'_>,
+495 | |     ) -> CudaResult<()> {
+496 | |         launch.finish()
+497 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:499:5
+    |
+499 | /     fn close_owned_gated_multiply_bf16(
+500 | |         exec: OwnedGraphGatedMultiplyBf16Exec,
+501 | |     ) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+502 | |         exec.close()
+503 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:505:5
+    |
+505 | /     fn begin_owned_residual_add_bf16(
+506 | |         stream: CudaStream,
+507 | |         left: CudaDeviceBuffer,
+508 | |         right: CudaDeviceBuffer,
+...   |
+518 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:520:5
+    |
+520 | /     fn end_owned_residual_add_bf16(
+521 | |         capture: OwnedGraphResidualAddBf16Capture,
+522 | |     ) -> CudaResult<OwnedCapturedResidualAddBf16Graph> {
+523 | |         capture.end()
+524 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:526:5
+    |
+526 | /     fn instantiate_owned_residual_add_bf16(
+527 | |         graph: OwnedCapturedResidualAddBf16Graph,
+528 | |     ) -> CudaResult<OwnedGraphResidualAddBf16Exec> {
+529 | |         graph.instantiate()
+530 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:532:5
+    |
+532 | /     fn launch_owned_residual_add_bf16(
+533 | |         exec: &mut OwnedGraphResidualAddBf16Exec,
+534 | |     ) -> CudaResult<OwnedGraphResidualAddBf16Launch<'_>> {
+535 | |         exec.launch()
+536 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:538:5
+    |
+538 | /     fn finish_owned_residual_add_bf16(
+539 | |         launch: OwnedGraphResidualAddBf16Launch<'_>,
+540 | |     ) -> CudaResult<()> {
+541 | |         launch.finish()
+542 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:544:5
+    |
+544 | /     fn close_owned_residual_add_bf16(
+545 | |         exec: OwnedGraphResidualAddBf16Exec,
+546 | |     ) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+547 | |         exec.close()
+548 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:550:5
+    |
+550 | /     fn begin_owned_canonical_rms_norm_bf16(
+551 | |         stream: CudaStream,
+552 | |         input: CudaDeviceBuffer,
+553 | |         weight: CudaDeviceBuffer,
+...   |
+568 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:570:5
+    |
+570 | /     fn end_owned_canonical_rms_norm_bf16(
+571 | |         capture: OwnedGraphCanonicalRmsNormBf16Capture,
+572 | |     ) -> CudaResult<OwnedCapturedCanonicalRmsNormBf16Graph> {
+573 | |         capture.end()
+574 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:576:5
+    |
+576 | /     fn instantiate_owned_canonical_rms_norm_bf16(
+577 | |         graph: OwnedCapturedCanonicalRmsNormBf16Graph,
+578 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Exec> {
+579 | |         graph.instantiate()
+580 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:582:5
+    |
+582 | /     fn launch_owned_canonical_rms_norm_bf16(
+583 | |         exec: &mut OwnedGraphCanonicalRmsNormBf16Exec,
+584 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Launch<'_>> {
+585 | |         exec.launch()
+586 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:588:5
+    |
+588 | /     fn finish_owned_canonical_rms_norm_bf16(
+589 | |         launch: OwnedGraphCanonicalRmsNormBf16Launch<'_>,
+590 | |     ) -> CudaResult<()> {
+591 | |         launch.finish()
+592 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:594:5
+    |
+594 | /     fn close_owned_canonical_rms_norm_bf16(
+595 | |         exec: OwnedGraphCanonicalRmsNormBf16Exec,
+596 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormBf16Resources> {
+597 | |         exec.close()
+598 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:601:5
+    |
+601 | /     fn begin_owned_canonical_rms_norm_gemm_bf16(
+602 | |         stream: CudaStream,
+603 | |         plan: CudaPreparedGemm,
+604 | |         rms_norm_input: CudaDeviceBuffer,
+...   |
+627 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:629:5
+    |
+629 | /     fn end_owned_canonical_rms_norm_gemm_bf16(
+630 | |         capture: OwnedGraphCanonicalRmsNormGemmBf16Capture,
+631 | |     ) -> CudaResult<OwnedCapturedCanonicalRmsNormGemmBf16Graph> {
+632 | |         capture.end()
+633 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:635:5
+    |
+635 | /     fn instantiate_owned_canonical_rms_norm_gemm_bf16(
+636 | |         graph: OwnedCapturedCanonicalRmsNormGemmBf16Graph,
+637 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Exec> {
+638 | |         graph.instantiate()
+639 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:641:5
+    |
+641 | /     fn launch_owned_canonical_rms_norm_gemm_bf16(
+642 | |         exec: &mut OwnedGraphCanonicalRmsNormGemmBf16Exec,
+643 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'_>> {
+644 | |         exec.launch()
+645 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:647:5
+    |
+647 | /     fn finish_owned_canonical_rms_norm_gemm_bf16(
+648 | |         launch: OwnedGraphCanonicalRmsNormGemmBf16Launch<'_>,
+649 | |     ) -> CudaResult<()> {
+650 | |         launch.finish()
+651 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:653:5
+    |
+653 | /     fn close_owned_canonical_rms_norm_gemm_bf16(
+654 | |         exec: OwnedGraphCanonicalRmsNormGemmBf16Exec,
+655 | |     ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+656 | |         exec.close()
+657 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:659:5
+    |
+659 | /     fn begin_owned_bf16_argmax(
+660 | |         stream: CudaStream,
+661 | |         logits: CudaDeviceBuffer,
+662 | |         results: CudaDeviceBuffer,
+...   |
+671 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:673:5
+    |
+673 | /     fn end_owned_bf16_argmax(
+674 | |         capture: OwnedGraphBf16ArgmaxCapture,
+675 | |     ) -> CudaResult<OwnedCapturedBf16ArgmaxGraph> {
+676 | |         capture.end()
+677 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:679:5
+    |
+679 | /     fn instantiate_owned_bf16_argmax(
+680 | |         graph: OwnedCapturedBf16ArgmaxGraph,
+681 | |     ) -> CudaResult<OwnedGraphBf16ArgmaxExec> {
+682 | |         graph.instantiate()
+683 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:685:5
+    |
+685 | /     fn launch_owned_bf16_argmax(
+686 | |         exec: &mut OwnedGraphBf16ArgmaxExec,
+687 | |     ) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'_>> {
+688 | |         exec.launch()
+689 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:691:5
+    |
+691 | /     fn finish_owned_bf16_argmax(launch: OwnedGraphBf16ArgmaxLaunch<'_>) -> CudaResult<()> {
+692 | |         launch.finish()
+693 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:695:5
+    |
+695 | /     fn close_owned_bf16_argmax(
+696 | |         exec: OwnedGraphBf16ArgmaxExec,
+697 | |     ) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+698 | |         exec.close()
+699 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:701:5
+    |
+701 | /     fn begin_owned_bf16_row_gather(
+702 | |         stream: CudaStream,
+703 | |         input: CudaDeviceBuffer,
+704 | |         row_indices: CudaDeviceBuffer,
+...   |
+719 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:721:5
+    |
+721 | /     fn end_owned_bf16_row_gather(
+722 | |         capture: OwnedGraphBf16RowGatherCapture,
+723 | |     ) -> CudaResult<OwnedCapturedBf16RowGatherGraph> {
+724 | |         capture.end()
+725 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:727:5
+    |
+727 | /     fn instantiate_owned_bf16_row_gather(
+728 | |         graph: OwnedCapturedBf16RowGatherGraph,
+729 | |     ) -> CudaResult<OwnedGraphBf16RowGatherExec> {
+730 | |         graph.instantiate()
+731 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:733:5
+    |
+733 | /     fn launch_owned_bf16_row_gather(
+734 | |         exec: &mut OwnedGraphBf16RowGatherExec,
+735 | |     ) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'_>> {
+736 | |         exec.launch()
+737 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:739:5
+    |
+739 | /     fn finish_owned_bf16_row_gather(launch: OwnedGraphBf16RowGatherLaunch<'_>) -> CudaResult<()> {
+740 | |         launch.finish()
+741 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:743:5
+    |
+743 | /     fn close_owned_bf16_row_gather(
+744 | |         exec: OwnedGraphBf16RowGatherExec,
+745 | |     ) -> CudaResult<OwnedGraphBf16RowGatherResources> {
+746 | |         exec.close()
+747 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:749:5
+    |
+749 | /     fn begin_owned_bf16_row_gather_argmax(
+750 | |         stream: CudaStream,
+751 | |         input: CudaDeviceBuffer,
+752 | |         row_indices: CudaDeviceBuffer,
+...   |
+770 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:772:5
+    |
+772 | /     fn end_owned_bf16_row_gather_argmax(
+773 | |         capture: OwnedGraphBf16RowGatherArgmaxCapture,
+774 | |     ) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxGraph> {
+775 | |         capture.end()
+776 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:778:5
+    |
+778 | /     fn instantiate_owned_bf16_row_gather_argmax(
+779 | |         graph: OwnedCapturedBf16RowGatherArgmaxGraph,
+780 | |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxExec> {
+781 | |         graph.instantiate()
+782 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:784:5
+    |
+784 | /     fn launch_owned_bf16_row_gather_argmax(
+785 | |         exec: &mut OwnedGraphBf16RowGatherArgmaxExec,
+786 | |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'_>> {
+787 | |         exec.launch()
+788 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:790:5
+    |
+790 | /     fn finish_owned_bf16_row_gather_argmax(
+791 | |         launch: OwnedGraphBf16RowGatherArgmaxLaunch<'_>,
+792 | |     ) -> CudaResult<()> {
+793 | |         launch.finish()
+794 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> crates/riley-cuda/tests/graph_cpu.rs:796:5
+    |
+796 | /     fn close_owned_bf16_row_gather_argmax(
+797 | |         exec: OwnedGraphBf16RowGatherArgmaxExec,
+798 | |     ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+799 | |         exec.close()
+800 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_statements
+
+warning: the following explicit lifetimes could be elided: 'exec, 'stream, 'buffer
+   --> crates/riley-cuda/tests/graph_cpu.rs:350:20
+    |
+350 |     fn finish_fill<'exec, 'stream, 'buffer>(
+    |                    ^^^^^  ^^^^^^^  ^^^^^^^
+351 |         launch: GraphLaunch<'exec, 'stream, 'buffer>,
+    |                             ^^^^^  ^^^^^^^  ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+    = note: `-W clippy::needless-lifetimes` implied by `-W clippy::all`
+    = help: to override `-W clippy::all` add `#[allow(clippy::needless_lifetimes)]`
+help: elide the lifetimes
+    |
+350 ~     fn finish_fill(
+351 ~         launch: GraphLaunch<'_, '_, '_>,
+    |
+
+warning: the following explicit lifetimes could be elided: 'stream, 'buffer
+   --> crates/riley-cuda/tests/graph_cpu.rs:356:19
+    |
+356 |     fn close_exec<'stream, 'buffer>(exec: GraphExec<'stream, 'buffer>) -> CudaResult<()> {
+    |                   ^^^^^^^  ^^^^^^^                  ^^^^^^^  ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_lifetimes
+help: elide the lifetimes
+    |
+356 -     fn close_exec<'stream, 'buffer>(exec: GraphExec<'stream, 'buffer>) -> CudaResult<()> {
+356 +     fn close_exec(exec: GraphExec<'_, '_>) -> CudaResult<()> {
+    |
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:464:10
+    |
+464 |     ) -> Result<OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError>
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphGatedMultiplyBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphGatedMultiplyBf16CaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+    = note: `-W clippy::result-large-err` implied by `-W clippy::all`
+    = help: to override `-W clippy::all` add `#[allow(clippy::result_large_err)]`
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:510:10
+    |
+510 |     ) -> Result<OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphResidualAddBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphResidualAddBf16CaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:555:10
+    |
+555 |       ) -> Result<
+    |  __________^
+556 | |         OwnedGraphCanonicalRmsNormBf16Capture,
+557 | |         OwnedGraphCanonicalRmsNormBf16CaptureBeginError,
+558 | |     > {
+    | |_____^ the `Err`-variant is at least 128 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphCanonicalRmsNormBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphCanonicalRmsNormBf16CaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:610:10
+    |
+610 |       ) -> Result<
+    |  __________^
+611 | |         OwnedGraphCanonicalRmsNormGemmBf16Capture,
+612 | |         OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError,
+613 | |     > {
+    | |_____^ the `Err`-variant is at least 376 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:706:10
+    |
+706 |     ) -> Result<OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 128 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphBf16RowGatherCaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphBf16RowGatherCaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: the `Err`-variant returned from this function is very large
+   --> crates/riley-cuda/tests/graph_cpu.rs:755:10
+    |
+755 |     ) -> Result<OwnedGraphBf16RowGatherArgmaxCapture, OwnedGraphBf16RowGatherArgmaxCaptureBeginError>
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 152 bytes
+    |
+    = help: try reducing the size of `riley_cuda::OwnedGraphBf16RowGatherArgmaxCaptureBeginError`, for example by boxing large elements or replacing it with `Box<riley_cuda::OwnedGraphBf16RowGatherArgmaxCaptureBeginError>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+
+warning: this function has too many lines (113/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:970:1
+     |
+970  | / fn owned_fill_graph_owners_move_cold_resources_and_fail_closed_on_uncertain_replay() {
+971  | |     let graph = include_str!("../src/graph.rs");
+972  | |     let ffi = include_str!("../src/ffi.rs");
+...    |
+1088 | |     );
+1089 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (168/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1092:1
+     |
+1092 | / fn owned_h2d_graph_owners_require_fresh_exact_payloads_and_recover_three_resources() {
+1093 | |     let graph = include_str!("../src/graph.rs");
+1094 | |     let ffi = include_str!("../src/ffi.rs");
+1095 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+1271 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (142/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1274:1
+     |
+1274 | / fn owned_bf16_silu_graph_uses_fixed_two_buffer_lifecycle_without_model_wiring() {
+1275 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+1276 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+1277 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+1426 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (151/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1429:1
+     |
+1429 | / fn owned_bf16_gated_multiply_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring() {
+1430 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+1431 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+1432 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+1590 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (148/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1593:1
+     |
+1593 | / fn owned_bf16_residual_add_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring() {
+1594 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+1595 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+1596 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+1751 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (182/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1754:1
+     |
+1754 | / fn owned_canonical_bf16_rms_norm_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring() {
+1755 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+1756 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+1757 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+1946 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (213/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:1949:1
+     |
+1949 | / fn owned_bf16_argmax_graph_uses_fixed_two_buffer_lifecycle_without_c07_mapping() {
+1950 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+1951 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+1952 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+2173 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (217/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:2176:1
+     |
+2176 | / fn owned_bf16_row_gather_graph_uses_fixed_three_buffer_lifecycle_without_c07_mapping() {
+2177 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+2178 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+2179 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+2405 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (188/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:2408:1
+     |
+2408 | / fn owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c07_mapping() {
+2409 | |     let ffi = include_str!("../src/ffi.rs");
+2410 | |     let graph = include_str!("../src/graph.rs");
+...    |
+2605 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (287/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:2608:1
+     |
+2608 | / fn owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_contract() {
+2609 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+2610 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+2611 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+2905 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (261/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:3066:1
+     |
+3066 | / fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
+3067 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+3068 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+3069 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+3335 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (208/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:3338:1
+     |
+3338 | / fn owned_ragged_paged_kv_cache_write_bf16_graph_has_fixed_nine_buffer_lifecycle() {
+3339 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+3340 | |     let ffi = include_str!("../src/ffi.rs");
+3341 | |     let graph = include_str!("../src/graph.rs");
+...    |
+3554 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (210/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:3557:1
+     |
+3557 | / fn owned_grouped_ragged_paged_attention_bf16_graph_has_fixed_nine_buffer_lifecycle() {
+3558 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+3559 | |     let ffi = include_str!("../src/ffi.rs");
+3560 | |     let graph = include_str!("../src/graph.rs");
+...    |
+3775 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (177/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:3778:1
+     |
+3778 | / fn owned_bf16_embedding_status_d2h_graph_has_fixed_validation_receipt_lifecycle() {
+3779 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+3780 | |     let ffi = include_str!("../src/ffi.rs");
+3781 | |     let graph = include_str!("../src/graph.rs");
+...    |
+3963 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (128/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:3966:1
+     |
+3966 | / fn owned_canonical_gemm_graph_has_by_value_plan_and_four_buffer_lifecycle() {
+3967 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+3968 | |     let ffi = include_str!("../src/ffi.rs");
+3969 | |     let gemm = include_str!("../src/gemm.rs");
+...    |
+4100 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (233/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:4103:1
+     |
+4103 | / fn owned_canonical_rms_norm_gemm_graph_has_one_intermediate_and_six_buffer_lifecycle() {
+4104 | |     let header = include_str!("../../../kernels/include/riley_cuda.h");
+4105 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+4106 | |     let native = include_str!("../../../kernels/src/graph.cu");
+...    |
+4344 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (150/100)
+    --> crates/riley-cuda/tests/graph_cpu.rs:4672:1
+     |
+4672 | / fn deferred_close_fifo_is_allocation_free_and_drains_after_physical_capture_end() {
+4673 | |     let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+4674 | |     let native = include_str!("../../../kernels/src/graph.cu");
+4675 | |     let host_runtime = include_str!("../../../kernels/src/host_runtime.cu");
+...    |
+4829 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: `riley-cuda` (test "graph_cpu") generated 92 warnings (run `cargo clippy --fix --test "graph_cpu"` to apply 2 suggestions)
+warning: for loop over a single element
+   --> crates/riley-runtime/src/llama/graph_decode_final_norm_owner.rs:371:9
+    |
+371 | /         for profile in [LlamaRmsNormProfile::FixedContiguous37Balanced] {
+372 | |             assert_eq!(
+373 | |                 make(profile, 1, 64, 1e-5, weight),
+374 | |                 Err(FinalNormBindingMismatch::Profile)
+375 | |             );
+376 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_element_loop
+    = note: `-W clippy::single-element-loop` implied by `-W clippy::all`
+    = help: to override `-W clippy::all` add `#[allow(clippy::single_element_loop)]`
+help: try
+    |
+371 ~         {
+372 +             let profile = LlamaRmsNormProfile::FixedContiguous37Balanced;
+373 +             assert_eq!(
+374 +                 make(profile, 1, 64, 1e-5, weight),
+375 +                 Err(FinalNormBindingMismatch::Profile)
+376 +             );
+377 +         }
+    |
+
+warning: this argument (264 byte) is passed by value, but might be more efficient if passed by reference (limit: 256 byte)
+   --> crates/riley-runtime/src/llama/batch_executor.rs:712:13
+    |
+712 |     packed: LlamaPackedBatchMetadata<'_>,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider passing by reference instead: `&LlamaPackedBatchMetadata<'_>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#large_types_passed_by_value
+    = note: `-W clippy::large-types-passed-by-value` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::large_types_passed_by_value)]`
+
+warning: `riley-runtime` (lib test) generated 4 warnings (1 duplicate) (run `cargo clippy --fix --lib -p riley-runtime --tests` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.35s

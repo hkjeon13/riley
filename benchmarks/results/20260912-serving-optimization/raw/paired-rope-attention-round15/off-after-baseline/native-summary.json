@@ -1,0 +1,200 @@
+{
+  "schema_version": "riley.decode-operator-summary.v1",
+  "performance_claim_eligible": false,
+  "log_sha256": "d8e6f43641d7d072301dd1e167af0e9d8cbab0ab40e66af680b79a3bfa76b6fe",
+  "captures": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 1,
+      "phase": "prefill",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+      "tool_sha256": "893e292d7c3cb911a2e64c8a93b210df087f52aa102948e6f02b521e1e866ffa",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": false,
+      "baseline_source_commit": "a179617070526068b66ba5627ba82a7151da8c64",
+      "baseline_build_sha256": "5576db88790d5a87e976c082df77f985595129b122fde55b2b475ce06e17a4f5"
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 2,
+      "phase": "decode",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+      "tool_sha256": "893e292d7c3cb911a2e64c8a93b210df087f52aa102948e6f02b521e1e866ffa",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": false,
+      "baseline_source_commit": "a179617070526068b66ba5627ba82a7151da8c64",
+      "baseline_build_sha256": "5576db88790d5a87e976c082df77f985595129b122fde55b2b475ce06e17a4f5"
+    }
+  ],
+  "external_event_inventories": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    }
+  ],
+  "whole_graph": {
+    "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+    "performance_claim_eligible": false,
+    "classification": {
+      "source": "position",
+      "prefill_tokens": 128
+    },
+    "graph_inventories": [
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 1,
+        "inventory_status": 0,
+        "nodes": 403,
+        "kernel_nodes": 397,
+        "memcpy_nodes": 6,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 1152
+      },
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 2,
+        "inventory_status": 0,
+        "nodes": 282,
+        "kernel_nodes": 277,
+        "memcpy_nodes": 5,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 0
+      }
+    ],
+    "groups": {
+      "prefill": {
+        "replays": 6,
+        "successful_replays": 6,
+        "capture_ids": [
+          1
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 3025.0,
+            "sum": 18306
+          },
+          "host_staging_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 1948.5,
+            "sum": 12537
+          },
+          "host_launch_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 12526.5,
+            "sum": 80651
+          },
+          "host_wait_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 4607788.5,
+            "sum": 27638826
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 6,
+            "unmeasured_count": 0,
+            "median": 4617295.9805,
+            "sum": 27701983.452
+          }
+        }
+      },
+      "decode": {
+        "replays": 186,
+        "successful_replays": 186,
+        "capture_ids": [
+          2
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 364.0,
+            "sum": 74394
+          },
+          "host_staging_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 1466.0,
+            "sum": 281342
+          },
+          "host_launch_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 4620.0,
+            "sum": 937354
+          },
+          "host_wait_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 940038.0,
+            "sum": 174855977
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 186,
+            "unmeasured_count": 0,
+            "median": 943296.015,
+            "sum": 175337279.851
+          }
+        }
+      }
+    },
+    "failed_replays": 0,
+    "read_records": 192,
+    "projection_groups": [],
+    "unmeasured": [
+      "per_kernel_cuda_time",
+      "Rust_metadata_pack",
+      "request_latency_without_instrumentation"
+    ]
+  },
+  "operator_groups": [],
+  "replay_totals": [],
+  "interpretation": [
+    "CUDA spans include the perturbation from external event nodes; these are not serving performance results.",
+    "Sum is formed per replay before taking its median; failed or missing intervals produce a null replay sum.",
+    "Host wait includes GPU execution and is not added to GPU operator or whole-graph spans.",
+    "One interval encloses the original RoPE/KV and attention calls; no sum of independently measured family medians is used.",
+    "Only the combined family is selectable. Initial norm/embedding/projections/argmax/transfers are unmeasured.",
+    "Position 127 is the batched prefill replay; captured handle IDs bind all decode operator results.",
+    "Different captures/logs require matching binary, workload, GPU and environment receipts for comparison."
+  ]
+}

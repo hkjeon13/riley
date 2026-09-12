@@ -1,0 +1,294 @@
+{
+  "runtime_manifest": {
+    "path": "/tmp/riley-opt-260912/blender-round15/runtime.json",
+    "sha256": "5f84c3641d43e767511ab1c5fd8d19677fc5d64fa7cfd2d2a9f6113af27bbc6c"
+  },
+  "all_relaunched_processes_have_pinned_vendor_maps": true,
+  "host_or_global_configuration_modified": false,
+  "alive_and_listening": true,
+  "commands_and_gui_environment_match": true,
+  "processes": [
+    {
+      "original_pid": 2694511,
+      "port": 9876,
+      "tag": "14b571e22ca34b85adae7ab95207ad4d",
+      "launch_intent": true,
+      "runtime_manifest": {
+        "path": "/tmp/riley-opt-260912/blender-round15/runtime.json",
+        "sha256": "5f84c3641d43e767511ab1c5fd8d19677fc5d64fa7cfd2d2a9f6113af27bbc6c"
+      },
+      "new_pid": 2730220,
+      "start": "84083612",
+      "runtime_mode": "validated_private_compute_and_gl_environment",
+      "driver_runtime": {
+        "ready": true,
+        "private_vendor_files": {
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02": {
+            "sha256": "ff3c3f7269060d284339754dbdaf27ca88225466d165be820ca8e3c0ede0d4aa",
+            "device": "103:02",
+            "inode": 10647969
+          },
+          "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02": {
+            "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4",
+            "device": "103:02",
+            "inode": 10647861
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02": {
+            "sha256": "0bcdfdfb4873050f861e294d99c9fca26cf4b0b59305147131d11aad20d61981",
+            "device": "103:02",
+            "inode": 10647940
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02": {
+            "sha256": "57d031b477d37f182a2c3d3ff0845b42c0e903b5cc1f00ee8a2f057ea75cf89e",
+            "device": "103:02",
+            "inode": 10647963
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02": {
+            "sha256": "cb4e22f2b0668cb1a79aaefdb344f10c2ff0c61a85054df15f4102d8ba518a4e",
+            "device": "103:02",
+            "inode": 10647960
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02": {
+            "sha256": "7e9ea3c9494f5a4c84e59ed0e1c9836e4b250345dc0ec37fafde7449f5bdb291",
+            "device": "103:02",
+            "inode": 10647954
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02": {
+            "sha256": "6b9b16e656b79bf758157b3bdd7edced1431ba8d4242b613acc733f1dcf8f5c0",
+            "device": "103:02",
+            "inode": 10647961
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02": {
+            "sha256": "3aaa689dbd242f4cf9532ae95bedf76affa8562ca759400955659371c8639625",
+            "device": "103:02",
+            "inode": 10647967
+          }
+        },
+        "driver_mappings": [
+          "7ad7f0200000-7ad7f62e0000 r-xp 00000000 103:02 10647969                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02",
+          "7ad7f62e0000-7ad7f64e0000 ---p 060e0000 103:02 10647969                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02",
+          "7ad7f64e0000-7ad7f6811000 r--p 060e0000 103:02 10647969                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02",
+          "7ad7f6811000-7ad7f68dc000 rw-p 06411000 103:02 10647969                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02",
+          "7ad7ff600000-7ad7ff766000 r--p 00000000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad7ff766000-7ad8006ea000 r-xp 00166000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad8006ea000-7ad805095000 r--p 010ea000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad805095000-7ad805096000 ---p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad805096000-7ad8051cb000 r--p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad8051cb000-7ad8051d4000 rw-p 05bca000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+          "7ad85a4d3000-7ad85a4d7000 r--p 00000000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7ad85a4d7000-7ad85a4f0000 r-xp 00004000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7ad85a4f0000-7ad85a4fb000 r--p 0001d000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7ad85a4fb000-7ad85a4fc000 r--p 00027000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7ad85a4fc000-7ad85a4fd000 rw-p 00028000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7ad882a00000-7ad882cab000 r--p 00000000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad882cab000-7ad885d99000 r-xp 002ab000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad885d99000-7ad886c09000 r--p 03399000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad886c09000-7ad886c0a000 ---p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad886c0a000-7ad886de1000 r--p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad886de1000-7ad886eec000 rw-p 043e0000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7ad887000000-7ad887259000 r-xp 00000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad887259000-7ad88727a000 rwxp 00259000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad88727a000-7ad887400000 r-xp 0027a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad887400000-7ad888000000 r-xp 00400000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad888000000-7ad88917b000 r-xp 01000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad88917b000-7ad8892f6000 r--p 0217a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad8892f6000-7ad889359000 rw-p 022f5000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7ad88e4d5000-7ad88e526000 r--p 00000000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e526000-7ad88e583000 r-xp 00051000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e583000-7ad88e5b8000 rwxp 000ae000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e5b8000-7ad88e5b9000 r-xp 000e3000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e5b9000-7ad88e5d9000 r--p 000e4000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e5d9000-7ad88e5f9000 r--p 00103000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e5f9000-7ad88e5fe000 rw-p 00123000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7ad88e881000-7ad88e891000 r--p 00000000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7ad88e891000-7ad88e8f1000 r-xp 00010000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7ad88e8f1000-7ad88e90e000 r--p 00070000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7ad88e90e000-7ad88e914000 r--p 0008c000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7ad88e914000-7ad88e915000 rw-p 00092000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7ad8a0902000-7ad8a0903000 r--p 00000000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7ad8a0903000-7ad8a0905000 r-xp 00001000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7ad8a0905000-7ad8a0906000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7ad8a0906000-7ad8a0907000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7ad8a0907000-7ad8a0908000 rw-p 00004000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02"
+        ],
+        "compute_loaded": true,
+        "all_observed_vendor_mappings_pinned": true
+      }
+    },
+    {
+      "original_pid": 2694607,
+      "port": 9911,
+      "tag": "f08b9d0c532242e48e9036b995a6a10d",
+      "launch_intent": true,
+      "runtime_manifest": {
+        "path": "/tmp/riley-opt-260912/blender-round15/runtime.json",
+        "sha256": "5f84c3641d43e767511ab1c5fd8d19677fc5d64fa7cfd2d2a9f6113af27bbc6c"
+      },
+      "new_pid": 2730294,
+      "start": "84083660",
+      "runtime_mode": "validated_private_compute_and_gl_environment",
+      "driver_runtime": {
+        "ready": true,
+        "private_vendor_files": {
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02": {
+            "sha256": "0bcdfdfb4873050f861e294d99c9fca26cf4b0b59305147131d11aad20d61981",
+            "device": "103:02",
+            "inode": 10647940
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02": {
+            "sha256": "57d031b477d37f182a2c3d3ff0845b42c0e903b5cc1f00ee8a2f057ea75cf89e",
+            "device": "103:02",
+            "inode": 10647963
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02": {
+            "sha256": "cb4e22f2b0668cb1a79aaefdb344f10c2ff0c61a85054df15f4102d8ba518a4e",
+            "device": "103:02",
+            "inode": 10647960
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02": {
+            "sha256": "7e9ea3c9494f5a4c84e59ed0e1c9836e4b250345dc0ec37fafde7449f5bdb291",
+            "device": "103:02",
+            "inode": 10647954
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02": {
+            "sha256": "6b9b16e656b79bf758157b3bdd7edced1431ba8d4242b613acc733f1dcf8f5c0",
+            "device": "103:02",
+            "inode": 10647961
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02": {
+            "sha256": "3aaa689dbd242f4cf9532ae95bedf76affa8562ca759400955659371c8639625",
+            "device": "103:02",
+            "inode": 10647967
+          }
+        },
+        "driver_mappings": [
+          "7817a0c29000-7817a0c2d000 r--p 00000000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7817a0c2d000-7817a0c46000 r-xp 00004000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7817a0c46000-7817a0c51000 r--p 0001d000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7817a0c51000-7817a0c52000 r--p 00027000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7817a0c52000-7817a0c53000 rw-p 00028000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7817a2200000-7817a24ab000 r--p 00000000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a24ab000-7817a5599000 r-xp 002ab000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a5599000-7817a6409000 r--p 03399000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a6409000-7817a640a000 ---p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a640a000-7817a65e1000 r--p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a65e1000-7817a66ec000 rw-p 043e0000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7817a6800000-7817a6a59000 r-xp 00000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a6a59000-7817a6a7a000 rwxp 00259000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a6a7a000-7817a6c00000 r-xp 0027a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a6c00000-7817a7800000 r-xp 00400000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a7800000-7817a897b000 r-xp 01000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a897b000-7817a8af6000 r--p 0217a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817a8af6000-7817a8b59000 rw-p 022f5000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7817adcd5000-7817add26000 r--p 00000000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817add26000-7817add83000 r-xp 00051000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817add83000-7817addb8000 rwxp 000ae000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817addb8000-7817addb9000 r-xp 000e3000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817addb9000-7817addd9000 r--p 000e4000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817addd9000-7817addf9000 r--p 00103000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817addf9000-7817addfe000 rw-p 00123000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7817ae0ac000-7817ae0bc000 r--p 00000000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7817ae0bc000-7817ae11c000 r-xp 00010000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7817ae11c000-7817ae139000 r--p 00070000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7817ae139000-7817ae13f000 r--p 0008c000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7817ae13f000-7817ae140000 rw-p 00092000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "7817c0140000-7817c0141000 r--p 00000000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7817c0141000-7817c0143000 r-xp 00001000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7817c0143000-7817c0144000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7817c0144000-7817c0145000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "7817c0145000-7817c0146000 rw-p 00004000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02"
+        ],
+        "compute_loaded": false,
+        "all_observed_vendor_mappings_pinned": true
+      }
+    },
+    {
+      "original_pid": 2694748,
+      "port": 9887,
+      "tag": "bb01db250a06488482f2ff12df09e7f3",
+      "launch_intent": true,
+      "runtime_manifest": {
+        "path": "/tmp/riley-opt-260912/blender-round15/runtime.json",
+        "sha256": "5f84c3641d43e767511ab1c5fd8d19677fc5d64fa7cfd2d2a9f6113af27bbc6c"
+      },
+      "new_pid": 2730392,
+      "start": "84083711",
+      "runtime_mode": "validated_private_compute_and_gl_environment",
+      "driver_runtime": {
+        "ready": true,
+        "private_vendor_files": {
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02": {
+            "sha256": "0bcdfdfb4873050f861e294d99c9fca26cf4b0b59305147131d11aad20d61981",
+            "device": "103:02",
+            "inode": 10647940
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02": {
+            "sha256": "57d031b477d37f182a2c3d3ff0845b42c0e903b5cc1f00ee8a2f057ea75cf89e",
+            "device": "103:02",
+            "inode": 10647963
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02": {
+            "sha256": "cb4e22f2b0668cb1a79aaefdb344f10c2ff0c61a85054df15f4102d8ba518a4e",
+            "device": "103:02",
+            "inode": 10647960
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02": {
+            "sha256": "7e9ea3c9494f5a4c84e59ed0e1c9836e4b250345dc0ec37fafde7449f5bdb291",
+            "device": "103:02",
+            "inode": 10647954
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02": {
+            "sha256": "6b9b16e656b79bf758157b3bdd7edced1431ba8d4242b613acc733f1dcf8f5c0",
+            "device": "103:02",
+            "inode": 10647961
+          },
+          "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02": {
+            "sha256": "3aaa689dbd242f4cf9532ae95bedf76affa8562ca759400955659371c8639625",
+            "device": "103:02",
+            "inode": 10647967
+          }
+        },
+        "driver_mappings": [
+          "7640e7c0d000-7640e7c11000 r--p 00000000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7640e7c11000-7640e7c2a000 r-xp 00004000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7640e7c2a000-7640e7c35000 r--p 0001d000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7640e7c35000-7640e7c36000 r--p 00027000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "7640e7c36000-7640e7c37000 rw-p 00028000 103:02 10647940                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02",
+          "76410de00000-76410e0ab000 r--p 00000000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "76410e0ab000-764111199000 r-xp 002ab000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "764111199000-764112009000 r--p 03399000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "764112009000-76411200a000 ---p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "76411200a000-7641121e1000 r--p 04209000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "7641121e1000-7641122ec000 rw-p 043e0000 103:02 10647963                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02",
+          "764112400000-764112659000 r-xp 00000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "764112659000-76411267a000 rwxp 00259000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "76411267a000-764112800000 r-xp 0027a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "764112800000-764113400000 r-xp 00400000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "764113400000-76411457b000 r-xp 01000000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "76411457b000-7641146f6000 r--p 0217a000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7641146f6000-764114759000 rw-p 022f5000 103:02 10647960                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02",
+          "7641198d5000-764119926000 r--p 00000000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "764119926000-764119983000 r-xp 00051000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "764119983000-7641199b8000 rwxp 000ae000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7641199b8000-7641199b9000 r-xp 000e3000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7641199b9000-7641199d9000 r--p 000e4000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7641199d9000-7641199f9000 r--p 00103000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "7641199f9000-7641199fe000 rw-p 00123000 103:02 10647954                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02",
+          "764119c81000-764119c91000 r--p 00000000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "764119c91000-764119cf1000 r-xp 00010000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "764119cf1000-764119d0e000 r--p 00070000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "764119d0e000-764119d14000 r--p 0008c000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "764119d14000-764119d15000 rw-p 00092000 103:02 10647961                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02",
+          "76412bd0e000-76412bd0f000 r--p 00000000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "76412bd0f000-76412bd11000 r-xp 00001000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "76412bd11000-76412bd12000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "76412bd12000-76412bd13000 r--p 00003000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02",
+          "76412bd13000-76412bd14000 rw-p 00004000 103:02 10647967                  /tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02"
+        ],
+        "compute_loaded": false,
+        "all_observed_vendor_mappings_pinned": true
+      }
+    }
+  ],
+  "time": 1789183685.5875497
+}

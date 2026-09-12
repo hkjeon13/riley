@@ -1,0 +1,27 @@
+{
+  "phase": "nonstream-first",
+  "requested": 2,
+  "recorded": 2,
+  "response_records": [
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-first-0.json",
+      "sha256": "5d3881ba7e9be9e9ca62efe5a4e54284e2468615c8001ac4f2b93ae279f0eee9"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-first-1.json",
+      "sha256": "c6a30de94c4b366c83d7c0dd68edb53b9c8dd2837f95d56eb45a98fba0de4dd0"
+    }
+  ],
+  "responses_complete": 2,
+  "http_200": 2,
+  "observed_max_request_in_flight": 2,
+  "reference_text_equal": 2,
+  "reference_token_ids_equal": 2,
+  "counts_prompt_usage_and_finish_valid": 2,
+  "parse_errors": 0,
+  "request_errors": 0,
+  "watchdog_timed_out_indices": [],
+  "worker_errors": [],
+  "total_request_deadline_seconds": 120,
+  "performance_claim": false
+}

@@ -1,0 +1,281 @@
+{
+  "schema_version": "riley.fusion-history-model-tests.v1",
+  "passed": true,
+  "build": {
+    "path": "/tmp/riley-opt-260912/fusion-history-build-v1.json",
+    "sha256": "c082c22b292ed2036bb730fcdd75141ea9eb19e28a91a7e4dcc4964b04db5127"
+  },
+  "source_root": "/tmp/riley-opt-260912/fusion-history-source-v1",
+  "source_commit": "4c5bcff43d1942fdd3c396b2b9bcd9df3bf63593",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "0904ed58fec4a6e73af3dc2ffe37016eeb5be04a1ce7486461f186e4bfd4ebb3",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "38548681c8363b9ab88bfb9854cb45487c7cb76de5d9019f5c0c32e83f5ed1ad",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "bb978cc6557be27b844d356ba38cf462b37934dc283e8a89f2df8a3f3a0b132f",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "1bbce29025fc91758f932a4bdbbf36e6e9097805df9c58157a90b18d7000ea9f",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "e815c8eb8d37daf6f48934b9fc9f79fabe87ec117ddfb4e3f5c4c6ad84e47b2e",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "5e1ab391690978a042ce4fb9203a464173ef8bfdac8e458d4b80e0859375c6b9",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67",
+    "crates/riley-server/src/domain.rs": "52190c94a29e429a6809ec80847716c5258af1ec433c0d49563bd4912037e3bb",
+    "crates/riley-server/src/openai.rs": "6541ef35d550e51adf7a99f3a086b2e3b7943673395178785665a0d4dce95c46"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/fusion-history-target-v1/release/riley": "89e57efff9f13af3d5a3b01cfec7359c9eb0788c094320a6c546418cdd10ae67",
+    "/tmp/riley-opt-260912/fusion-history-target-v1/release/riley-profile": "bade9db01a6dd0984d8c92ea89212a912a43d456afb97c3ac3cc04e28aef9ba7"
+  },
+  "references": {
+    "binding": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/native-binding.json",
+      "sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b"
+    },
+    "model_files": {
+      "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+      "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+    }
+  },
+  "fusion_probe": {
+    "path": "/tmp/riley-opt-260912/fusion-history-probe-v1/receipt.json",
+    "sha256": "e6b61b5560fccb56f4d64ee0a8698da4cf174af98181879853dabf7fb274d033"
+  },
+  "runtime": {
+    "receipt": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+      "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+    },
+    "library_directory": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "libcuda": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.1",
+      "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+    },
+    "nvidia_smi": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin/nvidia-smi",
+      "sha256": "22964713c1701fb62b4dd10b26b0dd25d174e100af5bda20c65e0b0fcc32b3be"
+    }
+  },
+  "runtime_environment": {
+    "CUDA_HOME": "/data/riley-g04-cuda13",
+    "CUDAToolkit_ROOT": "/data/riley-g04-cuda13",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "CARGO_TARGET_DIR": "/tmp/riley-opt-260912/fusion-history-target-v1",
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/data/riley-g04-cuda13/lib",
+    "RILEY_REAL_CHECKPOINT": "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "CARGO_TERM_COLOR": "never"
+  },
+  "helpers": {
+    "runner": {
+      "path": "/tmp/riley-opt-260912/qualify_fusion_history_v1.py",
+      "sha256": "8c22c9baf301d60de61eff20c8ffca9daeb5f18e48d608df45b4becba0213ade"
+    },
+    "model_contract": {
+      "path": "/tmp/riley-opt-260912/qualify_batch8.py",
+      "sha256": "ec00a9beabffa94a9d80b69b9eeda8a28cd7ad889202018b385ea7b1761b0790"
+    },
+    "test_contract": {
+      "path": "/tmp/riley-opt-260912/run_batch7_tests.py",
+      "sha256": "aaa5b883d45d7f7587742899a8c1a10c113d25ee616227a63f0e7beb30006570"
+    },
+    "validation": {
+      "path": "/tmp/riley-opt-260912/prepare_batch2_plan.py",
+      "sha256": "0383b45ca63d92e4ceff78f3836d830dd496c6f0a28c940b57e7463c33e559be"
+    },
+    "probe": {
+      "path": "/tmp/riley-opt-260912/batch8_fusion_probe.py",
+      "sha256": "c025519755c4ce73bf61d2aa80a3fc36ec6ae745843fb0995058c312a8b74904"
+    },
+    "builder": {
+      "path": "/tmp/riley-opt-260912/build_fusion_history_candidate_v1.py",
+      "sha256": "57a62964d4d656a8caf873cf98285656486e39ea410d6e395896f041149a54b5"
+    }
+  },
+  "gpu": {
+    "uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "name": "NVIDIA GeForce RTX 4090",
+    "driver_version": "580.173.02",
+    "pci_bus_id": "00000000:01:00.0",
+    "device_index": 0
+  },
+  "checks": [
+    {
+      "name": "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "gpu_test": true,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation.log",
+        "sha256": "e9b769513101dc60be1ebb072e175ade8512f44fb5dd85a81958440d2abf0172"
+      },
+      "counts": {
+        "passed_tests": 1,
+        "failed_tests": 0,
+        "ignored_tests": 0
+      }
+    },
+    {
+      "name": "batched_prefill_exact_logits_status_and_every_decode_kv",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_exact_logits_status_and_every_decode_kv",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "gpu_test": true,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-batched_prefill_exact_logits_status_and_every_decode_kv.log",
+        "sha256": "da84192e97df388c35030bf877caf2a1da52a8230d74377be558449abdfe467c"
+      },
+      "counts": {
+        "passed_tests": 1,
+        "failed_tests": 0,
+        "ignored_tests": 0
+      }
+    },
+    {
+      "name": "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "gpu_test": true,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-owned_graph_smol_p128_o32_reuses_scheduler_block_mappings.log",
+        "sha256": "2dd364c03a7e48cd84b6effb9457b0cf47550caecaa88571969227b426a261bc"
+      },
+      "counts": {
+        "passed_tests": 1,
+        "failed_tests": 0,
+        "ignored_tests": 0
+      }
+    },
+    {
+      "name": "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "gpu_test": true,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings.log",
+        "sha256": "c97a070745ea34ee2f668c37ec425de1b46da7371871072c18e9359a3dc5fc4d"
+      },
+      "counts": {
+        "passed_tests": 1,
+        "failed_tests": 0,
+        "ignored_tests": 0
+      }
+    },
+    {
+      "name": "server-lib-tests",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-server",
+        "--features",
+        "server,bench,cuda",
+        "--lib",
+        "--",
+        "--test-threads=1"
+      ],
+      "gpu_test": false,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-server-lib-tests.log",
+        "sha256": "4566557f7f5a28edb96c5c38bad2a3617ea495ab23ab129948aa607131a646d1"
+      },
+      "counts": {
+        "passed_tests": 72,
+        "failed_tests": 0,
+        "ignored_tests": 2
+      }
+    },
+    {
+      "name": "profile-unit-tests",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-server",
+        "--features",
+        "server,bench,cuda",
+        "--bin",
+        "riley-profile",
+        "--",
+        "--test-threads=1"
+      ],
+      "gpu_test": false,
+      "log": {
+        "path": "/tmp/riley-opt-260912/fusion-history-v1-profile-unit-tests.log",
+        "sha256": "56b039b5f37fe5a9d54915bd27f316076108fa7972bfeecc23d3c437b9a4e85d"
+      },
+      "counts": {
+        "passed_tests": 10,
+        "failed_tests": 0,
+        "ignored_tests": 0
+      }
+    }
+  ],
+  "gpu_tests_executed": true,
+  "http_correctness_qualified": false,
+  "performance_measured": false,
+  "performance_claim_eligible": false
+}

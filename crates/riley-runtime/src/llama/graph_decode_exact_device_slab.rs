@@ -176,6 +176,13 @@ impl PureDecodeGraphV1ExactDeviceSlab {
         })
     }
 
+    /// Borrows this exact owner for the canonical attention capture transaction.
+    /// The transaction compares complete layouts and stages the validated host
+    /// lease before capture; the graph retains this borrow through close.
+    pub(super) fn borrow_for_attention_capture(&mut self) -> &mut CudaDeviceBuffer {
+        &mut self.device
+    }
+
     /// Explicitly frees this device allocation after all bindings have ended.
     pub(crate) fn close(self) -> CudaResult<()> {
         self.device.close()

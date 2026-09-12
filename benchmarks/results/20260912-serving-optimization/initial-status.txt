@@ -1,0 +1,136 @@
+ M benchmarks/competitive/scripts/competitive_common.py
+ M benchmarks/competitive/scripts/tests/test_campaign_contract.py
+ M benchmarks/environment.md
+ M benchmarks/profiling/README.md
+ M benchmarks/schemas/native-profile-run.schema.json
+ M benchmarks/scripts/check_native_profile_pair.py
+ M benchmarks/scripts/preflight.sh
+ M benchmarks/scripts/tests/test_check_native_profile_pair.py
+ M benchmarks/scripts/tests/test_preflight.py
+ M crates/riley-cuda/Cargo.toml
+ M crates/riley-cuda/build.rs
+ M crates/riley-cuda/src/ffi.rs
+ M crates/riley-cuda/src/gemm.rs
+ M crates/riley-cuda/src/graph.rs
+ M crates/riley-cuda/src/lib.rs
+ M crates/riley-cuda/tests/graph_cpu.rs
+ M crates/riley-model/src/checkpoint.rs
+ M crates/riley-model/src/lib.rs
+ M crates/riley-model/src/model.rs
+ M crates/riley-model/src/provenance.rs
+ M crates/riley-model/src/weights.rs
+ M crates/riley-model/tests/checkpoint_loading.rs
+ M crates/riley-runtime/src/cuda_weights.rs
+ M crates/riley-runtime/src/llama/batch_executor.rs
+ M crates/riley-runtime/src/llama/executor/config.rs
+ M crates/riley-runtime/src/llama/executor/dispatch.rs
+ M crates/riley-runtime/src/llama/executor/owner.rs
+ M crates/riley-runtime/src/llama/graph_decode_exact_device_slab.rs
+ M crates/riley-runtime/src/llama/mod.rs
+ M crates/riley-scheduler/src/execution.rs
+ M crates/riley-scheduler/src/lib.rs
+ M crates/riley-server/src/benchmark.rs
+ M crates/riley-server/src/bin/riley-profile.rs
+ M crates/riley-server/src/engine.rs
+ M crates/riley-server/src/main.rs
+ M crates/riley-server/tests/api_gpu.rs
+ M deploy/260904/02-c07-capability-completion.md
+ M deploy/260904/STATUS.md
+ M kernels/CMakeLists.txt
+ M kernels/include/riley_cuda.h
+ M kernels/src/batch_primitives.cu
+ M kernels/src/ffi_internal.hpp
+ M kernels/src/gemm.cu
+ M kernels/src/graph.cu
+ M kernels/src/primitives.cu
+ M kernels/tests/abi_layout.c
+?? benchmarks/plans/
+?? benchmarks/profiling/VLLM_SMOL_P128_PROFILE.md
+?? benchmarks/results/20260910-g01-packed-c07/
+?? benchmarks/results/20260910-g01-parent-layer-native/
+?? benchmarks/results/20260910-g02a-embedding/
+?? benchmarks/results/20260910-g02b-gemm/
+?? benchmarks/results/20260910-g02b-selected-gemm/
+?? benchmarks/results/20260910-g02c-final-norm/
+?? benchmarks/results/20260910-g02c-hf-norm/
+?? benchmarks/results/20260910-g02d-lm-head/
+?? benchmarks/results/20260910-g02e-greedy/
+?? benchmarks/results/20260910-g02f-output/
+?? benchmarks/results/20260910-g02p1-h2d/
+?? benchmarks/results/20260910-g02p2-layer-norm/
+?? benchmarks/results/20260910-g02p3-rope-span/
+?? benchmarks/results/20260910-g02p4-kv-write/
+?? benchmarks/results/20260910-g02p567-pointwise/
+?? benchmarks/results/20260910-g03-hidden-bindings/
+?? benchmarks/results/20260911-g03-attention-chain-verified/
+?? benchmarks/results/20260911-g03-attention-chain/
+?? benchmarks/results/20260911-g03-full-decode/
+?? benchmarks/results/20260911-g03-layer-tail-verified/
+?? benchmarks/results/20260911-g03-layer-tail/
+?? benchmarks/results/20260911-g03-mlp-chain/
+?? benchmarks/results/20260911-g03-mlp-verified/
+?? benchmarks/results/20260911-g03-norm-mlp-verified/
+?? benchmarks/results/20260911-g03-norm-mlp/
+?? benchmarks/results/20260911-g03-norm-qkv-verified/
+?? benchmarks/results/20260911-g03-norm-qkv/
+?? benchmarks/results/20260911-g03-qkv-kv-verified/
+?? benchmarks/results/20260911-g03-qkv-kv/
+?? benchmarks/results/20260911-g03-qkv-rope-verified/
+?? benchmarks/results/20260911-g03-qkv-rope/
+?? benchmarks/results/20260911-g03-registry/
+?? benchmarks/results/20260911-g03-resource-ledger/
+?? benchmarks/results/20260911-g03-swiglu-chain/
+?? benchmarks/results/20260911-g03-swiglu-verified/
+?? benchmarks/results/20260911-g03-transfer-replay-verified/
+?? benchmarks/results/20260911-g03-transfer-replay/
+?? benchmarks/results/20260911-g04-attention-policy/
+?? benchmarks/results/20260911-g04-attention-trace/
+?? benchmarks/results/20260911-g04-compiled-diagnosis/
+?? benchmarks/results/20260911-g04-gui-measurement/
+?? benchmarks/results/20260911-g04-measurement-readiness/
+?? benchmarks/results/20260911-g04-native-profile/
+?? benchmarks/results/20260911-g04-prefix-trace/
+?? benchmarks/results/20260911-g04-qualification-followup/
+?? benchmarks/results/20260911-g04-serving-trace/
+?? benchmarks/results/20260911-g04-tail-trace/
+?? benchmarks/results/20260911-g04-vllm-profile/
+?? benchmarks/results/20260912-serving-optimization/
+?? benchmarks/schemas/vllm-profile-run.schema.json
+?? benchmarks/scripts/check_vllm_profile_run.py
+?? benchmarks/scripts/tests/test_check_vllm_profile_run.py
+?? crates/riley-cuda/src/graph/
+?? crates/riley-cuda/src/graph_resources.rs
+?? crates/riley-cuda/tests/graph_argmax_borrowed_gpu.rs
+?? crates/riley-cuda/tests/graph_embedding_borrowed_gpu.rs
+?? crates/riley-cuda/tests/graph_gemm_borrowed_gpu.rs
+?? crates/riley-cuda/tests/graph_h2d_borrowed_gpu.rs
+?? crates/riley-cuda/tests/graph_kv_parent_gpu.rs
+?? crates/riley-cuda/tests/graph_output_parent_gpu.rs
+?? crates/riley-cuda/tests/graph_parent_attention_gpu.rs
+?? crates/riley-cuda/tests/graph_pointwise_gpu.rs
+?? crates/riley-cuda/tests/graph_rope_span_gpu.rs
+?? crates/riley-cuda/tests/graph_selected_gemm_gpu.rs
+?? crates/riley-cuda/tests/serving_attention_replay_gpu.rs
+?? crates/riley-runtime/src/llama/graph_decode_attention_model_gpu.rs
+?? crates/riley-runtime/src/llama/graph_decode_attention_owner.rs
+?? crates/riley-runtime/src/llama/graph_decode_embedding_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs
+?? crates/riley-runtime/src/llama/graph_decode_final_norm_owner.rs
+?? crates/riley-runtime/src/llama/graph_decode_full.rs
+?? crates/riley-runtime/src/llama/graph_decode_gemm_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_greedy_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_h2d_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_kv_write_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_layer_norm_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_mlp_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_output_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_pointwise_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_resource_audit.rs
+?? crates/riley-runtime/src/llama/graph_decode_rope_audit.rs
+?? crates/riley-runtime/tests/attention_trace_gpu.rs
+?? crates/riley-runtime/tests/prefix_trace_gpu.rs
+?? crates/riley-runtime/tests/tail_trace_gpu.rs
+?? kernels/src/graph_numerics.cu
+?? kernels/src/graph_numerics_precise.cu
+?? kernels/src/graph_resources.cu

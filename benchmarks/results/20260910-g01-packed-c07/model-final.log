@@ -1,0 +1,27 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.30s
+     Running unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a)
+
+running 1 test
+test llama::batch_executor::attention_model_gpu_tests::c07_model_owned_packed_attention_preserves_logits_tokens_and_kv_continuation ... step=1 layer=29 metadata/output SHA256=([1a, 05, a1, 76, f9, 8b, 28, 6e, b6, 14, 39, 97, df, 18, 5d, 48, f3, a5, b4, 3d, ac, 3c, ab, cb, 01, 76, f3, 63, 8c, 93, de, 3e], [34, 66, 15, 61, 2c, 03, e0, 88, 89, 8c, e1, 3d, 46, d3, 5f, 0b, 40, e3, 0c, 7c, b4, 86, ee, f2, c4, 42, a6, fa, 94, f2, e5, bd])
+step=2 layer=29 metadata/output SHA256=([b4, a8, f9, ec, f4, e8, 64, ff, 77, 18, 46, 58, 4c, dd, 3c, 2c, 40, d2, 79, 61, 25, 0f, 5a, f4, 19, fe, 28, a6, f1, 02, aa, d0], [42, 2a, 11, 67, e7, d1, 69, 5e, 46, e5, 4a, 28, 57, 7a, a6, 0b, 24, ea, fb, a8, a9, e7, f4, 7a, a0, 55, c5, ce, f3, 9c, 95, 1d])
+step=3 layer=29 metadata/output SHA256=([11, 51, 32, ea, 9f, c9, a9, 84, 3c, d6, 96, 5b, b3, 3e, ac, 4e, c8, 2d, 87, 32, a6, c9, 8e, ae, 57, 0c, 3b, 45, 60, 6c, 94, 99], [ae, 27, 94, 78, ab, 0a, fa, 26, 73, f7, 3c, d8, 51, 99, fc, e6, f4, dc, 4a, 54, e1, 30, 80, a1, 6d, 46, 65, 56, d6, 42, 7b, 9d])
+model continuation greedy tokens=[808, 2775, 288, 536]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 280 filtered out; finished in 5.89s
+

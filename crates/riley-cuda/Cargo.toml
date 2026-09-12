@@ -112,3 +112,33 @@ required-features = ["cuda"]
 name = "hf_prefill_attention_exact_gpu"
 path = "tests/hf_prefill_attention_exact_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "graph_parent_attention_gpu"
+path = "tests/graph_parent_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_gemm_borrowed_gpu"
+path = "tests/graph_gemm_borrowed_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_selected_gemm_gpu"
+path = "tests/graph_selected_gemm_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_argmax_borrowed_gpu"
+path = "tests/graph_argmax_borrowed_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_output_parent_gpu"
+path = "tests/graph_output_parent_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "graph_h2d_borrowed_gpu"
+path = "tests/graph_h2d_borrowed_gpu.rs"
+required-features = ["cuda"]

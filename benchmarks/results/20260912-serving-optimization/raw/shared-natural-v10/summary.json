@@ -1,0 +1,27 @@
+{
+  "rows": 2048,
+  "passages": 64,
+  "mean_delta_nll_nats": -0.0012510188983662605,
+  "upper95_bootstrap_mean_delta_nll": 0.00035628741783013583,
+  "max_passage_mean_delta_nll": 0.01834888880436246,
+  "full_quality_qualified": false,
+  "confidence_scope": "resampling64text windows; does not guarantee article independence or generalization",
+  "fp32_mean_nll": 3.132042033022106,
+  "original_mean_nll": 3.1325617452460905,
+  "original_mean_kl": 0.0005812161022996875,
+  "original_p99_kl": 0.002676626466617731,
+  "original_top1_matches_fp32": 1990,
+  "shared_mean_nll": 3.1313107263477242,
+  "shared_mean_kl": 0.0005658704923090954,
+  "shared_p99_kl": 0.0025611312705922816,
+  "shared_top1_matches_fp32": 1990,
+  "shared_top1_matches_original": 2012,
+  "checks": {
+    "mean_nll_ci": true,
+    "passage_nll": true,
+    "mean_kl": true,
+    "p99_kl": true,
+    "finite": true
+  },
+  "finite_corpus_screen_pass": true
+}

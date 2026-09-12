@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/batch8_http_token_observation_check.py", line 302, in <module>
+    main()
+    ~~~~^^
+  File "/tmp/riley-opt-260912/batch8_http_token_observation_check.py", line 233, in main
+    build, prerequisites = validate_prerequisites(root, base)
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/batch8_http_token_observation_check.py", line 101, in validate_prerequisites
+    contract.check_artifacts(qualified)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v3.py", line 561, in check_artifacts
+    for item in value.values(): check_artifacts(item)
+                                ~~~~~~~~~~~~~~~^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v3.py", line 561, in check_artifacts
+    for item in value.values(): check_artifacts(item)
+                                ~~~~~~~~~~~~~~~^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v3.py", line 559, in check_artifacts
+    require(evidence(value['path']) == value, 'artifact changed: '+value['path'])
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v3.py", line 47, in require
+    raise ValueError(message)
+ValueError: artifact changed: /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.1

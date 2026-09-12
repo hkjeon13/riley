@@ -1,0 +1,21 @@
+{
+  "purpose": "predeclared finite-corpus numerical noninferiority screen; not final serving or general quality qualification",
+  "documents": 64,
+  "prompt_tokens": 128,
+  "scored_next_tokens_per_document": 32,
+  "forced_history": "dataset ground-truth next tokens, identical for original/shared/FP32",
+  "mean_nll_delta_upper_95_ci_nats": 0.01,
+  "max_document_mean_nll_delta_nats": 0.05,
+  "mean_kl_from_fp32_additive_slack": 0.0001,
+  "p99_kl_from_fp32_additive_slack": 0.001,
+  "bootstrap_unit": "document",
+  "bootstrap_seed": 20260912,
+  "bootstrap_repetitions": 10000,
+  "nonfinite_allowed": 0,
+  "top1_agreement": "diagnostic, not substituted for ground-truth loss",
+  "source_url": "https://huggingface.co/datasets/Salesforce/wikitext/resolve/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-2-raw-v1/validation-00000-of-00001.parquet",
+  "source_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "source_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c",
+  "corpus_sha256": "6967f6407973283f5224e71bbba03418a0fe9c213828eda3d72874b599f1f10d",
+  "selection": "lowest64SHA256keys over validation rows with at least160tokens; one deterministic contiguous window per row; fixed before candidate evaluation"
+}

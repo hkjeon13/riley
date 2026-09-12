@@ -1,0 +1,79 @@
+{
+  "completed": true,
+  "diagnostic_only": true,
+  "performance_claim": false,
+  "requests": 10,
+  "responses": [
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-plain-first-0.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-plain-first-1.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-plain-repeat-0.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-plain-repeat-1.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c1-plain-capacity2-0.json",
+      "status": 200,
+      "text_exact": true,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-token-ids-0.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": false
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-token-ids-1.json",
+      "status": 200,
+      "text_exact": false,
+      "token_ids_exact": false
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c1-token-ids-capacity2-0.json",
+      "status": 200,
+      "text_exact": true,
+      "token_ids_exact": true
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-stream-token-ids-0.json",
+      "status": 200,
+      "text_exact": null,
+      "token_ids_exact": null
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-c2-output-diagnostic-runtime/c2-stream-token-ids-1.json",
+      "status": 200,
+      "text_exact": null,
+      "token_ids_exact": null
+    }
+  ],
+  "gpu_after": {
+    "at_utc": "2026-09-12T00:49:30.628159+00:00",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "temperature_c": 40,
+    "memory_used_mib": 695,
+    "compute_pids": [
+      "4177823",
+      "4177821",
+      "4177822"
+    ]
+  }
+}

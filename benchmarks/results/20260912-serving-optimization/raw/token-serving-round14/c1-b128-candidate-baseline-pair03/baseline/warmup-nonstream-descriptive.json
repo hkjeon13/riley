@@ -1,0 +1,59 @@
+{
+  "schema_version": "riley.http-token-phase.v2",
+  "phase": "warmup-nonstream",
+  "warmup": true,
+  "offered_concurrency": 1,
+  "requested": 5,
+  "attempted": 5,
+  "succeeded": 5,
+  "failed": 0,
+  "unresolved_attempts": 0,
+  "not_started": 0,
+  "reference_matches": 5,
+  "protocol_valid_responses": 5,
+  "observed_max_request_in_flight": 1,
+  "observed_max_call_in_flight": 1,
+  "observed_max_successful_request_in_flight": 1,
+  "phase_started_ns": 837874209885079,
+  "phase_finished_ns": 837874400557280,
+  "completed": true,
+  "duplicate_response_ids": [],
+  "reference_sha256s": [
+    "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+  ],
+  "modes": [
+    "strict"
+  ],
+  "streaming_transports": [
+    false
+  ],
+  "worker_errors": [],
+  "interrupted": null,
+  "correctness_qualified": false,
+  "performance_qualified": false,
+  "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+  "common_wall_started_ns": 837874209943090,
+  "common_wall_finished_ns": 837874400316054,
+  "common_wall_ns": 190372964,
+  "successful_output_tokens": 160,
+  "observed_output_tokens_including_partial_failures": 160,
+  "successful_output_tokens_per_wall_second": 840.4554755999911,
+  "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+  "phase_wall_ns": 190672201,
+  "successful_output_tokens_per_phase_wall_second": 839.1364821975282,
+  "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+  "descriptive_statistics_only": true,
+  "timing_scope": "client delivery; incomplete phases are not comparable",
+  "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+  "e2e_ms": {
+    "samples": 5,
+    "median": 37.898517,
+    "p95": 38.379755,
+    "p99": 38.379755,
+    "max": 38.379755
+  },
+  "token_ttft_ms": null,
+  "token_tpot_ms": null,
+  "first_text_ms": null,
+  "token_itl_ms": null
+}

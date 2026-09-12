@@ -1,0 +1,5 @@
+RILEY_GRAPH prepared=true policy=Require fallback=false gpu_iteration_timing=false numerics=existing
+riley listening on http://127.0.0.1:60807 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=true)
+riley engine backend failure: multi graph iteration failed: invalid runtime iteration output physical_block_count: pool cannot cover fixed maximum reservations
+riley graceful shutdown requested by SIGTERM
+riley: graceful shutdown failed: backend shutdown failed: Internal

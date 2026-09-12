@@ -1,0 +1,36 @@
+{
+  "completed": true,
+  "gpu_tests_executed": false,
+  "performance_measured": false,
+  "time_unix": 1789176606.7302077,
+  "argv": [
+    "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+    "--dump-resource-usage",
+    "/tmp/riley-opt-260912/batch8-fusion-probe/build/attention.o"
+  ],
+  "tool": {
+    "path": "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+    "sha256": "8690c347b8b4ce8ce0491a2fd10de9c99e02ec3600d1c7e101cf27719500a6ad"
+  },
+  "kernel_object": {
+    "path": "/tmp/riley-opt-260912/batch8-fusion-probe/build/attention.o",
+    "sha256": "0ddf03540812da69ab492c34708afc39abc07df724e7fb9743bbe10b96da77c6"
+  },
+  "compile_receipt_sha256": "4adfa1561e00a8f2064f0064e4a6c4f6b04ed5cbb6f30882349fa0916c11ad5c",
+  "resources": {
+    "path": "/tmp/riley-opt-260912/batch8-fusion-probe/resources.txt",
+    "sha256": "01596c872245c3cd4b8b1cc65c01c7330c9542ed527ee6f75137f24d02fb266d"
+  },
+  "fused": {
+    "registers": 48,
+    "shared_bytes": 1280,
+    "stack_bytes": 0,
+    "local_bytes": 0
+  },
+  "accepted_two_warp": {
+    "registers": 55,
+    "shared_bytes": 1024,
+    "stack_bytes": 0,
+    "local_bytes": 0
+  }
+}

@@ -1,0 +1,30 @@
+commit 424b6edec524fac0c67d7126f272f5945e6bf52a
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 01:40:50 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 01:40:50 2026 +0900
+
+    Scale blocking HTTP workers with V3 active admission capacity
+
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index 2939677..089ac19 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -1182,6 +1182,8 @@ fn run_serve(
+     };
+     let server_config = ServerConfig {
+         bind_address,
++        // A blocking SSE response owns its HTTP worker until completion.
++        worker_threads: if options.variable_graph {options.max_active_sequences.max(8)} else {ServerConfig::default().worker_threads},
+         request_limits,
+         ..ServerConfig::default()
+     };
+@@ -4660,7 +4662,7 @@ mod graph_policy_cli_tests {
+ mod graph_numerics_cli_tests {
+     #[test]
+     fn variable_profile_accepts_supported_shared_capacities() {
+-        for capacity in ["1","2","4","8"] {
++        for capacity in ["1","2","4","8","16","32"] {
+             let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v3","--execution-graph-policy","require","--max-active-sequences",capacity,"--batch-token-budget","128","--prefill-chunk-tokens","128"].map(std::ffi::OsString::from));
+             let super::CliCommand::Serve(options)=result.unwrap() else {panic!("serve")};assert!(options.variable_graph);assert_eq!(options.max_active_sequences,capacity.parse::<usize>().unwrap());
+         }

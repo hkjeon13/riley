@@ -1,0 +1,25 @@
+{
+  "check_id": "fixed-07",
+  "kind": "completion",
+  "completed": true,
+  "sampler": "cpu",
+  "spec": {
+    "shape": "o1",
+    "streaming": true,
+    "raw": true
+  },
+  "server_request_id": "cmpl-0000000000000008",
+  "request": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/cpu/fixed-07-request.json",
+    "sha256": "7f0ac12e018a6712f861ef7a4e1d824186bdb1b36e1fdd2fca45d4fbe4321a81"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/cpu/fixed-07-response.json",
+    "sha256": "931d5aba25e3d6dc4d18cb20432024d53ad1048ce9aa951ae265a49a568dc018"
+  },
+  "blank_generated_token_events": 0,
+  "started_ns": 834411810323807,
+  "finished_ns": 834411815696878,
+  "published_ids_match_reference": true,
+  "performance_claim": false
+}

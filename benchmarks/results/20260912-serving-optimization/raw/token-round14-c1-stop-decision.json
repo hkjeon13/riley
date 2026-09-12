@@ -1,0 +1,200 @@
+{
+  "created_unix_seconds": 1789182357.959293,
+  "controller_pid": 2289182,
+  "controller_start": "83585224",
+  "controller_argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/python",
+    "/tmp/riley-opt-260912/run_serving_token_optimization_v4.py",
+    "--plan",
+    "/tmp/riley-opt-260912/token-serving-round14-plan.json",
+    "--output",
+    "/tmp/riley-opt-260912/token-serving-round14",
+    "--measure"
+  ],
+  "supervisor_sha256": "e8f8c374b8b41e7ac5e6e6fff8c2daf956cafe688530df88186ddf7f3f11e2a6",
+  "original_plan_sha256": "199d70ebf61e03d3db00ed557b454632daf2aad934ae56d6c4e027b37de7ed7b",
+  "original_plan_modified": false,
+  "reason": "All five C1 candidate/baseline pairs regress in throughput and median TPOT. Finish all five C1 direct-vLLM pairs, then prioritize diagnosis of rejected candidate.",
+  "observed_candidate_baseline_pairs": [
+    {
+      "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair01/pair.json",
+      "sha256": "5ac08b0061116a1f0f4153e2d192bbc86b0f630b0bb1b4ad7a076e95e65f9248",
+      "ratios": {
+        "throughput_right_over_left": 0.9420069420197442,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9985988918006787,
+          "p95": 0.9993864435846238,
+          "p99": 0.9957359435282637
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0734780946236864,
+          "p95": 1.0732751885143674,
+          "p99": 1.072419480591937
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.074474909369144,
+          "p95": 1.0772466668928318,
+          "p99": 1.0687568415017021
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0620030244877696,
+          "p95": 1.0602638496659618,
+          "p99": 1.062260778311283
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9985988918006787,
+          "p95": 0.9993864435846238,
+          "p99": 0.9957359435282637
+        }
+      }
+    },
+    {
+      "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair02/pair.json",
+      "sha256": "404b4552c3b9c2d1cbec79704b05d2a9bcf88b309ad28c010cc77a1bdb403104",
+      "ratios": {
+        "throughput_right_over_left": 0.942295166811239,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9992404675926393,
+          "p95": 0.9997485690621627,
+          "p99": 1.0007566139553985
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.073052327369031,
+          "p95": 1.0677520810760504,
+          "p99": 1.0697530817460579
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.0742835460837643,
+          "p95": 1.0767676518655709,
+          "p99": 1.068395083483854
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0618755243322422,
+          "p95": 1.0600759418566763,
+          "p99": 1.0596347451168318
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9992404675926393,
+          "p95": 0.9997485690621627,
+          "p99": 1.0007566139553985
+        }
+      }
+    },
+    {
+      "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair03/pair.json",
+      "sha256": "388a2e97451405d1c4b40e3ebba56cb79ee7458eb9bed030eb7986167b93bfee",
+      "ratios": {
+        "throughput_right_over_left": 0.9419615401282841,
+        "token_ttft_ms_right_over_left": {
+          "median": 1.0011722144611324,
+          "p95": 0.9986173528833205,
+          "p99": 1.00169623945405
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.072976420310151,
+          "p95": 1.0695951418668617,
+          "p99": 1.0688993626940833
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073522675097128,
+          "p95": 1.0755019767144778,
+          "p99": 1.0657891184150132
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0621541762986197,
+          "p95": 1.0588612905093386,
+          "p99": 1.0587816521337652
+        },
+        "first_text_ms_right_over_left": {
+          "median": 1.0011722144611324,
+          "p95": 0.9986173528833205,
+          "p99": 1.00169623945405
+        }
+      }
+    },
+    {
+      "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair04/pair.json",
+      "sha256": "c2f7d6a942d9f0f3798f86a91438609b38a8c9b1baa9052dc3d0b788bca301c1",
+      "ratios": {
+        "throughput_right_over_left": 0.9418877312016937,
+        "token_ttft_ms_right_over_left": {
+          "median": 1.0034221186456145,
+          "p95": 1.000355587450212,
+          "p99": 1.0033564625096807
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.0730498193364795,
+          "p95": 1.0650568082520078,
+          "p99": 1.0694999978651831
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073775381378222,
+          "p95": 1.0755042955661387,
+          "p99": 1.0627098060161548
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0624754822721387,
+          "p95": 1.0572136039608613,
+          "p99": 1.0647112428834602
+        },
+        "first_text_ms_right_over_left": {
+          "median": 1.0034221186456145,
+          "p95": 1.000355587450212,
+          "p99": 1.0033564625096807
+        }
+      }
+    },
+    {
+      "path": "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair05/pair.json",
+      "sha256": "3c37bf088cf3ccfd6a1c51c77f2667785ac7d658cdb370ad9b6da73deb0bb7e4",
+      "ratios": {
+        "throughput_right_over_left": 0.942752278869802,
+        "token_ttft_ms_right_over_left": {
+          "median": 0.9994620779495486,
+          "p95": 0.9969341261272615,
+          "p99": 0.9881058909465714
+        },
+        "token_tpot_ms_right_over_left": {
+          "median": 1.072708424274256,
+          "p95": 1.0690773811093437,
+          "p99": 1.0606038360348236
+        },
+        "token_itl_ms_right_over_left": {
+          "median": 1.073406309350462,
+          "p95": 1.0756411310208778,
+          "p99": 1.0671034672129012
+        },
+        "e2e_ms_right_over_left": {
+          "median": 1.0617741317167455,
+          "p95": 1.0567287666724547,
+          "p99": 1.0502027094684132
+        },
+        "first_text_ms_right_over_left": {
+          "median": 0.9994620779495486,
+          "p95": 0.9969341261272615,
+          "p99": 0.9881058909465714
+        }
+      }
+    }
+  ],
+  "stop_after": [
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair01/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair02/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair03/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair04/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair05/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair01/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair02/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair03/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair04/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair05/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair01/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair02/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair03/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair04/pair.json",
+    "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair05/pair.json"
+  ],
+  "signal": "SIGINT to exact owned controller via pidfd; controller performs cleanup and Blender restoration",
+  "overall_campaign_will_remain_incomplete": true,
+  "c2_performance_claim": false
+}

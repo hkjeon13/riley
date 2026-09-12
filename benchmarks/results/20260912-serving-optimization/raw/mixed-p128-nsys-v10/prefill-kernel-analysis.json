@@ -1,0 +1,113 @@
+{
+  "source_sha256": "be0fd1bdaf8b8267afa4c607cbbcb68cae618afdff2eb3b049bd051250e41de8",
+  "diagnostic_nonexclusive": true,
+  "prefill_submissions": 48,
+  "kernel_total_ms": 181.74226999999996,
+  "custom_prefill_projection_ms": 141.549038,
+  "custom_projection_percent": 77.88448884235903,
+  "kernels": [
+    {
+      "name": "void gemm_prefill_m16_vector<(int)576, (int)1536, (int)320, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1440,
+      "total_ms": 44.393232,
+      "mean_us": 30.828633333333336
+    },
+    {
+      "name": "void gemm_prefill_m16_vector<(int)1536, (int)576, (int)0, (int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 2880,
+      "total_ms": 39.637874,
+      "mean_us": 13.763150694444445
+    },
+    {
+      "name": "void gemm_prefill_m16<(int)192, (int)576, (int)192, (int)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 2880,
+      "total_ms": 26.55113,
+      "mean_us": 9.21914236111111
+    },
+    {
+      "name": "void attention_queries<(int)4, (int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const int *)",
+      "count": 1440,
+      "total_ms": 25.376837,
+      "mean_us": 17.622803472222223
+    },
+    {
+      "name": "void gemm_prefill_m16<(int)576, (int)576, (int)192, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1440,
+      "total_ms": 15.775869,
+      "mean_us": 10.955464583333333
+    },
+    {
+      "name": "void gemm_prefill_m16<(int)576, (int)576, (int)128, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)",
+      "count": 1440,
+      "total_ms": 15.190933,
+      "mean_us": 10.549259027777778
+    },
+    {
+      "name": "compiled_norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int)",
+      "count": 2928,
+      "total_ms": 5.56799,
+      "mean_us": 1.9016359289617488
+    },
+    {
+      "name": "std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)",
+      "count": 48,
+      "total_ms": 3.070877,
+      "mean_us": 63.97660416666666
+    },
+    {
+      "name": "compiled_swiglu_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *)",
+      "count": 1440,
+      "total_ms": 2.180057,
+      "mean_us": 1.5139284722222222
+    },
+    {
+      "name": "compiled_kv_write_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int)",
+      "count": 1440,
+      "total_ms": 1.83576,
+      "mean_us": 1.2748333333333333
+    },
+    {
+      "name": "compiled_rope_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)",
+      "count": 1440,
+      "total_ms": 1.761802,
+      "mean_us": 1.223473611111111
+    },
+    {
+      "name": "<unnamed>::partitioned_argmax(const unsigned short *, unsigned long long *)",
+      "count": 48,
+      "total_ms": 0.106082,
+      "mean_us": 2.2100416666666667
+    },
+    {
+      "name": "void <unnamed>::embedding_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, const RileyCudaEmbeddingErrorReport *, unsigned long, unsigned long)",
+      "count": 48,
+      "total_ms": 0.08208,
+      "mean_us": 1.71
+    },
+    {
+      "name": "<unnamed>::validate_embedding_tokens(const unsigned int *, unsigned long, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "count": 48,
+      "total_ms": 0.064288,
+      "mean_us": 1.3393333333333333
+    },
+    {
+      "name": "<unnamed>::finalize_embedding_error(const unsigned int *, unsigned long, RileyCudaEmbeddingErrorReport *)",
+      "count": 48,
+      "total_ms": 0.056866,
+      "mean_us": 1.1847083333333333
+    },
+    {
+      "name": "<unnamed>::reset_embedding_error(RileyCudaEmbeddingErrorReport *)",
+      "count": 48,
+      "total_ms": 0.046496,
+      "mean_us": 0.9686666666666667
+    },
+    {
+      "name": "<unnamed>::finish_partitioned_argmax(unsigned long long *, unsigned int)",
+      "count": 48,
+      "total_ms": 0.044097,
+      "mean_us": 0.9186875
+    }
+  ],
+  "interpretation": "gemm_prefill_m16 are custom inline MMA kernels, not cuBLAS dense GEMM; name substring gemm alone does not identify a library implementation."
+}

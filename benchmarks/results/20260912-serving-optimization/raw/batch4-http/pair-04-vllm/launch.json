@@ -1,0 +1,40 @@
+{
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+    "serve",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--tokenizer",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "19342",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "1",
+    "--max-num-batched-tokens",
+    "128",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ],
+  "env": {
+    "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "DO_NOT_TRACK": "1"
+  },
+  "cwd": "/tmp/riley-opt-260912/batch4-source",
+  "fresh_process": true
+}

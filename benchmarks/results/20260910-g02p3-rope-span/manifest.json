@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-10",
+  "scope": "G02P3 packed position span and cold executor Q/K audit; full graph and performance roadmap incomplete",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "source_files": 26,
+  "gpu_tests": {
+    "total": 48,
+    "span": 1,
+    "native_negative": 1,
+    "models": 2,
+    "graph_regression": 40,
+    "parent_attention_regression": 4,
+    "exit_code": 0
+  },
+  "cpu_tests": {
+    "cuda_lib": 81,
+    "cuda_graph_contracts": 32,
+    "runtime_lib": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "baseline_warnings": 288,
+    "changed_rope_module_diagnostics": []
+  },
+  "abi_fmt_diff": {
+    "exit_code": 0
+  },
+  "initial_failure": "gpu-span.log native compilation error corrected before GPU validation",
+  "artifact_hashes": {
+    "README.md": "b802235fb281635bd263a6ab810c5c1dd2450f798ab9248aa892224cb5a62a7e",
+    "checkpoint-identities.json": "796433a983ce4a7f4942827eff02749ab2701ff76fa81595536ac7c483c3043d",
+    "clippy-final.jsonl": "51985097f913c958527f45eb1ef6fb58918303457d4de9bcf11fb78148b1db34",
+    "clippy-final.log": "cb546b88e919681b4eeb73c5fac734d7449a3d9ed113f35be8e5a3624491b255",
+    "clippy.jsonl": "ab9bd426f782b62afbef6b90189180db27f79594ce1f5b2bf45e99fa772184a6",
+    "clippy.log": "57fa849369ce7cf23ce77c2f73a946fede180bef375e6dfd8ac06549b2dc636f",
+    "cuda-cpu-final.log": "f706c1b44509e0b735a9e4c0a1b53b12fd638077c4883e6945f54a563d19bae5",
+    "cuda-cpu.log": "ea9da73f357a79c362e7130d6461accdac1aa9c632f4235580506a7b9ae23729",
+    "gpu-model-final.log": "604a56394e0625b08eea3286dbe0bf25f7be424404ba77725860852e87c25971",
+    "gpu-model-verified.log": "dd22764b03aa71769cdc4c59ba53bee68f34c35369e77c44a33c7bf7d56de03b",
+    "gpu-model.log": "0176fb72bb50122365c4982e3d5d057c0e40a8cd7b8d3ec93df81dd5c870dbda",
+    "gpu-native-final.log": "155856848126779e9c73d1b2d1ff554c9a7879439d0801475e6fbb88c3a574ec",
+    "gpu-regression.log": "9a27eea16772fb188678ce7034ee1b975e4f263c615685c7b7544ae277f89f85",
+    "gpu-span-retry.log": "809cfb2c0ee4f772bb56a890a8c04cc939741df37c0de78bf4efca791a02b183",
+    "gpu-span.log": "c4b3fd9b6184330e28ab63a9946f8a2a0f29e889ab7d3807133b7387059e5a4f",
+    "remote-source-verification.json": "5613cd859968deee56b878c22c7d83c2565478b9ba95a0147284342cdf65d2e4",
+    "runtime-cpu.log": "788aed9118e205eb19d5821b703ea1d5686cf0faa56c5d88124a260320aee4a2",
+    "runtime-identities.json": "d1089a9b9bfec5c857456a34e55cfbb876875790f6038a4fdcf901fa32be85ef",
+    "source-hashes.json": "5e3649a7fb25ad3d4572ee0ecaca04ffdaa1918d4337c5125528754204732e62",
+    "source-overlay.tar.gz": "fa60b8b2ac6807cf3fd1f0d2bed004e2b0b4797664d2c6f93c3f0fbf115635b2"
+  }
+}

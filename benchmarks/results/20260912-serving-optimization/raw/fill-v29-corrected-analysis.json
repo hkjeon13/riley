@@ -1,0 +1,70 @@
+{
+  "scope": "Instrumented nonexclusive V28 natural serving, 132 requests each at C4 and C8. Middle80 excludes first/last10percent of iterations. Batch occupancy is request-row occupancy, not GPU occupancy. Execution includes transfer and validation.",
+  "results": {
+    "4": {
+      "all": {
+        "iterations": 2827,
+        "decode_iterations": 2563,
+        "prefill_iterations": 264,
+        "decode_row_histogram": {
+          "1": 64,
+          "2": 11,
+          "3": 314,
+          "4": 2174
+        },
+        "mean_decode_rows": 3.7939914163090127,
+        "full_decode_fraction": 0.8482247366367538,
+        "prefill_execution_time_fraction": 0.176119695334163,
+        "decode_median_execution_us": 1646
+      },
+      "middle80": {
+        "iterations": 2262,
+        "decode_iterations": 2046,
+        "prefill_iterations": 216,
+        "decode_row_histogram": {
+          "4": 1830,
+          "3": 216
+        },
+        "mean_decode_rows": 3.8944281524926687,
+        "full_decode_fraction": 0.8944281524926686,
+        "prefill_execution_time_fraction": 0.17897697038966795,
+        "decode_median_execution_us": 1646.0
+      }
+    },
+    "8": {
+      "all": {
+        "iterations": 1595,
+        "decode_iterations": 1331,
+        "prefill_iterations": 264,
+        "decode_row_histogram": {
+          "1": 32,
+          "2": 32,
+          "3": 28,
+          "4": 6,
+          "5": 8,
+          "6": 40,
+          "7": 240,
+          "8": 945
+        },
+        "mean_decode_rows": 7.305785123966942,
+        "full_decode_fraction": 0.709992486851991,
+        "prefill_execution_time_fraction": 0.27192814754058814,
+        "decode_median_execution_us": 1832
+      },
+      "middle80": {
+        "iterations": 1276,
+        "decode_iterations": 1050,
+        "prefill_iterations": 226,
+        "decode_row_histogram": {
+          "8": 823,
+          "7": 221,
+          "6": 6
+        },
+        "mean_decode_rows": 7.778095238095238,
+        "full_decode_fraction": 0.7838095238095238,
+        "prefill_execution_time_fraction": 0.2860641736661427,
+        "decode_median_execution_us": 1838.0
+      }
+    }
+  }
+}

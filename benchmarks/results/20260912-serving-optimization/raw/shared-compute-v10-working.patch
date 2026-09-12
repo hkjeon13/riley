@@ -1,0 +1,433 @@
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index b46e4d0..8cb0b3f 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11125,6 +11125,34 @@ unsafe extern "C" {
+         full: u32,
+         error: *mut ErrorInfo,
+     ) -> i32;
++    fn riley_cuda_graph_resources_record_shared_multisequence_decode(
++        resources: *mut RawGraphResources,
++        devices: *const *mut RawDeviceBuffer,
++        device_count: u64,
++        weights: *const *mut RawDeviceBuffer,
++        weight_count: u64,
++        plans: *const *mut RawGemmPlan,
++        plan_count: u64,
++        staging: *mut RawPinnedHostBuffer,
++        bucket: u32,
++        physical: u32,
++        full: u32,
++        error: *mut ErrorInfo,
++    ) -> i32;
++    fn riley_cuda_graph_resources_append_shared_multisequence_decode(
++        resources: *mut RawGraphResources,
++        devices: *const *mut RawDeviceBuffer,
++        device_count: u64,
++        weights: *const *mut RawDeviceBuffer,
++        weight_count: u64,
++        plans: *const *mut RawGemmPlan,
++        plan_count: u64,
++        staging: *mut RawPinnedHostBuffer,
++        bucket: u32,
++        physical: u32,
++        full: u32,
++        error: *mut ErrorInfo,
++    ) -> i32;
+     fn riley_cuda_graph_resources_replay_catalog(
+         resources: *mut RawGraphResources,
+         index: u32,
+@@ -11152,6 +11180,7 @@ impl GraphResourcesHandle {
+         physical: u32,
+         full: bool,
+         append: bool,
++        shared_rows: bool,
+     ) -> CudaResult<()> {
+         let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
+         let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
+@@ -11159,7 +11188,9 @@ impl GraphResourcesHandle {
+         let mut error = ErrorInfo::new();
+         // SAFETY: the enclosing owner retains all parent borrows. Native validates
+         // explicit counts, exact allocation geometry and ledger membership.
+-        let call = if append {
++        let call = if shared_rows {
++            if append { riley_cuda_graph_resources_append_shared_multisequence_decode } else { riley_cuda_graph_resources_record_shared_multisequence_decode }
++        } else if append {
+             riley_cuda_graph_resources_append_multisequence_decode
+         } else {
+             riley_cuda_graph_resources_record_multisequence_decode
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index 24d40f2..b71fc89 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1043,7 +1043,7 @@ impl BorrowedGraphResourceReservation<'_> {
+         full: bool,
+     ) -> CudaResult<()> {
+         self.prepare_multisequence_entry(
+-            devices, weights, plans, staging, bucket, physical, full, false,
++            devices, weights, plans, staging, bucket, physical, full, false, false,
+         )
+     }
+     pub fn append_multisequence_decode(
+@@ -1057,7 +1057,21 @@ impl BorrowedGraphResourceReservation<'_> {
+         full: bool,
+     ) -> CudaResult<()> {
+         self.prepare_multisequence_entry(
+-            devices, weights, plans, staging, bucket, physical, full, true,
++            devices, weights, plans, staging, bucket, physical, full, true, false,
++        )
++    }
++    pub fn append_shared_multisequence_decode(
++        &mut self,
++        devices: &[usize; 18],
++        weights: &[usize],
++        plans: &[usize; 5],
++        staging: usize,
++        bucket: u32,
++        physical: u32,
++        full: bool,
++    ) -> CudaResult<()> {
++        self.prepare_multisequence_entry(
++            devices, weights, plans, staging, bucket, physical, full, true, true,
+         )
+     }
+     fn prepare_multisequence_entry(
+@@ -1070,6 +1084,7 @@ impl BorrowedGraphResourceReservation<'_> {
+         physical: u32,
+         full: bool,
+         append: bool,
++        shared_rows: bool,
+     ) -> CudaResult<()> {
+         #[cfg(feature = "cuda")]
+         {
+@@ -1101,7 +1116,11 @@ impl BorrowedGraphResourceReservation<'_> {
+                 .collect::<CudaResult<_>>()?;
+             let plans: Vec<_> = plans
+                 .iter()
+-                .map(|i| {
++                .enumerate()
++                .map(|(role, i)| {
++                    if shared_rows && matches!(role, 0 | 1 | 4) {
++                        return self.parents.plans.get(*i).ok_or_else(bad)?.graph_resource_handle();
++                    }
+                     self.strided_plans
+                         .get(*i)
+                         .ok_or_else(bad)?
+@@ -1118,12 +1137,13 @@ impl BorrowedGraphResourceReservation<'_> {
+                 physical,
+                 full,
+                 append,
++                shared_rows,
+             )
+         }
+         #[cfg(not(feature = "cuda"))]
+         {
+             let _ = (
+-                devices, weights, plans, staging, bucket, physical, full, append,
++                devices, weights, plans, staging, bucket, physical, full, append, shared_rows,
+             );
+             Err(crate::CudaError::unavailable(
+                 "record multi-sequence decode",
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 5fa8804..7dc3e31 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -215,7 +215,11 @@ impl PreparedLlamaBatchExecutor {
+         let mut pinned = vec![staging];
+         let mut strided = Vec::new();
+         let mut multi_indices = Vec::new();
++        let mut shared_indices = Vec::new();
+         if let Some(multi) = multi {
++            let first_shared = plans.len();
++            shared_indices.extend((0..multi.shared.len()).map(|i| first_shared + i));
++            plans.extend(multi.shared.iter_mut());
+             for scratch in &mut multi.scratch {
+                 let first = devices.len();
+                 devices.extend(scratch.iter_mut());
+@@ -263,21 +267,13 @@ impl PreparedLlamaBatchExecutor {
+             let packed = packed_indices.ok_or_else(|| rejected("multi packed indices missing"))?;
+             multi_weights.extend_from_slice(&packed[..60]);
+             for (index, indices) in multi_indices.iter().enumerate() {
+-                graph
+-                    .append_multisequence_decode(
+-                        indices,
+-                        &multi_weights,
+-                        &std::array::from_fn(|i| index * 5 + i),
+-                        index + 1,
+-                        [2, 4, 8][index],
+-                        geometry[1] as u32,
+-                        true,
+-                    )
+-                    .map_err(cuda)?;
+-                graph.append_multisequence_decode(
+-                    indices, &multi_weights, &std::array::from_fn(|i| index * 5 + i),
+-                    index + 4, [2, 4, 8][index], geometry[1] as u32, false,
+-                ).map_err(cuda)?;
++                let shared = !shared_indices.is_empty();
++                let p = if shared { [shared_indices[index*3], shared_indices[index*3+1], index*5+2, index*5+3, shared_indices[index*3+2]] } else { std::array::from_fn(|i| index*5+i) };
++                for full in [true, false] {
++                    let staging = index + if full {1} else {4};
++                    if shared { graph.append_shared_multisequence_decode(indices, &multi_weights, &p, staging, [2,4,8][index], geometry[1] as u32, full) }
++                    else { graph.append_multisequence_decode(indices, &multi_weights, &p, staging, [2,4,8][index], geometry[1] as u32, full) }.map_err(cuda)?;
++                }
+             }
+         }
+         Ok(graph)
+@@ -1407,6 +1403,7 @@ struct FullDecodeParents {
+ /// The owner exposes no eager access while CUDA graph leases are active.
+ /// Full logits are retained so ordinary CPU sampling and stop masks remain valid.
+ pub struct OwnedLlamaDecodeExecutor {
++    multi_plan_identity: Vec<u8>,
+     graph: riley_cuda::OwnedGraphResourceReservation<FullDecodeParents>,
+     registry: GraphRegistry<1>,
+     signature: GraphSignature,
+@@ -1441,9 +1438,14 @@ impl PreparedLlamaBatchExecutor {
+ 
+     // Internal until the scheduler/codec adapter supplies live reservation authority.
+     pub(crate) fn into_owned_decode_graph_with_catalog(
+-        mut self,
++        self,
+         context: &riley_cuda::CudaContext,
+         catalog: bool,
++    ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
++        self.into_owned_decode_graph_with_catalog_profile(context, catalog, false)
++    }
++    pub(crate) fn into_owned_decode_graph_with_catalog_profile(
++        mut self, context: &riley_cuda::CudaContext, catalog: bool, shared_rows: bool,
+     ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
+         if !self.full_decode_supported() {
+             return Err(rejected("unsupported owned graph"));
+@@ -1456,7 +1458,7 @@ impl PreparedLlamaBatchExecutor {
+             return Err(rejected("catalog requires packed P128/C10"));
+         }
+         let multi = if catalog {
+-            Some(MultiDecodeParents::prepare(context)?)
++            Some(MultiDecodeParents::prepare(context, shared_rows)?)
+         } else {
+             None
+         };
+@@ -1490,6 +1492,7 @@ impl PreparedLlamaBatchExecutor {
+             .checked_add(multi_device_bytes)
+             .ok_or_else(|| rejected("catalog device footprint overflow"))?;
+ 
++        let multi_plan_identity = format!("shared-rows-v1:{}:{:?}", shared_rows, multi.as_ref().map(|m| m.shared.iter().map(|p| p.algorithm_metadata()).collect::<Vec<_>>())).into_bytes();
+         let vocabulary_size = self.vocabulary_size();
+         let maximum_position_count = self.maximum_position_count()?;
+         let config = self.config.metadata();
+@@ -1559,6 +1562,7 @@ impl PreparedLlamaBatchExecutor {
+             Ok(registered.graph)
+         })?;
+         Ok(OwnedLlamaDecodeExecutor {
++            multi_plan_identity,
+             graph,
+             registry: registry.ok_or_else(|| rejected("registry missing"))?,
+             signature,
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs b/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
+index 271b097..6cf3ed2 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
+@@ -1,19 +1,26 @@
+ //! Cold storage for N2/N4 captures under the P128/M1 aggregate owner.
+ use super::*;
+-use riley_cuda::{CudaContext, CudaPreparedStridedGemm, CudaStridedGemmConfig};
++use riley_cuda::{CudaContext, CudaPreparedStridedGemm, CudaStridedGemmConfig, CudaPreparedGemm, CudaGemmConfig};
+ pub(super) struct MultiDecodeParents {
+     pub(super) scratch: [Vec<CudaDeviceBuffer>; 3],
+     pub(super) plans: Vec<CudaPreparedStridedGemm>,
++    pub(super) shared: Vec<CudaPreparedGemm>,
+     pub(super) staging: Vec<CudaPinnedHostBuffer>,
+ }
+ impl MultiDecodeParents {
+-    pub(super) fn prepare(context: &CudaContext) -> LlamaBatchExecutorResult<Self> {
++    pub(super) fn prepare(context: &CudaContext, shared_rows: bool) -> LlamaBatchExecutorResult<Self> {
+         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
+         let mut scratch = [Vec::new(), Vec::new(), Vec::new()];
+         let mut plans = Vec::new();
+         let mut staging = Vec::new();
++        let mut shared = Vec::new();
+         for (index, bucket) in [2u32, 4, 8].into_iter().enumerate() {
+             let b = u64::from(bucket);
++            if shared_rows {
++                for n in [960, 3072, 49152] {
++                    shared.push(context.prepare_gemm(CudaGemmConfig::new(b, n, 576, 0).map_err(cuda)?).map_err(cuda)?);
++                }
++            }
+             let result = 1152 + 98304 * b;
+             for bytes in [
+                 1152 * b,
+@@ -59,6 +66,7 @@ impl MultiDecodeParents {
+         }
+         Ok(Self {
+             scratch,
++            shared,
+             plans,
+             staging,
+         })
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multi_session.rs b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+index c22e8e2..9df9562 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+@@ -32,14 +32,22 @@ impl PreparedLlamaBatchExecutor {
+         self,
+         context: &riley_cuda::CudaContext,
+     ) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
++        self.into_owned_multi_decode_graph_profile(context, false)
++    }
++    /// Experimental arithmetic-changing QKV/gate-up/head profile; not model-quality qualified.
++    pub fn into_owned_shared_multi_decode_graph(self, context: &riley_cuda::CudaContext) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
++        self.into_owned_multi_decode_graph_profile(context, true)
++    }
++    fn into_owned_multi_decode_graph_profile(self, context: &riley_cuda::CudaContext, shared_rows: bool) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
+         let physical = self.owner.layout.physical_block_count() as u32;
+-        let inner = self.into_owned_decode_graph_with_catalog(context, true)?;
++        let inner = self.into_owned_decode_graph_with_catalog_profile(context, true, shared_rows)?;
+         let generation = NEXT_GENERATION
+             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
+             .map_err(|_| rejected("multi owner generation exhausted"))?;
+         let mut hash = Sha256::new();
+         hash.update(b"riley.multi-catalog.dual-output.v2\0");
+         hash.update(wire::CONTRACT_SHA256.as_bytes());
++        hash.update(&inner.multi_plan_identity);
+         hash.update(include_bytes!("../../../../kernels/src/graph_multisequence_packet.inc"));
+         hash.update(include_bytes!("../../../../kernels/src/graph_resources.cu"));
+         hash.update(inner.signature.fingerprint().as_bytes());
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 6e4d4c7..251ccd8 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2583,6 +2583,19 @@ RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, uint64_t,
+     RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaGemmPlan* const*, uint64_t,
+     RileyCudaPinnedHostBuffer*, uint32_t, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_shared_multisequence_decode(
++    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
++    RileyCudaDeviceBuffer* const* weights, uint64_t weight_count,
++    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
++    RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical_blocks,
++    uint32_t full_logits, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
++
++// Add a cold bucket under the same ledger. Catalog index0 is the original DAG,
++// index1 is appended N2 and index2 appended N4; each has fixed output mode.
++RileyCudaStatus riley_cuda_graph_resources_append_shared_multisequence_decode(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, uint64_t,
++    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaGemmPlan* const*, uint64_t,
++    RileyCudaPinnedHostBuffer*, uint32_t, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
+     RileyCudaGraphResources*, uint32_t, const uint8_t*, uint64_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ RileyCudaStatus riley_cuda_graph_resources_read_catalog(
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index ee17a9c..41ec71c 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -1088,6 +1088,11 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
+ // Caller proves exact aggregate membership before binding; this does not acquire leases.
++RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
++    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
++    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
++
+ RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 97266ef..659f5d3 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1366,6 +1366,28 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+   return RILEY_CUDA_STATUS_SUCCESS;
+ }
+ 
++RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
++    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
++    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
++  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "requires shared-row algorithm21 with exact M/N/K and no workspace");
++  *state = RileyCudaCanonicalGemmBf16GraphState{};
++  state->plan = plan; state->input = input; state->weight = weight; state->workspace = nullptr;
++  state->input_byte_len = plan->input_bytes; state->weight_byte_len = plan->weight_bytes;
++  state->output_byte_len = plan->output_bytes; state->workspace_byte_len = plan->algorithm_info.workspace_bytes;
++  state->selected_no_split = true;
++  // These flags describe leases already held by the aggregate ledger. The
++  // aggregate caller independently proves membership for every exact parent.
++  state->plan_lease_held = true; state->input_lease_held = true; state->weight_lease_held = true;
++  state->workspace_lease_held = false;
++  if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, *state, true))
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "reserved plan/parent geometry differs");
++  return RILEY_CUDA_STATUS_SUCCESS;
++}
++
+ RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
+diff --git a/kernels/src/graph_multisequence_catalog.inc b/kernels/src/graph_multisequence_catalog.inc
+index 94d5a01..bf5afc6 100644
+--- a/kernels/src/graph_multisequence_catalog.inc
++++ b/kernels/src/graph_multisequence_catalog.inc
+@@ -36,10 +36,10 @@ void select_catalog_binding(RileyCudaGraphResources* r,const RileyCudaGraphResou
+   r->kv_write_bound=false;r->bound_attention=false;r->vllm_smol_p128=false;r->prefill128=false;
+ }
+ }
+-extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
++static RileyCudaStatus append_multisequence_decode_impl(
+     RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t device_count,
+     RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,uint64_t plan_count,
+-    RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,RileyCudaErrorInfo* error)noexcept{
++    RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,bool shared_rows,RileyCudaErrorInfo* error)noexcept{
+   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+   // Cold-only: never invalidate an already published completion to grow a catalog.
+   if((bucket!=2&&bucket!=4&&bucket!=8)||full>1||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
+@@ -47,7 +47,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decod
+   auto& entry=r->catalog[(full?0:3)+(bucket==2?0:bucket==4?1:2)];
+   if(entry.graph||entry.exec)return reject(error,"catalog entry already recorded",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   SavedGraphBinding saved(r);select_catalog_binding(r,{});
+-  status=riley_cuda_graph_resources_record_multisequence_decode(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,error);
++  status=record_multisequence_decode_impl(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,shared_rows,error);
+   // Retain even a partially constructed graph for aggregate close. Restoring
+   // the main binding must never discard native ownership after capture failure.
+   entry={r->graph,r->exec,r->input,r->transfer_bytes,r->multi_bucket,r->multi_physical,r->multi_full};
+@@ -75,3 +75,6 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_catalog(
+   saved.restore(r);r->last_catalog=index;
+   return status;
+ }
++
++extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return append_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,false,e); }
++extern "C" RileyCudaStatus riley_cuda_graph_resources_append_shared_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return append_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,true,e); }
+diff --git a/kernels/src/graph_multisequence_record.inc b/kernels/src/graph_multisequence_record.inc
+index 994fc97..cb0d690 100644
+--- a/kernels/src/graph_multisequence_record.inc
++++ b/kernels/src/graph_multisequence_record.inc
+@@ -1,11 +1,11 @@
+ // Fixed SmolLM2 strided decode DAG. Included in the aggregate owner TU so all
+ // parent membership, capture rollback and graph destruction use one ledger.
+-extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
++static RileyCudaStatus record_multisequence_decode_impl(
+     RileyCudaGraphResources* r, RileyCudaDeviceBuffer* const* d, uint64_t device_count,
+     RileyCudaDeviceBuffer* const* w, uint64_t weight_count,
+     RileyCudaGemmPlan* const* plans, uint64_t plan_count,
+     RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical,
+-    uint32_t full, RileyCudaErrorInfo* error) noexcept {
++    uint32_t full, bool shared_rows, RileyCudaErrorInfo* error) noexcept {
+   clear_error(error);
+   auto status=transfer_ready(r,error);
+   if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+@@ -38,6 +38,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
+   using State=RileyCudaCanonicalGemmBf16GraphState;
+   State states[121]{};
+   auto bind=[&](size_t index,size_t plan,size_t input,size_t weight,size_t output,uint64_t n,uint64_t k){
++    if(shared_rows && (plan==0||plan==1||plan==4))
++      return bind_reserved_shared_row_gemm_state(plans[plan],r->stream,d[input],w[weight],d[output],bucket,n,k,&states[index],error);
+     return bind_reserved_strided_gemm_state(plans[plan],r->stream,d[input],w[weight],d[output],bucket,n,k,k,n,&states[index],error);
+   };
+   for(size_t l=0;l<30&&status==RILEY_CUDA_STATUS_SUCCESS;++l){
+@@ -79,3 +81,6 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
+   if(status==RILEY_CUDA_STATUS_SUCCESS){r->multi_bucket=bucket;r->multi_physical=physical;r->multi_full=full;}
+   return status;
+ }
++
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return record_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,false,e); }
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_shared_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return record_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,true,e); }

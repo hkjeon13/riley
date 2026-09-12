@@ -1,0 +1,53 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "7a6c331f9d23975499b5d0215b957b1b2aab3ec25eb902ac6ecd71ea82ec1184",
+      "current_sha256": "a89e7850c13eda8b916a60d08bf87eaa5c14f17939b841d13a3f9665e21c9292"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "c5b52f518ccea6bd936d5bfbd7372b49312571d878af1fceb275c732c6e6d587",
+      "current_sha256": "97b0a2c5f0fb6ca40b4003c2f8dd4c200be3785052578d64d3d2fb5d2f537a65"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "6d5481b74a8ad43267ac7512434995b13ac5073565eb79bc9acf3d7ab227486b",
+      "current_sha256": "4b1d44a8461a1014964286be006fffb037c0f32048825e8258a323738788720e"
+    },
+    {
+      "path": "kernels/src/ffi_internal.hpp",
+      "previous_sha256": "a2e85e73a7d200a95167867d4814fa79bd91520dd4ca9586324d23a8a6538e25",
+      "current_sha256": "06743f4b6d8ca2eb3c5651ba2edf73d28af05b00593a0874ac99afe80cbf921d"
+    },
+    {
+      "path": "kernels/src/primitives.cu",
+      "previous_sha256": "c1b96301c92be509a0dbab5578497bb9d3532b5165a547e9f4dc2e1224bf26b8",
+      "current_sha256": "c11b503958dba891c2e3b6a2587697b40445c3fd1247f0abacb3cca439c5b9b0"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "68d2f023113b9e1b615335425c43e7c5eb1384ff311b8cb96f2f3266fc4aac4a",
+      "current_sha256": "413064ad13e81725d8eecc8c5ef24b1a476b2a0f5db8e26fe326d5fa53772b2f"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "44ba75c43b2838054a4180ccaf92a0e744bd17047a09f7982cfde7df5a57f65d",
+      "current_sha256": "ab068efa8e4224a5f79cf0d226e86ef98805642326d8d6883b780451b84bf6bf"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_pointwise_audit.rs",
+      "previous_sha256": "45afebf36a3aee956665e4371c38bcf8df001bdfb1b75da17202849f80fdd976",
+      "current_sha256": "be834b4d8d220a2a3ec02c9d6040e34d45f79a54e4ecf1d6512a9dc905cb8fa2"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "d363700c6e5af1aa5d6607591b73ee7543f15483913ee6d348280a6b2c1fd835",
+      "current_sha256": "71154ed0d4def5701e8e20c266414bcf24b979fb55e3ece2386e4719eb96e18e"
+    }
+  ],
+  "remote_write": false,
+  "gpu_run": false,
+  "rejection": "Automatic review requires explicit approval for the new nine-file payload beyond the previously approved five files."
+}

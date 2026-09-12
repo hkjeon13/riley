@@ -1,0 +1,15 @@
+
+running 5 tests
+test loaded_32_active_owners_match_every_logit ... LOADED_SHARED rows_max=8 logits_checked=2336 iterations=414 pending_close_abort=true allocation_zero=true
+ok
+test loaded_32_owners_sixteen_rows_match_every_logit ... LOADED_SHARED rows_max=16 logits_checked=2336 iterations=318 pending_close_abort=true allocation_zero=true
+ok
+test loaded_prefill_buckets_eight_rows ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_prefill_buckets_sixteen_rows ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_shared_scheduler_matches_every_logit ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=144 pending_close_abort=true allocation_zero=true
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.80s
+

@@ -1,0 +1,123 @@
+{
+  "schema_version": "riley.batch6-projection-correctness.v1",
+  "passed": true,
+  "gpu_tests_executed": true,
+  "cases": 630,
+  "layers": 30,
+  "projections": 7,
+  "patterns": 3,
+  "rows": 128,
+  "exact_outputs": true,
+  "finite_outputs": true,
+  "guards_intact": true,
+  "inputs_unchanged": true,
+  "weights_unchanged": true,
+  "position_unchanged": true,
+  "all_allocations_freed": true,
+  "source_root": "/tmp/riley-opt-260912/batch6-source",
+  "source_commit": "67a4197b007d4ec6c9f7ad473bdf1c4f2a636111",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "4cb1e314adeeebd79d6d095702f12746d3f59aa3a3af2c154bf494caeb0d9745",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "d0ce882c8859e0568547d9173ca19505fde4b7d1f46a2b7efda2de59052835be",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "d86de0d147fab0e7083095bd0b9515daf73cfe87465dde9c5ead2b6fda744dbf",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "f79bf6a54f3390f87ee55aa4b35f13a16e3b3fd500a8a43e6a9dc05805fb7c79",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67"
+  },
+  "source_build": {
+    "path": "/tmp/riley-opt-260912/batch6-build.json",
+    "sha256": "39e30dacda86c41c104aa211ba3c9603f36e478d0558773968d88de22334459d"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch6-target/release/riley": "a75f68a3bfb4552e8f098a0aef88406496f0bc33038824e7cf0602071b6e8bed",
+    "/tmp/riley-opt-260912/batch6-target/release/riley-profile": "f05775e95adc1169e60271ac58a0d5bb2c06bfcab949ceba37b4754e3cfa40f0"
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/batch6_projection_probe.py",
+    "sha256": "e306157697d5584b1f5d59826326f1682e6be57c224108fed68e8a2c3146e3d9"
+  },
+  "probe_source": {
+    "path": "/tmp/riley-opt-260912/batch6_projection_probe.cu",
+    "sha256": "d8881a5d6f40a8bc2065f8b75fc0dd306afcca096ee8e38485a3b336712fe34b"
+  },
+  "model": {
+    "path": "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/model.safetensors",
+    "sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1"
+  },
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/batch6-projection-probe/fixtures.json",
+    "sha256": "a64cd6c2219b3f1cd870cf00768b32db21d329cc162aa6c3d777c0681a821714"
+  },
+  "compile_receipt": {
+    "path": "/tmp/riley-opt-260912/batch6-projection-probe/compile.json",
+    "sha256": "b4ffba263bc54479bc779c310c7d9dd30d55654c25fabf87095e15e99f784138"
+  },
+  "probe_binary": {
+    "path": "/tmp/riley-opt-260912/batch6-projection-probe/build/batch6_projection_probe",
+    "sha256": "452bb54158511cfa7373b26417ad6d1d2761ca4acd7971b8c1bb78dc87e2f932"
+  },
+  "raw_results": {
+    "path": "/tmp/riley-opt-260912/batch6-projection-probe/native-results.jsonl",
+    "sha256": "927a5d5c198bf97711865fe55c35fa7eda04aaa055864c8d0119b1a55b165e3e"
+  },
+  "stderr": {
+    "path": "/tmp/riley-opt-260912/batch6-projection-probe/native-stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "argv": [
+    "/tmp/riley-opt-260912/batch6-projection-probe/build/batch6_projection_probe",
+    "--cases",
+    "/tmp/riley-opt-260912/batch6-projection-probe/cases.tsv",
+    "--device",
+    "0"
+  ],
+  "device": {
+    "schema": "riley.batch6-projection-native.v1",
+    "kind": "device",
+    "ordinal": 0,
+    "name": "NVIDIA GeForce RTX 4090",
+    "uuid_hex": "9087e4256acab722b8c9cc0423b39fb0",
+    "compute_major": 8,
+    "compute_minor": 9,
+    "driver_version": 13000,
+    "runtime_version": 13000
+  },
+  "allocation_summary": {
+    "schema": "riley.batch6-projection-native.v1",
+    "kind": "summary",
+    "passed": true,
+    "cases": 630,
+    "failed_cases": 0,
+    "layers": 30,
+    "projections": 7,
+    "patterns": 3,
+    "rows": 128,
+    "device_allocations_created": 3150,
+    "device_allocations_freed": 3150,
+    "live_device_allocations": 0,
+    "live_device_bytes": 0,
+    "cleanup_errors": 0,
+    "all_allocations_freed": true,
+    "stream_destroyed": true,
+    "performance_measured": false,
+    "performance_claim_eligible": false,
+    "error": ""
+  },
+  "performance_measured": false,
+  "performance_claim_eligible": false,
+  "desktop_session_policy": "left untouched; correctness-only execution"
+}

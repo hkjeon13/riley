@@ -1,0 +1,13 @@
+{
+  "schema_version": "riley.owned-graph-instrumentation.v1",
+  "source_root": "/tmp/riley-opt-260912/diagnostic-candidate-source",
+  "source_file": "kernels/src/graph_resources.cu",
+  "original_sha256": "3d3dc58ffe1e4e3b586bdc3d88d8859b3005d2c53f4ff05e9961c428a0af0601",
+  "instrumented_sha256": "4fa66ce431f3fbab317eba94aed91ee96729eaabd8b39fdd7ade041a2ef31591",
+  "source_topology": "dual_graph_v1",
+  "applied": true,
+  "runtime_enable": "RILEY_OWNED_GRAPH_PROFILE=1",
+  "projection_events": true,
+  "projection_selection": "RILEY_OWNED_GRAPH_PROJECTION=q|gate|down|off (default off)",
+  "performance_claim_eligible": false
+}

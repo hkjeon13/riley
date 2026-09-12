@@ -1,0 +1,21 @@
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index c3ce149..6dae45b 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -50,6 +50,7 @@ impl<G: VariableGraph> VariableSession<G> {
+             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
+             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
++        let batch_start=std::time::Instant::now();
+         wire::encode_into(&mut self.input,&e)?;
+         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
+         if self.graph.replay_transfer(&self.input).and_then(|()|self.graph.read_transfer(&mut self.output)).is_err() {
+@@ -57,7 +58,7 @@ impl<G: VariableGraph> VariableSession<G> {
+         }
+         let e=self.retained.as_ref().unwrap();
+         match if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
+-            Ok(result)=>{self.completed=true;Ok(result)},
++            Ok(result)=>{eprintln!("BATCH stage={} rows={} tokens={} us={}",if e.rows[0].progress.generated_index==0{"prefill"}else{"decode"},e.rows.len(),e.rows.iter().map(|r|r.progress.input_tokens).sum::<u32>(),batch_start.elapsed().as_micros());self.completed=true;Ok(result)},
+             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
+         }
+     }

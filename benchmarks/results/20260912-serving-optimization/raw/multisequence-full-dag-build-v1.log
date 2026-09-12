@@ -1,0 +1,17 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib test) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.68s
+  Executable unittests src/lib.rs (/tmp/riley-opt-260912/multisequence-integration-target-v1/release/deps/riley_cuda-2641f38b2953cdd0)

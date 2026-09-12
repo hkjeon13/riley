@@ -1,0 +1,288 @@
+{
+  "scope": "C16/C32 matched serving screen; V44 CPU versus V46 compact GPU greedy versus vLLM; both Riley GPU16; all admission capacities match clients, budget512; two reversed orders, not long-term stability qualification",
+  "medians": {
+    "c16-fixed": {
+      "new": {
+        "throughput": 4436.657396922163,
+        "ttft_ms": 6.34035725,
+        "tpot_ms": 3.356662283640553,
+        "e2e_p95_ms": 116.031837,
+        "e2e_p99_ms": 128.6091905
+      },
+      "previous": {
+        "throughput": 3816.6591578614507,
+        "ttft_ms": 7.16111175,
+        "tpot_ms": 3.9108065985507245,
+        "e2e_p95_ms": 136.6081415,
+        "e2e_p99_ms": 145.71979
+      },
+      "vllm": {
+        "throughput": 5202.153465920623,
+        "ttft_ms": 15.37531125,
+        "tpot_ms": 2.2720507608695657,
+        "e2e_p95_ms": 98.59758500000001,
+        "e2e_p99_ms": 107.7923545
+      }
+    },
+    "c16-natural": {
+      "new": {
+        "throughput": 7005.634569360821,
+        "ttft_ms": 6.95759075,
+        "tpot_ms": 2.164570710632945,
+        "e2e_p95_ms": 286.95677,
+        "e2e_p99_ms": 308.748144
+      },
+      "previous": {
+        "throughput": 5886.513329290114,
+        "ttft_ms": 7.55676125,
+        "tpot_ms": 2.583958751152074,
+        "e2e_p95_ms": 343.69150349999995,
+        "e2e_p99_ms": 366.60052099999996
+      },
+      "vllm": {
+        "throughput": 7869.577073765828,
+        "ttft_ms": 13.07187075,
+        "tpot_ms": 1.7907152064449605,
+        "e2e_p95_ms": 264.57131000000004,
+        "e2e_p99_ms": 280.517004
+      }
+    },
+    "c32-fixed": {
+      "new": {
+        "throughput": 4432.624974225959,
+        "ttft_ms": 7.996730250000001,
+        "tpot_ms": 7.1412680547619045,
+        "e2e_p95_ms": 223.1921165,
+        "e2e_p99_ms": 251.5099475
+      },
+      "previous": {
+        "throughput": 3850.2207939550226,
+        "ttft_ms": 9.40355375,
+        "tpot_ms": 8.224531785714285,
+        "e2e_p95_ms": 254.879926,
+        "e2e_p99_ms": 289.6441365
+      },
+      "vllm": {
+        "throughput": 6830.434892456034,
+        "ttft_ms": 25.93120225,
+        "tpot_ms": 3.3030747084385226,
+        "e2e_p95_ms": 161.44741399999998,
+        "e2e_p99_ms": 200.7516095
+      }
+    },
+    "c32-natural": {
+      "new": {
+        "throughput": 6757.754572094471,
+        "ttft_ms": 6.7263762499999995,
+        "tpot_ms": 4.637494761224403,
+        "e2e_p95_ms": 605.4275084999999,
+        "e2e_p99_ms": 697.972716
+      },
+      "previous": {
+        "throughput": 5749.8623366511965,
+        "ttft_ms": 7.55397675,
+        "tpot_ms": 5.450097145322561,
+        "e2e_p95_ms": 709.0484965,
+        "e2e_p99_ms": 808.832074
+      },
+      "vllm": {
+        "throughput": 11931.469141761037,
+        "ttft_ms": 19.2103805,
+        "tpot_ms": 2.3008103317861477,
+        "e2e_p95_ms": 335.731449,
+        "e2e_p99_ms": 346.529456
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "c16-fixed": {
+      "previous": {
+        "throughput": 16.244527305605907,
+        "ttft_ms": -11.461272057372929,
+        "tpot_ms": -14.169565815796869,
+        "e2e_p95_ms": -15.062282726392262,
+        "e2e_p99_ms": -11.742124731307936
+      },
+      "vllm": {
+        "throughput": -14.714984362019212,
+        "ttft_ms": -58.76273886813186,
+        "tpot_ms": 47.73711668113796,
+        "e2e_p95_ms": 17.682230249351427,
+        "e2e_p99_ms": 19.311978197860036
+      }
+    },
+    "c16-natural": {
+      "previous": {
+        "throughput": 19.011614812832978,
+        "ttft_ms": -7.928932517220922,
+        "tpot_ms": -16.230446416071555,
+        "e2e_p95_ms": -16.507458846738686,
+        "e2e_p99_ms": -15.780767807473994
+      },
+      "vllm": {
+        "throughput": -10.978258377887451,
+        "ttft_ms": -46.77433029239523,
+        "tpot_ms": 20.877440636145916,
+        "e2e_p95_ms": 8.461030789770806,
+        "e2e_p99_ms": 10.06396745917051
+      }
+    },
+    "c32-fixed": {
+      "previous": {
+        "throughput": 15.126513814099463,
+        "ttft_ms": -14.96055148299652,
+        "tpot_ms": -13.17112948403909,
+        "e2e_p95_ms": -12.43244613151685,
+        "e2e_p99_ms": -13.165876396051257
+      },
+      "vllm": {
+        "throughput": -35.10479136370026,
+        "ttft_ms": -69.1617450941751,
+        "tpot_ms": 116.20062169704384,
+        "e2e_p95_ms": 38.24446670914161,
+        "e2e_p99_ms": 25.284149963440285
+      }
+    },
+    "c32-natural": {
+      "previous": {
+        "throughput": 17.52898028564429,
+        "ttft_ms": -10.955825353844261,
+        "tpot_ms": -14.909869722149038,
+        "e2e_p95_ms": -14.614090363563747,
+        "e2e_p99_ms": -13.70610310391821
+      },
+      "vllm": {
+        "throughput": -43.361923902213995,
+        "ttft_ms": -64.9857208710676,
+        "tpot_ms": 101.5591940437897,
+        "e2e_p95_ms": 80.33088955571748,
+        "e2e_p99_ms": 101.4180047078018
+      }
+    }
+  },
+  "requests": 9216,
+  "reference_observations": [
+    {
+      "case": "c16-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p0-vllm",
+      "reference_matches": 360,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-fixed-p1-vllm",
+      "reference_matches": 358,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p0-vllm",
+      "reference_matches": 276,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c16-natural-p1-vllm",
+      "reference_matches": 294,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p0-vllm",
+      "reference_matches": 363,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-fixed-p1-vllm",
+      "reference_matches": 362,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p0-vllm",
+      "reference_matches": 292,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-new",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-previous",
+      "reference_matches": 384,
+      "requests": 384
+    },
+    {
+      "case": "c32-natural-p1-vllm",
+      "reference_matches": 273,
+      "requests": 384
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "Assess compact results against V44 and vLLM; broader concurrency and long-term stability remain unqualified"
+}

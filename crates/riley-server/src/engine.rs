@@ -260,7 +260,14 @@ impl BackendEvent {
 /// `step` must return token events only after the backend's authoritative
 /// scheduler commit succeeds.  A call must be finite so cancellation and
 /// shutdown are observed at iteration boundaries.
-pub trait EngineBackend: Send + 'static {
+pub trait EngineBackend: 'static {
+    /// Whether this backend publishes authoritative committed model token IDs.
+    /// Text-only and mock backends reject opt-in token requests by default.
+    #[must_use]
+    fn supports_token_ids(&self) -> bool {
+        false
+    }
+
     /// Validates, tokenizes, and admits a request into backend-owned state.
     ///
     /// # Errors
@@ -1052,10 +1059,20 @@ impl InferenceEngine {
     /// # Errors
     ///
     /// Returns for invalid engine/model metadata or host thread creation.
-    pub fn start<B: EngineBackend>(
+    pub fn start<B: EngineBackend + Send>(
         model: ModelMetadata,
         config: EngineConfig,
         backend: B,
+    ) -> Result<Self, EngineError> {
+        Self::start_with_factory(model, config, move || Ok(backend))
+    }
+
+    // Construct thread-confined graph owners on the worker that replays and
+    // destroys them. Only the cold resources/factory cross the thread boundary.
+    fn start_with_factory<B: EngineBackend>(
+        model: ModelMetadata,
+        config: EngineConfig,
+        factory: impl FnOnce() -> Result<B, BackendError> + Send + 'static,
     ) -> Result<Self, EngineError> {
         model
             .validate()
@@ -1072,6 +1089,14 @@ impl InferenceEngine {
         let worker = thread::Builder::new()
             .name("riley-engine".to_owned())
             .spawn(move || {
+                let backend = match factory() {
+                    Ok(backend) => backend,
+                    Err(error) => {
+                        eprintln!("riley backend preparation failed: {}", error.detail());
+                        worker_lifecycle.store(LIFECYCLE_FAILED);
+                        return;
+                    }
+                };
                 worker_main(
                     backend,
                     config,
@@ -1661,6 +1686,10 @@ fn process_command<B: EngineBackend>(
         let _ = admitted.try_send(Err(EngineError::Overloaded));
         return;
     }
+    if request.include_token_ids && !backend.supports_token_ids() {
+        let _ = admitted.try_send(Err(EngineError::InvalidRequest));
+        return;
+    }
     match backend.admit(request_id, &metadata, &request) {
         Ok(()) => {
             let replaced = requests.insert(
@@ -1890,6 +1919,7 @@ impl crate::service::CompletionBackend for InferenceEngine {
 
 #[cfg(feature = "cuda")]
 mod cuda_backend {
+    use super::c02_native_fallback_request_is_local;
     use std::collections::VecDeque;
     use std::sync::Arc;
     use std::time::Instant;
@@ -2119,6 +2149,7 @@ mod cuda_backend {
         stream: CudaStream,
         executor: PreparedLlamaBatchExecutor,
         timer: LlamaIterationCudaTimer,
+        execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
         gpu_greedy: bool,
         generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
     }
@@ -2150,6 +2181,15 @@ mod cuda_backend {
             model: LoadedModel,
             config: CudaBackendConfig,
         ) -> Result<Self, BackendError> {
+            if config.executor.vllm_smol_p128_batched_prefill()
+                && (config.scheduler.max_active_sequences != 1
+                    || config.scheduler.iteration_token_budget != 128
+                    || config.scheduler.max_prefill_chunk_tokens != 128)
+            {
+                return Err(internal(
+                    "P128 graph requires one sequence and complete 128-token prefill scheduling",
+                ));
+            }
             metadata
                 .validate()
                 .map_err(|source| internal(format!("invalid model metadata: {source}")))?;
@@ -2196,9 +2236,21 @@ mod cuda_backend {
                 stream,
                 executor,
                 timer,
+                execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
                 gpu_greedy: config.gpu_greedy,
                 generation_audit: None,
             })
+        }
+
+        /// Chooses the persistent single-token graph policy before worker startup.
+        /// Unsupported Auto configurations retain the existing eager executor.
+        #[must_use]
+        pub fn with_execution_graph_policy(
+            mut self,
+            policy: riley_runtime::llama::ExecutionGraphPolicy,
+        ) -> Self {
+            self.execution_graph_policy = policy;
+            self
         }
 
         /// Loaded model metadata copied before resources move to the worker.
@@ -2257,11 +2309,7 @@ mod cuda_backend {
             config: EngineConfig,
         ) -> Result<Self, EngineError> {
             let metadata = resources.metadata.clone();
-            let backend = CudaBackend::new(resources).map_err(|error| {
-                eprintln!("riley CUDA backend setup failure: {}", error.detail());
-                EngineError::Internal
-            })?;
-            Self::start(metadata, config, backend)
+            Self::start_with_factory(metadata, config, move || CudaBackend::new(resources))
         }
     }
 
@@ -2274,6 +2322,9 @@ mod cuda_backend {
         cancellation_deferred: bool,
         pre_iteration_cancel_delta: String,
         generation_audit: Option<C02RequestAudit>,
+        include_token_ids: bool,
+        prompt_ids_for_delivery: Option<Vec<u32>>,
+        next_delivery_index: usize,
     }
 
     struct C02RequestAudit {
@@ -2385,6 +2436,7 @@ mod cuda_backend {
         context: Option<CudaContext>,
         stream: Option<CudaStream>,
         executor: Option<PreparedLlamaBatchExecutor>,
+        decode_graph: Option<riley_runtime::llama::OwnedLlamaDecodeExecutor>,
         timer: Option<LlamaIterationCudaTimer>,
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
@@ -2453,13 +2505,49 @@ mod cuda_backend {
                     .map(|bucket| bucket.dense_rows()),
             )
             .map_err(internal)?;
+            use riley_runtime::llama::ExecutionGraphPolicy;
+            if resources.executor.config().vllm_smol_p128_graph()
+                && resources.execution_graph_policy != ExecutionGraphPolicy::Require
+            {
+                return Err(internal(
+                    "vllm-smol-p128-v1 requires an explicitly required graph",
+                ));
+            }
+            let supported = resources.executor.supports_owned_decode_graph();
+            if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {
+                return Err(internal(
+                    "required full graph unsupported by prepared server configuration",
+                ));
+            }
+            let use_graph =
+                resources.execution_graph_policy != ExecutionGraphPolicy::Disabled && supported;
+            let (executor, decode_graph) = if use_graph {
+                let graph = resources
+                    .executor
+                    .into_owned_decode_graph(&resources.context)
+                    .map_err(|e| internal(format!("server graph preparation failed: {e}")))?;
+                (None, Some(graph))
+            } else {
+                (Some(resources.executor), None)
+            };
+            eprintln!(
+                "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
+                use_graph,
+                resources.execution_graph_policy,
+                !use_graph,
+                !use_graph,
+                decode_graph
+                    .as_ref()
+                    .map_or("existing", |graph| graph.numerical_profile_id())
+            );
             Ok(Self {
                 metadata: resources.metadata,
                 model: resources.model,
                 scheduler: Some(resources.scheduler),
                 context: Some(resources.context),
                 stream: Some(resources.stream),
-                executor: Some(resources.executor),
+                executor,
+                decode_graph,
                 timer: Some(resources.timer),
                 sampling,
                 allowed_tokens,
@@ -2523,7 +2611,10 @@ mod cuda_backend {
                 } else {
                     ""
                 };
-                if !delta.is_empty() {
+                // Cancellation flushes withheld text without a new commit.
+                // The raw-token stream terminates as an error, so it omits
+                // this unattributed flush; ordinary text delivery is unchanged.
+                if !delta.is_empty() && !request.include_token_ids {
                     events.push(BackendEvent::new(
                         request.engine_id,
                         GenerationEvent::TokenDelta {
@@ -2550,6 +2641,15 @@ mod cuda_backend {
                         | RequestFinishReason::ExecutorFailure => unreachable!(),
                     };
                     if matches!(reason, FinishReason::Length | FinishReason::Stop) {
+                        if request.include_token_ids
+                            && (request.next_delivery_index
+                                != completion.generated_token_ids().len()
+                                || request.prompt_ids_for_delivery.is_some())
+                        {
+                            return Err(internal(
+                                "terminal committed token delivery count differs",
+                            ));
+                        }
                         if let Some(generation_audit) = generation_audit.as_ref() {
                             let audit = request.generation_audit.take().ok_or_else(|| {
                                 internal("C02 audit sink has no request-local committed record")
@@ -2906,6 +3006,13 @@ mod cuda_backend {
             let mut first_error = None;
             let mut final_scheduler = None;
             let mut final_allocation = None;
+            if let Some(graph) = self.decode_graph.take() {
+                eprintln!("RILEY_GRAPH close replays={}", graph.replay_count());
+                graph.close().map_err(|e| {
+                    internal(format!("graph close failed; KV remains retained: {e}"))
+                })?;
+            }
+
             if self
                 .scheduler
                 .as_ref()
@@ -3020,6 +3127,10 @@ mod cuda_backend {
     }
 
     impl EngineBackend for CudaBackend {
+        fn supports_token_ids(&self) -> bool {
+            true
+        }
+
         fn admit(
             &mut self,
             request_id: EngineRequestId,
@@ -3046,6 +3157,13 @@ mod cuda_backend {
                     },
                 )
                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
+            if let Some(graph) = &self.decode_graph {
+                graph
+                    .validate_request_shape(prompt_token_ids.len(), request.max_new_tokens)
+                    .map_err(|_| {
+                        private_request_error("request is outside graph numerical profile bounds")
+                    })?;
+            }
             let total_tokens = prompt_token_ids
                 .len()
                 .checked_add(request.max_new_tokens)
@@ -3095,6 +3213,15 @@ mod cuda_backend {
                 .then(|| C02RequestAudit::new(metadata, request.stream, request.max_new_tokens))
                 .transpose()?;
             let now_ns = self.now_ns();
+            let prompt_ids_for_delivery = if request.include_token_ids {
+                let mut ids = Vec::new();
+                ids.try_reserve_exact(prompt_token_ids.len())
+                    .map_err(|_| internal("prompt token delivery allocation failed"))?;
+                ids.extend_from_slice(&prompt_token_ids);
+                Some(ids)
+            } else {
+                None
+            };
             let submission = self
                 .scheduler_mut()?
                 .submit(
@@ -3111,6 +3238,9 @@ mod cuda_backend {
                 cancellation_deferred: false,
                 pre_iteration_cancel_delta,
                 generation_audit,
+                include_token_ids: request.include_token_ids,
+                prompt_ids_for_delivery,
+                next_delivery_index: 0,
             });
             Ok(())
         }
@@ -3157,49 +3287,70 @@ mod cuda_backend {
             let selection = self.sampling_selection_for_plan(&plan)?;
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
-            let (mut downloaded, timing, staged_shape) = {
-                let executor = self
-                    .executor
-                    .as_mut()
-                    .ok_or_else(|| internal("batch executor is already closed"))?;
-                let stream = self
-                    .stream
-                    .as_mut()
-                    .ok_or_else(|| internal("CUDA stream is already closed"))?;
-                let timer = self
-                    .timer
-                    .as_mut()
-                    .ok_or_else(|| internal("CUDA timer is already closed"))?;
-                let execution = if gpu_greedy {
-                    execute_llama_iteration_greedy_timed_with_workspace(
+            let (mut downloaded, timing, staged_shape) =
+                if let Some(graph) = self.decode_graph.as_mut() {
+                    let execution = riley_scheduler::execute_llama_iteration_graph(
                         &plan,
-                        executor,
-                        stream,
-                        timer,
-                        &mut self.greedy_token_workspace,
-                    )
+                        graph,
+                        gpu_greedy.then_some(&mut self.greedy_token_workspace),
+                    );
+                    match execution {
+                        Ok(downloaded) => (
+                            downloaded,
+                            riley_scheduler::IterationTiming::default(),
+                            None,
+                        ),
+                        Err(failure) => {
+                            // No eager retry and no scheduler abort on unknown completion.
+                            return Err(internal(format!(
+                                "graph iteration failed: {}",
+                                failure.error()
+                            )));
+                        }
+                    }
                 } else {
-                    execute_llama_iteration_timed(&plan, executor, stream, timer)
+                    let executor = self
+                        .executor
+                        .as_mut()
+                        .ok_or_else(|| internal("batch executor is already closed"))?;
+                    let stream = self
+                        .stream
+                        .as_mut()
+                        .ok_or_else(|| internal("CUDA stream is already closed"))?;
+                    let timer = self
+                        .timer
+                        .as_mut()
+                        .ok_or_else(|| internal("CUDA timer is already closed"))?;
+                    let execution = if gpu_greedy {
+                        execute_llama_iteration_greedy_timed_with_workspace(
+                            &plan,
+                            executor,
+                            stream,
+                            timer,
+                            &mut self.greedy_token_workspace,
+                        )
+                    } else {
+                        execute_llama_iteration_timed(&plan, executor, stream, timer)
+                    };
+                    match execution {
+                        Ok((downloaded, timing)) => {
+                            let staged_shape = executor
+                                .last_shape_observation()
+                                .filter(|shape| shape.active_rows() == expected_active_rows)
+                                .map(|shape| BatchShapeExecutionSample {
+                                    active_rows: shape.active_rows(),
+                                    selected_dense_rows: shape.selected_dense_rows(),
+                                    padding_rows: shape.padding_rows(),
+                                    gpu_execution_ns: timing.gpu_execution_ns(),
+                                });
+                            (downloaded, timing, staged_shape)
+                        }
+                        Err(failure) => {
+                            events.extend(self.settle_execution_failure(&failure)?);
+                            return Ok(events);
+                        }
+                    }
                 };
-                match execution {
-                    Ok((downloaded, timing)) => {
-                        let staged_shape = executor
-                            .last_shape_observation()
-                            .filter(|shape| shape.active_rows() == expected_active_rows)
-                            .map(|shape| BatchShapeExecutionSample {
-                                active_rows: shape.active_rows(),
-                                selected_dense_rows: shape.selected_dense_rows(),
-                                padding_rows: shape.padding_rows(),
-                                gpu_execution_ns: timing.gpu_execution_ns(),
-                            });
-                        (downloaded, timing, staged_shape)
-                    }
-                    Err(failure) => {
-                        events.extend(self.settle_execution_failure(&failure)?);
-                        return Ok(events);
-                    }
-                }
-            };
             let sampling = self.sample_iteration(&plan, &downloaded, selection);
             if gpu_greedy {
                 if let Err(source) =
@@ -3291,12 +3442,31 @@ mod cuda_backend {
                 let request_index = self
                     .request_index_by_scheduler(token.request_id())
                     .ok_or_else(|| internal("committed token targets unknown request"))?;
-                events.push(BackendEvent::new(
-                    self.requests[request_index].engine_id,
-                    GenerationEvent::TokenDelta {
-                        text: pending.text_delta.clone(),
-                    },
-                ));
+                let text = pending.text_delta.clone();
+                let request = &mut self.requests[request_index];
+                let event = if request.include_token_ids {
+                    if token.generated_index() != request.next_delivery_index
+                        || (token.generated_index() == 0)
+                            != request.prompt_ids_for_delivery.is_some()
+                    {
+                        return Err(internal(
+                            "committed token delivery metadata is inconsistent",
+                        ));
+                    }
+                    request.next_delivery_index = request
+                        .next_delivery_index
+                        .checked_add(1)
+                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
+                    GenerationEvent::CommittedToken {
+                        text,
+                        token_id: token.token_id(),
+                        generated_index: token.generated_index(),
+                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
+                    }
+                } else {
+                    GenerationEvent::TokenDelta { text }
+                };
+                events.push(BackendEvent::new(request.engine_id, event));
             }
             events.extend(self.process_completions(updates.completions())?);
             if !updates.settlement_failures().is_empty() {
@@ -3348,6 +3518,7 @@ mod cuda_backend {
         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
             if self.scheduler.is_none()
                 && self.executor.is_none()
+                && self.decode_graph.is_none()
                 && self.timer.is_none()
                 && self.stream.is_none()
                 && self.context.is_none()
@@ -3571,6 +3742,7 @@ mod tests {
             },
             stop_sequences: Vec::new(),
             stream: true,
+            include_token_ids: false,
         }
     }
 
@@ -3921,6 +4093,109 @@ mod tests {
     }
 
     #[test]
+    fn committed_empty_token_is_delivered_and_channel_overflow_cancels() {
+        // Explicit committed-event fixtures exercise publication only. The
+        // text-only backend never manufactures token IDs from its mock text.
+        for capacity in [1, 3] {
+            let counters = Arc::new(MockCounters::default());
+            let mut backend = MockBackend::new(Arc::clone(&counters), Duration::ZERO);
+            let request_id = EngineRequestId(1);
+            backend.requests.insert(
+                request_id,
+                MockRequest {
+                    prompt_tokens: 2,
+                    generated: 2,
+                    remaining: 0,
+                },
+            );
+            let (sender, receiver) = std::sync::mpsc::sync_channel(capacity);
+            let cancellation = Arc::new(std::sync::atomic::AtomicU8::new(super::REQUEST_LIVE));
+            let stats = Arc::new(super::EngineStats::default());
+            stats.active_requests.store(1, Ordering::Release);
+            let mut requests = BTreeMap::from([(
+                request_id,
+                super::RequestControl {
+                    cancellation: Arc::clone(&cancellation),
+                    events: sender,
+                    stats: Arc::clone(&stats),
+                },
+            )]);
+            let events = (0..2)
+                .map(|index| {
+                    BackendEvent::new(
+                        request_id,
+                        GenerationEvent::CommittedToken {
+                            text: String::new(),
+                            token_id: 17 + u32::try_from(index).expect("small index"),
+                            generated_index: index,
+                            prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+                        },
+                    )
+                })
+                .collect();
+            super::publish_events(&mut backend, &mut requests, events);
+            assert!(
+                matches!(receiver.try_recv(), Ok(GenerationEvent::CommittedToken {
+                token_id:17, generated_index:0, text, prompt_token_ids:Some(ids),
+            }) if text.is_empty() && ids == [1,2])
+            );
+            if capacity == 1 {
+                assert_eq!(counters.cancelled.load(Ordering::Acquire), 1);
+                assert!(requests.is_empty());
+                assert!(receiver.try_recv().is_err());
+            } else {
+                assert!(matches!(
+                    receiver.try_recv(),
+                    Ok(GenerationEvent::CommittedToken {
+                        token_id: 18,
+                        generated_index: 1,
+                        prompt_token_ids: None,
+                        ..
+                    })
+                ));
+                assert_eq!(counters.cancelled.load(Ordering::Acquire), 0);
+                cancellation.store(super::REQUEST_CANCELLED, Ordering::Release);
+                super::publish_events(
+                    &mut backend,
+                    &mut requests,
+                    vec![
+                        BackendEvent::new(
+                            request_id,
+                            GenerationEvent::CommittedToken {
+                                text: String::new(),
+                                token_id: 19,
+                                generated_index: 2,
+                                prompt_token_ids: None,
+                            },
+                        ),
+                        BackendEvent::new(
+                            request_id,
+                            GenerationEvent::Finished {
+                                reason: FinishReason::Cancelled,
+                                usage: TokenUsage::new(2, 2).expect("usage"),
+                            },
+                        ),
+                    ],
+                );
+                assert!(matches!(
+                    receiver.try_recv(),
+                    Ok(GenerationEvent::Finished {
+                        reason: FinishReason::Cancelled,
+                        ..
+                    })
+                ));
+                assert!(receiver.try_recv().is_err());
+                assert!(requests.is_empty());
+            }
+            assert_eq!(
+                cancellation.load(Ordering::Acquire),
+                super::REQUEST_TERMINAL
+            );
+            assert_eq!(stats.active_requests.load(Ordering::Acquire), 0);
+        }
+    }
+
+    #[test]
     fn graceful_shutdown_rejects_new_work_and_closes_backend() {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(Arc::clone(&counters), 8, 4, Duration::from_millis(5));
@@ -3951,6 +4226,20 @@ mod tests {
     }
 
     #[test]
+    fn text_only_backend_rejects_token_ids_before_admission() {
+        let counters = Arc::new(MockCounters::default());
+        let engine = engine(Arc::clone(&counters), 8, 2, Duration::ZERO);
+        let mut input = request(2);
+        input.include_token_ids = true;
+        assert!(matches!(
+            engine.submit(input),
+            Err(EngineError::InvalidRequest)
+        ));
+        assert_eq!(engine.status().active_requests, 0);
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+    }
+
+    #[test]
     fn concurrent_requests_finish_without_deadlock() {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(Arc::clone(&counters), 8, 8, Duration::ZERO);
@@ -3969,6 +4258,9 @@ mod tests {
                         GenerationEvent::Finished { .. } => break tokens,
                         GenerationEvent::Failed { class } => {
                             panic!("unexpected failure: {class:?}")
+                        }
+                        GenerationEvent::CommittedToken { .. } => {
+                            panic!("text-only mock produced model IDs")
                         }
                     }
                 }

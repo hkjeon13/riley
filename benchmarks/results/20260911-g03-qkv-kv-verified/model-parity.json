@@ -1,0 +1,50 @@
+{
+  "all_match": true,
+  "prior_log": "benchmarks/results/20260911-g03-qkv-rope-verified/gpu-model.log",
+  "prior_log_sha256": "f6f36d0a72daa191c5395b1a5398c4a596bb8832b4f5629114ec2e5894442a93",
+  "receipts": [
+    [
+      "RILEY_CANONICAL_CHECKPOINT",
+      "2",
+      "398336",
+      "446a6ee666785e4791ddffbec517ef2cb251c0072ca775c33e1c4a1f43995f4b",
+      "[2, 2, 2, 2]"
+    ],
+    [
+      "RILEY_REAL_CHECKPOINT",
+      "30",
+      "623616",
+      "e04fb2505a7d43e2e6679edb525bfb6e3ac2829f10fb5140a2598b9f9b6a5979",
+      "[808, 2775, 288, 536]"
+    ],
+    [
+      "RILEY_ODD_CHECKPOINT",
+      "3",
+      "400896",
+      "fcbc4d29d5f114f60af87e10bd43c38134b21b872bfba329391954e489871f01",
+      "[5, 5, 5, 0]"
+    ],
+    [
+      "RILEY_CANONICAL_CHECKPOINT",
+      "2",
+      "398336",
+      "446a6ee666785e4791ddffbec517ef2cb251c0072ca775c33e1c4a1f43995f4b",
+      "[2, 2, 2, 2]"
+    ],
+    [
+      "RILEY_REAL_CHECKPOINT",
+      "30",
+      "623616",
+      "e04fb2505a7d43e2e6679edb525bfb6e3ac2829f10fb5140a2598b9f9b6a5979",
+      "[808, 2775, 288, 536]"
+    ]
+  ],
+  "replay_counts": {
+    "G03_QKV_KV": 640,
+    "G03_QKV_ROPE": 640,
+    "G03_NORM_QKV": 640,
+    "G03_LAYER_TAIL": 640,
+    "G03_NORM_MLP": 640,
+    "G03_MLP": 640
+  }
+}

@@ -1,0 +1,28 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+error[E0308]: mismatched types
+   --> crates/riley-runtime/src/llama/graph_decode_attention_model_gpu.rs:149:40
+    |
+149 |                     let end = offset + (step + 1) * 64 * 2;
+    |                                        ^^^^^^^^^^^^^^^^^^^ expected `usize`, found `u32`
+
+error[E0277]: cannot add `u32` to `usize`
+   --> crates/riley-runtime/src/llama/graph_decode_attention_model_gpu.rs:149:38
+    |
+149 |                     let end = offset + (step + 1) * 64 * 2;
+    |                                      ^ no implementation for `usize + u32`
+    |
+    = help: the trait `Add<u32>` is not implemented for `usize`
+    = help: the following other types implement trait `Add<Rhs>`:
+              `&usize` implements `Add<usize>`
+              `&usize` implements `Add`
+              `usize` implements `Add<&usize>`
+              `usize` implements `Add`
+
+Some errors have detailed explanations: E0277, E0308.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `riley-runtime` (lib test) due to 2 previous errors

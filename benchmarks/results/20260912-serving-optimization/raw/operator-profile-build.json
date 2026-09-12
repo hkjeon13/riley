@@ -1,0 +1,43 @@
+{
+  "base_source_commit": "53677519082135c42a5d044044c5b31cad4a146a",
+  "base_build_sha256": "e33eca0efd3670c2cac7d935245599bc65099c402021f9a5c78eea0c76ef307b",
+  "source_root": "/tmp/riley-opt-260912/operator-profile-source",
+  "source_clean": false,
+  "instrumented_source_sha256": "95557a0f9b52529071b76b782c0b0f78c89704d8ab464b7689c9f6ae15f1a8f5",
+  "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+  "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+  "instrumentation": {
+    "schema_version": "riley.decode-operator-instrumentation.v1",
+    "source_root": "/tmp/riley-opt-260912/operator-profile-source",
+    "source_file": "kernels/src/graph_resources.cu",
+    "original_sha256": "2d148ef8cb76ee2fb23e1515063108d53c20cbc34ab125ab63cafd65fa3635b2",
+    "instrumented_sha256": "95557a0f9b52529071b76b782c0b0f78c89704d8ab464b7689c9f6ae15f1a8f5",
+    "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+    "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+    "applied": true,
+    "projection_events": true,
+    "families": [
+      "qkv",
+      "rope_kv",
+      "attention",
+      "o",
+      "post_norm",
+      "gate_up",
+      "swiglu",
+      "down",
+      "next_norm",
+      "head"
+    ],
+    "runtime_enable": "RILEY_OWNED_GRAPH_PROFILE=1",
+    "runtime_operator": "RILEY_DECODE_OPERATOR=<family>|off (default off)",
+    "runtime_layers": "RILEY_DECODE_OPERATOR_LAYERS=0,15,29|all (default 0,15,29; head is one interval)",
+    "runtime_exclusivity": "operator and historical projection modes require separate processes",
+    "synchronizations_added": 0,
+    "performance_claim_eligible": false
+  },
+  "binary": "/tmp/riley-opt-260912/operator-profile-target/release/riley",
+  "binary_sha256": "8840bed5743be3e69308182941f5ffff7f59acb9c6acdea29c6892d03f13b59b",
+  "build_log_sha256": "125da3234964168fe2fba38ada9c4d6cdddb949471c4511d6b0d4f63c6a9b447",
+  "performance_claim_eligible": false,
+  "execution_started": false
+}

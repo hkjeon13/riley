@@ -1,0 +1,21 @@
+{
+  "phase": "warmup-stream",
+  "warmup": true,
+  "requested": 10,
+  "attempted": 10,
+  "succeeded": 10,
+  "failed": 0,
+  "unresolved_attempts": 0,
+  "not_started": 0,
+  "offered_concurrency": 2,
+  "observed_max_request_in_flight": 2,
+  "observed_max_call_in_flight": 2,
+  "phase_started_ns": 809306324202794,
+  "phase_finished_ns": 809306667797515,
+  "completed": true,
+  "worker_errors": [],
+  "watchdog_timed_out_request_indices": [],
+  "failure_policy": "stop new requests; drain in-flight calls; total deadline aborts owned server; no retries",
+  "client_socket_timeout_seconds": 120,
+  "total_request_deadline_seconds": 120
+}

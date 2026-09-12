@@ -1,0 +1,42 @@
+{
+  "scope": "G03 prerequisite: fixed physical hidden roles within batch layer chain; native aggregate pending",
+  "gpu": {
+    "before": 14,
+    "after": 14,
+    "batch_regressions": 3,
+    "exit_code": 0
+  },
+  "cpu": {
+    "runtime": 259,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "before_after_model_bytes_exact": true,
+  "full_graph_complete": false,
+  "performance_claim": false,
+  "clippy_exit_code": 0,
+  "fmt_diff_exit_code": 0,
+  "artifacts": {
+    "README.md": "2d2e46dc9481ac4bbb8b5f665917ea43aa5959d668257c83de71a0b52560bd62",
+    "before-after-parity.json": "8e0fdcd04a0d0a50f315f61ae85563b9ea382fb7538cb6dd1adbc7f563eda50f",
+    "before-identities.txt": "57657c2d660e3d4330498b35eb917d99f35a19441fde73ac521157ed7bbe997b",
+    "clippy.log": "827002c304590f11a3e172b3692f0da8a32d056bd9269eeaf0d10719ca69b820",
+    "dispatch-before.rs": "8244b290fee228443b942622c786412942618e0a155be35cca0f4e5f2a0ad78b",
+    "dispatch-change.patch": "8c3ae7256c3cbdb09b23af8bfb818d3de0d42f0e50606ac64315e39af5980d07",
+    "format-diff.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gpu-after.log": "dc9526c6b23f853d0320ede5149b8bda8a26aba2b9572c3f2ed7ba6e92a28281",
+    "gpu-batch-regression.log": "f44ff16be43c7fa515b91d692cac25c6d9b0899062942e0be4edb2b4ea618e6e",
+    "gpu-before.log": "2bdfac5adde609a82680a8d89817b40d5e2b45963d1d179a8d213cba36944fa4",
+    "initial-hash-format-build-error.log": "c3775a7c656bb41013a4c2efe269772c4223532ef58e3dccb607c306bed23929",
+    "make-odd-fixture.py": "4fb6661d4d95b3c14a0444cccb89824c2382efab15c5a19d67a884b903c084cc",
+    "model-preservation.json": "f82828ab304c4acc177a244cb0dcc41787580f6ceb9b1c38e5dee75667420b44",
+    "odd-fixture-manifest.json": "c4b0d652f8a0ce7607a815c1e37f31674d87d256a253f3d3849e970a89238856",
+    "remote-source-verification.json": "b639b829eb4eb5c02088924edceed957c336d24445c9d3b4ba0bf65cbd526d47",
+    "roles-cpu.log": "2e9e71f68efc273149ded445597828f690f14d89af4e93004413392c89976315",
+    "runtime-cpu.log": "8ae91f6a756d18d0219789d2abffc1269ee72670a80cb6432a9dcf38d9e2c8f6",
+    "runtime-identities.json": "4a79a3617ac34939f856d25bf081099505a89a7249e1c70d31d5b7503ea40f42",
+    "source-hashes.json": "68d59e882baaf6f60132685f2d124cc1ef9b16fdce16001d18e2e015ebc796ea",
+    "source-overlay.tar.gz": "b60b1ed607e691235f76c5e334c1ce67613b14d5bae27db7e1e8d5d70cef8641"
+  }
+}

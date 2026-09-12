@@ -1,0 +1,17 @@
+{
+  "check_id": "disconnect-0",
+  "kind": "intentional_disconnect",
+  "completed": true,
+  "sampler": "gpu-greedy",
+  "request": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/disconnect-0-request.json",
+    "sha256": "ded236ea3dd57be0014456906f8b31778752cb1897ae37f5992ad97d9eae152d"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/disconnect-0-response.json",
+    "sha256": "a11a927fc30abdb1c1c54ec41f550ace39c00be4cda6747db3cf422c3e6c92d8"
+  },
+  "boundary": "after_headers",
+  "claim": "connection closed and following request reuses engine; cancellation race outcome is not inferred",
+  "performance_claim": false
+}

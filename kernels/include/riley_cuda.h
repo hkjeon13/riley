@@ -1358,6 +1358,26 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// G02C-HF: distinct profile entry points, exact BF16 H576/rows 1..8192/epsilon
+// 1e-5. Reuses the norm-family opaque lease lifecycle; canonical enqueue and
+// HF enqueue reject each other's captures. This does not promote global capability.
+RileyCudaStatus riley_cuda_graph_capture_begin_hf_smollm2_rms_norm_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output,
+    uint64_t row_count,
+    uint64_t hidden_size,
+    float epsilon,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Begins a C05-13 capture containing exactly one fixed-address deterministic
 // BF16 argmax node. `logits` is contiguous BF16 `[row_count,
 // vocabulary_size]`; `results` is U32 `[row_count, 2]` containing the exact
@@ -1480,6 +1500,24 @@ RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
     RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Additive output contract: row indices occupy the aligned indices_offset span
+// in their actual parent, pinned results occupy its byte-zero prefix. Both whole
+// allocations are retained until graph destruction. Legacy exact pinned-size
+// entrypoint is unchanged. Read results only after matching launch completion.
+RileyCudaStatus riley_cuda_graph_capture_begin_output_parent_d2h(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results,
+    RileyCudaPinnedHostBuffer* pinned_results,
+    uint64_t input_row_count,
+    uint64_t output_row_count,
+    uint64_t vocabulary_size,
+    uint64_t indices_offset, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Enqueues the exact row-gather, argmax, and result D2H node triple for a
 // capture created by riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h.
 // All fixed allocations and geometry remain immutable for the graph lifetime.
@@ -1537,6 +1575,20 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h(
 // This narrow API admits no spans, offsets, fresh addresses, descriptor work,
 // heuristic selection, command batches, node updates, or eager fallback.
 RileyCudaStatus riley_cuda_graph_capture_begin_canonical_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Additive selected-plan contract. Preserves the opaque algorithm and reviewed
+// prepare policy (flags 0, 1 or 3), but requires effective split_k <= 1/NONE.
+// Input/weight/output have exact sizes. Workspace may be null only when the
+// plan requires zero bytes; otherwise the actual parent must have enough bytes.
+// The entire supplied parent is leased; matmul uses its byte-zero required prefix.
+// Capture/replay/close reuse the GEMM enqueue and graph lifecycle entrypoints.
+// The legacy canonical entrypoint retains its strict-policy/exact-size contract.
+RileyCudaStatus riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
     RileyCudaStream* stream, RileyCudaGemmPlan* plan,
     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
@@ -1618,6 +1670,26 @@ RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
     RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Additive variant: aligned positions span within a retained whole parent allocation.
+RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16_positions_span(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* cos,
+    RileyCudaDeviceBuffer* sin,
+    RileyCudaDeviceBuffer* positions,
+    RileyCudaDeviceBuffer* output,
+    const uint32_t* positions_mirror,
+    uint64_t positions_mirror_len,
+    uint64_t active_row_count,
+    uint64_t head_count,
+    uint64_t head_size,
+    uint64_t rotary_dimension,
+    uint64_t table_position_count,
+    uint64_t positions_byte_offset,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Enqueues the sole fixed-address BF16 indexed-RoPE node for a capture created
 // by riley_cuda_graph_capture_begin_indexed_rope_bf16. The five allocations
 // and exact geometry remain immutable for the graph lifetime. A failed CUDA
@@ -1637,6 +1709,17 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
 // no host metadata and performs no H2D staging. Its device kernel preserves
 // eager write behavior: a bounds-invalid raw metadata row is a no-op, while
 // duplicate valid raw addresses retain the eager kernel's unspecified race.
+// Packed D64/page16 write retaining complete KV and metadata parents.
+RileyCudaStatus riley_cuda_graph_capture_begin_packed_parent_kv_write_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* key_source,
+    RileyCudaDeviceBuffer* value_source, RileyCudaDeviceBuffer* key_parent,
+    RileyCudaDeviceBuffer* value_parent, RileyCudaDeviceBuffer* metadata,
+    const uint64_t* metadata_offsets,
+    uint64_t sequence_count, uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t key_value_head_count,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus
 riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
     RileyCudaStream* stream,
@@ -1698,6 +1781,50 @@ riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16(
     uint64_t output_row_count,
     float scale,
     RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Parent-layer variant. Opaque buffer owners remain exclusively leased until
+// graph close. Requires exact [layers,P,KVH,16,64] BF16 parent capacities;
+// selects layer_index without accepting raw pointers, offsets or lengths.
+RileyCudaStatus
+riley_cuda_graph_capture_begin_parent_layer_attention_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool,
+    RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids,
+    RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions,
+    uint64_t sequence_count,
+    uint64_t block_count,
+    uint64_t active_row_count,
+    uint64_t physical_block_count,
+    uint64_t query_head_count,
+    uint64_t key_value_head_count,
+    uint64_t output_row_count,
+    float scale,
+    RileyCudaGraphCaptureMode mode,
+    uint64_t parent_layers,
+    uint64_t layer_index,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Packed parent attention: five copied field offsets; one exclusive slab lease.
+RileyCudaStatus
+riley_cuda_graph_capture_begin_packed_parent_attention_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool, RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* metadata_slab, const uint64_t* metadata_offsets,
+    uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t output_row_count, float scale,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
     RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
@@ -2415,6 +2542,156 @@ RileyCudaStatus riley_cuda_smoke_buffer_close(
 RileyCudaStatus riley_cuda_smoke_invalid_launch(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Cold resource reservation for future aggregate recording. No CUDA work is
+// submitted. Repeated handles acquire one lease; this does not validate an
+// operator DAG, authorize capture, or admit full decode replay. Maximum 4096
+// occurrences and 1024 unique resources including the stream.
+typedef struct RileyCudaGraphResources RileyCudaGraphResources;
+RileyCudaStatus riley_cuda_graph_resources_reserve(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
+    RileyCudaPinnedHostBuffer* const* pinned, uint64_t pinned_count,
+    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
+    RileyCudaGraphResources** out_resources,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Owner-thread only; idempotent for a null owner. On failure an unconsumed
+// pointer remains non-null, retaining its remaining leases. Reserve may also
+// return a non-null owner on a rollback failure; callers must retain/close it.
+RileyCudaStatus riley_cuda_graph_resources_close(
+    RileyCudaGraphResources** resources,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Builds an explicit three-node transfer graph on a reserved owner. All four
+// distinct, equal-sized nonempty parents must already be in its ledger.
+// This is a transport/lifecycle probe, not a full decode graph or stream capture.
+RileyCudaStatus riley_cuda_graph_resources_record_transfer(
+    RileyCudaGraphResources* resources, RileyCudaPinnedHostBuffer* input,
+    RileyCudaDeviceBuffer* first, RileyCudaDeviceBuffer* second,
+    RileyCudaPinnedHostBuffer* output, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Copies fresh host bytes into the leased pinned input, launches once and
+// synchronizes. A failed launch/sync retains every parent until completion is
+// known. Wrong-size calls are rejected before mutation. No separate stale launch.
+RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+    RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Copies completed output to caller storage; rejected before successful replay.
+RileyCudaStatus riley_cuda_graph_resources_read_transfer(
+    RileyCudaGraphResources* resources, uint8_t* destination, uint64_t bytes,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Six-node BF16 SwiGLU diagnostic chain using the same eager kernels:
+// H2D(gate/up), SiLU, multiply, D2H(activated/product). All four device
+// allocations must be distinct, registered, nonempty and equal-sized BF16.
+// One registered pinned parent holds [gate, up, activated, product] in disjoint
+// regions. replay_transfer stages exactly [gate,up]; read_transfer returns
+// [activated,product] only after completion. Pinned bytes beyond 4*N are untouched.
+RileyCudaStatus riley_cuda_graph_resources_record_swiglu(
+    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* gate,
+    RileyCudaDeviceBuffer* up, RileyCudaDeviceBuffer* activated,
+    RileyCudaDeviceBuffer* product, RileyCudaPinnedHostBuffer* staging,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Captures a staged M=1 MLP using existing selected GEMMs/eager pointwise kernels.
+// Exactly 12 device slots: norm input, residual, gate, up, activated, product,
+// down, final output, gate weight, up weight, down weight, optional workspace.
+// Exactly two plans: intermediate and down. All non-null parents and plans must
+// be registered. Staging holds [input,residual,down,final], each hidden-byte sized.
+// Capture is synchronous and publishes the existing native TLS/domain guard.
+RileyCudaStatus riley_cuda_graph_resources_record_mlp(
+    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices,
+    RileyCudaGemmPlan* intermediate, RileyCudaGemmPlan* down,
+    RileyCudaPinnedHostBuffer* staging, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Same 12 slots/staging as MLP; overwrite slot 0 with RMSNorm(slot 1).
+// Additional distinct ledger-held BF16 norm weight; profile 0 canonical,
+// 1 exact HF SmolLM2 (hidden 576, epsilon 1e-5). First staging slice is scratch.
+RileyCudaStatus riley_cuda_graph_resources_record_norm_mlp(
+    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices,
+    RileyCudaGemmPlan* intermediate, RileyCudaGemmPlan* down,
+    RileyCudaPinnedHostBuffer* staging, RileyCudaDeviceBuffer* norm_weight,
+    float epsilon, uint32_t profile, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Same slots as MLP. Staged [attention context, pre-attention residual] feeds
+// output projection -> in-place attention residual -> norm -> MLP. Slot 7 is
+// reused for projection then final output; slot 0 for context then norm output.
+// Both extra weights must be distinct registered parents; projection plan is
+// registered selected M=1 hidden->hidden. No projection bias is supported.
+RileyCudaStatus riley_cuda_graph_resources_record_layer_tail(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, RileyCudaDeviceBuffer*,
+    float, uint32_t, RileyCudaDeviceBuffer*, RileyCudaGemmPlan*, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// M=1 norm->Q/K/V. Exactly 10 device slots: input,norm,Q,K,V,norm weight,
+// Q weight,K weight,V weight,optional workspace. Distinct ledger-held parents.
+// Replay payload is Q+K+V bytes: first hidden bytes are fresh input, remainder
+// padding. Completed output is packed Q,K,V. Staging requires twice payload size.
+RileyCudaStatus riley_cuda_graph_resources_record_norm_qkv(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// Norm-QKV plus D64 indexed RoPE; five extra slots: rotated Q/K, F32 cos/sin,
+// actual U32 position parent. The payload's first padding word is a fresh
+// position, validated before launch and copied to position_offset each replay.
+RileyCudaStatus riley_cuda_graph_resources_record_qkv_rope(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// QKV/RoPE + fixed-block KV write. Cache parents [key,value], geometry exactly
+// [layers,layer,physical_blocks,physical_block,logical_block,valid_tokens].
+// Replay rejects a position outside the bound logical block/valid prefix.
+// Changing mapping or valid prefix requires recapture; no general batch admission.
+RileyCudaStatus riley_cuda_graph_resources_record_qkv_kv(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaDeviceBuffer* const*,
+    const uint64_t*, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// Extends bound QKV/KV with grouped-head attention for logical block zero.
+// Metadata fields: sequence offsets (8), physical id (4), valid prefix (2),
+// row slot (4). All fields disjoint from each other and the RoPE position.
+// Replays freshly publish fixed metadata; result is attention output,K,V.
+// Full M=1,D64 canonical decode. Fixed arrays: devices[22], plans[5], geometry[4].
+// weights[3+9*layers], eps[1+2*layers]; every parent must be reserved.
+RileyCudaStatus riley_cuda_graph_resources_record_decode(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
+    const float*, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// Profile2 P128 prefill and M1 decode under the same retained resource ledger.
+// Additional parents[12]: hidden,norm,projection,rotaryQ,context,rawK,rawV,
+// rotaryK,gate,up,residualFP32,product. Exact byte sizes are 128 times
+// [1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072].
+// Metadata appends {magic=0x50313238,rows,tokens[128]} after the legacy layout.
+// rows128 requires last_position127 and base token==tokens127; rows1 requires
+// positions128..159 and all appended token slots zero. Every parent is reserved.
+RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
+    const float*, uint32_t, uint32_t, RileyCudaDeviceBuffer* const*,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+// Additive profile2 P128 graph with packed M1 decode projections. Prefill keeps
+// the exact original operators and parents. packed[62] has two weights per
+// layer: [2*l]=BF16 QKV[960,576], [2*l+1]=BF16 gate_up[3072,576], l=0..29;
+// [60]=QKV output1920 bytes, [61]=gate_up output6144 bytes. All packed parents
+// are distinct and disjoint from original device/weight/prefill allocations.
+// packed_plans[2] are selected strict no-split, zero-workspace M1 plans for
+// N960/K576 and N3072/K576, with the explicitly qualified SM89/CUDA13 identity.
+// All parents and plans must already belong to the same aggregate reservation.
+RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,
+    const float*, uint32_t, uint32_t, RileyCudaDeviceBuffer* const*,
+    RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan* const*,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
+RileyCudaStatus riley_cuda_graph_resources_record_attention_chain(
+    RileyCudaGraphResources*,RileyCudaDeviceBuffer* const*,RileyCudaGemmPlan*,RileyCudaGemmPlan*,
+    RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,
+    RileyCudaDeviceBuffer* const*,const uint64_t*,RileyCudaDeviceBuffer*,const uint64_t*,RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
 #ifdef __cplusplus
 }  // extern "C"

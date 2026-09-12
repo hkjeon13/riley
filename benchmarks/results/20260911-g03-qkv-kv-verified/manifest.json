@@ -1,0 +1,42 @@
+{
+  "status": "remote_validation_passed",
+  "cuda_build_passed": true,
+  "gpu_tests": {
+    "gpu-kv-native.log": 1,
+    "gpu-qkv-native.log": 1,
+    "gpu-tail-native.log": 1,
+    "gpu-model.log": 14,
+    "gpu-aggregate.log": 3,
+    "gpu-swiglu.log": 2
+  },
+  "gpu_total_passed": 22,
+  "all_test_exit_codes": 0,
+  "model_replays": {
+    "G03_QKV_KV": 640,
+    "G03_QKV_ROPE": 640,
+    "G03_NORM_QKV": 640,
+    "G03_LAYER_TAIL": 640,
+    "G03_NORM_MLP": 640,
+    "G03_MLP": 640
+  },
+  "model_parity_matches_prior": true,
+  "full_decode_graph_complete": false,
+  "performance_measurement_started": false,
+  "artifacts": {
+    "README.md": "51d3eb29fb44013698845a92425a372af57500fb7a56b44b5acdb60a4a1c31f9",
+    "authorized-transfer.json": "0a5e64b6bbe5e9a6520c444c62280114ea3b2d9c1ec57273ae001c1f850aa367",
+    "build.log": "5a27f889c0c6cb03669f6e7d10d38e2eb7e9b01c697e5806ed3482944d0ed5d8",
+    "gpu-aggregate.log": "efce25c4818bd74d409706ca6965d52e0c18c4bf11e50f94c0a4271ccc06f818",
+    "gpu-kv-native.log": "d55823a07628042345d08994dac0188775bac3eacbfab4355629b9ccefc07be3",
+    "gpu-model.log": "e6410ed3a8916357debab564f2160cdbd730ca29b49d6f838785c3199cb8b69f",
+    "gpu-qkv-native.log": "daa073bacd634610c3c34cc7468460792a9be03493ddb6e2ac4d9e33e07166bb",
+    "gpu-swiglu.log": "0a3f626585997cac199b27837e31b22abcecca039c61a45850f21d74bbadc4c3",
+    "gpu-tail-native.log": "5c916bd0e4eead2d05d014a61ee2fc58e8929b4dd58549f228b0e2f1418e3ba6",
+    "local-checks.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-parity.json": "e5e2f5265618a20f9512ceffce30ad6d1c2d747346a23c479368075064a2c93d",
+    "model-preservation.json": "b3a4299929af2f0d7ba3e525f3cee0af85043e27e95d6b263f15e2a5614a6314",
+    "remote-before.txt": "d34be4243fcf14ce88d9b615d12251416cffc42d4baa99f747fd402515a92790",
+    "remote-hashes.txt": "5c2fe47b0b5027babf35964f65fbc75796aec198fd6068e7e5d01d5a7feafa72",
+    "runtime-identities.txt": "2118ab9ffdaa954c8950e76a2bcaa9382c88044209989baffa942c9cbc427abd"
+  }
+}

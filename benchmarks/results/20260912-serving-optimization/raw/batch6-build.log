@@ -1,0 +1,158 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-cuda)
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-core)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-model)
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 27.71s
+  Executable unittests src/lib.rs (/tmp/riley-opt-260912/batch6-target/release/deps/riley_runtime-835ae91bc565a2d5)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-core)
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-cuda)
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `rejected` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:22:4
+   |
+22 | fn rejected(reason: &'static str) -> LlamaBatchExecutorError {
+   |    ^^^^^^^^
+
+warning: function `read` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:28:4
+   |
+28 | fn read(
+   |    ^^^^
+
+warning: methods `audit_c07_norm_qkv`, `audit_c07_qkv_rope`, `audit_c07_qkv_kv`, `audit_c07_attention_chain`, and `audit_qkv_impl` are never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:39:19
+   |
+37 | impl PreparedLlamaBatchExecutor {
+   | ------------------------------- methods in this implementation
+38 |     #[allow(clippy::too_many_lines)]
+39 |     pub(crate) fn audit_c07_norm_qkv(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+45 |     pub(crate) fn audit_c07_qkv_rope(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+52 |     pub(crate) fn audit_c07_qkv_kv(
+   |                   ^^^^^^^^^^^^^^^^
+...
+59 |     pub(crate) fn audit_c07_attention_chain(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+67 |     fn audit_qkv_impl(
+   |        ^^^^^^^^^^^^^^
+
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-scheduler)
+   Compiling riley-server v0.1.0 (/tmp/riley-opt-260912/batch6-source/crates/riley-server)
+warning: `riley-runtime` (lib) generated 6 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+    Finished `release` profile [optimized + debuginfo] target(s) in 13.89s

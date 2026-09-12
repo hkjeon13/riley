@@ -1,0 +1,178 @@
+{
+  "schema_version": "riley.http-wakeup-qualification.v1",
+  "passed": true,
+  "source_root": "/tmp/riley-opt-260912/batch3-source",
+  "source_commit": "83cda03e183e29f48a82f7e7be3282c2e83ee186",
+  "source_clean": true,
+  "implementation_id": "g07-http-wakeup-v1",
+  "numerical_profile": "vllm-smol-p128-v1",
+  "correctness_gate_id": "g04-vllm-smol-p128-v1",
+  "scope": "HTTP-only readiness/wakeup change; SmolLM2-135M BF16 c1 P128 O32. New server CPU lifecycle tests and release HTTP reference text, SSE, rejection, disconnect/reuse and shutdown checks. GPU component correctness is reused by exact source equivalence.",
+  "build": {
+    "path": "/tmp/riley-opt-260912/batch3-build.json",
+    "sha256": "1a08c6290872e1692425da6571c054c670a41cb8fa4ae08232e541aa260419f4"
+  },
+  "cpu_tests": {
+    "path": "/tmp/riley-opt-260912/batch3-cpu-tests.json",
+    "sha256": "9e8aaa76b7e1cb94467790efcc4ddafb233e3657fab6710a2f39200f2b0cfd2d"
+  },
+  "release_http": {
+    "path": "/tmp/riley-opt-260912/batch3-http-correctness/http-validation.json",
+    "sha256": "5fe742116177e7ccd71581a02de7d3b5f33b509a3a0f6e335d8c3383b311edae"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch3-target/release/riley": "7391b2f6b3776b79b81c11b24b90fc1f953720672e5f1230cf15f2239f529704",
+    "/tmp/riley-opt-260912/batch3-target/release/riley-profile": "cd0a75ee95ead9e192fceb5270984695d140a58ff05e2c733a43df87b2f012be"
+  },
+  "new_binary_http_reference_text_exact": true,
+  "gpu_component_tests_rerun_on_batch3": false,
+  "gpu_component_evidence": {
+    "basis": "direct child commit changes only service.rs; all 17 frozen runtime/native source hashes are equal",
+    "source_commit": "1bfb23053fb15a3528eb6413abe6e1bbdb0db004",
+    "source_root": "/tmp/riley-opt-260912/batch2-source",
+    "binaries": {
+      "/tmp/riley-opt-260912/batch2-target/release/riley": "143e3077953aa946141ff50f1dfb9f5e9beac966750a6c46ed0bad66a5a20e86",
+      "/tmp/riley-opt-260912/batch2-target/release/riley-profile": "c558a037711dd8fa9b7b5a64cc76eb3372a7196537a4e41dcb527a9a9d35144a"
+    },
+    "qualification": {
+      "path": "/tmp/riley-opt-260912/batch2-qualification.json",
+      "sha256": "a90c2094bede7db9fba4da147cdeff6d156b5dac3cffde00d0e1f2938c23ff7d"
+    },
+    "gpu_tests": {
+      "path": "/tmp/riley-opt-260912/batch2-gpu-tests.json",
+      "sha256": "ec2c60db1895ffb119e5dd3f82655c2691a82b31f50c43cdd0cfa152a3f33e59"
+    },
+    "gpu_test_logs": [
+      {
+        "name": "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+        "passed": true,
+        "path": "/tmp/riley-opt-260912/batch2-batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation.log",
+        "sha256": "9707e08ce73e6a997c2fbbc8626eace666101d3b32d391c7142ade9cdc3d6580"
+      },
+      {
+        "name": "batched_prefill_exact_logits_status_and_every_decode_kv",
+        "passed": true,
+        "path": "/tmp/riley-opt-260912/batch2-batched_prefill_exact_logits_status_and_every_decode_kv.log",
+        "sha256": "8b1b7fc30fe4804725b1ba1a0e714823a132c2a917a8bd03be9baae64da608a4"
+      },
+      {
+        "name": "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+        "passed": true,
+        "path": "/tmp/riley-opt-260912/batch2-owned_graph_smol_p128_o32_reuses_scheduler_block_mappings.log",
+        "sha256": "8b13be4923c371f6fc5e157fccd9d386d3b158456de4bc7ee12785a155c8ece4"
+      },
+      {
+        "name": "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+        "passed": true,
+        "path": "/tmp/riley-opt-260912/batch2-owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings.log",
+        "sha256": "b37d98ad6a11e02ddb6aeec8938d327268ee46b6085f904052ea8b0dc92fb5a6"
+      }
+    ],
+    "prior_vllm_reference_tokens_exact": true,
+    "prior_full_logits_and_kv_exact": true,
+    "only_changed_source_files": [
+      "crates/riley-server/src/service.rs"
+    ],
+    "file_count": 17,
+    "source_file_parity": {
+      "crates/riley-cuda/src/ffi.rs": {
+        "batch2_sha256": "c15888a7a971f8901cdb737a4b0beb1b53604e0ddd164b8a822764351f7fdcaf",
+        "batch3_sha256": "c15888a7a971f8901cdb737a4b0beb1b53604e0ddd164b8a822764351f7fdcaf",
+        "equal": true
+      },
+      "crates/riley-cuda/src/graph_resources.rs": {
+        "batch2_sha256": "af7814e0eee11bb3607b49600092c71113dd8306bd825ea8e74c3427afe463bb",
+        "batch3_sha256": "af7814e0eee11bb3607b49600092c71113dd8306bd825ea8e74c3427afe463bb",
+        "equal": true
+      },
+      "crates/riley-runtime/src/llama/batch_executor.rs": {
+        "batch2_sha256": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+        "batch3_sha256": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+        "equal": true
+      },
+      "crates/riley-runtime/src/llama/executor/config.rs": {
+        "batch2_sha256": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+        "batch3_sha256": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+        "equal": true
+      },
+      "crates/riley-runtime/src/llama/executor/owner.rs": {
+        "batch2_sha256": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+        "batch3_sha256": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+        "equal": true
+      },
+      "crates/riley-runtime/src/llama/graph_decode_full.rs": {
+        "batch2_sha256": "d3f0f464e5f3930518c3572f085561247bcd6107d03084348b4f1953de077cca",
+        "batch3_sha256": "d3f0f464e5f3930518c3572f085561247bcd6107d03084348b4f1953de077cca",
+        "equal": true
+      },
+      "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": {
+        "batch2_sha256": "795e7b00d023c08335a20e4837fc354208b848a033ae4664e9aa0604fde88a57",
+        "batch3_sha256": "795e7b00d023c08335a20e4837fc354208b848a033ae4664e9aa0604fde88a57",
+        "equal": true
+      },
+      "crates/riley-server/src/benchmark.rs": {
+        "batch2_sha256": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+        "batch3_sha256": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+        "equal": true
+      },
+      "crates/riley-server/src/bin/riley-profile.rs": {
+        "batch2_sha256": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+        "batch3_sha256": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+        "equal": true
+      },
+      "crates/riley-server/src/engine.rs": {
+        "batch2_sha256": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+        "batch3_sha256": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+        "equal": true
+      },
+      "crates/riley-server/src/main.rs": {
+        "batch2_sha256": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+        "batch3_sha256": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+        "equal": true
+      },
+      "kernels/include/riley_cuda.h": {
+        "batch2_sha256": "79df6fea919926cccb1ba5bd9b893ab0c2acedaccfb4d010f55379c11cce2a82",
+        "batch3_sha256": "79df6fea919926cccb1ba5bd9b893ab0c2acedaccfb4d010f55379c11cce2a82",
+        "equal": true
+      },
+      "kernels/src/ffi_internal.hpp": {
+        "batch2_sha256": "5ed4529a3b809c978bc3eef5f8e3a04e9062e85135dc69652f6dd988e1d30d85",
+        "batch3_sha256": "5ed4529a3b809c978bc3eef5f8e3a04e9062e85135dc69652f6dd988e1d30d85",
+        "equal": true
+      },
+      "kernels/src/graph_numerics.cu": {
+        "batch2_sha256": "1fd0a64ddcda4ba3b1a6b0ecce6df45bcfba827fa2be9a2551cc7a2d6f362624",
+        "batch3_sha256": "1fd0a64ddcda4ba3b1a6b0ecce6df45bcfba827fa2be9a2551cc7a2d6f362624",
+        "equal": true
+      },
+      "kernels/src/graph_numerics_precise.cu": {
+        "batch2_sha256": "5ff42cb79af4da9fdefa61fd733a2559fcc5470f8ab7d95c94abd57312e08d79",
+        "batch3_sha256": "5ff42cb79af4da9fdefa61fd733a2559fcc5470f8ab7d95c94abd57312e08d79",
+        "equal": true
+      },
+      "kernels/src/graph_resources.cu": {
+        "batch2_sha256": "4037824987a511edca4b2c7fdadcaed3605e88177719db816fdf5bdcbb3e5a45",
+        "batch3_sha256": "4037824987a511edca4b2c7fdadcaed3605e88177719db816fdf5bdcbb3e5a45",
+        "equal": true
+      },
+      "kernels/src/primitives.cu": {
+        "batch2_sha256": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+        "batch3_sha256": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+        "equal": true
+      }
+    },
+    "note": "These GPU tests ran on batch2, not the new batch3 source or binaries."
+  },
+  "reference_only": {
+    "binding": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/native-binding.json",
+      "sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b"
+    },
+    "verification": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/verification.json",
+      "sha256": "8fb6d15ca85a23d424c05c7cbc3c23c4a2885b77869a43ec332adeeddbc47807"
+    }
+  },
+  "canonical_e0_claim": false,
+  "performance_measured": false
+}

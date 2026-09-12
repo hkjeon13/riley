@@ -1,0 +1,98 @@
+{
+  "completed": true,
+  "time": 1789174923.955855,
+  "performance_claim": false,
+  "window_created": false,
+  "blender_sessions_unchanged": true,
+  "blender_after": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "api": "egl",
+      "blender_pids_using_this_gui_environment": [
+        4177821,
+        4177822,
+        4177823
+      ],
+      "stdout": {
+        "path": "/tmp/riley-opt-260912/driver-runtime-gui-probe-v2/env-0-egl.stdout",
+        "sha256": "33897e803805b671aa660e59807489281e54c6b0b1c8e813079a118b92612fdf"
+      },
+      "gl": {
+        "vendor": "NVIDIA Corporation",
+        "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+        "version": "4.6.0 NVIDIA 580.173.02"
+      }
+    },
+    {
+      "api": "glx",
+      "blender_pids_using_this_gui_environment": [
+        4177821,
+        4177822,
+        4177823
+      ],
+      "stdout": {
+        "path": "/tmp/riley-opt-260912/driver-runtime-gui-probe-v2/env-0-glx.stdout",
+        "sha256": "24408d7ff4d247db5e517d5ae99e259ddbca9bbde62e120e5656dbebd0eeaf2a"
+      },
+      "gl": {
+        "vendor": "NVIDIA Corporation",
+        "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+        "version": "4.6.0 NVIDIA 580.173.02"
+      }
+    }
+  ],
+  "child_only_overrides": {
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia"
+  },
+  "runtime_receipts": [
+    {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+      "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/receipt.json",
+      "sha256": "091701fb0b91904024748a9baf59891735809ac2ba43e089165e619308f8f7ed"
+    }
+  ],
+  "scope": "Fresh EGL/GLX contexts; does not itself prove a future full Blender file/script restoration."
+}

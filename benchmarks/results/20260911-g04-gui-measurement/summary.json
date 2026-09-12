@@ -1,0 +1,194 @@
+{
+  "condition": {
+    "condition_id": "g04-smol-gui-retained-512mib-v1",
+    "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+    "canonical_preflight_pass": false,
+    "idle_memory_limit_mib": 512,
+    "canonical_idle_memory_limit_mib": 256,
+    "reason": "User elected to retain desktop GUI; Blender stopped, no CUDA compute processes allowed between lanes",
+    "scope": "diagnostic SmolLM2 c1/p128/o32, not canonical headless performance qualification",
+    "candidate_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4"
+  },
+  "limitations": [
+    "GUI retained; not the canonical 256 MiB idle condition",
+    "SmolLM2-135M BF16 c1/p128/o32 only; five process pairs",
+    "Host request timing, not CUDA event kernel timing",
+    "HTTP first text event is not a proven per-token ITL",
+    "Legacy vLLM raw environment_id is stale; condition.json and per-lane live preflight identify the actual environment",
+    "HTTP uses identical <=48 C cooldown before each lane; engine used original <=50 C start gate"
+  ],
+  "modes": {
+    "engine": {
+      "requests_per_role": 150,
+      "pairs": [
+        {
+          "index": 1,
+          "riley": {
+            "e2e_ms": 506.2372595,
+            "ttft_ms": 434.873653,
+            "tpot_ms": 2.301630951612903
+          },
+          "vllm": {
+            "e2e_ms": 35.895706503652036,
+            "ttft_ms": 7.154382939916104,
+            "tpot_ms": 0.9249605298522979
+          },
+          "riley_over_vllm_e2e": 14.103003083349128
+        },
+        {
+          "index": 2,
+          "riley": {
+            "e2e_ms": 506.21441,
+            "ttft_ms": 434.8464345,
+            "tpot_ms": 2.3016529354838706
+          },
+          "vllm": {
+            "e2e_ms": 36.79029451450333,
+            "ttft_ms": 7.004952989518642,
+            "tpot_ms": 0.9409868545199354
+          },
+          "riley_over_vllm_e2e": 13.759455222638733
+        },
+        {
+          "index": 3,
+          "riley": {
+            "e2e_ms": 506.727344,
+            "ttft_ms": 435.2853035,
+            "tpot_ms": 2.304605596774193
+          },
+          "vllm": {
+            "e2e_ms": 35.09105741977692,
+            "ttft_ms": 6.977664481382817,
+            "tpot_ms": 0.903949468216348
+          },
+          "riley_over_vllm_e2e": 14.44035549964403
+        },
+        {
+          "index": 4,
+          "riley": {
+            "e2e_ms": 506.738491,
+            "ttft_ms": 435.29057450000005,
+            "tpot_ms": 2.304672370967742
+          },
+          "vllm": {
+            "e2e_ms": 35.432418051641434,
+            "ttft_ms": 7.100013026501983,
+            "tpot_ms": 0.9056219038733793
+          },
+          "riley_over_vllm_e2e": 14.301549791534054
+        },
+        {
+          "index": 5,
+          "riley": {
+            "e2e_ms": 506.7091845,
+            "ttft_ms": 435.239505,
+            "tpot_ms": 2.304965564516129
+          },
+          "vllm": {
+            "e2e_ms": 35.54869903018698,
+            "ttft_ms": 6.928030983544886,
+            "tpot_ms": 0.9090604669895144
+          },
+          "riley_over_vllm_e2e": 14.25394454153488
+        }
+      ],
+      "median_of_pair_medians": {
+        "riley": {
+          "e2e_ms": 506.7091845,
+          "ttft_ms": 435.239505,
+          "tpot_ms": 2.304605596774193
+        },
+        "vllm": {
+          "e2e_ms": 35.54869903018698,
+          "ttft_ms": 7.004952989518642,
+          "tpot_ms": 0.9090604669895144
+        }
+      },
+      "paired_e2e_ratio_median": 14.25394454153488,
+      "paired_e2e_ratio_range": [
+        13.759455222638733,
+        14.44035549964403
+      ]
+    },
+    "http": {
+      "requests_per_role": 150,
+      "pairs": [
+        {
+          "index": 1,
+          "riley": {
+            "e2e_ms": 512.9808324999999,
+            "first_text_event_ms": 441.18490199999997
+          },
+          "vllm": {
+            "e2e_ms": 36.073057500000004,
+            "first_text_event_ms": 7.844825
+          },
+          "riley_over_vllm_e2e": 14.22060862182253
+        },
+        {
+          "index": 2,
+          "riley": {
+            "e2e_ms": 512.8652790000001,
+            "first_text_event_ms": 441.10924450000005
+          },
+          "vllm": {
+            "e2e_ms": 35.7361115,
+            "first_text_event_ms": 7.7933455
+          },
+          "riley_over_vllm_e2e": 14.351457320699263
+        },
+        {
+          "index": 3,
+          "riley": {
+            "e2e_ms": 512.9639385,
+            "first_text_event_ms": 441.167862
+          },
+          "vllm": {
+            "e2e_ms": 35.146018999999995,
+            "first_text_event_ms": 7.142455
+          },
+          "riley_over_vllm_e2e": 14.595221680725777
+        },
+        {
+          "index": 4,
+          "riley": {
+            "e2e_ms": 512.9124585,
+            "first_text_event_ms": 441.08331050000004
+          },
+          "vllm": {
+            "e2e_ms": 35.715112000000005,
+            "first_text_event_ms": 7.6490685
+          },
+          "riley_over_vllm_e2e": 14.361216576893273
+        },
+        {
+          "index": 5,
+          "riley": {
+            "e2e_ms": 512.84548,
+            "first_text_event_ms": 441.032399
+          },
+          "vllm": {
+            "e2e_ms": 35.676162,
+            "first_text_event_ms": 7.7874175
+          },
+          "riley_over_vllm_e2e": 14.375018254486006
+        }
+      ],
+      "median_of_pair_medians": {
+        "riley": {
+          "e2e_ms": 512.9124585,
+          "first_text_event_ms": 441.10924450000005
+        },
+        "vllm": {
+          "e2e_ms": 35.715112000000005,
+          "first_text_event_ms": 7.7874175
+        }
+      },
+      "paired_e2e_ratio_median": 14.361216576893273,
+      "paired_e2e_ratio_range": [
+        14.22060862182253,
+        14.595221680725777
+      ]
+    }
+  }
+}

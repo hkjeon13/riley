@@ -1,0 +1,1778 @@
+{
+  "schema_version": "riley.serving-token-analysis.v1",
+  "status": "incomplete",
+  "validated_complete": false,
+  "campaign": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13",
+  "plan": {
+    "path": "/tmp/riley-opt-260912/token-serving-round13-plan.json",
+    "sha256": "0ca01ebc7b16f9422db84f0f5afa233c6518773bb5e7c141e3ef9d42ed328de1"
+  },
+  "workload": {
+    "id": "g04-token-c1-c2-batch8-initial-v1",
+    "purpose": "initial-measurement",
+    "pairs": 5,
+    "retained_requests_per_process": 1000,
+    "warmups_per_worker_per_transport": 5,
+    "arrival_policy": "closed-loop-refill"
+  },
+  "groups": [
+    {
+      "setting": {
+        "id": "c1-b128",
+        "offered_concurrency": 1,
+        "vllm_token_budget": 128
+      },
+      "comparison": {
+        "id": "baseline-vllm",
+        "left": "vllm",
+        "right": "baseline"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "vllm",
+      "right_lane": "baseline",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [
+                {
+                  "phase": "warmup-nonstream",
+                  "requested": 5,
+                  "rows": 5,
+                  "accounting": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "warmup-nonstream",
+                    "warmup": true,
+                    "offered_concurrency": 1,
+                    "requested": 5,
+                    "attempted": 5,
+                    "succeeded": 5,
+                    "failed": 0,
+                    "unresolved_attempts": 0,
+                    "not_started": 0,
+                    "reference_matches": 5,
+                    "protocol_valid_responses": 5,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835225688383080,
+                    "phase_finished_ns": 835225887138477,
+                    "completed": true,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      false
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries"
+                  },
+                  "validated": true,
+                  "metrics": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "warmup-nonstream",
+                    "warmup": true,
+                    "offered_concurrency": 1,
+                    "requested": 5,
+                    "attempted": 5,
+                    "succeeded": 5,
+                    "failed": 0,
+                    "unresolved_attempts": 0,
+                    "not_started": 0,
+                    "reference_matches": 5,
+                    "protocol_valid_responses": 5,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835225688383080,
+                    "phase_finished_ns": 835225887138477,
+                    "completed": true,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      false
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+                    "common_wall_started_ns": 835225688457373,
+                    "common_wall_finished_ns": 835225886888394,
+                    "common_wall_ns": 198431021,
+                    "successful_output_tokens": 160,
+                    "observed_output_tokens_including_partial_failures": 160,
+                    "successful_output_tokens_per_wall_second": 806.32553919077,
+                    "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+                    "phase_wall_ns": 198755397,
+                    "successful_output_tokens_per_phase_wall_second": 805.0095867333856,
+                    "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+                    "descriptive_statistics_only": true,
+                    "timing_scope": "client delivery; incomplete phases are not comparable",
+                    "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+                    "e2e_ms": {
+                      "samples": 5,
+                      "median": 36.800725,
+                      "p95": 47.991323,
+                      "p99": 47.991323,
+                      "max": 47.991323
+                    },
+                    "token_ttft_ms": null,
+                    "token_tpot_ms": null,
+                    "first_text_ms": null,
+                    "token_itl_ms": null
+                  },
+                  "token_delivery_observations": {
+                    "blank_generated_frames": 0,
+                    "zero_observed_itls": 0,
+                    "observed_itls": 0,
+                    "requests_with_coalesced_token_arrivals": 0
+                  }
+                },
+                {
+                  "phase": "warmup-stream",
+                  "requested": 5,
+                  "rows": 5,
+                  "accounting": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "warmup-stream",
+                    "warmup": true,
+                    "offered_concurrency": 1,
+                    "requested": 5,
+                    "attempted": 5,
+                    "succeeded": 5,
+                    "failed": 0,
+                    "unresolved_attempts": 0,
+                    "not_started": 0,
+                    "reference_matches": 5,
+                    "protocol_valid_responses": 5,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835225887698508,
+                    "phase_finished_ns": 835226074131884,
+                    "completed": true,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      true
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries"
+                  },
+                  "validated": true,
+                  "metrics": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "warmup-stream",
+                    "warmup": true,
+                    "offered_concurrency": 1,
+                    "requested": 5,
+                    "attempted": 5,
+                    "succeeded": 5,
+                    "failed": 0,
+                    "unresolved_attempts": 0,
+                    "not_started": 0,
+                    "reference_matches": 5,
+                    "protocol_valid_responses": 5,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835225887698508,
+                    "phase_finished_ns": 835226074131884,
+                    "completed": true,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      true
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+                    "common_wall_started_ns": 835225887750304,
+                    "common_wall_finished_ns": 835226073896020,
+                    "common_wall_ns": 186145716,
+                    "successful_output_tokens": 160,
+                    "observed_output_tokens_including_partial_failures": 160,
+                    "successful_output_tokens_per_wall_second": 859.5416721811637,
+                    "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+                    "phase_wall_ns": 186433376,
+                    "successful_output_tokens_per_phase_wall_second": 858.2154302671642,
+                    "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+                    "descriptive_statistics_only": true,
+                    "timing_scope": "client delivery; incomplete phases are not comparable",
+                    "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+                    "e2e_ms": {
+                      "samples": 5,
+                      "median": 35.241179,
+                      "p95": 42.095767,
+                      "p99": 42.095767,
+                      "max": 42.095767
+                    },
+                    "token_ttft_ms": {
+                      "samples": 5,
+                      "median": 7.365389,
+                      "p95": 10.386725,
+                      "p99": 10.386725,
+                      "max": 10.386725
+                    },
+                    "token_tpot_ms": {
+                      "samples": 5,
+                      "median": 0.8990979032258064,
+                      "p95": 1.044802193548387,
+                      "p99": 1.044802193548387,
+                      "max": 1.044802193548387
+                    },
+                    "first_text_ms": {
+                      "samples": 5,
+                      "median": 7.365389,
+                      "p95": 10.386725,
+                      "p99": 10.386725,
+                      "max": 10.386725
+                    },
+                    "token_itl_ms": {
+                      "samples": 155,
+                      "median": 0.909443,
+                      "p95": 1.273021,
+                      "p99": 1.516966,
+                      "max": 1.528873
+                    }
+                  },
+                  "token_delivery_observations": {
+                    "blank_generated_frames": 0,
+                    "zero_observed_itls": 0,
+                    "observed_itls": 155,
+                    "requests_with_coalesced_token_arrivals": 0
+                  }
+                },
+                {
+                  "phase": "retained",
+                  "requested": 1000,
+                  "rows": 124,
+                  "accounting": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "retained",
+                    "warmup": false,
+                    "offered_concurrency": 1,
+                    "requested": 1000,
+                    "attempted": 124,
+                    "succeeded": 123,
+                    "failed": 1,
+                    "unresolved_attempts": 0,
+                    "not_started": 876,
+                    "reference_matches": 123,
+                    "protocol_valid_responses": 123,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835226075276827,
+                    "phase_finished_ns": 835230546704718,
+                    "completed": false,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      true
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries"
+                  },
+                  "validated": false,
+                  "failure": "phase is incomplete",
+                  "successful_rows_validated": 123,
+                  "successful_row_errors": [],
+                  "token_delivery_observations": {
+                    "blank_generated_frames": 0,
+                    "zero_observed_itls": 0,
+                    "observed_itls": 3813,
+                    "requests_with_coalesced_token_arrivals": 0
+                  },
+                  "comparison_eligible": false,
+                  "saved_partial_description": {
+                    "schema_version": "riley.http-token-phase.v1",
+                    "phase": "retained",
+                    "warmup": false,
+                    "offered_concurrency": 1,
+                    "requested": 1000,
+                    "attempted": 124,
+                    "succeeded": 123,
+                    "failed": 1,
+                    "unresolved_attempts": 0,
+                    "not_started": 876,
+                    "reference_matches": 123,
+                    "protocol_valid_responses": 123,
+                    "observed_max_request_in_flight": 1,
+                    "observed_max_call_in_flight": 1,
+                    "observed_max_successful_request_in_flight": 1,
+                    "phase_started_ns": 835226075276827,
+                    "phase_finished_ns": 835230546704718,
+                    "completed": false,
+                    "duplicate_response_ids": [],
+                    "reference_sha256s": [
+                      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+                    ],
+                    "modes": [
+                      "strict"
+                    ],
+                    "streaming_transports": [
+                      true
+                    ],
+                    "worker_errors": [],
+                    "interrupted": null,
+                    "correctness_qualified": false,
+                    "performance_qualified": false,
+                    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+                    "common_wall_started_ns": 835226075325168,
+                    "common_wall_finished_ns": 835230546552350,
+                    "common_wall_ns": 4471227182,
+                    "successful_output_tokens": 3936,
+                    "observed_output_tokens_including_partial_failures": 3957,
+                    "successful_output_tokens_per_wall_second": 880.2952388206339,
+                    "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+                    "phase_wall_ns": 4471427891,
+                    "successful_output_tokens_per_phase_wall_second": 880.2557250050485,
+                    "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+                    "descriptive_statistics_only": true,
+                    "timing_scope": "client delivery; incomplete phases are not comparable",
+                    "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+                    "e2e_ms": {
+                      "samples": 123,
+                      "median": 35.25598,
+                      "p95": 41.204701,
+                      "p99": 49.060293,
+                      "max": 51.349592
+                    },
+                    "token_ttft_ms": {
+                      "samples": 123,
+                      "median": 7.340264,
+                      "p95": 10.467784,
+                      "p99": 17.417451,
+                      "max": 17.480005
+                    },
+                    "token_tpot_ms": {
+                      "samples": 123,
+                      "median": 0.8967250967741935,
+                      "p95": 1.0245087096774195,
+                      "p99": 1.0940765806451611,
+                      "max": 1.1102647741935483
+                    },
+                    "first_text_ms": {
+                      "samples": 123,
+                      "median": 7.340264,
+                      "p95": 10.467784,
+                      "p99": 17.417451,
+                      "max": 17.480005
+                    },
+                    "token_itl_ms": {
+                      "samples": 3813,
+                      "median": 0.907196,
+                      "p95": 1.143613,
+                      "p99": 1.330021,
+                      "max": 1.775274
+                    }
+                  },
+                  "failed_rows": [
+                    {
+                      "index": 123,
+                      "worker_id": 0,
+                      "status": "failed",
+                      "error": {
+                        "type": "ProtocolError",
+                        "message": "multiple IDs share one SSE timestamp; token timing is ambiguous"
+                      },
+                      "token_ids": [
+                        28,
+                        339,
+                        5248,
+                        253,
+                        1838,
+                        3241,
+                        282,
+                        253,
+                        1443,
+                        929,
+                        3156,
+                        28,
+                        198,
+                        198,
+                        504,
+                        808,
+                        2775,
+                        339,
+                        1277,
+                        288,
+                        1643
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "errors": [],
+              "diagnostics": {
+                "process_exit": {
+                  "cleanup": {
+                    "returncode": 0,
+                    "remaining_owned_pids": [],
+                    "zombie_pids": [],
+                    "cleanup_verified": true,
+                    "log": {
+                      "path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/server.log",
+                      "sha256": "7b0330b4b0b7055cbdbb01a60b32b600731f04fe697b136d3b638206ac48c45f"
+                    }
+                  },
+                  "failure": {
+                    "type": "ValueError",
+                    "message": "token phase incomplete; no retries or partial qualification"
+                  }
+                },
+                "monitor": {
+                  "sample_count": 0,
+                  "errors": []
+                }
+              }
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "baseline",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "baseline",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    },
+    {
+      "setting": {
+        "id": "c1-b128",
+        "offered_concurrency": 1,
+        "vllm_token_budget": 128
+      },
+      "comparison": {
+        "id": "candidate-baseline",
+        "left": "baseline",
+        "right": "candidate"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "baseline",
+      "right_lane": "candidate",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    },
+    {
+      "setting": {
+        "id": "c1-b128",
+        "offered_concurrency": 1,
+        "vllm_token_budget": 128
+      },
+      "comparison": {
+        "id": "candidate-vllm",
+        "left": "vllm",
+        "right": "candidate"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "vllm",
+      "right_lane": "candidate",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "candidate",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "candidate",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    },
+    {
+      "setting": {
+        "id": "c2-b256",
+        "offered_concurrency": 2,
+        "vllm_token_budget": 256
+      },
+      "comparison": {
+        "id": "baseline-vllm",
+        "left": "vllm",
+        "right": "baseline"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "vllm",
+      "right_lane": "baseline",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "baseline",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "baseline",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "vllm",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    },
+    {
+      "setting": {
+        "id": "c2-b256",
+        "offered_concurrency": 2,
+        "vllm_token_budget": 256
+      },
+      "comparison": {
+        "id": "candidate-baseline",
+        "left": "baseline",
+        "right": "candidate"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "baseline",
+      "right_lane": "candidate",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "baseline",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    },
+    {
+      "setting": {
+        "id": "c2-b256",
+        "offered_concurrency": 2,
+        "vllm_token_budget": 256
+      },
+      "comparison": {
+        "id": "candidate-vllm",
+        "left": "vllm",
+        "right": "candidate"
+      },
+      "ratio_direction": "right / left",
+      "left_lane": "vllm",
+      "right_lane": "candidate",
+      "pairs": [
+        {
+          "index": 1,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "order": [
+            "candidate",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "order": [
+            "candidate",
+            "vllm"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "order": [
+            "vllm",
+            "candidate"
+          ],
+          "validated": false,
+          "lanes": [
+            {
+              "lane": "vllm",
+              "kind": "vllm",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            },
+            {
+              "lane": "candidate",
+              "kind": "riley",
+              "status": "incomplete",
+              "phases": [],
+              "errors": [
+                "lane was not started"
+              ]
+            }
+          ],
+          "errors": [
+            {
+              "type": "ValueError",
+              "message": "pair lacks two qualified complete lanes"
+            }
+          ]
+        }
+      ],
+      "validated_pairs": 0,
+      "planned_pairs": 5,
+      "paired_ratios": null,
+      "comparison_eligible": false
+    }
+  ],
+  "errors": [],
+  "finalization_failure": {
+    "type": "ValueError",
+    "message": "lane incomplete: {'type': 'ValueError', 'message': 'token phase incomplete; no retries or partial qualification'}"
+  },
+  "inputs": [
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/preparation.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/preparation.json",
+      "sha256": "40a251908cd89429a794e15d4c1d30bcfa2a64e3d6822ec10e37488619e047ca"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/token-serving-round13-plan.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13-plan.json",
+      "sha256": "0ca01ebc7b16f9422db84f0f5afa233c6518773bb5e7c141e3ef9d42ed328de1"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch7-http-plan.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch7-http-plan.json",
+      "sha256": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6"
+    },
+    {
+      "original_path": "/tmp/riley-g04-vllm-profile-260911/request.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-vllm-profile/request.json",
+      "sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5"
+    },
+    {
+      "original_path": "/tmp/riley-g04-vllm-profile-260911/native-binding.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-vllm-profile/native-binding.json",
+      "sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b"
+    },
+    {
+      "original_path": "/tmp/riley-g04-vllm-profile-260911/verification.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-vllm-profile/verification.json",
+      "sha256": "8fb6d15ca85a23d424c05c7cbc3c23c4a2885b77869a43ec332adeeddbc47807"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/http-token-build.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/http-token-build.json",
+      "sha256": "5576db88790d5a87e976c082df77f985595129b122fde55b2b475ce06e17a4f5"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/http-token-gpu-tests.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/http-token-gpu-tests.json",
+      "sha256": "e8f8614fe6daeb88e2f4f2087d159e8d6ec2bd4ffbc8a2d39aaac313bf4580fb"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/completion.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/http-token-observation-correctness-v3/completion.json",
+      "sha256": "287f35e37440c1b586bdf2aa2d4f9bc4cc8ead7113881eef72f32192c0dcb301"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch8-build.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch8-build.json",
+      "sha256": "629418e19f129436d9ee2d2a753a61317c5b8527e3f4fe438b9f9aa59a8392c6"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch8-model-tests.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch8-model-tests.json",
+      "sha256": "7f22786bf2393b5f695bf29f3c5cb3fe583fcfaee18c5fd4359a6dda523e9201"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/completion.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch8-http-token-observation-correctness/completion.json",
+      "sha256": "95966a1c73374fecbe9a68b5f6911aea818f75760d6fa15a290f8fb8874b2ebd"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch8-qualification.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch8-qualification.json",
+      "sha256": "a2460fce858f02b96ef065ec352299278d1f90f1d59278838cb9c2f50f403f35"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/batch8-fusion-probe/receipt.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/batch8-fusion-probe/receipt.json",
+      "sha256": "d18ee79cf87321ba7207bc2f130eb1c335daf92d83d3bedd45098c7a46e568ec"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/finalization.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/finalization.json",
+      "sha256": "2f61901debee8bf5c9cb9096766b48193572d6a8d9d98229c6df524fc276ced0"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/launch.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/launch.json",
+      "sha256": "5cdfb6cf025804c7d6ec17ade9eb5a67a438b3422aa5cfe03fb5e334c6345998"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/cooldown.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/cooldown.json",
+      "sha256": "e7a58ba0f7a9d38edce40347c789061731d2c0c0deaa713d2247110bcbec853d"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/process.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/process.json",
+      "sha256": "d2fc74c4332418749faf1fdb41feda23075719c67e0970d2334827df7f3a857d"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/vllm-startup.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/vllm-startup.json",
+      "sha256": "c272ff1da9fdcc2a04f45c77e958b8e422000b7849491d42e313bee90da6b657"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/startup-log-snapshot.log",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/startup-log-snapshot.log",
+      "sha256": "78d2446456d3018bd9251646ec2908f57d0f5479204fab74df91715a0e788e3b"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream.jsonl",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream.jsonl",
+      "sha256": "fc843d760cb47bd5fabebfaf1f7b0b3a9053e3c2c434f1aaf3fa4a2043a7ff83"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream-accounting.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream-accounting.json",
+      "sha256": "01d4d69ad18c373c39c7317ff8eafd7b6888cd1362ccb3331765c83b6a391bbf"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream-descriptive.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-nonstream-descriptive.json",
+      "sha256": "4635b1bd0e6ff8998f5773f3231cd92f3c6b2f35ce7ac67a5b546def0238d591"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream.jsonl",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream.jsonl",
+      "sha256": "ae28f8864fb7f7c48b3a9ae958bec22b272780ad69734f70f4731f95a9966b4a"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream-accounting.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream-accounting.json",
+      "sha256": "cd21bca197bd76e21e097a95bde2e9bba7e222e111efd4842f0936480cc6c97e"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream-descriptive.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/warmup-stream-descriptive.json",
+      "sha256": "68e1864aed75c8d9d96e75b5a4975d418170ae6296b8f80010018855fbd9566f"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained.jsonl",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained.jsonl",
+      "sha256": "460dca8381d57afdcfe1abe13ae5d06a9e4e019a986f18870a2ea1a28bd65cc0"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained-accounting.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained-accounting.json",
+      "sha256": "dc0677bdd8b97565fe2c1c635a76302c6de92a1c8ccfd6f3e083cb9471e36b0d"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained-descriptive.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/retained-descriptive.json",
+      "sha256": "2015548b4384f0b5a81e82832b4de9829df0460001f4ec0d6f2307827113c208"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/process-exit.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/process-exit.json",
+      "sha256": "286417b62fb73ef9ec2addc43479dac28cf4a338d861dcb5d1e82a80893f42a1"
+    },
+    {
+      "original_path": "/tmp/riley-opt-260912/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/server.log",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/server.log",
+      "sha256": "7b0330b4b0b7055cbdbb01a60b32b600731f04fe697b136d3b638206ac48c45f"
+    },
+    {
+      "original_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/gpu-monitor.json",
+      "local_path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/token-serving-round13/c1-b128-baseline-vllm-pair01/vllm/gpu-monitor.json",
+      "sha256": "cc77ebf34e170f2b258e1cd667adba846cde746d9688ed7474954ac25edc87f7"
+    }
+  ],
+  "path_maps": [
+    {
+      "original": "/tmp/riley-opt-260912",
+      "local": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw"
+    },
+    {
+      "original": "/tmp/riley-g04-vllm-profile-260911",
+      "local": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-vllm-profile"
+    }
+  ],
+  "numerical_qualification_scope": "saved current-source GPU/default/raw receipts bound; GPU tests not rerun by analyzer",
+  "metrics_scope": "client token delivery; first visible text and engine TTFT/TPOT are distinct",
+  "serial_order_scope": "observed request-phase windows; process cleanup has no saved timestamp",
+  "tail_scope": "finite per-process samples; initial 1000-request tails do not qualify P99 stability",
+  "concurrency_scope": "offered C<=2; Riley active1; no broad high-concurrency qualification",
+  "zero_itl_scope": "coalesced client observations; does not imply simultaneous engine token generation",
+  "winner": null,
+  "performance_claim": false,
+  "p99_stability_qualified": false,
+  "high_concurrency_qualified": false
+}

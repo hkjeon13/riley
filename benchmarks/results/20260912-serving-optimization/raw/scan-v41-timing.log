@@ -1,0 +1,218 @@
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_setzero_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:26:18
+   |
+26 |     let mut bits=_mm256_setzero_si256();let mut chunks=bytes.chunks_exact(32);
+   |                  ^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:24:1
+   |
+24 | unsafe fn avx2_zero(bytes:&[u8])->bool{
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(unsafe_op_in_unsafe_fn)]` on by default
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_or_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:29:14
+   |
+29 |         bits=_mm256_or_si256(bits,unsafe{_mm256_loadu_si256(chunk.as_ptr().cast())});
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_testz_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:31:5
+   |
+31 |     _mm256_testz_si256(bits,bits)!=0 && chunks.remainder().iter().all(|&x|x==0)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_set1_ps` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:38:21
+   |
+38 |     let mut maxima=[_mm256_set1_ps(f32::NEG_INFINITY);4];
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:35:1
+   |
+35 | unsafe fn avx2_argmax(bytes:&[u8])->Result<u32>{
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_setzero_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:39:22
+   |
+39 |     let mut indices=[_mm256_setzero_si256();4];
+   |                      ^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_setr_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:40:53
+   |
+40 | ...>(|g|_mm256_setr_epi32(g as i32*8,g as i32*8+1,g as i32*8+2,g as i32*8+3,g as i32*8+4,g as i32*8+5,g as i32*8+6,g as i32*8+7));
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_setzero_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:41:18
+   |
+41 |     let mut bad=[_mm256_setzero_si256();4];let exponent=_mm256_set1_epi32(0x7f80);
+   |                  ^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_set1_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:41:57
+   |
+41 |     let mut bad=[_mm256_setzero_si256();4];let exponent=_mm256_set1_epi32(0x7f80);
+   |                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_cvtepu16_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:46:23
+   |
+46 |             let words=_mm256_cvtepu16_epi32(unsafe{_mm_loadu_si128(chunk[group*16..].as_ptr().cast())});
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_or_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:47:24
+   |
+47 |             bad[group]=_mm256_or_si256(bad[group],_mm256_cmpeq_epi32(_mm256_and_si256(words,exponent),exponent));
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_cmpeq_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:47:51
+   |
+47 |             bad[group]=_mm256_or_si256(bad[group],_mm256_cmpeq_epi32(_mm256_and_si256(words,exponent),exponent));
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_and_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:47:70
+   |
+47 |             bad[group]=_mm256_or_si256(bad[group],_mm256_cmpeq_epi32(_mm256_and_si256(words,exponent),exponent));
+   |                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_castsi256_ps` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:48:24
+   |
+48 |             let values=_mm256_castsi256_ps(_mm256_slli_epi32::<16>(words));
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_slli_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:48:44
+   |
+48 |             let values=_mm256_castsi256_ps(_mm256_slli_epi32::<16>(words));
+   |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_cmp_ps` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:49:25
+   |
+49 |             let greater=_mm256_cmp_ps::<_CMP_GT_OQ>(values,maxima[group]);
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_blendv_ps` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:50:27
+   |
+50 |             maxima[group]=_mm256_blendv_ps(maxima[group],values,greater);
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_blendv_epi8` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:51:28
+   |
+51 |             indices[group]=_mm256_blendv_epi8(indices[group],current[group],_mm256_castps_si256(greater));
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_castps_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:51:77
+   |
+51 |             indices[group]=_mm256_blendv_epi8(indices[group],current[group],_mm256_castps_si256(greater));
+   |                                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_add_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:52:28
+   |
+52 |             current[group]=_mm256_add_epi32(current[group],_mm256_set1_epi32(32));
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_set1_epi32` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:52:60
+   |
+52 |             current[group]=_mm256_add_epi32(current[group],_mm256_set1_epi32(32));
+   |                                                            ^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+warning[E0133]: call to unsafe function `std::arch::x86_64::_mm256_testz_si256` is unsafe and requires unsafe block
+  --> crates/riley-runtime/src/llama/multi_descriptor/result_scan.rs:57:15
+   |
+57 |         check(_mm256_testz_si256(bad[group],bad[group])!=0,"logits","nonfinite logit")?;
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: for more information, see <https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+
+For more information about this error, try `rustc --explain E0133`.
+warning: `riley-runtime` (lib test) generated 21 warnings (run `cargo fix --lib -p riley-runtime --tests` to apply 2 suggestions)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/release/deps/riley_runtime-2c1cd40b3d7ef70a)
+
+running 1 test
+SCAN vector=false iterations=4096 ns_per_row=21423
+SCAN vector=true iterations=4096 ns_per_row=5276
+SCAN vector=true iterations=4096 ns_per_row=5265
+SCAN vector=false iterations=4096 ns_per_row=21405
+SCAN vector=false iterations=4096 ns_per_row=21489
+SCAN vector=true iterations=4096 ns_per_row=5296
+SCAN vector=true iterations=4096 ns_per_row=5281
+SCAN vector=false iterations=4096 ns_per_row=21458
+test llama::multi_descriptor::result_scan::tests::scan_timing_diagnostic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 301 filtered out; finished in 0.44s
+

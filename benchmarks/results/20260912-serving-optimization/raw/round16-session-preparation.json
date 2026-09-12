@@ -1,0 +1,82 @@
+{
+  "schema_version": "riley.round16-session-preparation.v1",
+  "generator": {
+    "path": "/tmp/riley-opt-260912/prepare_remote_session_round16.py",
+    "sha256": "8248b070f1aeaffffd9ca4eef406210b72e00cc76af35b6bd61507b11e95e9bc"
+  },
+  "helper": {
+    "path": "/tmp/riley-opt-260912/remote_session_round16.py",
+    "sha256": "3328a6a02cd387a7e7ef8ca07a238ef67e93b64e1d5caf2ce7955cb84a123635"
+  },
+  "predecessor_inputs": {
+    "remote_session.py": "047b133460322099851213149c623be4ef7f67a4b1ebfa7c2fedb4a70ef24712",
+    "remote_session_round14.py": "aad60fca63db57251ba7c75f7a286b4b066c24ed2a8d8dbdf5941a30c9de585e",
+    "remote_session_round15.py": "a7e8b194bd0d0bccd4ef0631dc8b295a718d8478266882cc0eeebb2716a222d2",
+    "prepare_remote_session_round15.py": "e7ee002a0c2d77d76e2262b24703501fe9b9ea305491894d31460879096ca876",
+    "build_fusion_history_candidate_v1.py": "57a62964d4d656a8caf873cf98285656486e39ea410d6e395896f041149a54b5",
+    "blender-session.json": "403be684f97a44422d01f1388eee5916055161ef43f559d012ae1934a7e4859b",
+    "paired-rope-attention-round15/completion.json": "fec1ddb624f8e774000620c02ec3987f0f200bd20cdf2a2fa5014ce2e536cb36",
+    "paired-rope-attention-round15/finalization.json": "8c516910522adee684b4ce3fd0e4480617097d19771428d61a5467a6cc2c0b8e",
+    "blender-round15/session.json": "52d7b01ab48d2b88339b8bcd6f7be575072fd34a901a179dc79007d6712b7fdf",
+    "blender-round15/runtime.json": "5f84c3641d43e767511ab1c5fd8d19677fc5d64fa7cfd2d2a9f6113af27bbc6c",
+    "blender-round15/verified.json": "39487322b5ca6cfd41d8a87892a47259ff901455f12222d890a9bc6261274d92",
+    "paired-rope-attention-round15/off-before-baseline/completion.json": "f246c906cf82731817f58818fbfe207b9533b8fde055d1fb58e440d470b9ab97",
+    "paired-rope-attention-round15/off-before-candidate/completion.json": "c34b872b4df1184854e4483b6ea180e59ed27d0167a8954dc068d1a15efab83d",
+    "paired-rope-attention-round15/combined-ab-baseline/completion.json": "ee0cebfa459ebe33b4052d6cf843e918e2ce4f034a248345cddcd8d3ee32ab17",
+    "paired-rope-attention-round15/combined-ab-candidate/completion.json": "c8217c5696b42d8ee75c1bdadc56cbdeb0279ec313fae5d25bda4478b72d71a0",
+    "paired-rope-attention-round15/combined-ba-candidate/completion.json": "7cf5661c9646378d9baf573e7c15b7f5033fa2349727789fbc48ab4bfab45680",
+    "paired-rope-attention-round15/combined-ba-baseline/completion.json": "713873a4bea8d3bff31958977c13278c74aa0f0fc919849962afcdec4b59f3cc",
+    "paired-rope-attention-round15/off-after-baseline/completion.json": "9904f92d3cce71d45208497cacbe97aedaf63ae1f93e63c2db2dd2939c29c3b8",
+    "paired-rope-attention-round15/off-after-candidate/completion.json": "d572c6d5311d9e859a906b1c4c3bd0dee3156db316f27cb422c3c9edc4cee30d"
+  },
+  "campaign_gate": {
+    "completion_sha256": "fec1ddb624f8e774000620c02ec3987f0f200bd20cdf2a2fa5014ce2e536cb36",
+    "finalization_sha256": "8c516910522adee684b4ce3fd0e4480617097d19771428d61a5467a6cc2c0b8e",
+    "restoration": {
+      "path": "/tmp/riley-opt-260912/blender-round15/verified.json",
+      "sha256": "39487322b5ca6cfd41d8a87892a47259ff901455f12222d890a9bc6261274d92"
+    }
+  },
+  "proven_successors": [
+    {
+      "pid": 2730220,
+      "start": "84083612",
+      "port": 9876,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 2730294,
+      "start": "84083660",
+      "port": 9911,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 2730392,
+      "start": "84083711",
+      "port": 9887,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "lifecycle_ast_identical": true,
+  "live_process_check_executed": false,
+  "session_action_executed": false,
+  "performance_or_acceptance_inferred": false
+}

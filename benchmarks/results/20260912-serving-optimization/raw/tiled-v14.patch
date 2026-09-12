@@ -1,0 +1,268 @@
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index 1ade7f6..0f22e0e 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -200,6 +200,14 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/graph_resources.cu"),
+         kernels_dir.join("src/graph_numerics.cu"),
+         kernels_dir.join("src/graph_numerics_precise.cu"),
++        kernels_dir.join("src/decode_tiled.cuh"),
++        kernels_dir.join("src/decode_shape.cuh"),
++        kernels_dir.join("src/prefill_shape_model.cuh"),
++        kernels_dir.join("src/prefill_shape_projection.cuh"),
++        kernels_dir.join("src/prefill_shape_attention.cuh"),
++        kernels_dir.join("src/prefill_shape_rope_kv.cuh"),
++        kernels_dir.join("src/prefill_shape_pointwise.cuh"),
++        kernels_dir.join("src/prefill_shape_packet.hpp"),
+         kernels_dir.join("src/graph_multisequence_precise.cu"),
+         kernels_dir.join("src/graph_multisequence_io.cu"),
+         kernels_dir.join("src/graph_multisequence_packet.inc"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 97c093f..2c093d0 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11251,11 +11251,11 @@ unsafe extern "C" {
+ }
+ impl GraphResourcesHandle {
+     pub(super) fn record_v3_prefill(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+-        if devices.len()!=22||weights.len()!=273 {return Err(CudaError::invalid_argument("record V3 prefill","parent count mismatch"));}
++        if devices.len()!=22||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V3 prefill","parent count mismatch"));}
+         let mut raw=[ptr::null_mut();23];for (i,d) in devices.iter().enumerate(){raw[i]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+         let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
+         // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
+-        let status=unsafe{riley_cuda_graph_resources_record_v3_prefill(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),273,head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        let status=unsafe{riley_cuda_graph_resources_record_v3_prefill(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V3 prefill",&error)
+     }
+ }
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 1b7b57d..5d62d84 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2080,7 +2080,10 @@ impl PreparedLlamaBatchExecutor {
+         }
+         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
+         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
+-        for source in [include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
++        for source in [include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
++            include_bytes!("variable_session.rs").as_slice(),
++            include_bytes!("graph_decode_full.rs").as_slice(),
++            include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh").as_slice(),
+@@ -2105,10 +2108,34 @@ impl PreparedLlamaBatchExecutor {
+                 buffer.download_to_slice(offset,&mut chunk[..n],&mut f.io_staging,stream).map_err(cuda)?;
+                 hash.update(&chunk[..n]);offset+=n as u64;}
+         }
++        // Pack immutable gate/up/down weights once before capture. The buffers
++        // remain explicit reservation parents and are dropped after graph close.
++        for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
++            for layer in 0..30 { for part in 0..3 {
++                if weights[3+layer*9+6+part]!=index {continue;}
++                let (n,k)=if part==2 {(576usize,1536usize)}else{(1536usize,576usize)};
++                let mut source=vec![0u8;n*k*2];
++                for (i,bytes) in source.chunks_mut(chunk.len()).enumerate() {
++                    buffer.download_to_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
++                }
++                let mut packed=vec![0u8;source.len()];
++                for row in (0..n).step_by(8) {for depth in (0..k).step_by(16) {for lane in 0..32 {for hi in 0..2 {
++                    let from=((row+lane/4)*k+depth+2*(lane%4)+hi*8)*2;
++                    let to=(((row/8)*(k/16)+depth/16)*128+hi*64+lane*2)*2;
++                    packed[to..to+4].copy_from_slice(&source[from..from+4]);
++                }}}}
++                hash.update(&packed);
++                for (i,bytes) in packed.chunks(chunk.len()).enumerate() {
++                    scratch.tiled[layer*3+part].upload_from_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
++                }
++            }}
++        }
+         let mut devices:Vec<_>=f.weights.borrow_graph_weight_parents().collect();let base=devices.len();
+         let (rows,tail)=scratch.devices.split_at_mut(12);devices.extend(rows);
+         devices.extend([&mut self.owner.key_cache,&mut self.owner.value_cache,&mut self.owner.absolute_rope_cos,&mut self.owner.absolute_rope_sin]);
+         devices.extend(tail);
++        weights.extend(devices.len()..devices.len()+scratch.tiled.len());
++        devices.extend(scratch.tiled.iter_mut());
+         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
+             pinned:vec![&mut scratch.staging],plans:vec![&mut scratch.head]}).map_err(cuda)?;
+         graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32).map_err(cuda)?;
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index 96d4cbb..a3a5a65 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -66,6 +66,7 @@ impl<G: VariableGraph> VariableSession<G> {
+ /// in the loaded model owner and are exclusively borrowed during the session.
+ pub struct VariableGraphBuffers {
+     pub(crate) devices:Vec<riley_cuda::CudaDeviceBuffer>,
++    pub(crate) tiled:Vec<riley_cuda::CudaDeviceBuffer>,
+     pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
+     pub(crate) head:riley_cuda::CudaPreparedGemm,
+     pub(crate) capacity:u32,
+@@ -81,7 +82,8 @@ impl VariableGraphBuffers {
+         let mut devices=Vec::with_capacity(18);
+         for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
+         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
+-        Ok(Self{devices,staging:context.allocate_pinned_host_buffer(196864)?,
++        let tiled=(0..90).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
++        Ok(Self{devices,tiled,staging:context.allocate_pinned_host_buffer(196864)?,
+             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
+     }
+     pub fn close(self)->riley_cuda::CudaResult<()> {self.head.close()}
+diff --git a/kernels/src/decode_tiled.cuh b/kernels/src/decode_tiled.cuh
+new file mode 100644
+index 0000000..fe32aa7
+--- /dev/null
++++ b/kernels/src/decode_tiled.cuh
+@@ -0,0 +1,38 @@
++#pragma once
++#include "decode_shape.cuh"
++// One-row projection: independent original BF16 rounding chunks run in parallel.
++// Each warp writes eight output columns. The merge retains the original order.
++template<int N,int K,int Interval>
++__global__ void tile_projection_parts(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out){
++ const int lane=threadIdx.x,g=lane/4,t=lane%4,base=blockIdx.x*8;
++ constexpr int Chunk=Interval>0?Interval:K;
++ int begin=blockIdx.y*Chunk,end=min(begin+Chunk,K);float d[4]={};
++ #pragma unroll
++ for(int depth=0;depth<Chunk;depth+=16){
++  if(begin+depth>=end)break;
++  int k=begin+depth;
++  uint32_t a=*reinterpret_cast<const uint32_t*>(x+k+2*t),aa=*reinterpret_cast<const uint32_t*>(x+k+2*t+8);
++  const auto* tile=w+((base/8)*(K/16)+k/16)*128;
++  uint32_t b=*reinterpret_cast<const uint32_t*>(tile+lane*2),bb=*reinterpret_cast<const uint32_t*>(tile+64+lane*2);
++  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
++ }
++ if(g==0)for(int j=0;j<2;++j){
++  auto v=__float2bfloat16_rn(d[j]);
++  if constexpr(Interval>0)parts[blockIdx.y*N+base+2*t+j]=__bfloat162float(v);
++  else out[base+2*t+j]=v;
++ }
++}
++template<int N,int K,int Interval>
++__global__ void tile_projection_merge(const float* parts,__nv_bfloat16* out){
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=N)return;float value=0.;
++ #pragma unroll
++ for(int chunk=0;chunk<(K+Interval-1)/Interval;++chunk)value+=parts[chunk*N+i];
++ out[i]=__float2bfloat16_rn(value);
++}
++template<int N,int K,int Interval>
++inline void enqueue_tile_projection(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* out,float* parts){
++ constexpr int chunk=Interval>0?Interval:K;
++ constexpr int chunks=(K+chunk-1)/chunk;
++ tile_projection_parts<N,K,Interval><<<dim3(N/8,chunks),32,0,stream>>>(x,w,parts,out);
++ if constexpr(Interval>0)tile_projection_merge<N,K,Interval><<<(N+255)/256,256,0,stream>>>(parts,out);
++}
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 0bfebcb..65bf395 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2397,7 +2397,7 @@ cudaError_t enqueue_compiled_packed_multisequence_rope_attention(cudaStream_t,co
+ }
+ 
+ namespace riley_cuda_internal {
+-cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t) noexcept;
++cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ }
+ 
+ namespace riley_cuda_internal { cudaError_t enqueue_compiled_v3_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept; }
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index 614edd3..e304e14 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -293,8 +293,8 @@ cudaError_t enqueue_shape_prefill_rope_kv(cudaStream_t stream,const void* q,cons
+ #include "prefill_shape_model.cuh"
+ 
+ namespace riley_cuda_internal {
+-cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical) noexcept {
+- return enqueue_v3_prefill_model(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical);
++cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
++ return enqueue_v3_prefill_model(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+ }
+ }
+ 
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 01746ca..861e139 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1139,7 +1139,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaPinnedHostBuffer* staging,
+  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+- if(!d||!w||!head||!staging||weight_count!=273||!capacity||capacity>1024||!physical||physical>4096||
++ if(!d||!w||!head||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
+     r->graph||r->exec||r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
+     !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses)||!holds_plan(r,head)||staging->byte_len<196864)
+    return reject(error,"V3 recorder lifecycle",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -1147,7 +1147,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+   if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses))return reject(error,"V3 device parent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t j=0;j<i;++j)if(d[i]==d[j])return reject(error,"V3 mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+- for(size_t i=0;i<273;++i){if(!w[i]||!same_context(w[i]->owner,r->owner)||!holds_counter(r,&w[i]->active_uses))return reject(error,"V3 weight parent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ for(size_t i=0;i<weight_count;++i){if(!w[i]||!same_context(w[i]->owner,r->owner)||!holds_counter(r,&w[i]->active_uses))return reject(error,"V3 weight parent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t j=0;j<23;++j)if(w[i]==d[j])return reject(error,"V3 weight/mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
+  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
+@@ -1156,16 +1156,22 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
+  for(size_t i=3;i<273;++i)if(w[i]->byte_len!=sizes[(i-3)%9])return reject(error,"V3 layer weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ if(weight_count==363)for(size_t i=273;i<363;++i){
++  if(w[i]->byte_len!=1769472)return reject(error,"V3 tiled weight extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  for(size_t j=0;j<i;++j)if(w[i]==w[j])return reject(error,"V3 tiled weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++ }
+  RileyCudaCanonicalGemmBf16GraphState state{};
+  status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  void* scratch[12];const void* weights[273];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<273;++i)weights[i]=w[i]->device_data;
+  constexpr uint64_t transfer=98432;
+  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
+- auto record_shape=[&](uint32_t row_capacity) noexcept {return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
++ auto record_shape=[&](uint32_t row_capacity) noexcept {
++  if(row_capacity==1&&weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)weights[3+l*9+6+j]=w[273+l*3+j]->device_data;
++  return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
+   auto* host=static_cast<uint8_t*>(staging->host_data);
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+   auto result=copy(d[16]->device_data,host,17536,cudaMemcpyHostToDevice);
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363&&row_capacity==1),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+diff --git a/kernels/src/prefill_shape_model.cuh b/kernels/src/prefill_shape_model.cuh
+index d7f78de..03677a7 100644
+--- a/kernels/src/prefill_shape_model.cuh
++++ b/kernels/src/prefill_shape_model.cuh
+@@ -3,13 +3,13 @@
+ #include "prefill_shape_rope_kv.cuh"
+ #include "prefill_shape_attention.cuh"
+ #include "prefill_shape_pointwise.cuh"
+-#include "decode_shape.cuh"
++#include "decode_tiled.cuh"
+ // Borrowed 30-layer SmolLM2 BF16 prefill sequence. Caller must validate V3 packet,
+ // all allocation extents/aliases and hold the resource ledger until completion.
+ // This enqueues work; it does not authorize scheduler settlement or serving output.
+ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scratch,const void*const* weights,
+  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
+- uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical){
++ uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!publish||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
+@@ -36,12 +36,15 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
+   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
+-  if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
+-  if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
+-  if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,shape,capacity);
+  }

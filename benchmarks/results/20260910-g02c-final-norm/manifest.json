@@ -1,0 +1,90 @@
+{
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "scope": "G02C canonical M1 FinalNorm development correctness; HF SmolLM2 capture pending",
+  "source_files": 19,
+  "source_hashes": "source-hashes.json",
+  "remote_source_match": true,
+  "source_overlay_sha256": "7cbeb41ccdc48df096b34a29d442621a2144f215acd90c3f5da20f78fa4d3f1f",
+  "unrelated_model_edits_preserved": true,
+  "unrelated_model_edits_in_remote_overlay": false,
+  "gpu": {
+    "runtime_tests": 3,
+    "native_regression_tests": 2,
+    "all_process_exit_codes": 0,
+    "shapes": [
+      [
+        1,
+        64
+      ],
+      [
+        3,
+        257
+      ],
+      [
+        1,
+        576
+      ]
+    ],
+    "captures_per_shape": 2,
+    "replays_per_capture": 64,
+    "synthetic_model_steps": 4,
+    "synthetic_model_replays_per_step": 32,
+    "synthetic_model_tokens": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "smollm2_tokens_after_profile_rejection": [
+      808,
+      2775,
+      288,
+      536
+    ],
+    "smollm2_graph_support": false
+  },
+  "cpu": {
+    "runtime_lib": 258,
+    "cuda_lib": 79,
+    "cuda_graph_contracts": 32,
+    "architecture": 15,
+    "inventory_boundaries": 2
+  },
+  "clippy_normal_mode_exit_code": 0,
+  "new_implementation_clippy_diagnostics": 0,
+  "qualification": false,
+  "global_inventory": {
+    "supported": 7,
+    "unknown": 7,
+    "aggregate": "Unknown"
+  },
+  "synthetic_fixture_generator_sha256": "7e605fd800b213cad53b7bcf1c00623f6d7ad11d5106070bc4c0b2c65751ef41",
+  "synthetic_checkpoint": {
+    "format": "riley-checkpoint-v1",
+    "source_model": "fixture/g02c-canonical-llama-h64-l2",
+    "source_revision": "1111111111111111111111111111111111111111",
+    "converter_revision": null,
+    "transforms": [],
+    "dtype": "bf16",
+    "files": [
+      {
+        "path": "config.json",
+        "bytes": 639,
+        "sha256": "03181e17dc090e47f85f8c02421e404928cf43dca39821f5e1e11eb703e5827f"
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 6458208,
+        "sha256": "7f5792964315f5bc4d7bff076753dc76fc3871941e0f3a62d7b15ce01da617fa"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 2104556,
+        "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+      }
+    ]
+  },
+  "remote_identities_sha256": "1724c8bf5ffaf6113d1de3753352032b4bc9320f2b4353c38039cd1b9ab04cec",
+  "independent_checkpoint_hashes_verified": true,
+  "smollm2_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+}

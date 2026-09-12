@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_serving_token_optimization_v3.py", line 823, in <module>
+    main()
+    ~~~~^^
+  File "/tmp/riley-opt-260912/run_serving_token_optimization_v3.py", line 817, in main
+    measure(args.plan.resolve(), output, plan, prepared, session, reference, request, binding)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/run_serving_token_optimization_v3.py", line 767, in measure
+    require(failure is None and restored is not None, "measurement incomplete; see finalization.json")
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/run_serving_concurrency.py", line 54, in require
+    raise ValueError(message)
+ValueError: measurement incomplete; see finalization.json

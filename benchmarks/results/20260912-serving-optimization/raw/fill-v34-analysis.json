@@ -1,0 +1,152 @@
+{
+  "scope": "Instrumented nonexclusive V33 natural serving, 384 requests each at client4,8,16,32 with active capacity min(client,8). Not matched vLLM performance or sustained stability qualification. Middle80 excludes first/last10percent of iterations. Batch occupancy is request-row occupancy, not GPU occupancy. Execution includes transfer and validation.",
+  "results": {
+    "4": {
+      "active_capacity": 4,
+      "sections": {
+        "all": {
+          "iterations": 8097,
+          "decode_iterations": 7329,
+          "prefill_iterations": 768,
+          "decode_row_histogram": {
+            "1": 64,
+            "2": 10,
+            "3": 816,
+            "4": 6439
+          },
+          "mean_decode_rows": 3.8597352981307136,
+          "full_decode_fraction": 0.8785646063583026,
+          "prefill_execution_time_fraction": 0.21648513860716254,
+          "decode_median_execution_us": 1285
+        },
+        "middle80": {
+          "iterations": 6478,
+          "decode_iterations": 5860,
+          "prefill_iterations": 618,
+          "decode_row_histogram": {
+            "4": 5242,
+            "3": 618
+          },
+          "mean_decode_rows": 3.894539249146758,
+          "full_decode_fraction": 0.8945392491467576,
+          "prefill_execution_time_fraction": 0.2173395795735213,
+          "decode_median_execution_us": 1285.0
+        }
+      }
+    },
+    "8": {
+      "active_capacity": 8,
+      "sections": {
+        "all": {
+          "iterations": 4473,
+          "decode_iterations": 3705,
+          "prefill_iterations": 768,
+          "decode_row_histogram": {
+            "1": 32,
+            "2": 32,
+            "3": 8,
+            "4": 6,
+            "5": 28,
+            "6": 24,
+            "7": 740,
+            "8": 2835
+          },
+          "mean_decode_rows": 7.635087719298245,
+          "full_decode_fraction": 0.7651821862348178,
+          "prefill_execution_time_fraction": 0.3328183999913677,
+          "decode_median_execution_us": 1421
+        },
+        "middle80": {
+          "iterations": 3578,
+          "decode_iterations": 2953,
+          "prefill_iterations": 625,
+          "decode_row_histogram": {
+            "8": 2328,
+            "7": 618,
+            "6": 7
+          },
+          "mean_decode_rows": 7.7859803589569925,
+          "full_decode_fraction": 0.7883508296647477,
+          "prefill_execution_time_fraction": 0.33651281075554124,
+          "decode_median_execution_us": 1423
+        }
+      }
+    },
+    "16": {
+      "active_capacity": 8,
+      "sections": {
+        "all": {
+          "iterations": 4476,
+          "decode_iterations": 3708,
+          "prefill_iterations": 768,
+          "decode_row_histogram": {
+            "1": 33,
+            "2": 29,
+            "3": 12,
+            "4": 11,
+            "5": 28,
+            "6": 26,
+            "7": 731,
+            "8": 2838
+          },
+          "mean_decode_rows": 7.62891046386192,
+          "full_decode_fraction": 0.7653721682847896,
+          "prefill_execution_time_fraction": 0.33259090559887444,
+          "decode_median_execution_us": 1418.0
+        },
+        "middle80": {
+          "iterations": 3581,
+          "decode_iterations": 2955,
+          "prefill_iterations": 626,
+          "decode_row_histogram": {
+            "7": 620,
+            "8": 2330,
+            "6": 5
+          },
+          "mean_decode_rows": 7.786802030456853,
+          "full_decode_fraction": 0.7884940778341794,
+          "prefill_execution_time_fraction": 0.3363595589739187,
+          "decode_median_execution_us": 1419
+        }
+      }
+    },
+    "32": {
+      "active_capacity": 8,
+      "sections": {
+        "all": {
+          "iterations": 4476,
+          "decode_iterations": 3708,
+          "prefill_iterations": 768,
+          "decode_row_histogram": {
+            "1": 32,
+            "2": 33,
+            "3": 9,
+            "4": 11,
+            "5": 22,
+            "6": 32,
+            "7": 735,
+            "8": 2834
+          },
+          "mean_decode_rows": 7.62891046386192,
+          "full_decode_fraction": 0.7642934196332255,
+          "prefill_execution_time_fraction": 0.3326972501645076,
+          "decode_median_execution_us": 1419.0
+        },
+        "middle80": {
+          "iterations": 3581,
+          "decode_iterations": 2956,
+          "prefill_iterations": 625,
+          "decode_row_histogram": {
+            "8": 2331,
+            "7": 618,
+            "6": 7
+          },
+          "mean_decode_rows": 7.786197564276049,
+          "full_decode_fraction": 0.7885656292286874,
+          "prefill_execution_time_fraction": 0.33626637252724334,
+          "decode_median_execution_us": 1421.0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "schema_version": "riley.g04.qualification.v1",
+  "source_commit": "2cfd76c27ad1f25f5f41cfea93c2d3f5420e8a9b",
+  "implementation_checks_passed": true,
+  "competitive_qualification_passed": false,
+  "performance_trials": 0,
+  "supported_scope": "SmolLM2 c1, single-token prefill and decode, full graph on scheduler-owned KV",
+  "checks": {
+    "owned_full_logits_exact": true,
+    "p128_o32": true,
+    "retained_graph_replays": 341,
+    "captures_for_owned_test": 1,
+    "cancelled_prefix_and_new_mapping_reuse": true,
+    "rejected_input_revokes_stale_output": true,
+    "final_allocations_zero": true,
+    "http_cpu_and_gpu_greedy_lifecycle": true,
+    "release_http_require_auto_disabled_and_unsupported_require": true,
+    "native_measurement_preparation_only": true,
+    "cpu_library_tests": 343,
+    "server_cli_tests": 21,
+    "profile_cli_tests": 9,
+    "profile_checker_tests": 22,
+    "source_manifest_matches_frozen_archive": true
+  },
+  "blockers": [
+    {
+      "gate": "cross-engine-token-equivalence",
+      "first_mismatch_zero_based": 8,
+      "riley_token": 2341,
+      "vllm_token": 1443
+    },
+    {
+      "gate": "same-campaign-cuda-runtime",
+      "riley": "12.8",
+      "vllm": "13.0",
+      "cuda13_experiment": "build succeeded with libstdc++; runtime rejected unreviewed HF prefill environment"
+    },
+    {
+      "gate": "canonical-host-preflight",
+      "expected_ram_bytes": 67185598464,
+      "observed_ram_bytes": 67185594368
+    },
+    {
+      "gate": "exclusive-gpu",
+      "observed_other_compute_pids": [
+        4007728,
+        201778,
+        501891
+      ],
+      "observed_total_used_mib": 743
+    }
+  ],
+  "not_run": [
+    "performance warmup/measurement campaign",
+    "M4/M5 judgement",
+    "multimodel expansion"
+  ],
+  "evidence": {
+    "release-http-require-m2.log": "091a147f4f20831420e8b451da92c11ede5c67cc3e4331248f4e3beede084e8c",
+    "release-http-require-m1.log": "d2bc1a442434104894fb184ce552435f0f1cd4a0546f5704e920b4c3dd7c81d3",
+    "riley-g04-owned-final.log": "059c0702b658e77974cb1314311d258966fb049061952503b7d1cf5d968b08ab",
+    "source-bundle.json": "0f7929bcf106273d225227710966e268bd54d99757bb6d8a448efee6a791cd53",
+    "riley-g04-vllm-correctness.log": "f9fb4feaf351d4901e158cc0315fd7babefdc83a97f5a5242b3b1029a29732e0",
+    "parity.json": "58e0856bd1e70aa8181ede393f38fd36849876420518641931bfcb0203a0ab31",
+    "release-http-disabled-m1.log": "cba7694e1f3dcc5f2ce5b65f5d52ac7c7072de998fc7e1fc0be425fd501d1677",
+    "candidate.json": "645fbfb7afb0b7ff05c1c52fd56b3de4d4e6cdaea9a61147f17b4b22e591f0b3",
+    "release-http-verification.json": "ca066a49a3d425d373cd6e0ce8a2b70be827a2988b1419a00fc65de61e2e7a7d",
+    "riley-g04-cuda13-build.log": "f60515a3e881bd3e95c721bb84979bac87a208cf108ad48a4c1931be2e663b1a",
+    "riley-g04-release-http-final.log": "c085de39cd5742a19ca3e8bf3a75afc3324e7b39e7452273196d995281b87eb6",
+    "riley-g04-preflight.stderr": "c1a93c457cee5595ec07fef7be06479603e8ee046d4e85b7f1d50b8e3a0731ba",
+    "riley-g04-http-candidate.log": "71dc40b42910db192597c3eee318ea67b3cadadf8c20273b53ecac1579330a9a",
+    "cpu-regression.log": "0b445a19b88baa96ee4fed8fae57ee117e26561ff281619e068ac1c650dd46e1",
+    "release-http-auto-m2.log": "b360da871f436ee10505a2a3120c7fe7dc9cc321a257e8d09eac6088d47e6a13",
+    "riley-g04-native-final.log": "880ceff3f16f241a0351f37340c42e9f18ddda5e0bf8a5e85170b03348d08b00",
+    "riley-g04-cli-direct-final.log": "6d0c09d617af77cfd94090d1be81e2007311e961fd00a79b7b1499c4f0894a29",
+    "profile-checker.log": "3d524bea6c444a67b2c7401a9f83df43f630f3e539985300bdb3094cfbd9d294",
+    "riley-g04-release-build-final.log": "6d12417b142294754bc84e00ac3cb8edf64d5908ae73e9a8a0b66e7cba736874",
+    "riley-g04-cuda13-parity.log": "1524135277423f0fbf7015bee70af2844f4d524b436fc26b87c9f262f1672b8e",
+    "riley-g04-profile-cli-final.log": "def43a4e5fb14c3446a5bff482c6461c34bda4d1fc24d7089caadd80c6a51c2b",
+    "riley-g04-preflight.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

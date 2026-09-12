@@ -1,0 +1,80 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10120:19
+      |
+10119 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10120 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10130 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10424:19
+      |
+10423 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10424 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10435 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10447 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/multisequence-output-source-v8/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 16.70s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/multisequence-output-target-v8/release/deps/riley_runtime-835ae91bc565a2d5)
+
+running 24 tests
+test llama::multi_descriptor::tests::canonical_target_table_and_generation_bounds ... ok
+test llama::multi_descriptor::tests::checked_overflow_and_no_catalog_fallback ... ok
+test llama::multi_descriptor::tests::duplicate_physical_tags_cookies_slots_and_sparse_output_rejected ... ok
+test llama::multi_descriptor::tests::caller_changes_cannot_rewrite_admitted_snapshot ... ok
+test llama::multi_descriptor::tests::any_repeated_result_attempt_invalidates_ready_output ... ok
+test llama::multi_descriptor::tests::explicit_ownership_blocks_forged_off_batch_reassignment ... ok
+test llama::multi_descriptor::tests::greedy_tokens_scatter_independently_from_execution_rows ... ok
+test llama::multi_descriptor::tests::old_wire_version_is_not_admitted ... ok
+test llama::multi_descriptor::tests::eighth_row_identity_and_cross_row_block_alias_are_rejected ... ok
+test llama::multi_descriptor::tests::independent_golden_request_exact_and_result_scatter ... ok
+test llama::multi_descriptor::tests::prefill_then_decode_requires_new_binding_and_respects_o1_terminal ... ok
+test llama::multi_descriptor::tests::malformed_last_row_never_exposes_earlier_rows ... ok
+test llama::multi_descriptor::tests::bf16_bits_preserved_and_nonfinite_rejected ... ok
+test llama::multi_descriptor::tests::p128_compatibility_view_and_all_prompt_tokens ... ok
+test llama::multi_descriptor::tests::owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter ... ok
+test llama::multi_descriptor::tests::inactive_rows_logits_and_arbitrary_spans_rejected ... ok
+test llama::multi_descriptor::tests::shrinking_and_growing_buckets_need_fresh_replay_and_result_shape ... ok
+test llama::multi_descriptor::tests::two_row_owner_has_exact_catalog_capacity_and_pool_bounds ... ok
+test llama::multi_descriptor::tests::unknown_completion_retains_snapshot_no_late_publication ... ok
+test llama::multi_descriptor::tests::unknown_stage_mode_version_and_lengths_rejected ... ok
+test llama::multi_descriptor::tests::unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt ... ok
+test llama::multi_descriptor::tests::all_exact_bucket_and_output_mode_sizes ... ok
+test llama::multi_descriptor::tests::every_request_byte_is_bound_in_both_stages ... ok
+test llama::multi_descriptor::tests::result_header_every_byte_and_row_identity_rejected ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 300 filtered out; finished in 0.00s
+

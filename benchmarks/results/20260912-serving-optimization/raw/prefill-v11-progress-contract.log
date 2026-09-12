@@ -1,0 +1,60 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling typenum v1.20.1
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+   Compiling serde_json v1.0.145
+   Compiling tinyvec_macros v0.1.1
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-core)
+   Compiling hybrid-array v0.4.14
+   Compiling serde v1.0.228
+   Compiling tinyvec v1.12.0
+   Compiling crypto-common v0.2.2
+   Compiling syn v2.0.119
+   Compiling block-buffer v0.12.1
+   Compiling itoa v1.0.18
+   Compiling digest v0.11.3
+   Compiling cfg-if v1.0.4
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-cuda)
+   Compiling ryu v1.0.23
+   Compiling cpufeatures v0.3.0
+   Compiling memchr v2.8.3
+   Compiling sha2 v0.11.0
+   Compiling unicode-normalization v0.1.25
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-tensor)
+   Compiling serde_derive v1.0.228
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.25s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/riley_runtime-ae469b804b4ca666)
+
+running 26 tests
+test llama::multi_descriptor::shape_progress::tests::rejects_cross_stage_overlap_overflow_and_context_exhaustion ... ok
+test llama::multi_descriptor::tests::checked_overflow_and_no_catalog_fallback ... ok
+test llama::multi_descriptor::tests::duplicate_physical_tags_cookies_slots_and_sparse_output_rejected ... ok
+test llama::multi_descriptor::shape_progress::tests::chunked_requests_publish_only_after_complete_prompt_then_exact_output_budget ... ok
+test llama::multi_descriptor::tests::canonical_target_table_and_generation_bounds ... ok
+test llama::multi_descriptor::tests::greedy_tokens_scatter_independently_from_execution_rows ... ok
+test llama::multi_descriptor::tests::explicit_ownership_blocks_forged_off_batch_reassignment ... ok
+test llama::multi_descriptor::tests::old_wire_version_is_not_admitted ... ok
+test llama::multi_descriptor::tests::two_row_owner_has_exact_catalog_capacity_and_pool_bounds ... ok
+test llama::multi_descriptor::tests::unknown_completion_retains_snapshot_no_late_publication ... ok
+test llama::multi_descriptor::tests::prefill_then_decode_requires_new_binding_and_respects_o1_terminal ... ok
+test llama::multi_descriptor::tests::shrinking_and_growing_buckets_need_fresh_replay_and_result_shape ... ok
+test llama::multi_descriptor::tests::unknown_stage_mode_version_and_lengths_rejected ... ok
+test llama::multi_descriptor::tests::p128_compatibility_view_and_all_prompt_tokens ... ok
+test llama::multi_descriptor::tests::malformed_last_row_never_exposes_earlier_rows ... ok
+test llama::multi_descriptor::tests::owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter ... ok
+test llama::multi_descriptor::tests::bf16_bits_preserved_and_nonfinite_rejected ... ok
+test llama::multi_descriptor::tests::any_repeated_result_attempt_invalidates_ready_output ... ok
+test llama::multi_descriptor::tests::caller_changes_cannot_rewrite_admitted_snapshot ... ok
+test llama::multi_descriptor::tests::independent_golden_request_exact_and_result_scatter ... ok
+test llama::multi_descriptor::tests::eighth_row_identity_and_cross_row_block_alias_are_rejected ... ok
+test llama::multi_descriptor::tests::unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt ... ok
+test llama::multi_descriptor::tests::inactive_rows_logits_and_arbitrary_spans_rejected ... ok
+test llama::multi_descriptor::tests::all_exact_bucket_and_output_mode_sizes ... ok
+test llama::multi_descriptor::tests::every_request_byte_is_bound_in_both_stages ... ok
+test llama::multi_descriptor::tests::result_header_every_byte_and_row_identity_rejected ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 261 filtered out; finished in 0.08s
+

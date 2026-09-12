@@ -1,0 +1,121 @@
+{
+  "scope": "Client-side first-token wait counts are not direct backend queue instrumentation. Means from full profiler trace include startup/drain. Fixed workload is P128 with8/16/32 requested outputs.",
+  "fixed_trace": {
+    "46": {
+      "tokens": 1920,
+      "decode_count": 138,
+      "mean_published_decode_rows": 13.217391304347826,
+      "stages": {
+        "prefill": {
+          "graph_us": 2853.089,
+          "kernel_us": 2591.2619999999997,
+          "copy_us": 3.536,
+          "d2h_us": 0.864,
+          "h2d_us": 2.624,
+          "memset_us": 0.352,
+          "idle_gap_us": 188.7225,
+          "kernel_span_us": 2609.822,
+          "kernel_count": 366.0
+        },
+        "decode": {
+          "graph_us": 1283.055,
+          "kernel_us": 1097.037,
+          "copy_us": 4.416,
+          "d2h_us": 0.864,
+          "h2d_us": 2.656,
+          "memset_us": 0.352,
+          "idle_gap_us": 174.242,
+          "kernel_span_us": 1115.565,
+          "kernel_count": 336
+        }
+      }
+    },
+    "47": {
+      "tokens": 1920,
+      "decode_count": 126,
+      "mean_published_decode_rows": 14.476190476190476,
+      "stages": {
+        "prefill": {
+          "graph_us": 2776.512,
+          "kernel_us": 2586.685,
+          "copy_us": 4.992,
+          "d2h_us": 1.024,
+          "h2d_us": 3.968,
+          "memset_us": 0.352,
+          "idle_gap_us": 182.627,
+          "kernel_span_us": 2605.214,
+          "kernel_count": 366
+        },
+        "decode": {
+          "graph_us": 1404.4325,
+          "kernel_us": 1228.6064999999999,
+          "copy_us": 6.7844999999999995,
+          "d2h_us": 0.896,
+          "h2d_us": 4.992,
+          "memset_us": 0.352,
+          "idle_gap_us": 168.49900000000002,
+          "kernel_span_us": 1247.0065,
+          "kernel_count": 336.0
+        }
+      }
+    }
+  },
+  "serving_client_observations": [
+    {
+      "workload": "fixed",
+      "pair": 0,
+      "lane": "previous",
+      "median_other_client_requests_awaiting_first_token_at_start": 1.0,
+      "p95": 9
+    },
+    {
+      "workload": "fixed",
+      "pair": 0,
+      "lane": "new",
+      "median_other_client_requests_awaiting_first_token_at_start": 13.0,
+      "p95": 14
+    },
+    {
+      "workload": "fixed",
+      "pair": 1,
+      "lane": "previous",
+      "median_other_client_requests_awaiting_first_token_at_start": 1.0,
+      "p95": 11
+    },
+    {
+      "workload": "fixed",
+      "pair": 1,
+      "lane": "new",
+      "median_other_client_requests_awaiting_first_token_at_start": 13.0,
+      "p95": 14
+    },
+    {
+      "workload": "natural",
+      "pair": 0,
+      "lane": "previous",
+      "median_other_client_requests_awaiting_first_token_at_start": 0.0,
+      "p95": 1
+    },
+    {
+      "workload": "natural",
+      "pair": 0,
+      "lane": "new",
+      "median_other_client_requests_awaiting_first_token_at_start": 0.0,
+      "p95": 1
+    },
+    {
+      "workload": "natural",
+      "pair": 1,
+      "lane": "previous",
+      "median_other_client_requests_awaiting_first_token_at_start": 0.0,
+      "p95": 1
+    },
+    {
+      "workload": "natural",
+      "pair": 1,
+      "lane": "new",
+      "median_other_client_requests_awaiting_first_token_at_start": 0.0,
+      "p95": 1
+    }
+  ]
+}

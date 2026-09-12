@@ -1,0 +1,179 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/fusion-history-source-v1/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `rejected` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:22:4
+   |
+22 | fn rejected(reason: &'static str) -> LlamaBatchExecutorError {
+   |    ^^^^^^^^
+
+warning: function `read` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:28:4
+   |
+28 | fn read(
+   |    ^^^^
+
+warning: methods `audit_c07_norm_qkv`, `audit_c07_qkv_rope`, `audit_c07_qkv_kv`, `audit_c07_attention_chain`, and `audit_qkv_impl` are never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:39:19
+   |
+37 | impl PreparedLlamaBatchExecutor {
+   | ------------------------------- methods in this implementation
+38 |     #[allow(clippy::too_many_lines)]
+39 |     pub(crate) fn audit_c07_norm_qkv(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+45 |     pub(crate) fn audit_c07_qkv_rope(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+52 |     pub(crate) fn audit_c07_qkv_kv(
+   |                   ^^^^^^^^^^^^^^^^
+...
+59 |     pub(crate) fn audit_c07_attention_chain(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+67 |     fn audit_qkv_impl(
+   |        ^^^^^^^^^^^^^^
+
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/fusion-history-source-v1/crates/riley-scheduler)
+warning: `riley-runtime` (lib) generated 6 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+   Compiling riley-server v0.1.0 (/tmp/riley-opt-260912/fusion-history-source-v1/crates/riley-server)
+    Finished `release` profile [optimized + debuginfo] target(s) in 14.99s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/fusion-history-target-v1/release/deps/riley_server-20b7f2e7e26d5ce0)
+
+running 74 tests
+test benchmark::graph_prepare_tests::full_graph_native_measurement_preparation_only ... ignored, requires CUDA checkpoint; prepares only and never measures
+test benchmark::tests::observer_rejects_regressing_monotonic_time ... ok
+test benchmark::tests::only_post_commit_tokens_are_observed_and_eos_is_ordinary ... ok
+test benchmark::tests::preparation_rejects_unbounded_or_unaddressable_inputs ... ok
+test benchmark::tests::token_hash_uses_exact_little_endian_u32_bytes ... ok
+test domain::tests::model_metadata_checks_token_limit_relationship ... ok
+test domain::tests::request_metadata_enforces_public_identifier_bounds ... ok
+test domain::tests::usage_total_is_checked_once ... ok
+test engine::tests::active_shape_buckets_route_without_hot_path_growth ... ok
+test engine::tests::c02_metrics_map_only_checked_source_owned_scheduler_and_allocation_facts ... ok
+test engine::tests::committed_empty_token_is_delivered_and_channel_overflow_cancels ... ok
+test engine::tests::committed_shape_without_matching_flattened_rows_degrades_without_a_hit ... ok
+test engine::tests::complete_iteration_failure_produces_no_audit_record ... ok
+test engine::tests::concurrent_requests_finish_without_deadlock ... ok
+test engine::tests::deferred_cancel_checkpoint_excludes_current_uncommitted_token ... ok
+test engine::tests::drop_guard_cancels_without_relying_on_command_capacity ... ok
+test engine::tests::events_are_ordered_and_terminal_is_last ... ok
+test engine::tests::gpu_greedy_ineligibility_is_typed_and_has_a_stable_precedence ... ok
+test engine::tests::graceful_shutdown_rejects_new_work_and_closes_backend ... ok
+test engine::tests::metrics_snapshot_is_serialized_through_the_worker ... ok
+test engine::tests::model_mismatch_and_live_capacity_are_rejected ... ok
+test engine::tests::native_fallback_attribution_requires_one_output_slot ... ok
+test engine::tests::shape_metric_overflow_is_isolated_as_degraded_observability ... ok
+test engine::tests::slow_consumer_is_cancelled_when_request_channel_is_full ... ok
+test engine::tests::staged_shape_metrics_count_only_committed_iterations ... ok
+test engine::tests::text_only_backend_rejects_token_ids_before_admission ... ok
+test engine::tests::user_input_diagnostics_do_not_retain_prompt_text ... ok
+test http::tests::fixed_json_and_get_requests_are_framed_exactly ... ok
+test http::tests::framing_ambiguity_and_missing_required_fields_fail_closed ... ok
+test http::tests::header_body_target_and_field_bounds_are_enforced ... ok
+test http::tests::response_headers_are_close_delimited_and_non_sniffable ... ok
+test openai::tests::empty_and_aggregate_stop_constraints_are_checked ... ok
+test openai::tests::finish_reason_uses_openai_values ... ok
+test openai::tests::in_stream_failure_is_sanitized_then_done ... ok
+test openai::tests::multi_or_token_prompt_is_an_explicit_validation_error ... ok
+test openai::tests::non_finite_and_out_of_range_floats_are_rejected ... ok
+test openai::tests::non_neutral_and_unsupported_options_fail_explicitly ... ok
+test openai::tests::non_streaming_response_has_one_choice_and_checked_usage ... ok
+test openai::tests::normalization_applies_defaults_and_preserves_supported_values ... ok
+test openai::tests::numeric_and_byte_bounds_are_enforced_before_admission ... ok
+test openai::tests::opted_in_sse_keeps_empty_tokens_and_requires_checked_usage_before_one_done ... ok
+test openai::tests::optional_token_request_flags_are_typed_and_stream_usage_requires_streaming ... ok
+test openai::tests::request_deserialization_accepts_stop_string_or_array ... ok
+test openai::tests::sanitized_errors_never_contain_internal_diagnostics ... ok
+test openai::tests::sse_encoder_is_deterministic_and_enforces_terminal_order ... ok
+test openai::tests::token_collector_rejects_missing_repeated_or_out_of_order_metadata_and_bounds ... ok
+test openai::tests::usage_only_opt_in_does_not_invent_token_ids_and_direct_finish_cannot_omit_usage ... ok
+test service::tests::absolute_framing_deadline_rejects_trickle_and_releases_worker ... ok
+test service::tests::accepted_connection_waits_for_delayed_request_bytes ... ok
+test service::tests::backend_and_connection_queue_overload_return_429 ... ok
+test service::tests::c02_metrics_endpoint_is_raw_canonical_and_explicitly_gated ... ok
+test service::tests::c02_shutdown_evidence_requires_post_close_typed_quiescence ... ok
+test service::tests::cancellation_after_invisible_token_emits_no_success_usage ... ok
+test service::tests::committed_tokens_and_usage_survive_concurrent_http_delivery ... ok
+test service::tests::concurrent_clients_finish_without_deadlock ... ok
+test service::tests::disconnect_after_invisible_token_cancels_source ... ok
+test service::tests::graceful_shutdown_stops_admission_cancels_active_and_joins ... ok
+test service::tests::listener_shutdown_wakeup_persists_and_takes_priority_over_backlog ... ok
+test service::tests::loopback_transport_timing ... ignored, prints loopback transport latency; run alone in release mode
+test service::tests::malformed_bounded_and_unavailable_requests_are_sanitized ... ok
+test service::tests::metrics_endpoint_consumes_committed_fixed_shape_snapshot ... ok
+test service::tests::missing_token_metadata_fails_before_first_payload_and_bad_usage_cannot_finish ... ok
+test service::tests::nonstream_disconnect_probe_cadence_counts_invisible_tokens ... ok
+test service::tests::observation_buffer_evicts_oldest_metadata_as_one_consistent_state ... ok
+test service::tests::opt_in_nonstream_response_counts_serialized_token_bytes ... ok
+test service::tests::readiness_health_and_model_metadata_are_separate ... ok
+test service::tests::request_timeout_and_client_disconnect_cancel_backend_work ... ok
+test service::tests::runtime_config_endpoint_is_immutable_and_fails_closed ... ok
+test service::tests::shutdown_deadline_contains_a_backend_that_violates_its_contract ... ok
+test service::tests::shutdown_interrupts_partial_requests_within_global_grace ... ok
+test service::tests::shutdown_metrics_fail_closed_without_post_close_backend_evidence ... ok
+test service::tests::shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections ... ok
+test service::tests::streaming_and_non_streaming_text_match_and_are_observed ... ok
+test tests::version_line_is_available_without_cuda ... ok
+
+test result: ok. 72 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.60s
+

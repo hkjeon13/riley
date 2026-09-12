@@ -1,0 +1,21 @@
+{
+  "phase": "warmup-nonstream",
+  "warmup": true,
+  "requested": 10,
+  "attempted": 2,
+  "succeeded": 0,
+  "failed": 2,
+  "unresolved_attempts": 0,
+  "not_started": 8,
+  "offered_concurrency": 2,
+  "observed_max_request_in_flight": 0,
+  "observed_max_call_in_flight": 2,
+  "phase_started_ns": 809341807741824,
+  "phase_finished_ns": 809341870385932,
+  "completed": false,
+  "worker_errors": [],
+  "watchdog_timed_out_request_indices": [],
+  "failure_policy": "stop new requests; drain in-flight calls; total deadline aborts owned server; no retries",
+  "client_socket_timeout_seconds": 120,
+  "total_request_deadline_seconds": 120
+}

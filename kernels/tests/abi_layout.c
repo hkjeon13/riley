@@ -609,6 +609,14 @@ static RileyCudaStatus (*const graph_capture_begin_canonical_rms_norm_bf16_symbo
 static RileyCudaStatus (*const graph_capture_enqueue_canonical_rms_norm_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16;
+static RileyCudaStatus (*const graph_capture_begin_hf_smollm2_rms_norm_bf16_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, uint64_t, uint64_t, float, RileyCudaGraphCaptureMode,
+    RileyCudaGraphCapture**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_hf_smollm2_rms_norm_bf16;
+static RileyCudaStatus (*const graph_capture_enqueue_hf_smollm2_rms_norm_bf16_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16;
 static RileyCudaStatus (*const graph_capture_begin_bf16_argmax_symbol)(
     RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, uint64_t,
     uint64_t, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
@@ -657,12 +665,24 @@ static RileyCudaStatus (*const
                             graph_capture_enqueue_bf16_embedding_status_d2h_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h;
+static RileyCudaStatus (*const output_parent_d2h_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaPinnedHostBuffer*,
+    uint64_t, uint64_t, uint64_t, uint64_t, RileyCudaGraphCaptureMode,
+    RileyCudaGraphCapture**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_output_parent_d2h;
 static RileyCudaStatus (*const graph_capture_begin_canonical_gemm_bf16_symbol)(
     RileyCudaStream*, RileyCudaGemmPlan*, RileyCudaDeviceBuffer*,
     RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
     RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
     RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_begin_canonical_gemm_bf16;
+static RileyCudaStatus (*const graph_capture_begin_selected_no_split_gemm_bf16_symbol)(
+    RileyCudaStream*, RileyCudaGemmPlan*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16;
 static RileyCudaStatus (*const graph_capture_enqueue_canonical_gemm_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_canonical_gemm_bf16;
@@ -678,6 +698,13 @@ static RileyCudaStatus (*const
                             graph_capture_enqueue_canonical_rms_norm_gemm_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16;
+static RileyCudaStatus (*const graph_packed_parent_kv_write_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    const uint64_t*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+    RileyCudaGraphCaptureMode, uint64_t, uint64_t, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_packed_parent_kv_write_bf16;
 static RileyCudaStatus (*const graph_capture_begin_indexed_rope_bf16_symbol)(
     RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
     RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
@@ -685,6 +712,13 @@ static RileyCudaStatus (*const graph_capture_begin_indexed_rope_bf16_symbol)(
     uint64_t, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
     RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_begin_indexed_rope_bf16;
+static RileyCudaStatus (*const graph_capture_begin_indexed_rope_bf16_span_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    const uint32_t*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+    uint64_t, uint64_t, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_indexed_rope_bf16_positions_span;
 static RileyCudaStatus (*const graph_capture_enqueue_indexed_rope_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_indexed_rope_bf16;
@@ -992,6 +1026,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_residual_add_bf16_symbol,
     (const void*)&graph_capture_begin_canonical_rms_norm_bf16_symbol,
     (const void*)&graph_capture_enqueue_canonical_rms_norm_bf16_symbol,
+    (const void*)&graph_capture_begin_hf_smollm2_rms_norm_bf16_symbol,
+    (const void*)&graph_capture_enqueue_hf_smollm2_rms_norm_bf16_symbol,
     (const void*)&graph_capture_begin_bf16_argmax_symbol,
     (const void*)&graph_capture_enqueue_bf16_argmax_symbol,
     (const void*)&graph_capture_begin_bf16_row_gather_symbol,
@@ -1002,11 +1038,15 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_bf16_row_gather_argmax_d2h_symbol,
     (const void*)&graph_capture_begin_bf16_embedding_status_d2h_symbol,
     (const void*)&graph_capture_enqueue_bf16_embedding_status_d2h_symbol,
+    (const void*)&graph_capture_begin_selected_no_split_gemm_bf16_symbol,
+    (const void*)&output_parent_d2h_symbol,
     (const void*)&graph_capture_begin_canonical_gemm_bf16_symbol,
     (const void*)&graph_capture_enqueue_canonical_gemm_bf16_symbol,
     (const void*)&graph_capture_begin_canonical_rms_norm_gemm_bf16_symbol,
     (const void*)&graph_capture_enqueue_canonical_rms_norm_gemm_bf16_symbol,
+    (const void*)&graph_packed_parent_kv_write_symbol,
     (const void*)&graph_capture_begin_indexed_rope_bf16_symbol,
+    (const void*)&graph_capture_begin_indexed_rope_bf16_span_symbol,
     (const void*)&graph_capture_enqueue_indexed_rope_bf16_symbol,
     (const void*)&graph_capture_begin_ragged_paged_kv_cache_write_bf16_symbol,
     (const void*)&graph_capture_enqueue_ragged_paged_kv_cache_write_bf16_symbol,
@@ -1080,3 +1120,57 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&fixed37_gemm_plan_execute_symbol,
     (const void*)&fixed37_gemm_plan_close_symbol,
 };
+
+static RileyCudaStatus (*const graph_resources_reserve_signature)(
+    RileyCudaStream*, RileyCudaDeviceBuffer* const*, uint64_t,
+    RileyCudaPinnedHostBuffer* const*, uint64_t,
+    RileyCudaGemmPlan* const*, uint64_t, RileyCudaGraphResources**,
+    RileyCudaErrorInfo*) = &riley_cuda_graph_resources_reserve;
+static RileyCudaStatus (*const graph_resources_close_signature)(
+    RileyCudaGraphResources**, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_close;
+
+static RileyCudaStatus (*const graph_resources_record_transfer_signature)(
+    RileyCudaGraphResources*, RileyCudaPinnedHostBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaPinnedHostBuffer*, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_transfer;
+static RileyCudaStatus (*const graph_resources_replay_transfer_signature)(
+    RileyCudaGraphResources*, const uint8_t*, uint64_t, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_replay_transfer;
+static RileyCudaStatus (*const graph_resources_read_transfer_signature)(
+    RileyCudaGraphResources*, uint8_t*, uint64_t, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_read_transfer;
+static RileyCudaStatus (*const graph_resources_record_swiglu_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaPinnedHostBuffer*,
+    RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_swiglu;
+static RileyCudaStatus (*const graph_resources_record_mlp_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_mlp;
+
+static RileyCudaStatus (*const graph_resources_record_norm_mlp_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, RileyCudaDeviceBuffer*,
+    float, uint32_t, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_norm_mlp;
+
+static RileyCudaStatus (*const graph_resources_record_layer_tail_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, RileyCudaDeviceBuffer*,
+    float, uint32_t, RileyCudaDeviceBuffer*, RileyCudaGemmPlan*, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_layer_tail;
+
+static RileyCudaStatus (*const graph_resources_record_norm_qkv_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_norm_qkv;
+
+static RileyCudaStatus (*const graph_resources_record_qkv_rope_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_qkv_rope;
+
+static RileyCudaStatus (*const graph_resources_record_qkv_kv_signature)(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, float, uint32_t,
+    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaDeviceBuffer* const*,
+    const uint64_t*, RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_qkv_kv;
+
+static RileyCudaStatus (*const graph_resources_record_attention_chain_signature)(
+    RileyCudaGraphResources*,RileyCudaDeviceBuffer* const*,RileyCudaGemmPlan*,RileyCudaGemmPlan*,
+    RileyCudaPinnedHostBuffer*,float,uint32_t,RileyCudaDeviceBuffer* const*,uint64_t,
+    RileyCudaDeviceBuffer* const*,const uint64_t*,RileyCudaDeviceBuffer*,const uint64_t*,RileyCudaErrorInfo*) = &riley_cuda_graph_resources_record_attention_chain;

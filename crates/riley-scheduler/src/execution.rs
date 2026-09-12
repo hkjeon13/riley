@@ -1958,3 +1958,70 @@ mod tests {
         assert_eq!(occupied_workspace.as_ptr(), occupied_allocation);
     }
 }
+
+/// Executes the immutable single-token scheduler plan on a retained full graph.
+/// CPU sampling can consume full logits; GPU greedy uses the exact device result.
+/// Timing is unavailable here (zero), never a host interval mislabeled as GPU time.
+/// # Errors
+/// Graph errors conservatively leave the iteration unsettled: no KV reuse is
+/// authorized without successful graph destruction proving completion.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_graph(
+    plan: &IterationPlan,
+    executor: &mut riley_runtime::llama::OwnedLlamaDecodeExecutor,
+    greedy_workspace: Option<&mut Vec<u32>>,
+) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+    let id = plan.iteration_id();
+    let before =
+        |error| IterationExecutionFailure::new(id, Some(ExecutionAbort::NotDispatched), error);
+    let prepared = PreparedLlamaIteration::prepare(plan).map_err(before)?;
+    let vocabulary_size = executor.vocabulary_size();
+    prepared
+        .validate_executor_bounds(
+            executor.metadata_config(),
+            vocabulary_size,
+            executor.maximum_position_count(),
+        )
+        .map_err(before)?;
+    if let Some(ref workspace) = greedy_workspace {
+        if workspace.capacity() < prepared.output_count {
+            return Err(before(IterationAdapterError::InvalidRuntimeOutput {
+                field: "graph greedy workspace",
+                reason: "insufficient preallocated capacity",
+            }));
+        }
+    }
+    let mut logits = if greedy_workspace.is_none() {
+        zeroed_vec(prepared.output_count * vocabulary_size * 2, "graph logits").map_err(before)?
+    } else {
+        Vec::new()
+    };
+    let downloaded = executor.execute(prepared.rows()).map_err(|source| {
+        IterationExecutionFailure::new(id, None, IterationAdapterError::Runtime(Box::new(source)))
+    })?;
+    if !logits.is_empty() {
+        logits.copy_from_slice(downloaded);
+    }
+    let output = if let Some(tokens) = greedy_workspace {
+        tokens.clear();
+        if prepared.output_count != 0 {
+            tokens.push(executor.greedy_token().map_err(|source| {
+                IterationExecutionFailure::new(
+                    id,
+                    None,
+                    IterationAdapterError::Runtime(Box::new(source)),
+                )
+            })?);
+        }
+        DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens))
+    } else {
+        DownloadedLlamaOutput::Logits(logits)
+    };
+    Ok(DownloadedLlamaIteration {
+        iteration_id: id,
+        vocabulary_size,
+        output_count: prepared.output_count,
+        output,
+        commit_outputs: prepared.commit_outputs,
+    })
+}

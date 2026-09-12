@@ -1,0 +1,27 @@
+{
+  "source_root": "/tmp/riley-g04-vllm-profile-source-260911",
+  "base_commit": "9b53ffa14cea7c066fda8eff65b977c860b12afb",
+  "source_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+  "changed_files": {
+    "crates/riley-cuda/src/ffi.rs": "cc6caabda38d786d2fbb36e3f40581e6dd20da82e72dd5ba7fb65c7b4b22e307",
+    "crates/riley-cuda/src/graph_resources.rs": "cc5d5119552d51075b37273695d06ba6a3e35b7a22047f6bddefe4473967d7be",
+    "crates/riley-cuda/src/lib.rs": "fe373b56ff1d3c1be2dec6cc187bc37dae5c6949b7f2ce084d2616887067d689",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "e9273e0eba624ed736e8406c5c14062f408f91e65e69ef1e188cd786f9f057a1",
+    "crates/riley-runtime/src/llama/executor/config.rs": "0746a9d698b5a156f3c2a95383fe4d8965d26b5549b131c7240479e822451eeb",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "9d444412534969eead04d71eb9292ab131b9f46cce6b2b17ca243009243913c0",
+    "crates/riley-server/src/benchmark.rs": "81e4fb439d88c99b402fa2cf3da96ad8c1a8eb6209676f07681b8a5e897b0812",
+    "crates/riley-server/src/bin/riley-profile.rs": "f03680039a40fec14f52b972f3ea51c09a80ffe35064f48fa5b6faa49602da1e",
+    "crates/riley-server/src/engine.rs": "eec3d6c1edb7ffe61f456e0749e666b3eb259b6032a3284d9e9d7342bb598fd2",
+    "crates/riley-server/src/main.rs": "c3d7f2d7b77da5df9d28a063c1a47ade52e399c92f2b58b78d6b61690eea3b84",
+    "kernels/CMakeLists.txt": "b8153073f51ad630da761ddb1868e6484d46d72c983189a381a3f284225c8630",
+    "kernels/src/ffi_internal.hpp": "750c6d6af836988cea309db377b9f5f39f3ecab3ebe4bacb8730ba8662a8cb91",
+    "kernels/src/graph_resources.cu": "3fb851aedfe20f0e48387abfc2ccdee51ba38d425ced394702c7332b54c516f7",
+    "kernels/src/graph_numerics.cu": "28031601c1cbfb78a2f9dc6f3464bb2ed9a1bdf57441daa9675ed9f8c1261a15",
+    "kernels/src/graph_numerics_precise.cu": "b249c8584e010827193ba433c38c8452c12103f5d037c37a5800737f34ff35e7",
+    "benchmarks/schemas/vllm-profile-run.schema.json": "9c4f8e5a42ad5d3e3cb883b7c8d28aeaa93c6fa4b01f0b909b495f79b5f02fcf",
+    "benchmarks/scripts/check_vllm_profile_run.py": "225e055963bf9dac4cdb6b343a22eb563dc01f67e54db64908abccacd77d8e50",
+    "benchmarks/scripts/tests/test_check_vllm_profile_run.py": "198a558b05e0e1a1132411d57cc9f5427cde66f9b587071d29cce139b0410955",
+    "benchmarks/profiling/VLLM_SMOL_P128_PROFILE.md": "83c6048e80762d1321b22cad0db52c0a9e762cf65dda90c328555ac122b14096"
+  },
+  "clean": true
+}

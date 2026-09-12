@@ -1,0 +1,212 @@
+{
+  "schema_version": "riley.multisequence-attention-fixtures.v1",
+  "cases": 34560,
+  "layers": 30,
+  "position_tuples": 32,
+  "patterns": 3,
+  "mappings": 3,
+  "modes": 4,
+  "recipe": {
+    "synthetic_only_no_checkpoint_activations": true,
+    "q_output_bytes_per_row": 1152,
+    "metadata_bytes": 1280,
+    "row_offset": 128,
+    "row_stride": 128,
+    "c10_bytes": 80,
+    "block_ids_offset": 16,
+    "valid_counts_offset": 56,
+    "shared_physical_blocks": 64,
+    "shared_kv_bytes_each": 393216,
+    "guard_bytes_each_side": 256,
+    "modes": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        4
+      ]
+    ],
+    "positions": "128+((tuple+11*row)%32)",
+    "position159": "numerical-only; not admitted by public P128/O1..32 descriptor codec",
+    "fixture_authority": "host-owned synthetic rows and disjoint physical ledger; no live scheduler/KV integration",
+    "inactive_device_poison": "canonical packet validated first, then inactive metadata set to ff and inactive Q to BF16 NaN; not production admission",
+    "arithmetic_allocation_count": 432000,
+    "graph_transition_allocation_count": 17,
+    "allocation_count": 432017,
+    "active_count_binding": "fresh common device header packet[6], byte24; no captured active scalar",
+    "retained_graph": {
+      "transitions": [
+        {
+          "step": 0,
+          "layer": 0,
+          "position_tuple": 0,
+          "pattern": "bounded_fingerprint",
+          "mapping": "identity64",
+          "bucket": 4,
+          "active_rows": 3,
+          "positions": [
+            128,
+            139,
+            150
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 1
+        },
+        {
+          "step": 1,
+          "layer": 15,
+          "position_tuple": 17,
+          "pattern": "signed_zero_impulses",
+          "mapping": "affine7_3_mod64",
+          "bucket": 4,
+          "active_rows": 4,
+          "positions": [
+            145,
+            156,
+            135,
+            146
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 2
+        },
+        {
+          "step": 2,
+          "layer": 29,
+          "position_tuple": 5,
+          "pattern": "tail_cancellation",
+          "mapping": "reverse64",
+          "bucket": 4,
+          "active_rows": 3,
+          "positions": [
+            133,
+            144,
+            155
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 3
+        }
+      ],
+      "fixture_coordinates": [
+        [
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        [
+          15,
+          17,
+          1,
+          3,
+          2
+        ],
+        [
+          29,
+          5,
+          2,
+          2,
+          1
+        ]
+      ],
+      "capture_count": 1,
+      "kernel_nodes": 1,
+      "parameter_updates": 0,
+      "refresh": "same fixed parent allocations; fresh H2D outside capture; no owner integration"
+    },
+    "oracle": "independent aligned Q/C10/output for each active row; same immutable shared KV pool",
+    "candidate_launches_per_case": 1,
+    "candidate_grid": "9 x 2 x bucket, 64 threads per CTA"
+  },
+  "source_build": {
+    "path": "/tmp/riley-opt-260912/batch7-build.json",
+    "sha256": "4d3f65c70aa56beb487754f01ed04e04d36f4c6db64fd3ee17b665561fb25395"
+  },
+  "source_root": "/tmp/riley-opt-260912/batch7-source",
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "43be2f99a2a1b8bf58bf7d6b873a05356508e59e00ec3701b24094cde088d6dc",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "bd5abff3d42ba00692c0eb98127043a6f16beb9c4182b925c35555a0af89c617",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch7-target/release/riley": "c803eaa21e233ce74f496396f3b85ccfd1a5cea9f0781b7ff9ff14f61fdace43",
+    "/tmp/riley-opt-260912/batch7-target/release/riley-profile": "32425c1b18dbd47011765a1b4555fa6cdfdd419d7179491ce1fdc1a33f629ccd"
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-prototype-v1/probe.py",
+    "sha256": "fd6e20e76c8ea27c419b18fcc4c9d7abecfe6a5fb5e8a2a776f7c458b7c3e007"
+  },
+  "host_source": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-prototype-v1/native.cu",
+    "sha256": "11eff6609013fdb114439ad00c575d92b74ad705d23f4265a7ba3b41a5303703"
+  },
+  "conventions": {
+    "path": "/tmp/riley-opt-260912/batch7_attention_probe.py",
+    "sha256": "bf8f8deca087d6db53c6cce9238d05b2d014328b3f0000f864cbf30ebc56e7f1"
+  },
+  "descriptor_contract": {
+    "path": "/tmp/riley-opt-260912/MULTISEQUENCE_DESCRIPTOR_CONTRACT.md",
+    "sha256": "5bed6d70342dec4f30c85ba67dd41cf560e6b7f4b0de5dedfe59424cecc9b641"
+  },
+  "generated_source": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/candidate.cu",
+    "sha256": "c6ee086306a56e52f0a5b041642f8fc5c3565e9f2080160570da400719ea07a9"
+  },
+  "generated_header": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/ffi_internal.hpp",
+    "sha256": "bd5abff3d42ba00692c0eb98127043a6f16beb9c4182b925c35555a0af89c617"
+  },
+  "case_index": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/cases.tsv",
+    "sha256": "287ac6cefbbe06314d6786c73f1566429530cd32b5d63bd74aed6303849469be"
+  },
+  "lineage": {
+    "accepted_kernel_sha256": "498ade32596bf5ccf258bdb373926c7091625ef9f36a01810dac258a6a29d6d4",
+    "helper_bytes_sha256": "f6d2a01485b3de8cf8d578bb02ad6b656d2a6e5db5d777295c02e0fd3be19658",
+    "arithmetic_body_preserved_by_reverse_transform": true,
+    "changes": [
+      "namespace isolation",
+      "grid.z row selection and exact Q/output stride576 BF16",
+      "fresh active count from common packet header byte24; fixed cold bucket grid",
+      "C10 metadata pointer at packet byte128+128*row",
+      "uniform inactive positive-zero output before row reads/barriers"
+    ]
+  },
+  "gpu_executed": false,
+  "performance_claim": false,
+  "production_integration": false
+}

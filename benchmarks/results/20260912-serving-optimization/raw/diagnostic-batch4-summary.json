@@ -1,0 +1,130 @@
+{
+  "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+  "performance_claim_eligible": false,
+  "classification": {
+    "source": "position",
+    "prefill_tokens": 128
+  },
+  "graph_inventories": [
+    {
+      "schema": "riley.owned-graph-diagnostic.v1",
+      "kind": "graph",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "nodes": 403,
+      "kernel_nodes": 397,
+      "memcpy_nodes": 6,
+      "other_nodes": 0,
+      "memcpy_params_status": 0,
+      "memcpy_unknown_nodes": 0,
+      "memcpy_bytes_complete": true,
+      "h2d_bytes": 604,
+      "d2h_bytes": 98344,
+      "d2d_bytes": 1152
+    },
+    {
+      "schema": "riley.owned-graph-diagnostic.v1",
+      "kind": "graph",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "nodes": 282,
+      "kernel_nodes": 277,
+      "memcpy_nodes": 5,
+      "other_nodes": 0,
+      "memcpy_params_status": 0,
+      "memcpy_unknown_nodes": 0,
+      "memcpy_bytes_complete": true,
+      "h2d_bytes": 604,
+      "d2h_bytes": 98344,
+      "d2d_bytes": 0
+    }
+  ],
+  "groups": {
+    "prefill": {
+      "replays": 6,
+      "successful_replays": 6,
+      "capture_ids": [
+        1
+      ],
+      "metrics": {
+        "event_setup_ns": {
+          "measured_count": 6,
+          "unmeasured_count": 0,
+          "median": 2968.0,
+          "sum": 18823
+        },
+        "host_staging_ns": {
+          "measured_count": 6,
+          "unmeasured_count": 0,
+          "median": 2103.5,
+          "sum": 15767
+        },
+        "host_launch_ns": {
+          "measured_count": 6,
+          "unmeasured_count": 0,
+          "median": 13695.0,
+          "sum": 166767
+        },
+        "host_wait_ns": {
+          "measured_count": 6,
+          "unmeasured_count": 0,
+          "median": 13707279.5,
+          "sum": 83370002
+        },
+        "cuda_graph_span_ns": {
+          "measured_count": 6,
+          "unmeasured_count": 0,
+          "median": 13717375.7555,
+          "sum": 83515198.708
+        }
+      }
+    },
+    "decode": {
+      "replays": 186,
+      "successful_replays": 186,
+      "capture_ids": [
+        2
+      ],
+      "metrics": {
+        "event_setup_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 378.5,
+          "sum": 78251
+        },
+        "host_staging_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 1583.5,
+          "sum": 304899
+        },
+        "host_launch_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 4682.0,
+          "sum": 970520
+        },
+        "host_wait_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 2008304.5,
+          "sum": 371703970
+        },
+        "cuda_graph_span_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 2010864.0189999999,
+          "sum": 372183104.273
+        }
+      }
+    }
+  },
+  "failed_replays": 0,
+  "read_records": 192,
+  "projection_groups": [],
+  "unmeasured": [
+    "per_kernel_cuda_time",
+    "Rust_metadata_pack",
+    "request_latency_without_instrumentation"
+  ]
+}

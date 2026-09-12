@@ -1,0 +1,11 @@
+========= COMPUTE-SANITIZER
+
+running 2 tests
+test loaded_compact_sixteen_alternates_full_and_greedy ... LOADED_SHARED rows_max=16 logits_checked=2336 iterations=318 pending_close_abort=true allocation_zero=true
+ok
+test loaded_compact_sixteen_prefill_shapes ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 35.60s
+
+========= ERROR SUMMARY: 0 errors

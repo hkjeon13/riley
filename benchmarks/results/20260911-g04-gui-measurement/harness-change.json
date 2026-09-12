@@ -1,0 +1,16 @@
+{
+  "original_runner_sha256": "c97e3abee64c6153d0bcb991260235e7a908e07187c0b6f1fff09368c335f49f",
+  "derived_runner_sha256": "e5fed9873afaa6b8bfcbf4cd92efc2766a8435f7d985a8d742f51daaf8fa5741",
+  "changes": [
+    "Keep original pinned ROOT and candidate validation",
+    "Set SO_REUSEADDR on pre-launch bind probe to allow closed TIME_WAIT sockets; active listeners still fail",
+    "Identical temperature cooldown <=48 C before each lane; preserve original preflight 50 C ceiling"
+  ],
+  "excluded_attempt": "http-attempt1",
+  "retained_attempt": "http",
+  "benchmark_candidate_changed": false,
+  "excluded_attempts": [
+    "http-attempt1",
+    "http-attempt2"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "baseline_sha256": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+  "candidate_sha256": "1bbce29025fc91758f932a4bdbbf36e6e9097805df9c58157a90b18d7000ea9f",
+  "accepted7_prefix_sha256": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e",
+  "preserved_softmax_bytes_sha256": "96979bc5e1320738047a23898df3a82c24b1b2af893c03a512739cdb901cad42",
+  "preserved_finalization_bytes_sha256": "684adc3677a44dbeecf2dfb03da43966046bf39af5a519a4e85d77aa2984df67",
+  "changes": [
+    "compile-specialized tail then full historical tile",
+    "hoisted key bases and historical PV page arithmetic",
+    "aligned raw32 shared Q/prob and K pair loads"
+  ],
+  "softmax_and_finalization_text_unchanged": true,
+  "mma_operand_mapping_and_chain_order": "source contract; GPU qualification pending",
+  "tile_order": [
+    "tail128..position",
+    "history0..127"
+  ],
+  "cuda_compile_executed": false,
+  "gpu_executed": false,
+  "performance_claim": false
+}

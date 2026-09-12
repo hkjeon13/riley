@@ -1,0 +1,52 @@
+{
+  "started_ns": 834753435484368,
+  "http_status": 200,
+  "headers": [
+    [
+      "Content-Type",
+      "text/event-stream; charset=utf-8"
+    ],
+    [
+      "Cache-Control",
+      "no-cache"
+    ],
+    [
+      "Connection",
+      "close"
+    ],
+    [
+      "X-Content-Type-Options",
+      "nosniff"
+    ]
+  ],
+  "disconnect": null,
+  "disconnect_observed": false,
+  "complete": true,
+  "error": null,
+  "finished_ns": 834753442736632,
+  "deadline_fired": false,
+  "total_deadline_seconds": 30,
+  "owned_connection_closed": true,
+  "cleanup_errors": [],
+  "request": {
+    "model": "g04-smol",
+    "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+    "temperature": 0,
+    "top_p": 1,
+    "max_tokens": 32,
+    "stream": true,
+    "stop": ", I'm"
+  },
+  "request_body_sha256": "5d5a9f9c687d7bbe10ca9df644fd9c156fc62950ec7545cd56916c4c8d3b8cc3",
+  "frames": [
+    {
+      "data": "{\"id\":\"cmpl-000000000000000b\",\"object\":\"text_completion\",\"created\":1789177600,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"stop\"}]}",
+      "arrived_ns": 834753442632626
+    },
+    {
+      "data": "[DONE]",
+      "arrived_ns": 834753442646808
+    }
+  ],
+  "raw_response_base64": "ZGF0YTogeyJpZCI6ImNtcGwtMDAwMDAwMDAwMDAwMDAwYiIsIm9iamVjdCI6InRleHRfY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODkxNzc2MDAsIm1vZGVsIjoiZzA0LXNtb2wiLCJjaG9pY2VzIjpbeyJ0ZXh0IjoiIiwiaW5kZXgiOjAsImxvZ3Byb2JzIjpudWxsLCJmaW5pc2hfcmVhc29uIjoic3RvcCJ9XX0KCmRhdGE6IFtET05FXQoK"
+}

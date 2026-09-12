@@ -1,0 +1,43 @@
+{
+  "scope": "G02E standalone actual greedy graph; D2H after graph close; G02F retained output pending",
+  "gpu": {
+    "passed": 8,
+    "exit_code": 0,
+    "actual_models": 2,
+    "borrowed_fixture": 1,
+    "eager_regressions": 3,
+    "owned_graph_regressions": 2,
+    "greedy_replays_per_model": 64
+  },
+  "cpu": {
+    "cuda_lib": 84,
+    "graph_contracts": 32,
+    "runtime": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "new_module_diagnostics": [],
+    "inherited_warnings_remain": true
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "source-hashes.json": "40641b7a901ec6ecc342f57bb48dbd5fcdc5548a11b36b94b46fef06b9cf0dab",
+    "runtime-cpu.log": "bf04800876c85d0f2edcf4b2edcd747194aa291e4f509c0bc289b4a352cb9a78",
+    "runtime-identities.json": "8f059430bcfa9e9ffc5dd3225a7636bca707e45b82ab56dc134f068e179737c5",
+    "gpu-legacy.log": "47f9f100e1f2f3f254cef210a8f788aeb0175fbd26cc36ef0a8b1682b2440f76",
+    "model-preservation.json": "009cd67b64f74b09b513af8ad064671c672b3dbb5451123da09a319bff222971",
+    "clippy.log": "9538ffcc270340d945ad056436cf5e39369b3817252065eab24880352b8575d6",
+    "cuda-cpu.log": "6f9865f3a0f60138f70b623b637a04ec2a57371bb695225fd9e733b129127a8a",
+    "clippy.jsonl": "f851def5e45d02b1da5e9c7cf7b20f46070aef74cc624061aba68a431734a67b",
+    "gpu-argmax.log": "5e61bea3625b0fda819d3041e8bf01af9a87aeb6be13e6ee7206c90ba487c252",
+    "remote-source-verification.json": "855aebcbd7446d234b9394f46287f00b7b4f8d5497f5161cb456d43887b9e053",
+    "README.md": "e7123138f7b4f788551995a1986701e0bafce98409e491bf139cb7ba3347670c",
+    "source-overlay.tar.gz": "5e94de2bd4d39bc91a44257197e40b4ae73a25656c1e221be30685b30568140b",
+    "gpu-model.log": "807017ef8afc11f5f253a64b65c365ee2850ab8a62c0dbe60f930a142afcef93"
+  }
+}

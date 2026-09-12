@@ -1,0 +1,32 @@
+{
+  "schema_version": "riley.http-token-observation-local-validation.v3",
+  "completed": true,
+  "cpu_tests": 17,
+  "gpu_tests_executed_now": false,
+  "remote_actions": false,
+  "performance_claim": false,
+  "files": {
+    "http_token_observation_check_v3.py": "5ce121cf81e9251592f972d8105e0dd636bf9af4c237ca2e1d4555d4477804f0",
+    "test_http_token_observation_check_v3.py": "fd8f7b1cc8c0daea3f10eb8ddca3b15800f4672ebf57745b3df2a8d6971b43d0"
+  },
+  "independent_source_review": "stage_contract_review found no blocker",
+  "archived_actual_receipts_revalidated_locally": {
+    "gpu_checks": 4,
+    "server_unit_tests_passed": 72,
+    "required_committed_path_tests_passed": 5,
+    "current_four_http_files_equal_frozen_build": true
+  },
+  "proof_scope": "actual API IDs versus fixed reference plus existing fullGPU logits/KV and reviewed/tested committed path; no independent per-request committed audit",
+  "stop_fixture": {
+    "text": ", I'm",
+    "ids": [
+      28,
+      339,
+      5248
+    ],
+    "empty_generated_token_events": 3
+  },
+  "output_directory": "/tmp/riley-opt-260912/http-token-observation-correctness-v3",
+  "frozen_v1_preserved": "d0531b6af5873e490c6c77cd49b32c58e5c2c6aa7e5d03dc72701fc4f07e9962",
+  "frozen_v2_preserved": "19729397dcc46b986768a51333a0be725a3dd412f509d3ccb45b244526ef69c6"
+}

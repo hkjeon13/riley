@@ -1,0 +1,146 @@
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+index 0acc61c..050686c 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+@@ -80,11 +80,14 @@ pub const RESULT_BYTES:usize=128+49152*2;
+ pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
+     validate(e)?;
+     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
++    validate_result_row(bytes,e,0)
++}
++fn validate_result_row<'a>(bytes:&'a[u8],e:&Expectation,index:usize)->Result<(Option<u32>,&'a[u8])>{
+     let u32_at=|at:usize|u32::from_le_bytes(bytes[at..at+4].try_into().unwrap());
+     check(u32_at(0)==0 && u32_at(12)==0,"status","GPU execution or argmax failed")?;
+-    let row=&e.rows[0];let progress=row.progress.validate()?;let published=progress.logits_input_row.is_some();
++    let row=&e.rows[index];let progress=row.progress.validate()?;let published=progress.logits_input_row.is_some();
+     let token=u32_at(8);check(token<49152,"argmax","token out of vocabulary")?;
+-    let mut expected=[0u8;128];result_identity_into(&mut expected,e,token)?;
++    let mut expected=[0u8;128];result_row_identity_into(&mut expected,e,index,token)?;
+     check(bytes[..128]==expected,"result_identity","completion differs from outstanding expectation")?;
+     let logits=&bytes[128..];
+     if !published {check(logits.iter().all(|&v|v==0) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
+@@ -94,12 +97,32 @@ pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'
+     check(token==host_token,"argmax","token differs from published logits")?;
+     Ok((Some(token),logits))
+ }
+-fn result_identity_into(out:&mut[u8;128],e:&Expectation,token:u32)->Result<()>{
+-    let row=&e.rows[0];let p=row.progress;let v=p.validate()?;out.fill(0);
++#[cfg(test)]
++fn result_identity_into(out:&mut[u8;128],e:&Expectation,token:u32)->Result<()>{result_row_identity_into(out,e,0,token)}
++fn result_row_identity_into(out:&mut[u8;128],e:&Expectation,index:usize,token:u32)->Result<()>{
++    let row=&e.rows[index];let p=row.progress;let v=p.validate()?;out.fill(0);
+     for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,if e.stage==InputStage::Prefill{0}else{1}),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,0x33524d52)]{u32_at(out,at,x);}
+     for(at,x)in[(16,e.owner_generation),(24,e.replay_id),(32,e.iteration_id),(40,row.sequence_tag),(48,row.cookie)]{u64_at(out,at,x);}
+     out[80..112].copy_from_slice(&e.catalog_digest);Ok(())
+ }
++/// Fixed-capacity readback. Unused records must be zero, and no record is
++/// returned until every active identity/status/logit row has validated.
++pub const BATCH_RESULT_BYTES:usize=8*RESULT_BYTES;
++#[derive(Debug)]
++pub struct RowResult<'a>{pub output_slot:u32,pub token:Option<u32>,pub logits:&'a[u8]}
++pub fn validate_batch_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<Vec<RowResult<'a>>>{
++    validate(e)?;
++    check(bytes.len()==BATCH_RESULT_BYTES,"result","exact eight-record extent required")?;
++    let mut result=Vec::with_capacity(e.rows.len());
++    for (index,row) in e.rows.iter().enumerate(){
++        let record=&bytes[index*RESULT_BYTES..(index+1)*RESULT_BYTES];
++        let (token,logits)=validate_result_row(record,e,index)?;
++        result.push(RowResult{output_slot:row.output_slot,token,logits});
++    }
++    check(bytes[e.rows.len()*RESULT_BYTES..].iter().all(|&v|v==0),"inactive_result","inactive record published bytes")?;
++    Ok(result)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -147,4 +170,24 @@ mod tests {
+         assert!(validate_result(&bytes,&e).is_err());
+     }
+ 
++    #[test] fn batch_results_bind_all_rows_before_publication(){
++        for active in [1,2,4,8]{
++            let e=fixture(InputStage::Decode,active);let mut bytes=vec![0;BATCH_RESULT_BYTES];
++            for i in 0..active as usize {let mut h=[0;128];result_row_identity_into(&mut h,&e,i,i as u32+7).unwrap();let b=i*RESULT_BYTES;bytes[b..b+128].copy_from_slice(&h);bytes[b+128+(i+7)*2..b+130+(i+7)*2].copy_from_slice(&0x3f80u16.to_le_bytes());}
++            if let Some(dir)=std::env::var_os("RILEY_V18_FIXTURES") {
++                let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();let mut packet=vec![0;REQUEST_BYTES];encode_into(&mut packet,&e).unwrap();
++                std::fs::write(dir.join(format!("request-{active}.bin")),packet).unwrap();std::fs::write(dir.join(format!("result-{active}.bin")),&bytes).unwrap();
++            }
++            if let Some(dir)=std::env::var_os("RILEY_V18_GPU_RESULTS") {
++                let gpu=std::fs::read(std::path::PathBuf::from(dir).join(format!("gpu-result-{active}.bin"))).unwrap();
++                assert_eq!(gpu,bytes);assert_eq!(validate_batch_result(&gpu,&e).unwrap().len(),active as usize);
++            }
++            let rows=validate_batch_result(&bytes,&e).unwrap();assert_eq!(rows.len(),active as usize);
++            for(i,row)in rows.iter().enumerate(){assert_eq!(row.output_slot,active-1-i as u32);assert_eq!(row.token,Some(i as u32+7));}
++            for row in 0..active as usize {for offset in 0..128 {let at=row*RESULT_BYTES+offset;bytes[at]^=1;assert!(validate_batch_result(&bytes,&e).is_err());bytes[at]^=1;}}
++            if active<8 {let at=active as usize*RESULT_BYTES;bytes[at]=1;assert!(validate_batch_result(&bytes,&e).is_err());bytes[at]=0;}
++            let last=(active as usize-1)*RESULT_BYTES;bytes[last+128..last+130].copy_from_slice(&0x7fc0u16.to_le_bytes());assert!(validate_batch_result(&bytes,&e).is_err());
++        }
++    }
++
+ }
+diff --git a/kernels/src/decode_shared_result.cuh b/kernels/src/decode_shared_result.cuh
+new file mode 100644
+index 0000000..a2d8574
+--- /dev/null
++++ b/kernels/src/decode_shared_result.cuh
+@@ -0,0 +1,33 @@
++#pragma once
++#include <cuda_runtime.h>
++#include <math_constants.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++namespace riley_shared_result {
++constexpr uint32_t record_bytes=98432,batch_bytes=8*record_bytes;
++// Each record follows descriptor row order; its output slot is explicit.
++__global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint32_t* status,uint8_t* bytes){
++ uint32_t row=blockIdx.x,active=m[5];if(active<1||active>8||row>=active)return;
++ auto* shape=m+32+row*416;auto* result=reinterpret_cast<uint32_t*>(bytes+row*record_bytes);
++ auto* out=reinterpret_cast<__nv_bfloat16*>(bytes+row*record_bytes+128);
++ uint32_t tid=threadIdx.x;bool published=shape[11]!=0xffffffffu;
++ __shared__ float maxima[256];__shared__ uint32_t tokens[256],errors[256];
++ float maximum=-CUDART_INF_F;uint32_t token=0,failed=0;
++ for(uint32_t i=tid;i<49152;i+=256){auto v=published?logits[row*49152+i]:__float2bfloat16_rn(0.F);out[i]=v;float f=__bfloat162float(v);failed|=!isfinite(f);if(f>maximum||(f==maximum&&i<token)){maximum=f;token=i;}}
++ maxima[tid]=maximum;tokens[tid]=token;errors[tid]=failed;__syncthreads();
++ for(uint32_t step=128;step;step>>=1){if(tid<step){float other=maxima[tid+step];uint32_t id=tokens[tid+step];if(other>maxima[tid]||(other==maxima[tid]&&id<tokens[tid])){maxima[tid]=other;tokens[tid]=id;}errors[tid]|=errors[tid+step];}__syncthreads();}
++ if(tid==0){
++ result[0]=*status;result[1]=published;result[2]=published?tokens[0]:0;result[3]=errors[0];
++ for(int i=0;i<6;++i)result[4+i]=m[10+i];
++ for(int i=0;i<4;++i)result[10+i]=shape[12+i];
++ result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
++ for(int i=0;i<8;++i)result[20+i]=m[16+i];
++ result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=0x33524d52;
++ }
++}
++inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const __nv_bfloat16* logits,const uint32_t* status,void* result){
++ if(!metadata||!logits||!status||!result)return cudaErrorInvalidValue;
++ auto e=cudaMemsetAsync(result,0,batch_bytes,stream);if(e!=cudaSuccess)return e;
++ finish<<<8,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
++}
++}
+diff --git a/kernels/tests/batch_result_v18.cu b/kernels/tests/batch_result_v18.cu
+new file mode 100644
+index 0000000..54adf71
+--- /dev/null
++++ b/kernels/tests/batch_result_v18.cu
+@@ -0,0 +1,20 @@
++#include "decode_shared_result.cuh"
++#include <fstream>
++#include <vector>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#define OK(x) do{auto e=(x);if(e!=cudaSuccess){fprintf(stderr,"%d %s\n",__LINE__,cudaGetErrorString(e));exit(2);}}while(0)
++template<class T>T* alloc(size_t n){T*p;OK(cudaMallocManaged(&p,n*sizeof(T)));return p;}
++std::vector<uint8_t> read(std::string path){std::ifstream f(path,std::ios::binary);std::vector<uint8_t>b((std::istreambuf_iterator<char>(f)),{});if(b.empty())exit(8);return b;}
++int main(int argc,char**argv){if(argc!=2)return 1;std::string root=argv[1];auto*m=alloc<uint8_t>(17536);auto*l=alloc<__nv_bfloat16>(8*49152);auto*status=alloc<uint32_t>(1);auto*out=alloc<uint8_t>(riley_shared_result::batch_bytes);
++ for(int active:{1,2,4,8}){auto p=read(root+"/request-"+std::to_string(active)+".bin"),expected=read(root+"/result-"+std::to_string(active)+".bin");if(p.size()!=17536||expected.size()!=riley_shared_result::batch_bytes)return 9;
++  std::memcpy(m,p.data(),p.size());*status=0;for(int row=0;row<8;++row)std::memcpy(l+row*49152,expected.data()+row*98432+128,98304);
++  OK(riley_shared_result::enqueue(0,m,l,status,out));OK(cudaDeviceSynchronize());if(std::memcmp(out,expected.data(),expected.size())){fprintf(stderr,"byte mismatch active=%d\n",active);return 3;}
++  std::ofstream f(root+"/gpu-result-"+std::to_string(active)+".bin",std::ios::binary);f.write((char*)out,expected.size());f.close();
++  // A nonfinite row must carry an error, not a successful completion.
++  l[(active-1)*49152]=__ushort_as_bfloat16(0x7fc0);OK(riley_shared_result::enqueue(0,m,l,status,out));OK(cudaDeviceSynchronize());if(*reinterpret_cast<uint32_t*>(out+(active-1)*98432+12)==0)return 4;
++  printf("active=%d gpu_rust_bytes_exact=true inactive_zero=true nonfinite_error=true\n",active);
++ }
++ for(void*p:{(void*)m,(void*)l,(void*)status,(void*)out})OK(cudaFree(p));
++}

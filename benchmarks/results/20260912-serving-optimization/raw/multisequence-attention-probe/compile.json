@@ -1,0 +1,162 @@
+{
+  "schema_version": "riley.multisequence-attention-build.v1",
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/fixtures.json",
+    "sha256": "1a6fa3b9e7967c7c24f51e3409a5f8abc9b35d2d0d2f05a94c74605db310c9dc"
+  },
+  "compiler": {
+    "path": "/data/riley-g04-cuda13/bin/nvcc",
+    "sha256": "0d3511aa5fe86ae6565618aeebbdd2a7e4fe8affa1980787071199e1cdae07dc"
+  },
+  "compiler_version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "options": {
+    "flags": [
+      "-forward-unknown-to-host-compiler",
+      "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include/cccl",
+      "-O3",
+      "-DNDEBUG",
+      "-std=c++17",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-Xcompiler=-fPIC",
+      "--objdir-as-tempdir",
+      "-Xcompiler=-fno-exceptions",
+      "--use_fast_math"
+    ],
+    "cmake_artifacts": [
+      {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeCache.txt",
+        "sha256": "83c86248b57597e33f40a6bf48f858f81182ee0b2942e2570aaa955588ec918e"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/flags.make",
+        "sha256": "c37468255e463520d168d54e48e8869753342d1477b9d47ff1d4b0e2bd9398fd"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/build.make",
+        "sha256": "274226277d3971d3083de05fd267f61cec034bc3afce1d4babfe9711b142089e"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cudart-Release.path",
+        "sha256": "428dc93381518530fd5dff41b84130221ce5a96ec8f45f9051d7ee1cbcd8a070"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/includes_CUDA.rsp",
+        "sha256": "b732de958d15f6b5cc515c5afc6d2c0327fab781083b05b47e9f5a62a67bce2f"
+      }
+    ],
+    "production_compile_rule": "/data/riley-g04-cuda13/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) --use_fast_math -MD -MT CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o -MF CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o.d -x cu -c /tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics.cu -o CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o",
+    "original_compile_cwd": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build",
+    "response_files_expanded": true,
+    "omitted_dependency_only_flags": [
+      "-MD",
+      "-MT",
+      "-MF"
+    ],
+    "runtime_library_link": "/data/riley-g04-cuda13/lib/libcudart.so"
+  },
+  "commands": [
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-forward-unknown-to-host-compiler",
+      "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include/cccl",
+      "-O3",
+      "-DNDEBUG",
+      "-std=c++17",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-Xcompiler=-fPIC",
+      "--objdir-as-tempdir",
+      "-Xcompiler=-fno-exceptions",
+      "--use_fast_math",
+      "-x",
+      "cu",
+      "-c",
+      "/tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics.cu",
+      "-o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/oracle.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-forward-unknown-to-host-compiler",
+      "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include/cccl",
+      "-O3",
+      "-DNDEBUG",
+      "-std=c++17",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-Xcompiler=-fPIC",
+      "--objdir-as-tempdir",
+      "-Xcompiler=-fno-exceptions",
+      "--use_fast_math",
+      "-x",
+      "cu",
+      "-c",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/candidate.cu",
+      "-o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/candidate.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-std=c++17",
+      "-O2",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-c",
+      "/tmp/riley-opt-260912/multisequence-attention-prototype-v1/native.cu",
+      "-o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/host.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "--cudart=shared",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/oracle.o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/candidate.o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/host.o",
+      "-L/data/riley-g04-cuda13/lib",
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "/data/riley-g04-cuda13/lib",
+      "-o",
+      "/tmp/riley-opt-260912/multisequence-attention-probe/build/probe"
+    ]
+  ],
+  "runtime": {
+    "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+    "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+  },
+  "runtime_link": "/data/riley-g04-cuda13/lib/libcudart.so",
+  "objects": [
+    {
+      "path": "/tmp/riley-opt-260912/multisequence-attention-probe/build/oracle.o",
+      "sha256": "ba0a9722b08a99a4e258ed5f79f9b60d7f7a747191338c35fb15a3e58563cc54"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/multisequence-attention-probe/build/candidate.o",
+      "sha256": "8591178b7330de1773552c7822731a4f7b77b96e760e934439411670f48a8880"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/multisequence-attention-probe/build/host.o",
+      "sha256": "c3f91c63b61688242f6133304ef6340dd18b6f57aedd93a7dcee723fc0dc0928"
+    }
+  ],
+  "binary": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/build/probe",
+    "sha256": "7e0a706fcf95dbfe869cd55efbbcace9d64c11a2fe94c5151d06d2fc81f074c7"
+  },
+  "log": {
+    "path": "/tmp/riley-opt-260912/multisequence-attention-probe/build/compile.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "gpu_executed": false,
+  "performance_claim": false
+}

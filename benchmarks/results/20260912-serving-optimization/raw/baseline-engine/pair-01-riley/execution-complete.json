@@ -1,0 +1,103 @@
+{
+  "completed": true,
+  "summary": {
+    "requests": 30,
+    "tokens_exact": true,
+    "aggregate_output_tokens_per_second": 63.046917743778444,
+    "throughput_boundary": "native-profile aggregate throughput field",
+    "aggregate_host": {
+      "plan_ns": {
+        "validity": "measured",
+        "value": 3567036
+      },
+      "execute_ns": {
+        "validity": "measured",
+        "value": 15220908160
+      },
+      "sampling_ns": {
+        "validity": "measured",
+        "value": 218332
+      },
+      "commit_ns": {
+        "validity": "measured",
+        "value": 1399619
+      }
+    },
+    "aggregate_cuda": {
+      "stream_span_ns": {
+        "validity": "unmeasured",
+        "value": null
+      },
+      "idle_ns": {
+        "validity": "unmeasured",
+        "value": null
+      }
+    },
+    "counters": {
+      "iterations": {
+        "validity": "measured",
+        "value": 4770
+      },
+      "kernel_launches": {
+        "validity": "unmeasured",
+        "value": null
+      },
+      "copies": {
+        "h2d_calls": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "h2d_bytes": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "d2h_calls": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "d2h_bytes": {
+          "validity": "unmeasured",
+          "value": null
+        }
+      },
+      "allocations": {
+        "device_allocations": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "device_frees": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "pinned_allocations": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "pinned_frees": {
+          "validity": "unmeasured",
+          "value": null
+        },
+        "peak_device_bytes": {
+          "validity": "unmeasured",
+          "value": null
+        }
+      }
+    },
+    "ttft_ms": {
+      "median": 435.821777,
+      "p95": 436.078779,
+      "p99": 436.118012
+    },
+    "tpot_ms": {
+      "median": 2.313837935483871,
+      "p95": 2.315185483870968,
+      "p99": 2.3153016774193547
+    },
+    "e2e_ms": {
+      "median": 507.54455299999995,
+      "p95": 507.795158,
+      "p99": 507.802544
+    },
+    "output_tokens_per_request_service_second": 63.04698043568494
+  }
+}

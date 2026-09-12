@@ -1,0 +1,24 @@
+{
+  "schema_version": "riley.batch8-http-token-observation-local-validation.v2",
+  "completed": true,
+  "cpu_tests_passed": 6,
+  "files": {
+    "batch8_http_token_observation_check_v2.py": "0023e42863a7cab7b448098e218e2b2fdd4c23ea3a5820a9e62cadece00d2e1d",
+    "test_batch8_http_token_observation_check_v2.py": "493d5ece7f8cbfc2b230abb3d7868d186189765e2cf6df39316aeaccbf4a28d0"
+  },
+  "remote_read_only_prerequisite_preflight": {
+    "passed": true,
+    "host": "ai-assistant",
+    "helper_sha256": "0023e42863a7cab7b448098e218e2b2fdd4c23ea3a5820a9e62cadece00d2e1d",
+    "source_commit": "8329c1aeec6e013f581128888c536e15f8bf7300",
+    "qualification_sha256": "a2460fce858f02b96ef065ec352299278d1f90f1d59278838cb9c2f50f403f35",
+    "model_tests_sha256": "7f22786bf2393b5f695bf29f3c5cb3fe583fcfaee18c5fd4359a6dda523e9201",
+    "fusion_probe_sha256": "d18ee79cf87321ba7207bc2f130eb1c335daf92d83d3bedd45098c7a46e568ec",
+    "server_started": false,
+    "gpu_workload_executed": false,
+    "desktop_actions": false
+  },
+  "change": "Remove redundant V3 canonical-path artifact comparison after exact qualifier reconstruction; pinned build/model/fusion validators continue to verify actual runtime bytes and symlink inventory.",
+  "frozen_v1_sha256": "a77b0f9bd41513bbc6d594ba180bb3b0161a8c2f68c171fb798967a0f2cd5803",
+  "performance_claim": false
+}

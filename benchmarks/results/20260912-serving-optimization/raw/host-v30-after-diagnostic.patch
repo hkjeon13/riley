@@ -1,0 +1,46 @@
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index c3ce149..e6dcf0a 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -52,12 +52,15 @@ impl<G: VariableGraph> VariableSession<G> {
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
+         wire::encode_into(&mut self.input,&e)?;
+         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
++        let host_native=std::time::Instant::now();
+         if self.graph.replay_transfer(&self.input).and_then(|()|self.graph.read_transfer(&mut self.output)).is_err() {
+             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
+         }
++        eprintln!("HOST_NATIVE us={}",host_native.elapsed().as_micros());
++        let host_validate=std::time::Instant::now();
+         let e=self.retained.as_ref().unwrap();
+         match if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
+-            Ok(result)=>{self.completed=true;Ok(result)},
++            Ok(result)=>{eprintln!("HOST_VALIDATE rows={} us={}",e.rows.len(),host_validate.elapsed().as_micros());self.completed=true;Ok(result)},
+             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
+         }
+     }
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 46e8a30..618faab 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -3364,8 +3364,10 @@ mod cuda_backend {
+                 if let Some(graph)=self.variable_graph.as_mut() {
+                     let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
+                         .map_err(|e|internal(format!("V3 authority failed: {e}")))?;
++                    let host_execute=std::time::Instant::now();
+                     let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,graph)
+                         .map_err(|e|internal(format!("V3 iteration failed: {}",e.error())))?;
++                    eprintln!("HOST_EXECUTE us={}",host_execute.elapsed().as_micros());
+                     (downloaded,riley_scheduler::IterationTiming::default(),None)
+                 } else if let Some(graph) = self.multi_graph.as_mut() {
+                     let authority = self
+@@ -3450,7 +3452,9 @@ mod cuda_backend {
+                         }
+                     }
+                 };
++            let host_sample=std::time::Instant::now();
+             let sampling = self.sample_iteration(&plan, &downloaded, selection);
++            eprintln!("HOST_SAMPLE rows={} us={}",plan.output_slots().len(),host_sample.elapsed().as_micros());
+             if gpu_greedy {
+                 if let Err(source) =
+                     downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)

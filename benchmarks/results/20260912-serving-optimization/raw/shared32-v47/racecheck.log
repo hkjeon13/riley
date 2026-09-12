@@ -1,0 +1,9 @@
+========= COMPUTE-SANITIZER
+projection N=576 K=576 interval=192 seeds=3 active0..33 exact guards=true
+projection N=192 K=576 interval=192 seeds=3 active0..33 exact guards=true
+projection N=576 K=576 interval=128 seeds=3 active0..33 exact guards=true
+projection N=1536 K=576 interval=0 seeds=3 active0..33 exact guards=true
+projection N=576 K=1536 interval=320 seeds=3 active0..33 exact guards=true
+gate active0..33 exact guards=true
+attention active0..33 mixed contexts1..4096 disjoint permuted pages exact guards=true
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)

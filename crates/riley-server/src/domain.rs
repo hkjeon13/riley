@@ -70,6 +70,8 @@ pub struct GenerationRequest {
     pub stop_sequences: Vec<String>,
     /// Whether the HTTP response should use SSE.
     pub stream: bool,
+    /// Whether delivery must expose authoritative committed token identities.
+    pub include_token_ids: bool,
 }
 
 /// Stable metadata shared by streaming and non-streaming responses.
@@ -325,6 +327,17 @@ pub enum GenerationEvent {
     TokenDelta {
         /// Text made visible by this event.
         text: String,
+    },
+    /// One authoritative scheduler-committed token, including invisible tokens.
+    CommittedToken {
+        /// Visible text produced by the existing generation state.
+        text: String,
+        /// Actual model token accepted by the scheduler.
+        token_id: u32,
+        /// Zero-based position in the committed output sequence.
+        generated_index: usize,
+        /// Actual submitted prompt IDs, present only with the first token.
+        prompt_token_ids: Option<Vec<u32>>,
     },
     /// Successful terminal event. No later token delta is valid.
     Finished {

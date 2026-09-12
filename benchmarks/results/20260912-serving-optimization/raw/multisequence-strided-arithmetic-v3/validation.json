@@ -1,0 +1,37 @@
+{
+  "validated": true,
+  "receipt_sha256": "127d739176181ed341c2056c3f0b6112c7b1236f020970c17f2d60dcc3173bef",
+  "cases": 2178,
+  "mismatches": 0,
+  "mapped_libraries_before_after": [
+    {
+      "driver": {
+        "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+      },
+      "cudart": {
+        "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+        "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+      },
+      "cublaslt": {
+        "path": "/data/riley-g04-cuda13/lib/libcublasLt.so.13",
+        "sha256": "1489aeb75d55ee55782798343ac66f57771d561cc1fe1e0491568deefa0e6515"
+      }
+    },
+    {
+      "driver": {
+        "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+      },
+      "cudart": {
+        "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+        "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+      },
+      "cublaslt": {
+        "path": "/data/riley-g04-cuda13/lib/libcublasLt.so.13",
+        "sha256": "1489aeb75d55ee55782798343ac66f57771d561cc1fe1e0491568deefa0e6515"
+      }
+    }
+  ],
+  "performance_measured": false
+}

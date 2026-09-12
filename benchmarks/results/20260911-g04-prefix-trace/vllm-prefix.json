@@ -1,0 +1,680 @@
+{
+  "performance_trials": 0,
+  "before_tokens": [
+    28,
+    339,
+    5248,
+    253,
+    1838,
+    3241,
+    282,
+    253,
+    1443,
+    929,
+    3156,
+    28,
+    198,
+    198,
+    504,
+    808,
+    2775,
+    339,
+    1277,
+    288,
+    1643,
+    314,
+    338,
+    339,
+    5248,
+    2045,
+    288,
+    1138,
+    346,
+    253,
+    1443,
+    282
+  ],
+  "after_tokens": [
+    28,
+    339,
+    5248,
+    253,
+    1838,
+    3241,
+    282,
+    253,
+    1443,
+    929,
+    3156,
+    28,
+    198,
+    198,
+    504,
+    808,
+    2775,
+    339,
+    1277,
+    288,
+    1643,
+    314,
+    338,
+    339,
+    5248,
+    2045,
+    288,
+    1138,
+    346,
+    253,
+    1443,
+    282
+  ],
+  "model_outputs_unchanged": true,
+  "worker_results": [
+    {
+      "records": [
+        {
+          "file": "m1-eager-embedding.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager-layer0.input_norm.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager-layer0.q_proj.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager-layer0.k_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager-layer0.v_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-compiled-embedding.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-compiled-layer0.input_norm.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-compiled-layer0.q_proj.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-compiled-layer0.k_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-compiled-layer0.v_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager_fp32-embedding.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager_fp32-layer0.input_norm.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager_fp32-layer0.q_proj.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager_fp32-layer0.k_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-eager_fp32-layer0.v_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split-embedding.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split-layer0.input_norm.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split-layer0.q_proj.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split-layer0.k_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split-layer0.v_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split_fp32-embedding.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split_fp32-layer0.input_norm.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split_fp32-layer0.q_proj.bf16",
+          "shape": [
+            1,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split_fp32-layer0.k_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "m1-split_fp32-layer0.v_proj.bf16",
+          "shape": [
+            1,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager-embedding.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager-layer0.input_norm.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager-layer0.q_proj.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager-layer0.k_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager-layer0.v_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-compiled-embedding.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-compiled-layer0.input_norm.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-compiled-layer0.q_proj.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-compiled-layer0.k_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-compiled-layer0.v_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager_fp32-embedding.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager_fp32-layer0.input_norm.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager_fp32-layer0.q_proj.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager_fp32-layer0.k_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-eager_fp32-layer0.v_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split-embedding.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split-layer0.input_norm.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split-layer0.q_proj.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split-layer0.k_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split-layer0.v_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split_fp32-embedding.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split_fp32-layer0.input_norm.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split_fp32-layer0.q_proj.bf16",
+          "shape": [
+            128,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split_fp32-layer0.k_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "p128-split_fp32-layer0.v_proj.bf16",
+          "shape": [
+            128,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager-embedding.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager-layer0.input_norm.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager-layer0.q_proj.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager-layer0.k_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager-layer0.v_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-compiled-embedding.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-compiled-layer0.input_norm.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-compiled-layer0.q_proj.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-compiled-layer0.k_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-compiled-layer0.v_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager_fp32-embedding.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager_fp32-layer0.input_norm.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager_fp32-layer0.q_proj.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager_fp32-layer0.k_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-eager_fp32-layer0.v_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split-embedding.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split-layer0.input_norm.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split-layer0.q_proj.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split-layer0.k_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split-layer0.v_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split_fp32-embedding.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split_fp32-layer0.input_norm.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split_fp32-layer0.q_proj.bf16",
+          "shape": [
+            136,
+            576
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split_fp32-layer0.k_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        },
+        {
+          "file": "common136-split_fp32-layer0.v_proj.bf16",
+          "shape": [
+            136,
+            192
+          ],
+          "dtype": "torch.bfloat16"
+        }
+      ],
+      "exposed_vs_opaque_qkv_exact": true,
+      "scope": "isolated loaded-model prefix replay, before RoPE/attention; not whole-graph capture"
+    }
+  ]
+}

@@ -1,0 +1,226 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-cuda)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-runtime)
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.66s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/riley_scheduler-c09faef4ea96a330)
+
+running 33 tests
+test config::tests::chunk_must_fit_iteration_budget ... ok
+test config::tests::default_configuration_is_valid ... ok
+test config::tests::timeout_requires_wait_policy ... ok
+test execution::tests::commit_failure_retains_download_and_safe_abort_data ... ok
+test execution::tests::downloaded_greedy_allocation_returns_to_empty_execution_placeholder ... ok
+test execution::tests::downloaded_greedy_tokens_map_dense_slots_without_logits ... ok
+test execution::tests::downloaded_rows_map_dense_slots_to_commit_results_without_reallocation ... ok
+test execution::tests::greedy_workspace_restore_failure_preserves_both_allocations ... ok
+test execution::tests::physical_blocks_must_be_exclusive_across_rows ... ok
+test execution::tests::executor_bounds_are_rechecked_without_device_work ... ok
+test execution::tests::plan_boundary_rejects_nondense_slots_and_decode_without_output ... ok
+test execution::tests::post_validation_test_fault_retains_unpublished_download_and_is_one_shot ... ok
+test execution::tests::plan_is_adapted_in_prefill_then_decode_order_without_copying_payloads ... ok
+test authority::tests::live_scheduler_authority_encodes_exact_request_and_rejects_foreign_geometry ... ok
+test execution::tests::reusable_greedy_workspace_is_bounded_and_never_reallocated ... ok
+test metrics::tests::iteration_metrics_are_recorded_together ... ok
+test metrics::tests::rolling_p95_uses_nearest_rank_and_stays_bounded ... ok
+test plan::tests::iteration_accepts_permuted_exactly_once_block_table_references ... ok
+test plan::tests::iteration_rejects_physical_block_aliases_across_requests ... ok
+test plan::tests::iteration_rejects_duplicate_block_table_references ... ok
+test plan::tests::iteration_requires_a_sampled_output_for_decode_work ... ok
+test plan::tests::iteration_requires_one_block_table_per_work_item ... ok
+test plan::tests::iteration_requires_dense_zero_based_output_slots ... ok
+test plan::tests::owned_v1_table_requires_canonical_full_and_tail_counts ... ok
+test plan::tests::mixed_stage_output_slots_are_canonicalized_for_sampling ... ok
+test plan::tests::zero_is_reserved_for_scheduler_ids ... ok
+test plan::tests::result_rejects_duplicate_output_slots ... ok
+test scheduler::tests::consuming_close_returns_a_typed_post_cleanup_metrics_snapshot ... ok
+test scheduler::tests::failed_tick_preserves_timeout_completion_until_exactly_once_recovery ... ok
+test scheduler::tests::contained_publication_failure_is_not_a_completed_metric_sample ... ok
+test scheduler::tests::post_validation_commit_fault_after_one_commit_is_contained ... ok
+test scheduler::tests::successful_commit_returns_its_exact_raw_metric_sample ... ok
+test authority::tests::variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/bounded_mixed_program_routing.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/bounded_mixed_program_routing-7a496cfbade3a927)
+
+running 9 tests
+test bounded_mixed_program_codec_round_trips_a_raw_program ... ok
+test bounded_mixed_program_replays_every_three_slot_feedback_permutation ... ok
+test bounded_mixed_program_reducer_rebases_stateful_removals ... ok
+test bounded_mixed_program_codec_rejects_noncanonical_and_invalid_documents ... ok
+test bounded_mixed_program_corpus_is_canonical_and_replays ... ok
+test bounded_mixed_program_reducer_finds_a_stateful_local_minimum ... ok
+test bounded_mixed_program_failure_report_preserves_source_and_local_minimum ... ok
+test bounded_mixed_program_reducer_candidates_are_deduped_ranked_and_canonical ... ok
+test ten_thousand_seeded_bounded_mixed_programs_round_trip_and_replay ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/complete_prefill_policy.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/complete_prefill_policy-eaee64d6fde0a695)
+
+running 14 tests
+test invalid_requests_never_take_promises_ids_or_waiting_capacity ... ok
+test execution_authority_rejects_forged_tokens_and_stale_plan ... ok
+test default_constructor_retains_mixed_127_token_prefill_behavior ... ok
+test execution_authority_checks_actual_tables_and_off_batch_owners ... ok
+test policy_rejects_incompatible_configuration_before_pool_construction ... ok
+test quiesced_failed_dispatch_poisons_only_its_rows_then_allows_survivors ... ok
+test possibly_dispatched_prefill_failure_does_not_delay_a_healthy_decoder_again ... ok
+test aged_prefill_pressure_alternates_whole_prompts_and_immediate_decode_buckets ... ok
+test waiting_short_request_still_reserves_ten_blocks_after_admission ... ok
+test rejected_output_vocabulary_cannot_enter_the_next_decode ... ok
+test undispatched_retry_and_rejected_results_do_not_advance_class_progress ... ok
+test cancellation_of_one_inflight_decoder_keeps_other_rows_and_reuses_capacity ... ok
+test output_limit32_never_plans_low_level_position159_or_output33 ... ok
+test continuous_short_prefills_cannot_starve_an_aged_ready_decoder ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/general_mixed_operation_routing.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/general_mixed_operation_routing-f9bdff92e7a85661)
+
+running 22 tests
+test general_mixed_operation_codec_round_trips_the_bounded_grammar ... ok
+test general_mixed_operation_receipt_rejects_seed_settlement_and_rank_drift ... ok
+test general_mixed_operation_failure_report_delimits_its_panic_only_scope ... ok
+test general_mixed_operation_codec_rejects_noncanonical_or_invalid_documents ... ok
+test general_mixed_operation_reducer_orders_identity_before_adjacent_swaps ... ok
+test general_mixed_operation_receipt_is_canonical_and_binds_both_replays ... ok
+test general_mixed_operation_trace::general_mixed_operation_v2_tests::v2_codec_is_strict_and_isolated_from_v1 ... ok
+test general_mixed_operation_v2_codec_is_strict_and_isolated_from_v1 ... ok
+test general_mixed_operation_corpus_is_canonical_round_trips_and_replays ... ok
+test general_mixed_operation_v2_corpus_is_canonical_and_replays_rejections ... ok
+test general_mixed_operation_reducer_rebases_removed_request_selectors ... ok
+test general_mixed_operation_trace::general_mixed_operation_v2_tests::v2_seeded_generator_and_corpus_stay_strict_canonical ... ok
+test general_mixed_operation_reducer_preserves_and_minimizes_a_synthetic_failure ... ok
+test general_mixed_operation_trace::general_mixed_operation_v2_tests::v2_reducer_removes_rejection_before_v1_reductions_and_reaches_a_local_minimum ... ok
+test general_mixed_operation_v2_reducer_is_strict_local_and_idempotent ... ok
+test general_mixed_operation_receipt_writer_is_create_new_and_preserves_primary_binding ... ok
+test general_mixed_operation_receipt_directory_sink_uses_safe_distinct_case_leaves ... ok
+test general_mixed_operation_matrix_preserves_routing_and_quiescence ... ok
+test general_mixed_operation_v2_matrix_preserves_rejection_surface_routing_and_quiescence ... ok
+test ten_thousand_seeded_general_mixed_operation_traces_round_trip_and_replay ... ok
+test ten_thousand_seeded_general_mixed_operation_v2_traces_round_trip_and_replay ... ok
+test general_mixed_operation_reducer_candidates_are_deduped_ranked_and_canonical ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.07s
+
+     Running tests/general_mixed_program_routing.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/general_mixed_program_routing-2317615d7264a2c9)
+
+running 9 tests
+test general_mixed_program_codec_round_trips_variable_length_programs ... ok
+test general_mixed_program_reducer_rebases_semantic_cancel_and_submission_removals ... ok
+test general_mixed_program_codec_rejects_noncanonical_and_invalid_documents ... ok
+test general_mixed_program_reducer_keeps_its_semantic_candidate_order ... ok
+test general_mixed_program_reducer_finds_a_semantic_local_minimum_and_binds_reports ... ok
+test general_mixed_program_corpus_is_canonical_and_replays ... ok
+test general_mixed_program_replays_every_four_slot_feedback_permutation ... ok
+test general_mixed_program_reducer_candidates_are_ranked_canonical_and_replayable ... ok
+test ten_thousand_seeded_general_mixed_program_traces_round_trip_and_replay ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+
+     Running tests/gpu_fixed_corpus_contract.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/gpu_fixed_corpus_contract-5f9a3493f510770f)
+
+running 3 tests
+test commit_data_assembly_failure_topology_aborts_on_cpu ... ok
+test normal_gpu_fixture_topologies_replay_on_cpu ... ok
+test fixed_gpu_corpus_is_canonical_and_closed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inflight_mixed_program_routing.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/inflight_mixed_program_routing-30dd667eb6965705)
+
+running 16 tests
+test inflight_mixed_program_codec_round_trips_a_raw_program ... ok
+test inflight_mixed_program_v2_codec_keeps_v1_and_v2_parser_surfaces_disjoint ... ok
+test inflight_mixed_program_v2_replays_not_dispatched_retry_separately ... ok
+test inflight_mixed_program_v2_codec_rejects_noncanonical_and_invalid_documents ... ok
+test inflight_mixed_program_v2_corpus_is_canonical_and_replays ... ok
+test inflight_mixed_program_codec_rejects_noncanonical_and_invalid_documents ... ok
+test inflight_mixed_program_reducer_rejects_raw_lifecycle_mutations_that_need_rebase ... ok
+test inflight_mixed_program_replays_every_three_slot_feedback_permutation ... ok
+test inflight_mixed_program_reducer_contracts_only_valid_raw_lifecycles ... ok
+test inflight_mixed_program_failure_report_preserves_source_and_local_minimum ... ok
+test inflight_mixed_program_corpus_is_canonical_and_replays ... ok
+test inflight_mixed_program_v2_reducer_preserves_terminal_device_abort ... ok
+test inflight_mixed_program_reducer_finds_a_raw_lifecycle_local_minimum ... ok
+test inflight_mixed_program_reducer_candidates_are_deduped_ranked_and_canonical ... ok
+test ten_thousand_seeded_inflight_mixed_program_v2s_round_trip_and_replay ... ok
+test ten_thousand_seeded_inflight_mixed_programs_round_trip_and_replay ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+
+     Running tests/model_based_routing.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/model_based_routing-66dde3b44f2ef6a1)
+
+running 11 tests
+test scheduled_routing_fuzz_seed_rotation_is_canonical_and_disjoint ... ok
+test bounded_operation_trace_shrinker_preserves_and_minimizes_a_failure ... ok
+test operation_trace_v2_codec_rejects_noncanonical_or_invalid_documents ... ok
+test replay_mixed_stage_corpus_v1 ... ok
+test operation_trace_v2_corpus_is_canonical_round_trips_and_replays ... ok
+test operation_trace_v2_codec_round_trips_the_bounded_grammar ... ok
+test bounded_operation_trace_shrink_candidates_preserve_the_v2_grammar ... ok
+test ten_thousand_seeded_fault_microtraces_preserve_routing_and_quiescence ... ok
+test ten_thousand_seeded_mixed_stage_traces_preserve_routing_and_quiescence ... ok
+test ten_thousand_seeded_operation_traces_round_trip_and_preserve_routing_and_quiescence ... ok
+test ten_thousand_seeded_cpu_traces_route_permuted_outputs_by_slot ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.81s
+
+     Running tests/multi_graph_authority_gpu.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/multi_graph_authority_gpu-726c4e0842437c2e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shared_model_diagnostic_gpu.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/shared_model_diagnostic_gpu-a2f8644ce5661a31)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shared_natural_model_gpu.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/shared_natural_model_gpu-a65bc8d28490f57e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shared_output_modes_gpu.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/shared_output_modes_gpu-a6a223cb37c86783)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/simulation.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/simulation-b4926a1547b8011b)
+
+running 14 tests
+test admission_timeout_immediate_reject_and_queue_bounds_are_explicit ... ok
+test aging_prevents_prefill_starvation_under_a_one_token_budget ... ok
+test configuration_and_transport_contracts_fail_closed ... ok
+test kv_promises_gate_admission_before_physical_oom ... ok
+test consuming_close_requires_and_applies_an_inflight_disposition ... ok
+test cancellation_is_safe_in_every_request_state ... ok
+test inflight_shutdown_requires_one_of_the_two_explicit_abort_dispositions ... ok
+test malformed_stale_and_replayed_feedback_never_mutates_state ... ok
+test prefill_chunks_and_total_iteration_tokens_are_bounded ... ok
+test mixed_prompts_are_fcfs_then_decode_first ... ok
+test oversized_caller_vec_capacity_does_not_change_bounded_accounting_or_plans ... ok
+test output_slots_match_independent_request_oracles ... ok
+test long_run_reclaims_kv_and_bounds_tombstones_and_metric_windows ... ok
+test fixed_lcg_simulation_is_reproducible ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/v3_variable_gpu.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/v3_variable_gpu-c0c28d8693721ffb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests riley_scheduler
+
+running 1 test
+test crates/riley-scheduler/src/lib.rs - (line 8) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+

@@ -1,0 +1,30 @@
+from pathlib import Path
+import subprocess,hashlib,json,shutil,os
+r=Path('/tmp/riley-opt-260912');src=r/'prefill-shapes-source-v11';p=src/'crates/riley-runtime/src/llama/variable_session.rs';saved=p.read_bytes()
+assert not subprocess.check_output(['git','status','--porcelain'],cwd=src)
+commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=src,text=True).strip();assert commit=='4941e7318ae5cd6a6857a9743946854922e04b51'
+env=os.environ.copy();env.update(PATH='/home/psyche/.cargo/bin:/data/riley-g04-cuda13/bin:'+env['PATH'],CUDA_HOME='/data/riley-g04-cuda13',CUDAToolkit_ROOT='/data/riley-g04-cuda13',CMAKE='/data/cmake-3.31.12/bin/cmake',CMAKE_BUILD_PARALLEL_LEVEL='4',CARGO_BUILD_JOBS='4',CARGO_TARGET_DIR=str(r/'prefill-shapes-target-v11'))
+try:
+ s=saved.decode().replace('wire::encode_into(&mut self.input,&e)?;', 'let batch_start=std::time::Instant::now();wire::encode_into(&mut self.input,&e)?;let encode_us=batch_start.elapsed().as_micros();')
+ s=s.replace('        if self.graph.replay_transfer(', '        let native_start=std::time::Instant::now();\n        if self.graph.replay_transfer(')
+ s=s.replace('        let e=self.retained.as_ref().unwrap();', '        let native_us=native_start.elapsed().as_micros();let validate_start=std::time::Instant::now();\n        let e=self.retained.as_ref().unwrap();')
+ s=s.replace('Ok(result)=>{self.completed=true;Ok(result)}', 'Ok(result)=>{eprintln!("BATCH stage={} rows={} tokens={} us={} encode_us={} native_us={} validate_us={}",if e.rows[0].progress.generated_index==0{"prefill"}else{"decode"},e.rows.len(),e.rows.iter().map(|r|r.progress.input_tokens).sum::<u32>(),batch_start.elapsed().as_micros(),encode_us,native_us,validate_start.elapsed().as_micros());self.completed=true;Ok(result)}')
+ assert 'BATCH stage=' in s;p.write_text(s)
+ patch=subprocess.check_output(['git','diff'],cwd=src);(r/'fill-v41-instrumentation.patch').write_bytes(patch)
+ with (r/'fill-v41-build.log').open('w') as log:subprocess.run(['cargo','build','-p','riley-server','--release','--features','cuda,server','--bin','riley'],cwd=src,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
+ out=r/'fill-diagnostic-v41';out.mkdir();shutil.copy2(r/'prefill-shapes-target-v11/release/riley',out/'riley')
+ (out/'build.json').write_text(json.dumps({'base_commit':commit,'binary_sha256':hashlib.sha256((out/'riley').read_bytes()).hexdigest(),'instrumentation_patch_sha256':hashlib.sha256(patch).hexdigest()},indent=2)+'\n')
+finally:
+ p.write_bytes(saved);shutil.copy2(r/'variable-candidate-v41/riley',r/'prefill-shapes-target-v11/release/riley')
+ assert not subprocess.check_output(['git','status','--porcelain'],cwd=src)
+s=(r/'run_fill_v34_high.py').read_text().replace('natural-fill-v34-high','natural-fill-v41').replace('fill-diagnostic-v34','fill-diagnostic-v41')
+s=s.replace('for concurrency in (16,32):', 'for concurrency,profile in [(c,p) for c in (16,32) for p in ("v3","v4")]:')
+s=s.replace('cap=min(concurrency,8)', 'cap=concurrency\n assert not subprocess.check_output(["nvidia-smi","--query-compute-apps=pid","--format=csv,noheader"],env=env,text=True).strip()')
+s=s.replace("f'c{concurrency}","f'c{concurrency}-{profile}")
+s=s.replace("'--batch-token-budget','128','--prefill-chunk-tokens','128'", "'--batch-token-budget','512','--prefill-chunk-tokens','512'")
+s=s.replace("'--metadata-transport','packed-async'", "'--metadata-transport','synchronous'")
+s=s.replace("'--graph-numerics','variable-smol-v3'", "'--graph-numerics','variable-smol-'+profile")
+s=s.replace("{'capacity':cap,", "{'profile':profile,'capacity':cap,")
+s=s.replace("assert accounting['completed'], accounting", "assert accounting['completed'] and accounting['strict_reference_pass'], accounting")
+(r/'run_fill_v41.py').write_text(s)
+subprocess.run(['/data/riley-vllm-interim.CfrT9T/venv/bin/python',str(r/'run_fill_v41.py')],check=True)

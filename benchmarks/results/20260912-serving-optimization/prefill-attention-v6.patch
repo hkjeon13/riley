@@ -1,0 +1,208 @@
+diff --git a/kernels/src/graph_numerics.cu b/kernels/src/graph_numerics.cu
+index 84a8ae4..e91c81a 100644
+--- a/kernels/src/graph_numerics.cu
++++ b/kernels/src/graph_numerics.cu
+@@ -112,6 +112,173 @@ __global__ void attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __
+ #endif
+ }
+ 
++#if MODE == 6
++// P128 query reuse: four independent queries, shared softmax results, and four
++// output slices per head. The row oracle retains exceptional-value semantics.
++__device__ __forceinline__ void attention_reference_row(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,int reference_row){
++ if(dynamic_n)n=*dynamic_n+1;
++ int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
++ int row=reference_row,kvh=blockIdx.y,qh=kvh*3+warp,count=n-rows+row+1;
++ int qb=(row*9+qh)*64;
++ if(n<rows || n>160){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
++ __shared__ float scores[3][128];
++ __shared__ __nv_bfloat16 probs[3][128];
++ float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);
++  for(int token=begin;token<end;token+=8){
++   float d[4]={};
++   for(int depth=0;depth<64;depth+=16){
++    uint32_t a=pair(q[qb+depth+2*t],q[qb+depth+2*t+1]);
++    uint32_t aa=pair(q[qb+depth+2*t+8],q[qb+depth+2*t+9]);
++    int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
++    uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
++    uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++    mma(d,a,a,aa,aa,b,bb);
++   }
++   if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[warp][token-begin+2*t+j]=d[j]*.125F;}
++  }
++  __syncwarp();
++  float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[warp][i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  #if MODE >= 4
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++#else
++  float alpha=exponential(maximum,mx);
++#endif
++  float local_den=0.;
++  for(int i=lane;i<128;i+=32){
++   float p=i<end-begin?exponential(scores[warp][i],mx):0.;
++   local_den+=p;probs[warp][i]=__float2bfloat16_rn(p);
++  }
++  for(int offset=16;offset>0;offset>>=1)local_den+=__shfl_xor_sync(0xffffffff,local_den,offset);
++#if MODE == 3 || MODE == 5 || MODE == 6
++#if MODE == 6
++  local_den=den*alpha;
++#else
++  local_den=0.;
++#endif
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
++    if(i<end-begin)local_den+=exponential(scores[warp][i],mx);}
++#if MODE != 6
++  local_den+=__shfl_xor_sync(0xffffffff,local_den,2);
++  local_den+=__shfl_xor_sync(0xffffffff,local_den,1);
++#endif
++#endif
++#if MODE == 6
++  den=local_den;
++#else
++  den=den*alpha+local_den;
++#endif
++  maximum=mx;
++  __syncwarp();
++  for(int block=0;block<8;++block){
++   for(int j=0;j<4;++j)accum[block][j]*=alpha;
++   for(int token=begin;token<end;token+=16){
++    int pi=token-begin;
++    uint32_t a=pair(probs[warp][pi+2*t],probs[warp][pi+2*t+1]);
++    uint32_t aa=pair(probs[warp][pi+2*t+8],probs[warp][pi+2*t+9]);
++    int dim=block*8+group;
++    auto val=[&](int pos){return pos<end?v[cache_index(pos,kvh,dim,blocks)]:zero;};
++    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
++    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
++    mma(accum[block],a,a,aa,aa,b,bb);
++   }
++  }
++  __syncwarp();
++ }
++#if MODE == 6
++ den+=__shfl_xor_sync(0xffffffff,den,2);
++ den+=__shfl_xor_sync(0xffffffff,den,1);
++#endif
++ float inverse=1.0F/den;
++ if(group==0)for(int block=0;block<8;++block)for(int j=0;j<2;++j)
++#if MODE >= 4
++  out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
++#else
++  out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]/den);
++#endif
++}
++template<int R,int S=4>
++__global__ void attention_queries(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* blocks,const int* position){
++ int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
++ int head=warp%3;
++ int qr=g%R,row=blockIdx.x*R+qr,kvh=blockIdx.y,qh=kvh*3+head,qb=(row*9+qh)*64;
++ int count=row+1,end=(blockIdx.x+1)*R;
++ if(*position!=127){
++  if(warp<3)for(int local=0;local<R;++local)attention_reference_row(q,k,v,out,128,160,position,blocks,blockIdx.x*R+local);
++  return;
++ }
++ // Conservative magnitude bound also rules out overflowing finite QK products.
++ // Slow-path preserves per-query masking when future K/V contains NaN or Inf.
++ bool bad=false;
++ for(int i=threadIdx.x;i<R*3*64;i+=blockDim.x){
++  int qi=((blockIdx.x*R+i/(3*64))*9+kvh*3+(i/64)%3)*64+i%64;
++  bad|=(__bfloat16_as_ushort(q[qi])&0x7fff)>=0x5d80;
++ }
++ for(int i=threadIdx.x;i<end*64;i+=blockDim.x){
++  int ki=cache_index(i/64,kvh,i%64,blocks);
++  bad|=(__bfloat16_as_ushort(k[ki])&0x7fff)>=0x5d80;
++  bad|=(__bfloat16_as_ushort(v[ki])&0x7fff)>=0x5d80;
++ }
++ if(__syncthreads_or(bad)){
++  if(warp<3)for(int local=0;local<R;++local)attention_reference_row(q,k,v,out,128,128,nullptr,blocks,blockIdx.x*R+local);
++  return;
++ }
++ __shared__ float scores[3][R][132];
++ __shared__ __nv_bfloat16 probs[3][R][136];
++ __shared__ float inverses[3][R];
++ if(warp<3){
++ float mx=-CUDART_INF_F;
++ for(int token=0;token<end;token+=8){
++  float d[4]={};
++  for(int depth=0;depth<64;depth+=16){
++   uint32_t a=pair(q[qb+depth+2*t],q[qb+depth+2*t+1]);
++   uint32_t aa=pair(q[qb+depth+2*t+8],q[qb+depth+2*t+9]);
++   int kb=token+g<end?cache_index(token+g,kvh,depth,blocks):0;
++   uint32_t b=token+g<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
++   uint32_t bb=token+g<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++   mma(d,a,a,aa,aa,b,bb);
++  }
++  for(int j=0;j<2;++j)if(token+2*t+j<count){float score=d[j]*.125F;mx=fmaxf(mx,score);if(g<R)scores[head][qr][token+2*t+j]=score;}
++ }
++ __syncwarp();
++ mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,2));mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,1));
++ float den=0.;
++ #pragma unroll 1
++ for(int j=0;j<16;++j){
++  int i=2*t+j*8;
++  float p0=i<count?exponential(scores[head][qr][i],mx):0.;
++  float p1=i+1<count?exponential(scores[head][qr][i+1],mx):0.;
++  if(i<count)den+=p0;if(i+1<count)den+=p1;
++  if(g<R)*reinterpret_cast<uint32_t*>(&probs[head][qr][i])=pair(__float2bfloat16_rn(p0),__float2bfloat16_rn(p1));
++ }
++ __syncwarp();
++ den+=__shfl_xor_sync(0xffffffff,den,2);den+=__shfl_xor_sync(0xffffffff,den,1);
++ float inverse=1.F/den;
++ if(g<R&&t==0)inverses[head][qr]=inverse;
++ }
++ __syncthreads();
++ float inverse=inverses[head][qr];
++ for(int block=(8/S)*(warp/3);block<(8/S)*(warp/3+1);++block){
++  float d[4]={};
++  for(int token=0;token<end;token+=16){
++   uint32_t a=pair(probs[head][qr][token+2*t],probs[head][qr][token+2*t+1]);
++   uint32_t aa=pair(probs[head][qr][token+2*t+8],probs[head][qr][token+2*t+9]);
++   int dim=block*8+g;
++   auto val=[&](int pos){return pos<end?v[cache_index(pos,kvh,dim,blocks)]:__float2bfloat16_rn(0.);};
++   uint32_t b=pair(val(token+2*t),val(token+2*t+1)),bb=pair(val(token+2*t+8),val(token+2*t+9));
++   mma(d,a,a,aa,aa,b,bb);
++  }
++  if(g<R)for(int j=0;j<2;++j)out[qb+block*8+2*t+j]=__float2bfloat16_rn(d[j]*inverse);
++ }
++}
++
++
++#endif
++
+ namespace riley_cuda_internal {
+ cudaError_t enqueue_compiled_attention(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* metadata) noexcept {
+  auto* m=(const uint8_t*)metadata;attention<<<dim3(1,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,1,160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();}
+@@ -124,7 +291,14 @@ namespace riley_cuda_internal {
+ cudaError_t enqueue_compiled_attention_rows(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* metadata,uint32_t rows) noexcept {
+  if(rows==0||rows>128)return cudaErrorInvalidValue;
+  if(rows==1)return enqueue_compiled_attention(s,q,k,v,out,metadata);
+- auto* m=(const uint8_t*)metadata;attention<<<dim3(rows,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,static_cast<int>(rows),160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();
++ auto* m=(const uint8_t*)metadata;
++#if MODE == 6
++ if(rows==128){
++  attention_queries<4,4><<<dim3(32,3),384,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,(const uint32_t*)(m+16),(const int*)(m+4));
++  return cudaGetLastError();
++ }
++#endif
++ attention<<<dim3(rows,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,static_cast<int>(rows),160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();
+ }
+ } // namespace riley_cuda_internal
+ 
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index bb8ab9e..d263c1d 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -248,7 +248,8 @@ __global__ void gemm_prefill_m16_vector(const __nv_bfloat16* x,const __nv_bfloat
+ namespace riley_cuda_internal {
+ template<int N,int K,int Interval,int Warps>
+ cudaError_t launch_compiled_prefill_m16(cudaStream_t s,const void* x,const void* w,void* y,const void* position) noexcept {
+- if constexpr(N==192){
++ // Whole-model V5 trace regressed Q/O; keep packed loads for gate/up/down only.
++ if constexpr(N==192||(N==576&&K==576)){
+  gemm_prefill_m16<N,K,Interval,Warps><<<dim3(N/(8*Warps),8),32*Warps,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,(const uint32_t*)position);
+  }else{
+  gemm_prefill_m16_vector<N,K,Interval,Warps><<<dim3(N/(8*Warps),8),32*Warps,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,(const uint32_t*)position);

@@ -1,5 +1,12 @@
 //! Cold, immutable planning contract for a fixed-length Llama forward.
 
+#[cfg(feature = "cuda")]
+#[allow(dead_code)]
+mod graph_decode_attention_owner;
+#[cfg(any(feature = "cuda", test))]
+#[allow(dead_code)]
+mod graph_decode_final_norm_owner;
+
 mod batch;
 #[cfg(any(feature = "cuda", test))]
 mod batch_executor;
@@ -102,7 +109,7 @@ pub use batch_executor::{
     BatchMetadataTransport, ExecutionCompletionImplementation, LlamaBatchExecutorError,
     LlamaBatchExecutorResource, LlamaBatchExecutorResult, LlamaBatchShapeBucketHit,
     LlamaBatchShapeObservation, LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS,
-    PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
+    OwnedLlamaDecodeExecutor, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
     PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation, ResidualNormImplementation,
 };
 

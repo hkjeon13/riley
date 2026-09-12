@@ -1,0 +1,45 @@
+{"verified_successor_pids": [3596595, 3596596, 3596597]}
+Restore pending; watchdog will retry: restore port occupied; no duplicate launched
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 332, in <module>
+    globals()[action]()
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 194, in stop
+    while any(original_alive(row) for row in rows):
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 194, in <genexpr>
+    while any(original_alive(row) for row in rows):
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 86, in original_alive
+    current = identity(row['pid'])
+  File "/tmp/riley-opt-260912/remote_session.py", line 9, in identity
+    return {'pid':pid,'start':(p/'stat').read_text().split(') ',1)[1].split()[19], 'argv':[(x.decode()) for x in (p/'cmdline').read_bytes().split(b'\0') if x], 'cwd':str((p/'cwd').resolve()),'env':{k.decode():v.decode() for raw in (p/'environ').read_bytes().split(b'\0') if b'=' in raw for k,v in [raw.split(b'=',1)] if k in {b'DISPLAY',b'XAUTHORITY',b'XDG_RUNTIME_DIR',b'DBUS_SESSION_BUS_ADDRESS',b'WAYLAND_DISPLAY'}}}
+  File "/usr/lib/python3.10/pathlib.py", line 1126, in read_bytes
+    with self.open(mode='rb') as f:
+  File "/usr/lib/python3.10/pathlib.py", line 1119, in open
+    return self._accessor.open(self, mode, buffering, encoding, errors,
+PermissionError: [Errno 13] Permission denied: '/proc/3596597/environ'
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 332, in <module>
+    globals()[action]()
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 272, in restore
+    ensure(not listening(row['port']), 'restore port occupied; no duplicate launched')
+  File "/tmp/riley-opt-260912/remote_session_round2.py", line 37, in ensure
+    raise RuntimeError(message)
+RuntimeError: restore port occupied; no duplicate launched
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/measure_round2.py", line 44, in <module>
+    run(['python3', str(SESSION), 'stop'])
+  File "/tmp/riley-opt-260912/measure_round2.py", line 19, in run
+    subprocess.run(argv, check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/tmp/riley-opt-260912/remote_session_round2.py', 'stop']' returned non-zero exit status 1.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/measure_round2.py", line 66, in <module>
+    run(['python3', str(SESSION), 'restore'])
+  File "/tmp/riley-opt-260912/measure_round2.py", line 19, in run
+    subprocess.run(argv, check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/tmp/riley-opt-260912/remote_session_round2.py', 'restore']' returned non-zero exit status 1.

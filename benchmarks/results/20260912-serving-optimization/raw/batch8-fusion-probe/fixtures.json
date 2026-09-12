@@ -1,0 +1,141 @@
+{
+  "schema_version": "riley.batch8-fusion-fixtures.v1",
+  "cases": 8640,
+  "layers": 30,
+  "positions": 32,
+  "patterns": 3,
+  "mappings": 3,
+  "source_root": "/tmp/riley-opt-260912/batch8-source",
+  "source_commit": "8329c1aeec6e013f581128888c536e15f8bf7300",
+  "source_build": {
+    "path": "/tmp/riley-opt-260912/batch8-build.json",
+    "sha256": "629418e19f129436d9ee2d2a753a61317c5b8527e3f4fe438b9f9aa59a8392c6"
+  },
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "0904ed58fec4a6e73af3dc2ffe37016eeb5be04a1ce7486461f186e4bfd4ebb3",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "38548681c8363b9ab88bfb9854cb45487c7cb76de5d9019f5c0c32e83f5ed1ad",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "bb978cc6557be27b844d356ba38cf462b37934dc283e8a89f2df8a3f3a0b132f",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "e815c8eb8d37daf6f48934b9fc9f79fabe87ec117ddfb4e3f5c4c6ad84e47b2e",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "5e1ab391690978a042ce4fb9203a464173ef8bfdac8e458d4b80e0859375c6b9",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67",
+    "crates/riley-server/src/domain.rs": "52190c94a29e429a6809ec80847716c5258af1ec433c0d49563bd4912037e3bb",
+    "crates/riley-server/src/openai.rs": "6541ef35d550e51adf7a99f3a086b2e3b7943673395178785665a0d4dce95c46"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch8-target/release/riley": "4c0876dbe080920bcc0d689df16d52b7714f31aa625b603fb9f7f1acc760c741",
+    "/tmp/riley-opt-260912/batch8-target/release/riley-profile": "9b082e3b9c9d887b47f8c00cf472f6496545ded4c3573cb615dcfc9e6dbee21b"
+  },
+  "source_dependencies": {
+    "kernels/src/graph_numerics.cu": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/src/graph_numerics.cu",
+      "sha256": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552"
+    },
+    "kernels/src/graph_numerics_precise.cu": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/src/graph_numerics_precise.cu",
+      "sha256": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f"
+    },
+    "kernels/src/ffi_internal.hpp": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/src/ffi_internal.hpp",
+      "sha256": "e815c8eb8d37daf6f48934b9fc9f79fabe87ec117ddfb4e3f5c4c6ad84e47b2e"
+    },
+    "kernels/include/riley_cuda.h": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/include/riley_cuda.h",
+      "sha256": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f"
+    },
+    "kernels/CMakeLists.txt": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/CMakeLists.txt",
+      "sha256": "b8153073f51ad630da761ddb1868e6484d46d72c983189a381a3f284225c8630"
+    },
+    "crates/riley-cuda/build.rs": {
+      "path": "/tmp/riley-opt-260912/batch8-source/crates/riley-cuda/build.rs",
+      "sha256": "2abd1940eac31eec4bc43394a724a8339bfe1cdacc21fe620cd7b50905cfd518"
+    }
+  },
+  "oracle_source": {
+    "path": "/tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics.cu",
+    "sha256": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e"
+  },
+  "candidate_entry": "enqueue_compiled_packed_decode_rope_attention",
+  "candidate_source_sha256": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+  "helpers": {
+    "batch7_attention_probe.py": {
+      "path": "/tmp/riley-opt-260912/batch7_attention_probe.py",
+      "sha256": "bf8f8deca087d6db53c6cce9238d05b2d014328b3f0000f864cbf30ebc56e7f1"
+    },
+    "batch6_projection_probe.py": {
+      "path": "/tmp/riley-opt-260912/batch6_projection_probe.py",
+      "sha256": "e306157697d5584b1f5d59826326f1682e6be57c224108fed68e8a2c3146e3d9"
+    }
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/batch8_fusion_probe.py",
+    "sha256": "c025519755c4ce73bf61d2aa80a3fc36ec6ae745843fb0995058c312a8b74904"
+  },
+  "probe_source": {
+    "path": "/tmp/riley-opt-260912/batch8_fusion_probe.cu",
+    "sha256": "0ff8999f2647ab466ee0e816187e86cda3970586824178057eb79ad3ba0f6e70"
+  },
+  "case_index": {
+    "path": "/tmp/riley-opt-260912/batch8-fusion-probe/cases.tsv",
+    "sha256": "226c75fb937bb09975525e3cbec80aba648fb8cba8abf056aa591ac7fc9779df"
+  },
+  "fixture_recipe": {
+    "version": "fused-rope-attention-integer-v1",
+    "input_kind": "synthetic_only_no_checkpoint_activations_or_trig_tables",
+    "generator": "pinned native probe fixture()/sample()",
+    "qkv_bytes": 1920,
+    "q_bytes": 1152,
+    "kv_bytes_each": 98304,
+    "table_bytes_each": 20480,
+    "metadata_bytes": 116,
+    "allocations_per_case": 12,
+    "physical_blocks": 16,
+    "logical_tokens": 160,
+    "query_heads": 9,
+    "kv_heads": 3,
+    "head_dim": 64,
+    "guard_bytes_each_side": 256,
+    "positions_inclusive": [
+      128,
+      159
+    ],
+    "patterns": [
+      "bounded_fingerprint",
+      "signed_zero_impulses",
+      "tail_cancellation"
+    ],
+    "mappings": [
+      "identity",
+      "reverse",
+      "affine_7_3"
+    ],
+    "metadata_offsets": {
+      "position": 4,
+      "live_blocks": 12,
+      "block_ids": 16,
+      "valid_counts": 80,
+      "sequence_slot": 112
+    },
+    "comparison": "all BF16 attention and rotated Q words and full physical K/V; bit exact including signed zeros",
+    "current_kv": "poisoned NaN in both independent buffers before oracle or candidate",
+    "unused_and_future_slots": "initialized finite and immutable; all slots checked independently",
+    "oracle": "full precise RoPE/KV then accepted two-warp attention from preserved source prefix"
+  },
+  "gpu_tests_executed": false,
+  "performance_measured": false,
+  "performance_claim_eligible": false
+}

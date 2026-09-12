@@ -1,0 +1,5 @@
+from pathlib import Path
+p=Path('/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-scheduler/src/authority.rs');s=p.read_text();a=s.index('    fn variable_policy_batches_live_decode');b=s.index('    #[test]',a);t=s[a:b];t=t.replace('        let mut scheduler=','        for cancel_last in [false,true] {\n        let mut scheduler=',1)
+t=t.replace('            owner.last_accepted_replay=replay;', '            owner.last_accepted_replay=replay;\n            if cancel_last && replay==1 {scheduler.cancel(ids[3],now+1).unwrap();}')
+t=t.replace('        for id in ids {assert_eq!(scheduler.request_state(id),Some(crate::RequestState::Finished));}', '        for (i,id) in ids.into_iter().enumerate() {assert_eq!(scheduler.request_state(id),Some(if cancel_last && i==3 {crate::RequestState::Cancelled}else{crate::RequestState::Finished}));}')
+t=t.replace('        scheduler.close(now+2,None).unwrap();','        scheduler.close(now+2,None).unwrap();\n        }');s=s[:a]+t+s[b:];p.write_text(s)

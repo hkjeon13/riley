@@ -1,0 +1,201 @@
+{
+  "schema_version": "riley.rope-arithmetic-inspection.v2",
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/fixtures.json",
+    "sha256": "ea451c3090d2912e547f23f2f8acdc2db3aab14222e6f942c1df654b0a495dc1"
+  },
+  "compile_receipt": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/compile.json",
+    "sha256": "438f2fb78e8625f0c6e4b98f8b82a869e69c07a9c4cea5a650aefc074cf59349"
+  },
+  "cuobjdump": {
+    "path": "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+    "sha256": "8690c347b8b4ce8ce0491a2fd10de9c99e02ec3600d1c7e101cf27719500a6ad"
+  },
+  "cuobjdump_version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Fri_Apr_17_07:22:20_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.29\nBuild cuda_13.3.r13.3/compiler.37818446_0\n",
+  "artifacts": [
+    {
+      "kind": "actual_binary_sass",
+      "input": {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/riley",
+        "sha256": "c803eaa21e233ce74f496396f3b85ccfd1a5cea9f0781b7ff9ff14f61fdace43"
+      },
+      "command": [
+        "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+        "--dump-sass",
+        "--gpu-architecture",
+        "sm_89",
+        "/tmp/riley-opt-260912/batch7-target/release/riley"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-0.sass",
+        "sha256": "8f1dd16bf3abfa7e01c11cbe9c3a402e29c1d129d462bebe130950f9567f8df8"
+      },
+      "stderr": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected_rope": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-0-rope.sass",
+        "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+      }
+    },
+    {
+      "kind": "actual_binary_sass",
+      "input": {
+        "path": "/tmp/riley-opt-260912/batch7-target/release/riley-profile",
+        "sha256": "32425c1b18dbd47011765a1b4555fa6cdfdd419d7179491ce1fdc1a33f629ccd"
+      },
+      "command": [
+        "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+        "--dump-sass",
+        "--gpu-architecture",
+        "sm_89",
+        "/tmp/riley-opt-260912/batch7-target/release/riley-profile"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-1.sass",
+        "sha256": "8f1dd16bf3abfa7e01c11cbe9c3a402e29c1d129d462bebe130950f9567f8df8"
+      },
+      "stderr": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-1.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected_rope": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/production-1-rope.sass",
+        "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+      }
+    },
+    {
+      "kind": "actual_binary_sass",
+      "input": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/build/precise.o",
+        "sha256": "b648e791c7bcfc92cf70dccb89cbb96a680b56372224b0f1bb87c9035a628b2e"
+      },
+      "command": [
+        "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+        "--dump-sass",
+        "--gpu-architecture",
+        "sm_89",
+        "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/build/precise.o"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle.sass",
+        "sha256": "453c425e3b95c54aadd1b589f04ff305d6619277a14d02982bb7b657069bcc54"
+      },
+      "stderr": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected_rope": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle-rope.sass",
+        "sha256": "4ce1a5725a741475c69c599699059b3ae8dff2ef7c10e74c6421a7aabed8c433"
+      }
+    },
+    {
+      "kind": "actual_binary_sass",
+      "input": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/build/candidates.o",
+        "sha256": "f70e64c226b81a2758ccc7f4ba96d3a7f0b1b0d051bee154b391d9aeb70d6a5b"
+      },
+      "command": [
+        "/tmp/riley-opt-260912/cuobjdump-13.3.29/cuda_cuobjdump-linux-x86_64-13.3.29-archive/bin/cuobjdump",
+        "--dump-sass",
+        "--gpu-architecture",
+        "sm_89",
+        "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/build/candidates.o"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates.sass",
+        "sha256": "57a7c9e7aebb18a0c07785de8d923f593350730e345f401cb5a4c2313a13a0ed"
+      },
+      "stderr": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected_rope": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates-rope.sass",
+        "sha256": "716f66ddac87086671633bc5cc36f5f0d326a0e014f9f9131d5930d2ee672c3a"
+      }
+    },
+    {
+      "kind": "regenerated_source_ptx_not_frozen_binary",
+      "source": {
+        "path": "/tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics_precise.cu",
+        "sha256": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f"
+      },
+      "command": [
+        "/data/riley-g04-cuda13/bin/nvcc",
+        "-forward-unknown-to-host-compiler",
+        "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include/cccl",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Xcompiler=-fPIC",
+        "--objdir-as-tempdir",
+        "-Xcompiler=-fno-exceptions",
+        "--gpu-architecture=compute_89",
+        "--ptx",
+        "-x",
+        "cu",
+        "/tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics_precise.cu",
+        "-o",
+        "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle.ptx"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle.ptx",
+        "sha256": "fc669c935a52a8a8c0ebf540b612e0975d15ba81e8cb5b1d2d2e0b8a475c250a"
+      },
+      "log": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/oracle-ptx.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "architecture_only_transform": "SM89 generate-code to compute_89 PTX"
+    },
+    {
+      "kind": "regenerated_source_ptx_not_frozen_binary",
+      "source": {
+        "path": "/tmp/riley-opt-260912/rope_arithmetic_candidates_v2.cu",
+        "sha256": "9f2c42c8157221fa9913dd9cec017bbfd478f2267411668518fedfd27a0a0f01"
+      },
+      "command": [
+        "/data/riley-g04-cuda13/bin/nvcc",
+        "-forward-unknown-to-host-compiler",
+        "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include/cccl",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Xcompiler=-fPIC",
+        "--objdir-as-tempdir",
+        "-Xcompiler=-fno-exceptions",
+        "--use_fast_math",
+        "--gpu-architecture=compute_89",
+        "--ptx",
+        "-x",
+        "cu",
+        "/tmp/riley-opt-260912/rope_arithmetic_candidates_v2.cu",
+        "-o",
+        "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates.ptx"
+      ],
+      "output": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates.ptx",
+        "sha256": "e5585c7eb0ece416c4981d8d835d390be31154aec9322695d2f38a819ae3c13f"
+      },
+      "log": {
+        "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/inspect/candidates-ptx.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "architecture_only_transform": "SM89 generate-code to compute_89 PTX"
+    }
+  ],
+  "gpu_tests_executed": false,
+  "fusion_qualified": false
+}

@@ -1,0 +1,96 @@
+{
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "scope": "G02C-HF final normalization development implementation and GPU correctness",
+  "source_files": 22,
+  "remote_source_matches": true,
+  "source_overlay_sha256": "05c95590bbc617254bf615e341f24d35aef5f3c598a98f7d52a6a301645fedfe",
+  "source_hashes": "source-hashes.json",
+  "unrelated_model_edits_preserved": true,
+  "unrelated_model_edits_in_overlay": false,
+  "gpu_tests": {
+    "runtime_model_and_owner": 3,
+    "native_profile_abort_recovery": 1,
+    "graph_lifecycle_regression": 40,
+    "c05_22_composite_regression": 3,
+    "parent_attention_regression": 4,
+    "total": 51,
+    "all_command_exit_codes": 0
+  },
+  "cpu_tests": {
+    "runtime_lib": 258,
+    "cuda_lib": 80,
+    "graph_contracts": 32,
+    "architecture": 15,
+    "inventory_boundaries": 2
+  },
+  "real_model": {
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "profile": "HuggingFaceSmolLm2",
+    "steps": 4,
+    "replays_per_step": 32,
+    "greedy_tokens": [
+      808,
+      2775,
+      288,
+      536
+    ],
+    "final_norm_byte_exact": true,
+    "full_logits_byte_exact": true,
+    "initialized_kv_all_layers_byte_exact": true,
+    "full_decode_graph": false
+  },
+  "owner_matrix": {
+    "canonical": [
+      [
+        1,
+        64
+      ],
+      [
+        3,
+        257
+      ],
+      [
+        1,
+        576
+      ]
+    ],
+    "hf_hidden": 576,
+    "hf_rows": [
+      1,
+      3,
+      8,
+      16,
+      17
+    ],
+    "captures_per_case": 2,
+    "replays_per_capture": 64
+  },
+  "global_inventory": {
+    "supported": 7,
+    "unknown": 7,
+    "aggregate": "Unknown"
+  },
+  "normal_clippy_exit_code": 0,
+  "new_module_clippy_diagnostics": 0,
+  "qualification": false,
+  "performance_claim": false,
+  "artifacts_sha256": {
+    "README.md": "8ec3759a9ffb88d0bfcad6dbdc07b5ca53d3888fa579153793b014c6bd8e8707",
+    "checkpoint-identities.json": "038fd69f39aa6e6721cd0f39f2682f6f7110dea0ca82124ed845cbf63e1b9eed",
+    "clippy.log": "4381f59d212c9fd20cd4303ec692e2f5cd26b3d03768cab4ca6195e5d241ea63",
+    "cuda-unit-cpu.log": "38d2e906eb410f2a5cf4dca945d2c38bba4aab6ed51dc1212face262a27de4e4",
+    "generate_canonical_fixture.py": "7e605fd800b213cad53b7bcf1c00623f6d7ad11d5106070bc4c0b2c65751ef41",
+    "graph-contract-cpu.log": "66a610d725560f15c3979333fca4c6a605153999338a79c68ccb0ac9f07d8165",
+    "initial-source-contract-failure.log": "ed39075de39697c91742f4d082e39a6135f8637ea56daeae1b18713e20e0dbc6",
+    "lint-summary.json": "1b3a890c41b73e5cef4449e03106b3eae830a3d3de7d2d797adb5976a1e189ea",
+    "model-gpu.log": "4b265879cf53af466ff4dfa811d2e807d8fb971e8f9af4ab55ed6fd9b04008a5",
+    "native-profile-gpu.log": "cd059bec2f36e44f390ffb21b27c563294edecf445860127f14a7b38e2a6b1d8",
+    "regression-gpu.log": "9670c5b2c50cb7513db278f813f39c0635788f7f319d1941f76149cee9824dc2",
+    "remote-identities.txt": "3133a4051ccf3c356471b808a6b42edafcbd83d2283857a0e648abe09be38ec1",
+    "runtime-cpu.log": "66d14e6daf61751d433b8275aeffed443c14131557b4ad1b243584f24ebc41f2",
+    "source-hashes.json": "302cd02107d503ae136a4413a9e0ce78c177df4c7e606dca404ebeb045bad1ab",
+    "source-overlay.tar.gz": "05c95590bbc617254bf615e341f24d35aef5f3c598a98f7d52a6a301645fedfe",
+    "synthetic-checkpoint-manifest.json": "cc56fa4028435c98f68150c4769de0aca17d45f7af500909bad3e6c35953555b"
+  }
+}

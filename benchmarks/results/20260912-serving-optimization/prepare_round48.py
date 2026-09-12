@@ -1,0 +1,11 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912')
+s=(r/'serving_screen_round47.py').read_text().replace('round47','round48').replace('variable-candidate-v37','variable-candidate-v40').replace('variable-candidate-v33','variable-candidate-v37')
+s=s.replace("'concurrency':[16,32]", "'concurrency':[4,8,16,32]").replace('for c in (16,32)', 'for c in (4,8,16,32)')
+s=s.replace("option(argv,'--graph-numerics','variable-smol-v3')", "option(argv,'--graph-numerics','variable-smol-v4' if name=='new' else 'variable-smol-v3')")
+s=s.replace("8 if name=='previous' else concurrency", 'concurrency')
+s=s.replace('previous8; new and vLLM equal client16/32; new GPU dispatch remains at most8', 'all admission equals client; previous GPU8, new GPU16')
+s=s.replace('previous active8 versus new active16/32', 'both Riley active capacity equals client, previous GPU8 versus new GPU16')
+s=s.replace('C16/C32 client workloads; V33 active8 vs V37 active16/32 vs vLLM active16/32', 'C4/C8/C16/C32; V37 GPU8 versus V40 GPU16 versus vLLM; all admission capacities match clients')
+s=s.replace("if not account['completed']:raise RuntimeError('incomplete token transport '+prefix)", "if not account['completed']:raise RuntimeError('incomplete token transport '+prefix)\n        if name!='vllm' and not account['strict_reference_pass']:raise RuntimeError('Riley reference mismatch '+prefix)")
+(r/'serving_screen_round48.py').write_text(s)

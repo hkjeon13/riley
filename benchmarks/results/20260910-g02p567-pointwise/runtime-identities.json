@@ -1,0 +1,23 @@
+{
+  "binaries": {
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_gpu-c48d8cdb75122bfa": "4b8add5d8792c8a55466b6bb0efc1bf4264d7d968e999d73353eaa939d419426",
+    "/tmp/riley-g01-native-260910-target/debug/deps/graph_pointwise_gpu-e42e7846efc5535b": "3e0c5e3626f0d2ece42c2c99000feb621ce58bc0c6a1eb9bfebee6e32701b9d7",
+    "/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a": "4367e6eb5be2a589171eb8fe8e51a58b6542507320726ebfeec1a7f13d9b6c84"
+  },
+  "models": {
+    "hf": {
+      "path": "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+      "manifests": {
+        "riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0"
+      }
+    },
+    "canonical": {
+      "path": "/tmp/riley-g02c-canonical-fixture",
+      "manifests": {
+        "riley-checkpoint.json": "cc56fa4028435c98f68150c4769de0aca17d45f7af500909bad3e6c35953555b"
+      }
+    }
+  },
+  "gpu": "NVIDIA GeForce RTX 4090, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02, 804 MiB, 0 %",
+  "io_pressure": "some avg10=69.69 avg60=70.14 avg300=68.19 total=430594885629\nfull avg10=63.78 avg60=63.15 avg300=61.63 total=394109657245\n"
+}

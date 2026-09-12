@@ -1,0 +1,1501 @@
+{
+  "schema_version": "riley.vllm-divergence-extraction.v1",
+  "diagnostic_only": true,
+  "gpu_executed": false,
+  "performance_claim": false,
+  "independent_numerical_quality_qualified": false,
+  "requests_reparsed": 123,
+  "source_record_and_raw_hashes_checked": true,
+  "selected_tokens_logprob_checked": 928,
+  "all_returned_top_logprob_dicts_singleton": true,
+  "runner_up_margins_available": false,
+  "logprob_scope": "Separate logprobs=1 diagnostic waves. Values condition on each recorded prefix; selected-minus-returned-maximum zero is self-reported top1, not a runner-up margin.",
+  "inputs": {
+    "matrix_preparation": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/vllm-output-matrix-diagnostic/preparation.json",
+      "sha256": "6fcce68c8646ba07ddf2be3b818825037a1d3f80784f21dca45264c2ae6fa4e6"
+    },
+    "matrix_completion": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/vllm-output-matrix-diagnostic/completion.json",
+      "sha256": "f75a4608c7958f201d2cd15352926d83e4c41dfac56c3d02fd93cf75b7307848"
+    },
+    "prior_analysis": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/vllm-output-matrix-analysis.json",
+      "sha256": "aa8352b95886b5a4593e3ae9f742031cb4d36bb785ee60fead6c0903347a5416"
+    },
+    "prior_common136": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-attention-trace/prefixes.json",
+      "sha256": "7c9736afb6e18ac159b2a82fc3051c9301a9acfbe0a875cc7c72c92574dcda48"
+    }
+  },
+  "settings": [
+    {
+      "label": "c1-vllm-budget128",
+      "requests": 5,
+      "first_divergence_choices": {
+        "exact": 5
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "exact": 1
+        },
+        "nonstream-logprobs-diagnostic": {
+          "exact": 1
+        },
+        "nonstream-repeat": {
+          "exact": 1
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "exact": 1
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c1-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": null,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c1-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "505b80f54ca84bfc88194b588cdb2559290446ae96340bbd4898d4c1c9723a32"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c1-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "33b214f0d57ad38172cdb00f4a19728685cfd67f185589e7359891d4da06043e"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3729660511016846,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 253,
+              "token_text": " a",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9263581037521362,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c2-vllm-budget128",
+      "requests": 9,
+      "first_divergence_choices": {
+        "8:1443->2341": 4,
+        "29:253->638": 4,
+        "exact": 1
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "8:1443->2341": 1,
+          "29:253->638": 1
+        },
+        "nonstream-logprobs-diagnostic": {
+          "29:253->638": 1,
+          "8:1443->2341": 1
+        },
+        "nonstream-repeat": {
+          "29:253->638": 1,
+          "8:1443->2341": 1
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "29:253->638": 1,
+          "8:1443->2341": 1
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "b249ffe61ceae2deaa91dfaa154140d3b0558e66bdb89772e7fdc9b1b16a2734"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "a4020882ecc1b1b31524b954689b7ec0644cc5b9d10b58f3745c34de79be2ea7"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.4055633544921875,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.853715419769287,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "ad82e3dd76318f602658cac67b12cc83cf40f04b73e714298488c6ed47aa1a04"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "74b35d8640d373d6a51eea28f74bbd4312fe7894258e4607225e8f3f4e7423e3"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.873034119606018,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.2867372035980225,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 42,
+              "token_text": ":",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -1.613520860671997,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c2-vllm-budget256",
+      "requests": 9,
+      "first_divergence_choices": {
+        "exact": 9
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "exact": 2
+        },
+        "nonstream-logprobs-diagnostic": {
+          "exact": 2
+        },
+        "nonstream-repeat": {
+          "exact": 2
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "exact": 2
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c2-vllm-budget256",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": null,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "7c88ce554905874fd282e909ee024e8150ba285503843f97cc8b91b4e380aba2"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "45e4202823de46b654189418e175bdca0ea6e2f689262397a214103d753cb784"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.359409809112549,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 253,
+              "token_text": " a",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9346040487289429,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c2-vllm-budget256",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": null,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "a204c5f915383e03e08b86d043b47e5543331f3c61554a54a18b65fa3047a702"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "a193d370c7274188966925af2a5245bf22386c0134c8ec73e3a4019473cc952d"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -0.9092003703117371,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.429971694946289,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 253,
+              "token_text": " a",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9284040927886963,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c4-vllm-budget128",
+      "requests": 17,
+      "first_divergence_choices": {
+        "8:1443->2341": 8,
+        "29:253->638": 4,
+        "exact": 5
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "8:1443->2341": 2,
+          "29:253->638": 1,
+          "exact": 1
+        },
+        "nonstream-logprobs-diagnostic": {
+          "8:1443->2341": 2,
+          "exact": 1,
+          "29:253->638": 1
+        },
+        "nonstream-repeat": {
+          "8:1443->2341": 2,
+          "29:253->638": 1,
+          "exact": 1
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "exact": 1,
+          "8:1443->2341": 2,
+          "29:253->638": 1
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "d3c06921e1e86057211f6d907dab54ce1ed9457f1b20f166ab87e4d9c720d739"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "b1eedcc45cd366efba22c356f8317661112c7a63ad3059bfe8d813136cabadb0"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.2940964698791504,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -2.2894704341888428,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": null,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "80e7e55ac4ae1b2b223a502cf7b831e2256fb2ec3e6125198b645a344124964d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "9e4677d0a23661e1231a6c07644cbb86bd3145091e3cba8121a9c9f843fe95f1"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3389506340026855,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 253,
+              "token_text": " a",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9323874711990356,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "8d75aec9c7afb450e331d0b8520f8d83030bfab4d6a33c949b8bac5e5a3ded9b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "be671c30b0c3d97f851592e3f5f3e60bc44f0085be72ccf19462c324bd585299"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.5827136039733887,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3119640350341797,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 30,
+              "token_text": ".",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -1.6632307767868042,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "565e438f5cdaabd9409c6b52c75541c100974abdb8484599cc2b01801e7b9fae"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "c6bced60f1303ed09a8c8d78bb8cd7930985d74c72c6eaf8c2e243a9ad9c9542"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.34875750541687,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9050090312957764,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c4-vllm-budget512",
+      "requests": 17,
+      "first_divergence_choices": {
+        "8:1443->2341": 4,
+        "8:1443->1838": 12,
+        "exact": 1
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "8:1443->2341": 1,
+          "8:1443->1838": 3
+        },
+        "nonstream-logprobs-diagnostic": {
+          "8:1443->1838": 3,
+          "8:1443->2341": 1
+        },
+        "nonstream-repeat": {
+          "8:1443->1838": 3,
+          "8:1443->2341": 1
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "8:1443->1838": 3,
+          "8:1443->2341": 1
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "a807e31bb3f477f8a6fef166ae08dc8ad358b59aa621cca9683ffdec5abe6114"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "0917e2f93448702a713ada83ba21f8334c16feea5f0a43247f0c554573b50643"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.3042008876800537,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.313375473022461,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6897019147872925,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "0b10fdc52dfb7d7bbba38670c71b8eedf24a3feccfa9c860de3f823e4453d29d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "8c06cb54a750c823f1e560635cf345a536a949f17826259604e710900dec9174"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.316863775253296,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 42,
+              "token_text": ":",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -1.5681235790252686,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "fd76f5819a78435f02adc424f6c7517f0cd3ebd11d5a8cd1d2059e5ae6a3cd6c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "589a3622fc3e62649b989e3068c541d631577d0fba04cb5a58fc36f3da9b96a8"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.3042008876800537,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.313375473022461,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6897019147872925,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "5015c6eae445669897555e31fe113709fab4014e780f66d91650a0ea33aa620b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "2520c8cfe0793e25bcaa9f8430df9b1555017eaf0b962a982b31d108976867af"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.3042008876800537,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.313375473022461,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6897019147872925,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c8-vllm-budget128",
+      "requests": 33,
+      "first_divergence_choices": {
+        "29:253->638": 20,
+        "8:1443->1838": 4,
+        "8:1443->2341": 8,
+        "exact": 1
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "29:253->638": 5,
+          "8:1443->1838": 1,
+          "8:1443->2341": 2
+        },
+        "nonstream-logprobs-diagnostic": {
+          "8:1443->2341": 2,
+          "8:1443->1838": 1,
+          "29:253->638": 5
+        },
+        "nonstream-repeat": {
+          "8:1443->2341": 2,
+          "29:253->638": 5,
+          "8:1443->1838": 1
+        },
+        "offered-c1-same-capacity": {
+          "exact": 1
+        },
+        "stream-with-usage": {
+          "8:1443->1838": 1,
+          "8:1443->2341": 2,
+          "29:253->638": 5
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "827b9ebcb0fe3303bd8e642def1995a1cf20c1189aee04df517e9745be89918c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "63a9b18c9e2d81f1c0a63685aa7e219c836308931a383e3f728c76d987ce0cc8"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.2958028316497803,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -2.19543194770813,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "1d83bcc02364a1dc56447fe1586d8586d82f651b6b24df3148c7c1ef4e9537d1"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "9a73ba30ae07949d1f83213af1d8b9ee18ea3ea8e73a29678144eb6aea67c202"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.328965187072754,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6697202920913696,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "aa6c05fffa328265117d1ba6a816a3a10cad5be3d5faeaf51f725546e63115e9"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "9d8f7db189f982d6b4eeef63c3f9e33aa19d656e84bcdf1ff3a81d54ae69665e"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.350717067718506,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.8392348289489746,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "6ac092daa3f417e2422030031ec75c9aeaafb3fb18e0a95a00125a0df340a9cf"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "4916ad12e7f86d7de7513cecd6da53ac3cf98ac40dd2e1903825ea7022160046"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3787760734558105,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.8356375694274902,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-4.json",
+            "sha256": "8130651afb1399b169a42d18dc437d4fab0745e05214ab1b39f5c0d0781fa0c5"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-4.response",
+            "sha256": "3ddfb823a75a7dc0a70387ffcd3716222c3c8e1a512b1dfb9834db06fc8399c7"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3016228675842285,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -2.233917236328125,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 5,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-5.json",
+            "sha256": "b8a80cf52d95b15caa315fc7a93a3d3e9781a4bfcc4e32a897a331c66eef4e24"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-5.response",
+            "sha256": "de17e8dd2d158255e9f265171f047f0be82ada37ccc6417fb27861004440461d"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.417085886001587,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.9016401767730713,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 6,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-6.json",
+            "sha256": "7110df4be6607ad44260277b58626f9accd1fc95805ffbd7e3fc01843afe8994"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-6.response",
+            "sha256": "8e0dfd0fb97f5bf08b6603a14eb9c0b787665ffa9b5474b6d4e9fbf895ff2afd"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.2235496044158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3297228813171387,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.881959080696106,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 7,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-7.json",
+            "sha256": "f2bbbe6424b09dc31e3a8050d92687c25ef50c0f3d8f67568acceb86656adb10"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-7.response",
+            "sha256": "8f021c736a998e3d47053a96d17584e069d91e8b7e3d61fb552c6e7ca5b572bb"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.192589521408081,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.3325183391571045,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 638,
+              "token_text": " how",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.8035956621170044,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "c8-vllm-budget1024",
+      "requests": 33,
+      "first_divergence_choices": {
+        "8:1443->1838": 28,
+        "8:1443->2341": 4,
+        "29:253->638": 1
+      },
+      "phase_choice_counts": {
+        "nonstream-first": {
+          "8:1443->1838": 7,
+          "8:1443->2341": 1
+        },
+        "nonstream-logprobs-diagnostic": {
+          "8:1443->1838": 7,
+          "8:1443->2341": 1
+        },
+        "nonstream-repeat": {
+          "8:1443->1838": 7,
+          "8:1443->2341": 1
+        },
+        "offered-c1-same-capacity": {
+          "29:253->638": 1
+        },
+        "stream-with-usage": {
+          "8:1443->1838": 7,
+          "8:1443->2341": 1
+        }
+      },
+      "logprob_requests": [
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "613d976f4be2afe9e7ded84bbc390796199c940a7d8f61ff27745d142a06b43c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "3cf81a1a8d033ed0ca861d41269a7f0413c285d15838fb53fd5cc1dfa207adbb"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "dfdecca5c046fd28b63ee6e934b67411b3ad7bee7a6b13bd856a31bcd337906a"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "f075396721c039ce21713b2f2bc67f343c2f4219e65c74fc7fab0032169fc9b7"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "a17edb0a7e93c8d351ddce0af5b665a4825e19ba1103d636ff4dc5b76279ff52"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "7d777fbc4d9897f21372cc625fa354f5107e06d82e8b8af8b4144280303b6e0c"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -1.223557472229004,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 2341,
+              "token_text": " lot",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.263840436935425,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 1443,
+              "token_text": " few",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -2.2708587646484375,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "1bb3571b8e72766f85c49bb92b0e1133743b7be11728bafe673af5438e5539ff"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "44b8911f2b82d0a9b1b5f725e6594c40b7a1eeb89b33cca30e522835a7a3c9af"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-4.json",
+            "sha256": "c69a083e2c480ad4b3bcc8846615bb6cc753e4d99ab4d9b0a72d8edb99f4d9b7"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-4.response",
+            "sha256": "12d52afdc0a4f8d54c1ebe942a888295c54b6d8a135b2deda1a718090125605c"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 5,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-5.json",
+            "sha256": "a8cc453960dce34493060708107ac5e8ba04b7af1347e2241b34b085d265355c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-5.response",
+            "sha256": "499016cb863e877bc4efe161eb3b35fe4fee73a916daf79ed5f7ea41e93c0202"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-6.json",
+            "sha256": "1fd4597b1e3e612ba068a287a802e1b9ff395c1b7883d1da6e4220d02d27dc5e"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-6.response",
+            "sha256": "1f02f00e382381d040b2e8a2d636c0e9ab5db47e6210c7f7dc2f98e87ebba482"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 7,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-7.json",
+            "sha256": "a1317d82681903ca079f3a41da528072ed32a12ee64c046e461a8c4a95651e0b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-7.response",
+            "sha256": "1b5d6e1999d216af1413f11af8559c948546eba7e2aed577b60c6fc7ffbd3fa3"
+          },
+          "positions": [
+            {
+              "generated_index": 0,
+              "token_id": 28,
+              "token_text": ",",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -2.2801902294158936,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 8,
+              "token_id": 1838,
+              "token_text": " little",
+              "input_prefix_matches_reference": true,
+              "selected_logprob": -3.275320291519165,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            },
+            {
+              "generated_index": 29,
+              "token_id": 338,
+              "token_text": " that",
+              "input_prefix_matches_reference": false,
+              "selected_logprob": -0.6687037348747253,
+              "returned_top_count": 1,
+              "runner_up_margin": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

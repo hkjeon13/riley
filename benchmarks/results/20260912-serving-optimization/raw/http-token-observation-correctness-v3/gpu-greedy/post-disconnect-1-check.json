@@ -1,0 +1,25 @@
+{
+  "check_id": "post-disconnect-1",
+  "kind": "completion",
+  "completed": true,
+  "sampler": "gpu-greedy",
+  "spec": {
+    "shape": "o32",
+    "streaming": true,
+    "raw": true
+  },
+  "server_request_id": "cmpl-000000000000002e",
+  "request": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/post-disconnect-1-request.json",
+    "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/http-token-observation-correctness-v3/gpu-greedy/post-disconnect-1-response.json",
+    "sha256": "22399e0cc60d6193086d78c13873ccac1133f8045bfb3e3a65ca03591e700b6d"
+  },
+  "blank_generated_token_events": 0,
+  "started_ns": 834416436680591,
+  "finished_ns": 834416473406486,
+  "published_ids_match_reference": true,
+  "performance_claim": false
+}

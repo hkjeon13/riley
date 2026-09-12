@@ -847,8 +847,8 @@ dim3 hugging_face_smollm2_rms_norm_block(uint64_t row_count) noexcept {
 }
 
 void launch_hugging_face_smollm2_rms_norm(
-    const ResolvedSpan& input, const ResolvedSpan& weight,
-    const ResolvedSpan& output, uint64_t row_count, cudaStream_t stream) {
+    const void* input, const void* weight,
+    void* output, uint64_t row_count, cudaStream_t stream) {
   const dim3 block = hugging_face_smollm2_rms_norm_block(row_count);
   const uint32_t blocks = static_cast<uint32_t>(
       (row_count + block.y - 1) / block.y);
@@ -856,9 +856,9 @@ void launch_hugging_face_smollm2_rms_norm(
       static_cast<size_t>(block.x) * block.y * sizeof(float);
   hugging_face_smollm2_rms_norm_kernel<false>
       <<<blocks, block, shared_bytes, stream>>>(
-          reinterpret_cast<const __nv_bfloat16*>(input.data), nullptr,
-          reinterpret_cast<const __nv_bfloat16*>(weight.data), nullptr,
-          reinterpret_cast<__nv_bfloat16*>(output.data), row_count);
+          reinterpret_cast<const __nv_bfloat16*>(input), nullptr,
+          reinterpret_cast<const __nv_bfloat16*>(weight), nullptr,
+          reinterpret_cast<__nv_bfloat16*>(output), row_count);
 }
 
 template <typename T>
@@ -974,6 +974,13 @@ void launch_rope(const ResolvedSpan& input, const ResolvedSpan& cos,
 }
 
 }  // namespace
+
+void riley_cuda_internal::launch_graph_hf_smollm2_rms_norm(
+    const void* input, const void* weight, void* output, uint64_t rows,
+    cudaStream_t stream) noexcept {
+  launch_hugging_face_smollm2_rms_norm(input, weight, output, rows, stream);
+}
+
 
 extern "C" RileyCudaStatus riley_cuda_embedding_execute(
     const RileyCudaEmbeddingParams* params, RileyCudaStream* stream,
@@ -1333,7 +1340,7 @@ RileyCudaStatus execute_rms_norm_impl(
     launch_attempted = true;
     if (hugging_face_smollm2) {
       launch_hugging_face_smollm2_rms_norm(
-          input, weight, output, params->row_count, stream->stream);
+          input.data, weight.data, output.data, params->row_count, stream->stream);
     } else if (params->input.dtype == RILEY_CUDA_DTYPE_F32) {
       launch_rms_norm<float>(input, weight, output, params->row_count,
                              params->hidden_size, params->epsilon,
@@ -2241,4 +2248,101 @@ extern "C" RileyCudaStatus riley_cuda_cast_execute(
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
+}
+
+namespace riley_cuda_internal {
+cudaError_t add_swiglu_graph_nodes(cudaGraph_t graph, cudaGraphNode_t gate_ready,
+    cudaGraphNode_t up_ready, void* gate, void* up, void* activated, void* product,
+    uint64_t elements, cudaGraphNode_t* activated_node, cudaGraphNode_t* product_node) noexcept {
+  auto* gate_ptr = static_cast<const __nv_bfloat16*>(gate);
+  auto* up_ptr = static_cast<const __nv_bfloat16*>(up);
+  auto* activated_ptr = static_cast<__nv_bfloat16*>(activated);
+  auto* product_ptr = static_cast<__nv_bfloat16*>(product);
+  void* silu_args[] = {&gate_ptr, &activated_ptr, &elements};
+  cudaKernelNodeParams silu_params{};
+  silu_params.func = reinterpret_cast<void*>(silu_kernel<__nv_bfloat16>);
+  silu_params.gridDim = dim3(block_count(elements));
+  silu_params.blockDim = dim3(kThreads);
+  silu_params.kernelParams = silu_args;
+  auto result = cudaGraphAddKernelNode(activated_node, graph, &gate_ready, 1, &silu_params);
+  if (result != cudaSuccess) return result;
+  void* multiply_args[] = {&activated_ptr, &up_ptr, &product_ptr, &elements};
+  cudaKernelNodeParams multiply_params{};
+  multiply_params.func = reinterpret_cast<void*>(gated_multiply_kernel<__nv_bfloat16>);
+  multiply_params.gridDim = dim3(block_count(elements));
+  multiply_params.blockDim = dim3(kThreads);
+  multiply_params.kernelParams = multiply_args;
+  const cudaGraphNode_t dependencies[] = {*activated_node, up_ready};
+  return cudaGraphAddKernelNode(product_node, graph, dependencies, 2, &multiply_params);
+}
+}  // namespace riley_cuda_internal
+
+namespace riley_cuda_internal {
+cudaError_t enqueue_mlp_pointwise(cudaStream_t stream, void* gate, void* up,
+    void* activated, void* product, uint64_t elements) noexcept {
+  silu_kernel<__nv_bfloat16><<<block_count(elements), kThreads, 0, stream>>>(
+      static_cast<const __nv_bfloat16*>(gate), static_cast<__nv_bfloat16*>(activated), elements);
+  auto result = cudaGetLastError();
+  if (result != cudaSuccess) return result;
+  gated_multiply_kernel<__nv_bfloat16><<<block_count(elements), kThreads, 0, stream>>>(
+      static_cast<const __nv_bfloat16*>(activated), static_cast<const __nv_bfloat16*>(up),
+      static_cast<__nv_bfloat16*>(product), elements);
+  return cudaGetLastError();
+}
+cudaError_t enqueue_mlp_residual(cudaStream_t stream, void* residual, void* down,
+    void* output, uint64_t elements) noexcept {
+  residual_add_kernel<__nv_bfloat16><<<block_count(elements), kThreads, 0, stream>>>(
+      static_cast<const __nv_bfloat16*>(residual), static_cast<const __nv_bfloat16*>(down),
+      static_cast<__nv_bfloat16*>(output), elements);
+  return cudaGetLastError();
+}
+}  // namespace riley_cuda_internal
+
+cudaError_t riley_cuda_internal::enqueue_mlp_norm(cudaStream_t stream,
+    const void* input, const void* weight, void* output, uint64_t hidden,
+    float epsilon, uint32_t profile) noexcept {
+  if (profile == 1) {
+    launch_hugging_face_smollm2_rms_norm(input, weight, output, 1, stream);
+  } else {
+    rms_norm_kernel<__nv_bfloat16><<<1, kThreads, kThreads * sizeof(float), stream>>>(
+        static_cast<const __nv_bfloat16*>(input), static_cast<const __nv_bfloat16*>(weight),
+        static_cast<__nv_bfloat16*>(output), 1, hidden, epsilon);
+  }
+  return cudaGetLastError();
+}
+
+// Full M=1 decode uses exactly the eager embedding kernels and report layout.
+cudaError_t riley_cuda_internal::enqueue_decode_embedding(cudaStream_t stream,
+    const void* table,const void* tokens,void* output,void* error,uint64_t hidden,uint64_t vocab) noexcept {
+  auto* report=static_cast<RileyCudaEmbeddingErrorReport*>(error);
+  reset_embedding_error<<<1,1,0,stream>>>(report);
+  auto status=cudaGetLastError(); if(status!=cudaSuccess) return status;
+  validate_embedding_tokens<<<1,kThreads,0,stream>>>(static_cast<const uint32_t*>(tokens),1,vocab,report);
+  status=cudaGetLastError(); if(status!=cudaSuccess) return status;
+  embedding_kernel<__nv_bfloat16><<<block_count(hidden),kThreads,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(table),static_cast<const uint32_t*>(tokens),
+      static_cast<__nv_bfloat16*>(output),report,hidden,hidden);
+  status=cudaGetLastError(); if(status!=cudaSuccess) return status;
+  finalize_embedding_error<<<1,1,0,stream>>>(static_cast<const uint32_t*>(tokens),1,report);
+  return cudaGetLastError();
+}
+
+// The bounded prefill path uses the same validation, gather and report kernels
+// as M1. All token validation precedes any embedding output write.
+cudaError_t riley_cuda_internal::enqueue_decode_embedding_rows(cudaStream_t stream,
+    const void* table,const void* tokens,void* output,void* error,uint64_t hidden,
+    uint64_t vocab,uint64_t rows) noexcept {
+  if(rows==1)return enqueue_decode_embedding(stream,table,tokens,output,error,hidden,vocab);
+  if(rows!=128||hidden!=576||vocab!=49152)return cudaErrorInvalidValue;
+  auto* report=static_cast<RileyCudaEmbeddingErrorReport*>(error);
+  reset_embedding_error<<<1,1,0,stream>>>(report);
+  auto status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  validate_embedding_tokens<<<1,kThreads,0,stream>>>(static_cast<const uint32_t*>(tokens),rows,vocab,report);
+  status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  embedding_kernel<__nv_bfloat16><<<block_count(hidden*rows),kThreads,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(table),static_cast<const uint32_t*>(tokens),
+      static_cast<__nv_bfloat16*>(output),report,hidden,hidden*rows);
+  status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  finalize_embedding_error<<<1,1,0,stream>>>(static_cast<const uint32_t*>(tokens),rows,report);
+  return cudaGetLastError();
 }

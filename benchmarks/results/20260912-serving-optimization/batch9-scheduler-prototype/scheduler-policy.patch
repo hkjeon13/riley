@@ -1,0 +1,838 @@
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -9,6 +9,24 @@
+     RejectImmediately,
+     /// Keep the request in the bounded waiting queue.
+     Wait,
++}
++
++/// Opt-in iteration shapes supported by the executor prepared with a scheduler.
++///
++/// This is separate from [`SchedulerConfig`] so existing configuration literals
++/// and [`crate::Scheduler::new`] keep the general scheduling policy unchanged.
++#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
++pub enum ExecutionShapePolicy {
++    /// Existing decode-first, chunked-prefill scheduling with aging.
++    #[default]
++    General,
++    /// One complete P128 prefill or independent decode rows, never mixed.
++    ///
++    /// Requires active capacity 2 or 4, token/chunk budget 128, sequence capacity 160
++    /// and at least ten promised/physical KV blocks per active request. Inputs
++    /// are limited to vocabulary 49152 and output limits 1..=32. This policy only
++    /// constrains host plans; it does not qualify a multi-sequence GPU executor.
++    CompletePrefill128DecodeN,
+ }
+ 
+ /// All host-memory, work, and KV promises enforced by one scheduler.
+--- a/crates/riley-scheduler/src/lib.rs
++++ b/crates/riley-scheduler/src/lib.rs
+@@ -64,7 +64,7 @@
+ pub mod plan;
+ mod scheduler;
+ 
+-pub use config::{OverloadPolicy, SchedulerConfig};
++pub use config::{ExecutionShapePolicy, OverloadPolicy, SchedulerConfig};
+ pub use error::{SchedulerError, SchedulerResult};
+ pub use execution::{
+     DownloadedLlamaIteration, IterationAdapterError, IterationAdapterResult,
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -11,7 +11,7 @@
+     KV_BLOCK_SIZE, KvBlockPool, KvBlockPoolStats, KvLayout, SequenceReservation, SequenceState,
+ };
+ 
+-use crate::config::{OverloadPolicy, SchedulerConfig};
++use crate::config::{ExecutionShapePolicy, OverloadPolicy, SchedulerConfig};
+ use crate::error::{SchedulerError, SchedulerResult};
+ use crate::metrics::{
+     IterationMetricSample, SchedulerGauges, SchedulerMetrics, SchedulerMetricsSnapshot,
+@@ -503,6 +503,8 @@
+ #[must_use = "settle every in-flight plan and close the scheduler before discarding it"]
+ pub struct Scheduler {
+     config: SchedulerConfig,
++    execution_shape_policy: ExecutionShapePolicy,
++    last_dispatched_shape: Option<WorkKind>,
+     pool: KvBlockPool,
+     requests: Vec<RequestRecord>,
+     waiting: VecDeque<RequestId>,
+@@ -574,6 +576,7 @@
+         formatter
+             .debug_struct("Scheduler")
+             .field("config", &self.config)
++            .field("execution_shape_policy", &self.execution_shape_policy)
+             .field("pool_stats", &self.pool.stats())
+             .field("request_count", &self.requests.len())
+             .field("waiting_count", &self.waiting.len())
+@@ -598,7 +601,26 @@
+     /// Returns before publishing a scheduler when configuration, KV layout,
+     /// checked capacity arithmetic, or host reservation fails.
+     pub fn new(config: SchedulerConfig, layout: KvLayout) -> SchedulerResult<Self> {
++        Self::new_with_execution_shape(config, layout, ExecutionShapePolicy::General)
++    }
++
++    /// Creates a scheduler for an explicitly prepared executor shape policy.
++    ///
++    /// Complete-P128 policy rejects incompatible geometry and budgets before
++    /// allocating a pool or accepting any KV promises. It retains the ordinary
++    /// reservation, completion and cancellation ownership protocol.
++    ///
++    /// # Errors
++    ///
++    /// Returns for invalid general or policy-specific configuration, checked
++    /// capacity arithmetic, or host reservation failure.
++    pub fn new_with_execution_shape(
++        config: SchedulerConfig,
++        layout: KvLayout,
++        policy: ExecutionShapePolicy,
++    ) -> SchedulerResult<Self> {
+         let config = config.validate()?;
++        validate_execution_shape_config(policy, &config, layout)?;
+         if config.max_promised_kv_blocks > layout.physical_block_count() {
+             return Err(SchedulerError::InvalidConfiguration {
+                 field: "max_promised_kv_blocks",
+@@ -639,6 +661,8 @@
+         let metrics = SchedulerMetrics::new(config.metrics_window_samples)?;
+         let mut scheduler = Self {
+             config,
++            execution_shape_policy: policy,
++            last_dispatched_shape: None,
+             pool: KvBlockPool::new(layout)?,
+             requests,
+             waiting,
+@@ -669,6 +693,12 @@
+         &self.config
+     }
+ 
++    /// Immutable cold-start shape selection; it cannot change for live requests.
++    #[must_use]
++    pub const fn execution_shape_policy(&self) -> ExecutionShapePolicy {
++        self.execution_shape_policy
++    }
++
+     #[must_use]
+     pub fn pool_stats(&self) -> KvBlockPoolStats {
+         self.pool.stats()
+@@ -756,7 +786,8 @@
+             return Err(SchedulerError::SchedulerClosed);
+         }
+         self.observe_now(now_ns)?;
+-        let maximum_logical_length = validate_descriptor(&self.config, &descriptor)?;
++        let maximum_logical_length =
++            validate_descriptor(&self.config, self.execution_shape_policy, &descriptor)?;
+         let promised_kv_blocks = maximum_logical_length.div_ceil(KV_BLOCK_SIZE);
+         if promised_kv_blocks > self.config.max_promised_kv_blocks {
+             observe_metric(
+@@ -962,6 +993,11 @@
+             return Err(SchedulerError::NoIterationInFlight);
+         };
+ 
++        // A fully validated completed result proves dispatch. Recording at
++        // settlement is sufficient: no later plan can exist while this one is
++        // in flight. Rejected results leave this alternation state unchanged.
++        self.record_dispatched_shape(&inflight);
++
+         let prefill_tokens = inflight.prefill_tokens;
+         let decode_tokens = inflight.decode_tokens;
+         let scheduler_cpu_ns = inflight.scheduler_cpu_ns;
+@@ -1109,6 +1145,10 @@
+             return Err(SchedulerError::NoIterationInFlight);
+         };
+ 
++        if abort == ExecutionAbort::DeviceQuiescedMutationUnknown {
++            self.record_dispatched_shape(&inflight);
++        }
++
+         for item in inflight.items {
+             let request_id = item.request_id;
+             let previous_state = item.previous_state;
+@@ -1466,7 +1506,11 @@
+             if !self.can_admit(promised) {
+                 return Ok(());
+             }
+-            let maximum = maximum_logical_length(&self.requests[index].descriptor)?;
++            let maximum = validate_descriptor(
++                &self.config,
++                self.execution_shape_policy,
++                &self.requests[index].descriptor,
++            )?;
+             let sequence = self.pool.create_sequence(maximum)?;
+             let prompt_tokens = self.requests[index].descriptor.prompt_token_ids.len();
+             let waited_ns = now_ns.saturating_sub(self.requests[index].submitted_at_ns);
+@@ -1538,6 +1582,37 @@
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
++        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
++            // Alternate classes immediately when both are ready. Neither aging
++            // nor decode subtraction may split a prompt into 127 input tokens.
++            // A NotDispatched abort retains the previous class so a retry cannot
++            // count an unexecuted prefill as progress for admission/fairness.
++            if !prefill.is_empty()
++                && (decode.is_empty() || self.last_dispatched_shape != Some(WorkKind::Prefill))
++            {
++                let item = &prefill[0];
++                if item.remaining_tokens != 128 {
++                    return Err(SchedulerError::InvalidPlan {
++                        field: "complete prefill",
++                        reason: "opt-in policy requires the entire untouched P128 prompt",
++                    });
++                }
++                selected.push(Candidate {
++                    request_id: item.request_id,
++                    kind: WorkKind::Prefill,
++                    token_count: 128,
++                });
++            } else {
++                for item in decode {
++                    selected.push(Candidate {
++                        request_id: item.request_id,
++                        kind: WorkKind::Decode,
++                        token_count: 1,
++                    });
++                }
++            }
++            return Ok((selected, false));
++        }
+         let mut budget = self.config.iteration_token_budget;
+         let mut aged_request = None;
+         let can_override = !decode.is_empty() && !self.aging_override_last_iteration;
+@@ -1599,6 +1674,16 @@
+             budget -= token_count;
+         }
+         Ok((selected, aged_request.is_some()))
++    }
++
++    fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
++        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
++            self.last_dispatched_shape = Some(if inflight.prefill_count == 1 {
++                WorkKind::Prefill
++            } else {
++                WorkKind::Decode
++            });
++        }
+     }
+ 
+     #[allow(clippy::too_many_lines)]
+@@ -2013,6 +2098,14 @@
+             }
+         }
+         for output in result.outputs() {
++            if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN
++                && output.token_id() >= 49_152
++            {
++                return Err(SchedulerError::InvalidIterationResult {
++                    field: "token_id",
++                    reason: "output token is outside the prepared P128 profile vocabulary",
++                });
++            }
+             if !inflight.expected_output_slots.contains(&output.slot()) {
+                 return Err(SchedulerError::InvalidIterationResult {
+                     field: "outputs",
+@@ -2566,8 +2659,37 @@
+ 
+ fn validate_descriptor(
+     config: &SchedulerConfig,
++    policy: ExecutionShapePolicy,
+     descriptor: &RequestDescriptor,
+ ) -> SchedulerResult<usize> {
++    if policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
++        if descriptor.prompt_token_ids.len() != 128 {
++            return Err(SchedulerError::InvalidConfiguration {
++                field: "prompt_token_ids",
++                reason: "complete-prefill policy requires exactly 128 prompt tokens",
++            });
++        }
++        if !(1..=32).contains(&descriptor.max_new_tokens) {
++            return Err(SchedulerError::InvalidConfiguration {
++                field: "max_new_tokens",
++                reason: "complete-prefill policy supports output limits 1..=32",
++            });
++        }
++        if descriptor
++            .prompt_token_ids
++            .iter()
++            .any(|&token| token >= 49_152)
++        {
++            return Err(SchedulerError::InvalidConfiguration {
++                field: "prompt_token_ids",
++                reason: "prompt contains a token outside vocabulary 49152",
++            });
++        }
++        // Promise the full prepared 160-position envelope even for O1. The
++        // caller's output limit remains authoritative for completion, so this
++        // capacity does not authorize a 33rd output or a position 159 decode.
++        return Ok(160);
++    }
+     if descriptor.prompt_token_ids.is_empty() {
+         return Err(SchedulerError::InvalidConfiguration {
+             field: "prompt_token_ids",
+@@ -2588,6 +2710,68 @@
+         });
+     }
+     Ok(maximum)
++}
++
++fn validate_execution_shape_config(
++    policy: ExecutionShapePolicy,
++    config: &SchedulerConfig,
++    layout: KvLayout,
++) -> SchedulerResult<()> {
++    if policy == ExecutionShapePolicy::General {
++        return Ok(());
++    }
++    for (valid, field, reason) in [
++        (
++            matches!(config.max_active_sequences, 2 | 4),
++            "max_active_sequences",
++            "complete-prefill policy requires capacity 2 or 4",
++        ),
++        (
++            config.iteration_token_budget == 128,
++            "iteration_token_budget",
++            "complete-prefill policy requires exactly 128 tokens",
++        ),
++        (
++            config.max_prefill_chunk_tokens == 128,
++            "max_prefill_chunk_tokens",
++            "complete-prefill policy requires exactly 128 tokens",
++        ),
++        (
++            config.max_sequence_tokens == 160,
++            "max_sequence_tokens",
++            "complete-prefill policy requires the 160-position envelope",
++        ),
++        (
++            config.max_waiting_prompt_tokens >= 128,
++            "max_waiting_prompt_tokens",
++            "waiting capacity must fit one complete P128 prompt",
++        ),
++        (
++            layout.layer_count() == 30
++                && layout.key_value_head_count() == 3
++                && layout.head_dimension() == 64,
++            "kv_layout",
++            "complete-prefill policy requires 30 layers, 3 KV heads and head dimension 64",
++        ),
++    ] {
++        if !valid {
++            return Err(SchedulerError::InvalidConfiguration { field, reason });
++        }
++    }
++    let promised =
++        config
++            .max_active_sequences
++            .checked_mul(10)
++            .ok_or(SchedulerError::ArithmeticOverflow {
++                field: "complete-prefill aggregate KV promise",
++            })?;
++    if config.max_promised_kv_blocks < promised {
++        return Err(SchedulerError::InvalidConfiguration {
++            field: "max_promised_kv_blocks",
++            reason: "complete-prefill policy requires ten promised blocks per active request",
++        });
++    }
++    Ok(())
+ }
+ 
+ fn maximum_logical_length(descriptor: &RequestDescriptor) -> SchedulerResult<usize> {
+--- /dev/null
++++ b/crates/riley-scheduler/tests/complete_prefill_policy.rs
+@@ -0,0 +1,497 @@
++//! Model-free qualification of the opt-in complete-P128/DecodeN host policy.
++//! Synthetic executor results prove scheduler contracts only, never GPU parity.
++
++use std::collections::HashSet;
++
++use riley_runtime::paged_kv::KvLayout;
++use riley_scheduler::{
++    ExecutionAbort, ExecutionShapePolicy, IterationOutput, IterationPlan, IterationResult,
++    OverloadPolicy, RequestDescriptor, RequestFinishReason, RequestId, RequestState, Scheduler,
++    SchedulerConfig, SchedulerError, WorkKind,
++};
++
++fn config(capacity: usize) -> SchedulerConfig {
++    SchedulerConfig {
++        max_waiting_requests: 8,
++        max_waiting_prompt_tokens: 1024,
++        max_active_sequences: capacity,
++        max_sequence_tokens: 160,
++        iteration_token_budget: 128,
++        max_prefill_chunk_tokens: 128,
++        aging_threshold_ns: 1,
++        overload_policy: OverloadPolicy::Wait,
++        admission_timeout_ns: None,
++        max_promised_kv_blocks: capacity * 10,
++        metrics_window_samples: 16,
++    }
++}
++
++fn layout(blocks: usize) -> KvLayout {
++    KvLayout::checked(30, blocks, 3, 64).unwrap()
++}
++
++fn scheduler(capacity: usize) -> Scheduler {
++    Scheduler::new_with_execution_shape(
++        config(capacity),
++        layout(capacity * 10),
++        ExecutionShapePolicy::CompletePrefill128DecodeN,
++    )
++    .unwrap()
++}
++
++fn submit(scheduler: &mut Scheduler, seed: u32, outputs: usize, now: u64) -> RequestId {
++    scheduler
++        .submit(RequestDescriptor::new(vec![seed; 128], outputs), now)
++        .unwrap()
++        .request_id()
++}
++
++fn plan(scheduler: &mut Scheduler, now: u64) -> IterationPlan {
++    let output = scheduler.plan_iteration(now).unwrap();
++    assert!(output.completions().is_empty());
++    let plan = output.into_parts().0.unwrap();
++    if plan.prefill_items().is_empty() {
++        assert!((1..=4).contains(&plan.decode_items().len()));
++        assert_eq!(plan.total_tokens(), plan.decode_items().len());
++        assert!(plan.decode_items().iter().all(|item| {
++            item.input_tokens().len() == 1 && (129..=159).contains(&item.target_logical_length())
++        }));
++    } else {
++        assert_eq!(plan.prefill_items().len(), 1);
++        assert!(plan.decode_items().is_empty());
++        assert_eq!(plan.total_tokens(), 128);
++        assert_eq!(plan.prefill_items()[0].target_logical_length(), 128);
++    }
++    assert_eq!(plan.output_slots().len(), plan.batch_size());
++    let mut blocks = HashSet::new();
++    for table in plan.block_tables() {
++        assert_eq!(table.physical_block_ids().len(), table.valid_tokens().len());
++        assert!(
++            table
++                .physical_block_ids()
++                .iter()
++                .all(|&id| blocks.insert(id))
++        );
++        assert_eq!(
++            table
++                .valid_tokens()
++                .iter()
++                .map(|&v| u32::from(v))
++                .sum::<u32>(),
++            table.logical_length()
++        );
++    }
++    plan
++}
++
++fn result(plan: &IterationPlan, stop: Option<RequestId>) -> IterationResult {
++    // Reverse result order to exercise routing by dense slot, not vector order.
++    let outputs = plan
++        .prefill_items()
++        .iter()
++        .chain(plan.decode_items())
++        .rev()
++        .map(|item| {
++            IterationOutput::new(
++                item.output_slot().unwrap(),
++                u32::try_from(item.request_id().get()).unwrap(),
++                Some(item.request_id()) == stop,
++            )
++        })
++        .collect();
++    IterationResult::new(plan.iteration_id(), outputs, 1, 0).unwrap()
++}
++
++fn complete(scheduler: &mut Scheduler, plan: &IterationPlan, now: u64) {
++    let update = scheduler
++        .complete_iteration(&result(plan, None), now)
++        .unwrap();
++    assert!(update.settlement_failures().is_empty());
++    for event in update.token_events() {
++        assert_eq!(u64::from(event.token_id()), event.request_id().get());
++    }
++}
++
++fn close(scheduler: Scheduler, now: u64) {
++    let output = scheduler.close(now, None).unwrap();
++    assert!(output.settlement_failures().is_empty());
++}
++
++#[test]
++fn policy_rejects_incompatible_configuration_before_pool_construction() {
++    let mutations: &[fn(&mut SchedulerConfig)] = &[
++        |c| c.max_active_sequences = 1,
++        |c| c.max_active_sequences = 3,
++        |c| c.max_active_sequences = 5,
++        |c| c.iteration_token_budget = 127,
++        |c| c.iteration_token_budget = 129,
++        |c| c.max_prefill_chunk_tokens = 127,
++        |c| c.max_sequence_tokens = 159,
++        |c| c.max_sequence_tokens = 161,
++        |c| c.max_waiting_prompt_tokens = 127,
++        |c| c.max_promised_kv_blocks = 19,
++    ];
++    for mutate in mutations {
++        let mut c = config(2);
++        mutate(&mut c);
++        assert!(
++            Scheduler::new_with_execution_shape(
++                c,
++                layout(40),
++                ExecutionShapePolicy::CompletePrefill128DecodeN
++            )
++            .is_err()
++        );
++    }
++    assert!(
++        Scheduler::new_with_execution_shape(
++            config(2),
++            layout(19),
++            ExecutionShapePolicy::CompletePrefill128DecodeN
++        )
++        .is_err()
++    );
++    assert!(
++        Scheduler::new_with_execution_shape(
++            config(2),
++            KvLayout::checked(1, 20, 1, 8).unwrap(),
++            ExecutionShapePolicy::CompletePrefill128DecodeN
++        )
++        .is_err()
++    );
++}
++
++#[test]
++fn invalid_requests_never_take_promises_ids_or_waiting_capacity() {
++    let mut scheduler = scheduler(2);
++    for (tokens, outputs) in [
++        (vec![1; 127], 1),
++        (vec![1; 129], 1),
++        (vec![1; 128], 0),
++        (vec![1; 128], 33),
++        (vec![49_152; 128], 1),
++    ] {
++        assert!(
++            scheduler
++                .submit(RequestDescriptor::new(tokens, outputs), 0)
++                .is_err()
++        );
++        assert_eq!(scheduler.active_sequence_count(), 0);
++        assert_eq!(scheduler.waiting_request_count(), 0);
++        assert_eq!(scheduler.promised_kv_blocks(), 0);
++        assert_eq!(scheduler.pool_stats().allocated_block_count(), 0);
++    }
++    assert_eq!(submit(&mut scheduler, 1, 1, 0).get(), 1);
++    assert_eq!(scheduler.promised_kv_blocks(), 10);
++    close(scheduler, 1);
++}
++
++#[test]
++fn default_constructor_retains_mixed_127_token_prefill_behavior() {
++    let mut scheduler = Scheduler::new(config(2), layout(20)).unwrap();
++    assert_eq!(
++        scheduler.execution_shape_policy(),
++        ExecutionShapePolicy::General
++    );
++    submit(&mut scheduler, 1, 3, 0);
++    let first = scheduler.plan_iteration(1).unwrap().into_parts().0.unwrap();
++    complete(&mut scheduler, &first, 2);
++    submit(&mut scheduler, 2, 3, 3);
++    let mixed = scheduler.plan_iteration(4).unwrap().into_parts().0.unwrap();
++    assert_eq!(mixed.decode_items().len(), 1);
++    assert_eq!(mixed.prefill_items()[0].input_tokens().len(), 127);
++    scheduler
++        .abort_iteration(mixed.iteration_id(), ExecutionAbort::NotDispatched, 5)
++        .unwrap();
++    close(scheduler, 6);
++}
++
++#[test]
++fn aged_prefill_pressure_alternates_whole_prompts_and_immediate_decode_buckets() {
++    let mut scheduler = scheduler(4);
++    let ids: Vec<_> = (1..=4)
++        .map(|id| submit(&mut scheduler, id, 32, 0))
++        .collect();
++    let mut now = 1;
++    for (kind, count) in [
++        (WorkKind::Prefill, 1),
++        (WorkKind::Decode, 1),
++        (WorkKind::Prefill, 1),
++        (WorkKind::Decode, 2),
++        (WorkKind::Prefill, 1),
++        (WorkKind::Decode, 3),
++        (WorkKind::Prefill, 1),
++        (WorkKind::Decode, 4),
++    ] {
++        let p = plan(&mut scheduler, now);
++        if kind == WorkKind::Prefill {
++            assert_eq!(p.prefill_items().len(), count);
++        } else {
++            assert_eq!(p.decode_items().len(), count);
++            assert_eq!(
++                p.decode_items()
++                    .iter()
++                    .map(|item| item.request_id())
++                    .collect::<Vec<_>>(),
++                ids[..count]
++            );
++        }
++        complete(&mut scheduler, &p, now + 1);
++        now += 2;
++    }
++    assert_eq!(scheduler.promised_kv_blocks(), 40);
++    close(scheduler, now);
++}
++
++#[test]
++fn waiting_short_request_still_reserves_ten_blocks_after_admission() {
++    let mut scheduler = scheduler(2);
++    let first = submit(&mut scheduler, 1, 1, 0);
++    submit(&mut scheduler, 2, 32, 0);
++    let waiting = submit(&mut scheduler, 3, 1, 0);
++    assert_eq!(
++        scheduler.request_state(waiting),
++        Some(RequestState::Waiting)
++    );
++    assert_eq!(scheduler.promised_kv_blocks(), 20);
++    let p = plan(&mut scheduler, 1);
++    assert_eq!(p.prefill_items()[0].request_id(), first);
++    complete(&mut scheduler, &p, 2);
++    let p = plan(&mut scheduler, 3);
++    assert_eq!(
++        scheduler
++            .request_snapshot(waiting)
++            .unwrap()
++            .promised_kv_blocks(),
++        10
++    );
++    assert_eq!(scheduler.promised_kv_blocks(), 20);
++    complete(&mut scheduler, &p, 4);
++    close(scheduler, 5);
++}
++
++#[test]
++fn undispatched_retry_and_rejected_results_do_not_advance_class_progress() {
++    let mut scheduler = scheduler(2);
++    submit(&mut scheduler, 1, 8, 0);
++    submit(&mut scheduler, 2, 8, 0);
++    let p = plan(&mut scheduler, 1);
++    let first = p.prefill_items()[0].request_id();
++    let incomplete = IterationResult::new(p.iteration_id(), vec![], 0, 0).unwrap();
++    assert!(scheduler.complete_iteration(&incomplete, 2).is_err());
++    scheduler
++        .abort_iteration(p.iteration_id(), ExecutionAbort::NotDispatched, 2)
++        .unwrap();
++    let retry = plan(&mut scheduler, 3);
++    assert_eq!(retry.prefill_items()[0].request_id(), first);
++    complete(&mut scheduler, &retry, 4);
++    let decode = plan(&mut scheduler, 5);
++    assert_eq!(decode.decode_items().len(), 1);
++    assert!(matches!(
++        scheduler.plan_iteration(6),
++        Err(SchedulerError::IterationInFlight { .. })
++    ));
++    scheduler
++        .abort_iteration(decode.iteration_id(), ExecutionAbort::NotDispatched, 6)
++        .unwrap();
++    let retry = plan(&mut scheduler, 7);
++    assert_eq!(retry.decode_items().len(), 1);
++    complete(&mut scheduler, &retry, 8);
++    let prefill = plan(&mut scheduler, 9);
++    assert_eq!(prefill.prefill_items().len(), 1);
++    complete(&mut scheduler, &prefill, 10);
++    close(scheduler, 11);
++}
++
++#[test]
++fn rejected_output_vocabulary_cannot_enter_the_next_decode() {
++    let mut scheduler = scheduler(2);
++    submit(&mut scheduler, 1, 2, 0);
++    let p = plan(&mut scheduler, 1);
++    let bad = IterationResult::new(
++        p.iteration_id(),
++        vec![IterationOutput::new(p.output_slots()[0], 49_152, false)],
++        0,
++        0,
++    )
++    .unwrap();
++    assert!(scheduler.complete_iteration(&bad, 2).is_err());
++    assert_eq!(
++        scheduler
++            .request_snapshot(p.prefill_items()[0].request_id())
++            .unwrap()
++            .generated_tokens(),
++        0
++    );
++    complete(&mut scheduler, &p, 2);
++    let p = plan(&mut scheduler, 3);
++    assert!(p.decode_items()[0].input_tokens()[0] < 49_152);
++    complete(&mut scheduler, &p, 4);
++    close(scheduler, 5);
++}
++
++#[test]
++fn cancellation_of_one_inflight_decoder_keeps_other_rows_and_reuses_capacity() {
++    let mut scheduler = scheduler(4);
++    let ids: Vec<_> = (1..=4)
++        .map(|id| submit(&mut scheduler, id, 32, 0))
++        .collect();
++    let mut now = 1;
++    for _ in 0..7 {
++        let p = plan(&mut scheduler, now);
++        complete(&mut scheduler, &p, now + 1);
++        now += 2;
++    }
++    let p = plan(&mut scheduler, now);
++    assert_eq!(p.decode_items().len(), 4);
++    let before = scheduler.pool_stats().allocated_block_count();
++    assert!(
++        scheduler
++            .cancel(ids[1], now + 1)
++            .unwrap()
++            .deferred_until_iteration_settles()
++    );
++    assert_eq!(scheduler.pool_stats().allocated_block_count(), before);
++    let updates = scheduler
++        .complete_iteration(&result(&p, None), now + 2)
++        .unwrap();
++    assert_eq!(updates.token_events().len(), 3);
++    assert!(
++        updates
++            .token_events()
++            .iter()
++            .all(|event| event.request_id() != ids[1])
++    );
++    assert_eq!(
++        updates.completions()[0].reason(),
++        RequestFinishReason::Cancelled
++    );
++    let p = plan(&mut scheduler, now + 3);
++    assert_eq!(p.decode_items().len(), 3);
++    complete(&mut scheduler, &p, now + 4);
++    scheduler.cancel(ids[0], now + 5).unwrap();
++    scheduler.cancel(ids[2], now + 5).unwrap();
++    let p = plan(&mut scheduler, now + 6);
++    assert_eq!(p.decode_items().len(), 1);
++    complete(&mut scheduler, &p, now + 7);
++    submit(&mut scheduler, 5, 32, now + 8);
++    let p = plan(&mut scheduler, now + 9);
++    assert_eq!(p.prefill_items().len(), 1);
++    complete(&mut scheduler, &p, now + 10);
++    let p = plan(&mut scheduler, now + 11);
++    assert_eq!(p.decode_items().len(), 2);
++    complete(&mut scheduler, &p, now + 12);
++    close(scheduler, now + 13);
++}
++
++#[test]
++fn output_limit32_never_plans_low_level_position159_or_output33() {
++    let mut scheduler = scheduler(2);
++    let id = submit(&mut scheduler, 1, 32, 0);
++    for index in 0..32 {
++        let p = plan(&mut scheduler, 2 * index + 1);
++        let item = p
++            .prefill_items()
++            .first()
++            .or_else(|| p.decode_items().first())
++            .unwrap();
++        assert_eq!(
++            item.target_logical_length(),
++            128 + usize::try_from(index).unwrap()
++        );
++        complete(&mut scheduler, &p, 2 * index + 2);
++    }
++    assert_eq!(scheduler.request_state(id), Some(RequestState::Finished));
++    assert!(scheduler.plan_iteration(65).unwrap().plan().is_none());
++    assert_eq!(scheduler.promised_kv_blocks(), 0);
++    assert_eq!(scheduler.pool_stats().allocated_block_count(), 0);
++    close(scheduler, 66);
++}
++
++#[test]
++fn quiesced_failed_dispatch_poisons_only_its_rows_then_allows_survivors() {
++    let mut scheduler = scheduler(4);
++    let first = submit(&mut scheduler, 1, 32, 0);
++    let second = submit(&mut scheduler, 2, 32, 0);
++    let p = plan(&mut scheduler, 1);
++    complete(&mut scheduler, &p, 2);
++    let p = plan(&mut scheduler, 3);
++    let updates = scheduler
++        .abort_iteration(
++            p.iteration_id(),
++            ExecutionAbort::DeviceQuiescedMutationUnknown,
++            4,
++        )
++        .unwrap();
++    assert_eq!(updates.completions()[0].request_id(), first);
++    assert_eq!(
++        updates.completions()[0].reason(),
++        RequestFinishReason::ExecutorFailure
++    );
++    assert!(updates.settlement_failures().is_empty());
++    let p = plan(&mut scheduler, 5);
++    assert_eq!(p.prefill_items()[0].request_id(), second);
++    complete(&mut scheduler, &p, 6);
++    close(scheduler, 7);
++}
++
++#[test]
++fn possibly_dispatched_prefill_failure_does_not_delay_a_healthy_decoder_again() {
++    let mut scheduler = scheduler(4);
++    let first = submit(&mut scheduler, 1, 32, 0);
++    let second = submit(&mut scheduler, 2, 32, 0);
++    let third = submit(&mut scheduler, 3, 32, 0);
++    for now in [1, 3] {
++        let p = plan(&mut scheduler, now);
++        complete(&mut scheduler, &p, now + 1);
++    }
++    let p = plan(&mut scheduler, 5);
++    assert_eq!(p.prefill_items()[0].request_id(), second);
++    scheduler
++        .abort_iteration(
++            p.iteration_id(),
++            ExecutionAbort::DeviceQuiescedMutationUnknown,
++            6,
++        )
++        .unwrap();
++    let p = plan(&mut scheduler, 7);
++    assert_eq!(p.decode_items()[0].request_id(), first);
++    complete(&mut scheduler, &p, 8);
++    let p = plan(&mut scheduler, 9);
++    assert_eq!(p.prefill_items()[0].request_id(), third);
++    complete(&mut scheduler, &p, 10);
++    close(scheduler, 11);
++}
++
++#[test]
++fn continuous_short_prefills_cannot_starve_an_aged_ready_decoder() {
++    let mut scheduler = scheduler(2);
++    let decoder = submit(&mut scheduler, 1, 32, 0);
++    let first = plan(&mut scheduler, 1);
++    complete(&mut scheduler, &first, 2);
++    let mut now = 3;
++    let mut previous_was_prefill = true;
++    let mut generated = 1;
++    let mut admitted_short = None;
++    while scheduler.request_state(decoder) != Some(RequestState::Finished) {
++        if admitted_short.is_none() {
++            admitted_short = Some(submit(&mut scheduler, 2, 1, now));
++        }
++        let p = plan(&mut scheduler, now);
++        if p.decode_items().is_empty() {
++            assert!(!previous_was_prefill);
++            assert_eq!(Some(p.prefill_items()[0].request_id()), admitted_short);
++            admitted_short = None;
++            previous_was_prefill = true;
++        } else {
++            assert_eq!(p.decode_items()[0].request_id(), decoder);
++            generated += 1;
++            previous_was_prefill = false;
++        }
++        complete(&mut scheduler, &p, now + 1);
++        now += 2;
++        assert!(now < 130, "ready decoder failed bounded class progress");
++    }
++    assert_eq!(generated, 32);
++    close(scheduler, now);
++}

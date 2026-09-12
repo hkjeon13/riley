@@ -1,0 +1,32 @@
+{
+  "status": "remote_validation_passed",
+  "cuda_build_passed": true,
+  "gpu_tests": {
+    "gpu-native.log": 1,
+    "gpu-model.log": 14,
+    "gpu-aggregate.log": 3,
+    "gpu-swiglu.log": 2
+  },
+  "gpu_total_passed": 20,
+  "all_test_exit_codes": 0,
+  "norm_mlp_replays": 640,
+  "mlp_replays": 640,
+  "model_parity_matches_prior": true,
+  "full_decode_graph_complete": false,
+  "vllm_speedup_claim": false,
+  "artifacts": {
+    "README.md": "d51e02d093c59ce174b871e9e1868b2a2ae43d5617a53a0b3b271d05207dc72a",
+    "authorized-transfer.json": "f5c62fc6a9fa65b8be9157f2c57db06ccecf51a56e6c384eaa68194a78fbe431",
+    "build.log": "d2756315f6248d367122fa947648dd5ee5b6f2688b48c1da5a9454ff06e9fda7",
+    "gpu-aggregate.log": "5ab38edc2ee0704fd3fe869f87f3d3ef4d6887ca2ac84216a71e40374afa4246",
+    "gpu-model.log": "da2bb675fad7d5024a6cb4381ef7716adb766b686717ec64fcbccf3d3578b9ce",
+    "gpu-native.log": "99bbbde38502d4922a961a6da30a3964bb1761fb829782acdd2d412c3878277f",
+    "gpu-swiglu.log": "cb24e65f34fe0576443dae1b84285a61e951838e0db22d53de92434b8c87d768",
+    "local-checks.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-parity.json": "6084373149862859b79411f0c6a23662fa1859610e2e7eae3651f2a954767da2",
+    "model-preservation.json": "b3a4299929af2f0d7ba3e525f3cee0af85043e27e95d6b263f15e2a5614a6314",
+    "remote-before.txt": "0dbb36d10502a78f458a21ffaa90afb7f9804014710bdb7fae5e36d833f0a556",
+    "remote-hashes.txt": "e93dd9fcf3ca5cd29f25ba55df92ca17e1acb692723831973545d298c195ee22",
+    "runtime-identities.txt": "a7950b1cb7b7e26ddfad7cce3139e5869807b12239efc8de4ad6ed0a1edba7b0"
+  }
+}

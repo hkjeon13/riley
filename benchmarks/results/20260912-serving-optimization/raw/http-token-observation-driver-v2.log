@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/http_token_observation_check_v2.py", line 807, in <module>
+    main()
+    ~~~~^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v2.py", line 786, in main
+    results = [run_sampler(module, root, output, sampler, env, compute, prompt, references, verify, args.timeout_seconds) for sampler in SAMPLERS]
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v2.py", line 488, in run_sampler
+    wait_ready(module, process, port)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check_v2.py", line 332, in wait_ready
+    raise RuntimeError('owned HTTP token server did not become ready')
+RuntimeError: owned HTTP token server did not become ready

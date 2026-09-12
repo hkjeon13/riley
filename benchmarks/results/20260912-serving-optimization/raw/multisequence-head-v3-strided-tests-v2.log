@@ -1,0 +1,49 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10120:19
+      |
+10119 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10120 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10130 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10424:19
+      |
+10423 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10424 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10435 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10447 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/multisequence-head-source-v3/crates/riley-cuda)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.20s
+     Running tests/strided_gemm_gpu.rs (/tmp/riley-opt-260912/multisequence-head-target-v3/release/deps/strided_gemm_gpu-4689d25c286bd3c3)
+
+running 1 test
+STRIDED_RUST_OWNER cases=20 exact_impulse_outputs=true padding_preserved=true invalid_span_reuse=true strided_graph_replays=60 explicit_and_drop_close=true
+test strided_rust_owner_executes_rows_and_preserves_padding ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+

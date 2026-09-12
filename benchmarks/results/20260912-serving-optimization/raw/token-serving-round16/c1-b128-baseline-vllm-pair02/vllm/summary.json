@@ -1,0 +1,108 @@
+{
+  "lane": "vllm",
+  "kind": "vllm",
+  "completed": true,
+  "setting": {
+    "id": "c1-b128",
+    "offered_concurrency": 1,
+    "vllm_token_budget": 128
+  },
+  "summary": {
+    "schema_version": "riley.http-token-phase.v2",
+    "phase": "retained",
+    "warmup": false,
+    "offered_concurrency": 1,
+    "requested": 300,
+    "attempted": 300,
+    "succeeded": 300,
+    "failed": 0,
+    "unresolved_attempts": 0,
+    "not_started": 0,
+    "reference_matches": 300,
+    "protocol_valid_responses": 300,
+    "observed_max_request_in_flight": 1,
+    "observed_max_call_in_flight": 1,
+    "observed_max_successful_request_in_flight": 1,
+    "phase_started_ns": 844138161270543,
+    "phase_finished_ns": 844148930793856,
+    "completed": true,
+    "duplicate_response_ids": [],
+    "reference_sha256s": [
+      "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+    ],
+    "modes": [
+      "strict"
+    ],
+    "streaming_transports": [
+      true
+    ],
+    "worker_errors": [],
+    "interrupted": null,
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+    "common_wall_started_ns": 844138161325361,
+    "common_wall_finished_ns": 844148930575450,
+    "common_wall_ns": 10769250089,
+    "successful_output_tokens": 9600,
+    "observed_output_tokens_including_partial_failures": 9600,
+    "successful_output_tokens_per_wall_second": 891.4269722276853,
+    "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+    "phase_wall_ns": 10769523313,
+    "successful_output_tokens_per_phase_wall_second": 891.404356626606,
+    "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+    "descriptive_statistics_only": true,
+    "timing_scope": "client delivery; incomplete phases are not comparable",
+    "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+    "e2e_ms": {
+      "samples": 300,
+      "median": 35.224900000000005,
+      "p95": 39.125301,
+      "p99": 45.787485,
+      "max": 51.01545
+    },
+    "token_ttft_ms": {
+      "samples": 300,
+      "median": 7.3331669999999995,
+      "p95": 8.697472,
+      "p99": 15.853856,
+      "max": 16.961714
+    },
+    "token_tpot_ms": {
+      "samples": 300,
+      "median": 0.8971556129032258,
+      "p95": 0.9903065806451613,
+      "p99": 1.079563064516129,
+      "max": 1.1188228064516128
+    },
+    "first_text_ms": {
+      "samples": 300,
+      "median": 7.3331669999999995,
+      "p95": 8.697472,
+      "p99": 15.853856,
+      "max": 16.961714
+    },
+    "token_itl_ms": {
+      "samples": 9300,
+      "median": 0.9070659999999999,
+      "p95": 1.053165,
+      "p99": 1.321903,
+      "max": 7.012402
+    }
+  },
+  "cleanup": {
+    "returncode": 0,
+    "remaining_owned_pids": [],
+    "zombie_pids": [],
+    "cleanup_verified": true,
+    "log": {
+      "path": "/tmp/riley-opt-260912/token-serving-round16/c1-b128-baseline-vllm-pair02/vllm/server.log",
+      "sha256": "cfe78e4cbd0ed4162c5899b0d993b6ee359dc63289a0ed0d1c5f05dc2bb9d0aa"
+    }
+  },
+  "performance_claim": false,
+  "raw": {
+    "path": "/tmp/riley-opt-260912/token-serving-round16/c1-b128-baseline-vllm-pair02/vllm/retained.jsonl",
+    "sha256": "a58b71d667ecdb277324c52a2124cab6bf5b5bd2c95fcf30ea3884d62128f8a3"
+  }
+}

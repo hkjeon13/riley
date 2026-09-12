@@ -1,0 +1,78 @@
+{
+  "source_commit": "8329c1aeec6e013f581128888c536e15f8bf7300",
+  "source_root": "/tmp/riley-opt-260912/batch8-source",
+  "parent_source_commit": "a179617070526068b66ba5627ba82a7151da8c64",
+  "parent_build_sha256": "5576db88790d5a87e976c082df77f985595129b122fde55b2b475ce06e17a4f5",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "0904ed58fec4a6e73af3dc2ffe37016eeb5be04a1ce7486461f186e4bfd4ebb3",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "38548681c8363b9ab88bfb9854cb45487c7cb76de5d9019f5c0c32e83f5ed1ad",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "bb978cc6557be27b844d356ba38cf462b37934dc283e8a89f2df8a3f3a0b132f",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "e815c8eb8d37daf6f48934b9fc9f79fabe87ec117ddfb4e3f5c4c6ad84e47b2e",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "5e1ab391690978a042ce4fb9203a464173ef8bfdac8e458d4b80e0859375c6b9",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67",
+    "crates/riley-server/src/domain.rs": "52190c94a29e429a6809ec80847716c5258af1ec433c0d49563bd4912037e3bb",
+    "crates/riley-server/src/openai.rs": "6541ef35d550e51adf7a99f3a086b2e3b7943673395178785665a0d4dce95c46"
+  },
+  "changed_files": [
+    "crates/riley-runtime/src/llama/graph_decode_full.rs",
+    "kernels/src/ffi_internal.hpp",
+    "kernels/src/graph_numerics.cu",
+    "kernels/src/graph_resources.cu"
+  ],
+  "binaries": {
+    "/tmp/riley-opt-260912/batch8-target/release/riley": "4c0876dbe080920bcc0d689df16d52b7714f31aa625b603fb9f7f1acc760c741",
+    "/tmp/riley-opt-260912/batch8-target/release/riley-profile": "9b082e3b9c9d887b47f8c00cf472f6496545ded4c3573cb615dcfc9e6dbee21b"
+  },
+  "build_argv": [
+    [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-runtime",
+      "--features",
+      "cuda",
+      "--lib",
+      "--no-run"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--bin",
+      "riley",
+      "--bin",
+      "riley-profile"
+    ]
+  ],
+  "build_environment": {
+    "CUDA_HOME": "/data/riley-g04-cuda13",
+    "CUDAToolkit_ROOT": "/data/riley-g04-cuda13",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "CARGO_TARGET_DIR": "/tmp/riley-opt-260912/batch8-target",
+    "LD_LIBRARY_PATH": "/data/riley-g04-cuda13/lib"
+  },
+  "gpu_tests_executed": false,
+  "build_log_sha256": "3c7cfe7cf46834d85f7ccc8179098603c123730c9669218e86bb86d7780b3c19",
+  "performance_measured": false
+}

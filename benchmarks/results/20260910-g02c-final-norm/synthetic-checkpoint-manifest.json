@@ -1,0 +1,25 @@
+{
+  "format": "riley-checkpoint-v1",
+  "source_model": "fixture/g02c-canonical-llama-h64-l2",
+  "source_revision": "1111111111111111111111111111111111111111",
+  "converter_revision": null,
+  "transforms": [],
+  "dtype": "bf16",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 639,
+      "sha256": "03181e17dc090e47f85f8c02421e404928cf43dca39821f5e1e11eb703e5827f"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 6458208,
+      "sha256": "7f5792964315f5bc4d7bff076753dc76fc3871941e0f3a62d7b15ce01da617fa"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 2104556,
+      "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+    }
+  ]
+}

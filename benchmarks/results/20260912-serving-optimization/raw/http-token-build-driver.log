@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/build_http_tokens_v2.py", line 97, in <module>
+    main()
+  File "/tmp/riley-opt-260912/build_http_tokens_v2.py", line 74, in main
+    run(command, cwd=SOURCE, env=env, stdout=log, stderr=log)
+  File "/tmp/riley-opt-260912/build_http_tokens_v2.py", line 26, in run
+    return subprocess.run(argv, check=True, **kwargs)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cargo', 'test', '--release', '-p', 'riley-runtime', '--features', 'cuda', '--lib', '--no-run']' returned non-zero exit status 101.

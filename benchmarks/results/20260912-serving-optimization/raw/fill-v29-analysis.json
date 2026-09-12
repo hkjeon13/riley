@@ -1,0 +1,66 @@
+{
+  "scope": "Initial diagnostic: client concurrency was4 for both server capacities4 and8. Invalid as C8 client evidence; superseded by corrected report.",
+  "results": {
+    "4": {
+      "all": {
+        "iterations": 2825,
+        "decode_iterations": 2561,
+        "prefill_iterations": 264,
+        "decode_row_histogram": {
+          "1": 63,
+          "2": 8,
+          "3": 315,
+          "4": 2175
+        },
+        "mean_decode_rows": 3.796954314720812,
+        "full_decode_fraction": 0.8492776259273721,
+        "prefill_execution_time_fraction": 0.17612264465208372,
+        "decode_median_execution_us": 1648
+      },
+      "middle80": {
+        "iterations": 2260,
+        "decode_iterations": 2044,
+        "prefill_iterations": 216,
+        "decode_row_histogram": {
+          "4": 1828,
+          "3": 216
+        },
+        "mean_decode_rows": 3.8943248532289627,
+        "full_decode_fraction": 0.8943248532289628,
+        "prefill_execution_time_fraction": 0.17913132221263775,
+        "decode_median_execution_us": 1648.0
+      }
+    },
+    "8": {
+      "all": {
+        "iterations": 2826,
+        "decode_iterations": 2562,
+        "prefill_iterations": 264,
+        "decode_row_histogram": {
+          "1": 64,
+          "2": 10,
+          "3": 312,
+          "4": 2176
+        },
+        "mean_decode_rows": 3.795472287275566,
+        "full_decode_fraction": 0.0,
+        "prefill_execution_time_fraction": 0.17606738192808224,
+        "decode_median_execution_us": 1648.0
+      },
+      "middle80": {
+        "iterations": 2261,
+        "decode_iterations": 2045,
+        "prefill_iterations": 216,
+        "decode_row_histogram": {
+          "4": 1829,
+          "3": 216
+        },
+        "mean_decode_rows": 3.8943765281173595,
+        "full_decode_fraction": 0.0,
+        "prefill_execution_time_fraction": 0.1792106601240437,
+        "decode_median_execution_us": 1649
+      }
+    }
+  },
+  "c8_client_evidence_valid": false
+}

@@ -1,0 +1,136 @@
+{
+  "performance_qualified": false,
+  "scope": "nonexclusive synthetic dense projection graph trace; no serving or whole-model memory-history claim",
+  "shapes": [
+    {
+      "n": 960,
+      "k": 576,
+      "n4_span_us": 5.008,
+      "n8_span_us": 8.208,
+      "n8_to_n4_latency": 1.6389776357827477,
+      "idealized_rows_per_gpu_time_gain_percent": 22.027290448343084,
+      "span_samples_us": {
+        "4": [
+          5.248,
+          4.992,
+          5.024,
+          4.96,
+          5.024,
+          4.992
+        ],
+        "8": [
+          8.16,
+          8.256,
+          8.16,
+          8.192,
+          8.224,
+          8.288
+        ]
+      }
+    },
+    {
+      "n": 3072,
+      "k": 576,
+      "n4_span_us": 11.808,
+      "n8_span_us": 22.432,
+      "n8_to_n4_latency": 1.899728997289973,
+      "idealized_rows_per_gpu_time_gain_percent": 5.278174037089878,
+      "span_samples_us": {
+        "4": [
+          11.84,
+          11.808,
+          11.712,
+          11.84,
+          11.808,
+          11.808
+        ],
+        "8": [
+          22.464,
+          22.432,
+          22.369,
+          22.368,
+          22.528,
+          22.432
+        ]
+      }
+    },
+    {
+      "n": 576,
+      "k": 576,
+      "n4_span_us": 3.616,
+      "n8_span_us": 5.408,
+      "n8_to_n4_latency": 1.4955752212389382,
+      "idealized_rows_per_gpu_time_gain_percent": 33.72781065088757,
+      "span_samples_us": {
+        "4": [
+          3.616,
+          3.584,
+          3.552,
+          3.68,
+          3.616,
+          3.648
+        ],
+        "8": [
+          5.408,
+          5.44,
+          5.504,
+          5.344,
+          5.344,
+          5.408
+        ]
+      }
+    },
+    {
+      "n": 576,
+      "k": 1536,
+      "n4_span_us": 4.704,
+      "n8_span_us": 7.1525,
+      "n8_to_n4_latency": 1.520514455782313,
+      "idealized_rows_per_gpu_time_gain_percent": 31.534428521495972,
+      "span_samples_us": {
+        "4": [
+          4.704,
+          4.768,
+          4.704,
+          4.672,
+          4.704,
+          4.704
+        ],
+        "8": [
+          7.264,
+          7.2,
+          7.136,
+          7.137,
+          7.168,
+          7.104
+        ]
+      }
+    },
+    {
+      "n": 49152,
+      "k": 576,
+      "n4_span_us": 150.945,
+      "n8_span_us": 271.28200000000004,
+      "n8_to_n4_latency": 1.797224154493359,
+      "idealized_rows_per_gpu_time_gain_percent": 11.282724250042374,
+      "span_samples_us": {
+        "4": [
+          151.393,
+          150.689,
+          150.881,
+          150.945,
+          150.945,
+          150.945
+        ],
+        "8": [
+          271.873,
+          272.002,
+          271.266,
+          271.298,
+          270.914,
+          270.082
+        ]
+      }
+    }
+  ]
+}

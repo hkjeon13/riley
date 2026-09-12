@@ -1,0 +1,82 @@
+{
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/python",
+    "/tmp/riley-opt-260912/capture_common_prefix_logits.py",
+    "_worker",
+    "--root",
+    "/tmp/riley-opt-260912",
+    "--reference-package",
+    "/tmp/riley-opt-260912/common-prefix-reference-source/riley_reference",
+    "--output",
+    "/tmp/riley-opt-260912/common-prefix-fp32",
+    "--dtype",
+    "fp32",
+    "--hf-home",
+    "/data/riley-vllm-interim.CfrT9T/hf",
+    "--path-map",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw=/tmp/riley-opt-260912",
+    "--path-map",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization=/tmp/riley-opt-260912",
+    "--path-map",
+    "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-attention-trace=/tmp/riley-g04-attention-trace-260911"
+  ],
+  "environment": {
+    "HOME": "/home/psyche",
+    "PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+    "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1"
+  },
+  "tool": {
+    "path": "/tmp/riley-opt-260912/capture_common_prefix_logits.py",
+    "sha256": "413fa06c6e86bee1b2b525854b837c25e19f650ffc5dd38f74040d56a95b129a"
+  },
+  "campaign_gate": {
+    "preparation_sha256": "91fc5dc41c0f9cbe51bf877f099209147ebe791f4e12686211d5225bec1cb112",
+    "finalization_sha256": "5678b0eda15fc057cf94d8999620c0ed5320936ba5f134a38c1447702ef7dd3e",
+    "restoration": {
+      "path": "/tmp/riley-opt-260912/blender-round14/verified.json",
+      "sha256": "5a822ce22a4cbfad1feb768f844bc7c730031690e18e915310d37bf37a0f55c9"
+    },
+    "process_exit_receipts": {
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair01/baseline/process-exit.json": "33049477f1da5b1fefd6c6de32140fb5699787b1fd44895c50619f1903dbbcff",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair01/vllm/process-exit.json": "c04989d596f34661152e425f8078df5137e74ad61ce1fc63ed90a3dbec0632a5",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair02/baseline/process-exit.json": "e32c760fe79e37e47521da9183fa9198346075a6b1f0fdb78cb3d50943b67433",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair02/vllm/process-exit.json": "24305aeb9bf8041eb058b821cd461fe039fa14ada559c0a8e0d79bcb00eac8d3",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair03/baseline/process-exit.json": "57cb6bb50876a27b05fe4a43969e7dca53b1d23179784988181e154a6ca66d37",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair03/vllm/process-exit.json": "9ed5158e389208fd7c37c723f005484ecc48032b7ca950fb67af60c8c612639c",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair04/baseline/process-exit.json": "9b74cfa56e85e5468cf9a01111db761d11bb0a80238bc4d1d949f15ac4e2808a",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair04/vllm/process-exit.json": "0fe4d975f27d236990afd124007d4b80df70d67ecbd6695298930529fa69130a",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair05/baseline/process-exit.json": "f3d6ec0d5d8d082e8e95b4ca0d2fa07c32f2d0520ca62a51a705794b6726e407",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-baseline-vllm-pair05/vllm/process-exit.json": "563c31f6b44c9354a90994fbf94db42b97447d322390a92dd7425775aed2820f",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair01/baseline/process-exit.json": "42f0ad6c44587c3f5c8dab5a7ad361a6a662dd31e182ed06bb015b1e17e54d63",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair01/candidate/process-exit.json": "298e04852d97472df56a10d2167663b2ccb546d7a8d63c2a38472a3726dc4a94",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair02/baseline/process-exit.json": "e18d2471a0f8afd73e477a1ed9b30cd1373699c2bddf8b294bc6e8a4c705aa17",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair02/candidate/process-exit.json": "477f6e308023cdf1051a90cde0b15b2387d199533edda13efd70c2c80c7fac68",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair03/baseline/process-exit.json": "1276685b0433af344a5492642f3efe89ca77b211ae440e3738164d7c69d3c4df",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair03/candidate/process-exit.json": "9e08d3624a0941fa44b99bc8019600fcb8a220d2162844435b29c51a73f597a2",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair04/baseline/process-exit.json": "4aebd9a4feef2001988de182f52a744e8df9320b6658f6a944346faf7af8332e",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair04/candidate/process-exit.json": "e47a17953568d1b1dbb919b3c2c5d9c692690c7432cab5baad0999d65c0f98bb",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair05/baseline/process-exit.json": "8b709e19e060b8565c83cc858c6d8542b2387216357c073e84b27e90b0af6309",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-baseline-pair05/candidate/process-exit.json": "7eec5e44680d731efd9a3a59ce258243b3e140ce14822951a63367f0d6c282d7",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair01/candidate/process-exit.json": "d5b766e582dd0dc7cdc64a80499f681b39b871a465b728ab00da842c1c27a421",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair01/vllm/process-exit.json": "752c176a4d2b72f038a9e79bef398984b3a6a7288aa05ccf7d3ef4c85656d72c",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair02/candidate/process-exit.json": "fc63da8a39e4c8b583f4fff0be09c9852fc44858236c81d3adb5a44080ddccfa",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair02/vllm/process-exit.json": "9166e728197d6ea1519614e24ce2269a5491bc2bd966557c4a569a2d3ed9f445",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair03/candidate/process-exit.json": "1b15fda66958fe8dd5c83e47637dcf622e51408909955a839d6691bb5d32021c",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair03/vllm/process-exit.json": "5b87b1f464ea8253b12efb5f67e9f03dd20e64e53a10fbf1f334da8a791d21be",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair04/candidate/process-exit.json": "20c9de650522f43b5c620faa3403c8c4c8f381181656e6ae1d2d5d3423ea92ca",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair04/vllm/process-exit.json": "b94b7cc0b101e00c4349bc6e0b7656c5ef7b8df6c668b9c614a3fd8f2fc67889",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair05/candidate/process-exit.json": "cc866e4da030b8cb2d0b943206dec65a0844086682fa93cff9a54c6665bbbbce",
+      "/tmp/riley-opt-260912/token-serving-round14/c1-b128-candidate-vllm-pair05/vllm/process-exit.json": "fa0cb7e2371e982631cc662bb414b4993cf7bdbe666e9bf534f9037d1c1a4877"
+    },
+    "performance_or_acceptance_inferred": false
+  },
+  "diagnostic_only": true,
+  "performance_claim": false
+}

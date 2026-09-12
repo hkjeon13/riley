@@ -1,0 +1,14 @@
+
+running 3 tests
+test llama::batch_executor::full_decode::tests::full_decode_canonical_40_tokens ... G03_FULL_DECODE checkpoint=RILEY_CANONICAL_CHECKPOINT steps=40 blocks=3 all_logits_exact=true all_cache_exact=true sha256=26fbf686ef99de53aff589e82a5ef654f5b827ca73f6fb324c681fe0330d5e48
+G03_FULL_ENTRY checkpoint=RILEY_CANONICAL_CHECKPOINT steps=40 graph_exact=true eager_fallback_exact=true
+ok
+test llama::batch_executor::full_decode::tests::full_decode_odd_40_tokens ... G03_FULL_DECODE checkpoint=RILEY_ODD_CHECKPOINT steps=40 blocks=3 all_logits_exact=true all_cache_exact=true sha256=50ee3a28bd66749237752bdffc3fe869b19499183a600f1217d9f6c2a3721cc1
+G03_FULL_ENTRY checkpoint=RILEY_ODD_CHECKPOINT steps=40 graph_exact=true eager_fallback_exact=true
+ok
+test llama::batch_executor::full_decode::tests::full_decode_smol_40_tokens ... G03_FULL_DECODE checkpoint=RILEY_REAL_CHECKPOINT steps=40 blocks=3 all_logits_exact=true all_cache_exact=true sha256=a74c1c76f4229db7b05a5ffa9e31eff1dff1ddbcf0ba209562a039aea92acab4
+G03_FULL_ENTRY checkpoint=RILEY_REAL_CHECKPOINT steps=40 graph_exact=true eager_fallback_exact=true
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 289 filtered out; finished in 8.65s
+

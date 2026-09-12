@@ -1,0 +1,378 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling typenum v1.20.1
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.228
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-cuda)
+   Compiling tinyvec_macros v0.1.1
+   Compiling riley-core v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-core)
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.145
+   Compiling cpufeatures v0.3.0
+   Compiling cfg-if v1.0.4
+   Compiling ryu v1.0.23
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling tinyvec v1.12.0
+   Compiling unicode-normalization v0.1.25
+   Compiling hybrid-array v0.4.14
+   Compiling syn v2.0.119
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.0
+   Compiling serde_derive v1.0.228
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-model)
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `rejected` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:22:4
+   |
+22 | fn rejected(reason: &'static str) -> LlamaBatchExecutorError {
+   |    ^^^^^^^^
+
+warning: function `read` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:28:4
+   |
+28 | fn read(
+   |    ^^^^
+
+warning: methods `audit_c07_norm_qkv`, `audit_c07_qkv_rope`, `audit_c07_qkv_kv`, `audit_c07_attention_chain`, and `audit_qkv_impl` are never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:39:19
+   |
+37 | impl PreparedLlamaBatchExecutor {
+   | ------------------------------- methods in this implementation
+38 |     #[allow(clippy::too_many_lines)]
+39 |     pub(crate) fn audit_c07_norm_qkv(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+45 |     pub(crate) fn audit_c07_qkv_rope(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+52 |     pub(crate) fn audit_c07_qkv_kv(
+   |                   ^^^^^^^^^^^^^^^^
+...
+59 |     pub(crate) fn audit_c07_attention_chain(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+67 |     fn audit_qkv_impl(
+   |        ^^^^^^^^^^^^^^
+
+warning: `riley-runtime` (lib) generated 6 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+warning: `riley-runtime` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.18s
+     Running unittests src/lib.rs (/tmp/riley-g04-followup-target13/debug/deps/riley_runtime-570cdeef4d03c643)
+
+running 1 test
+G04_OWNED p128_o32=true full_logits_exact=true requests=3 cancelled_prefix=23 replays=341 captures=1 zero_allocations=true output_tokens=[28, 339, 5248, 253, 1838, 3241, 282, 253, 2341, 282, 260, 198, 198, 504, 808, 2775, 339, 1277, 288, 1643, 314, 338, 339, 5248, 2045, 288, 1138, 346, 638, 288, 1464, 253]
+test llama::batch_executor::full_decode::owned_tests::owned_graph_smol_p128_o32_reuses_scheduler_block_mappings ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 292 filtered out; finished in 13.50s
+
+     Running tests/architecture_boundary.rs (/tmp/riley-g04-followup-target13/debug/deps/architecture_boundary-1d388a767c249c30)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/cuda_weights_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/cuda_weights_gpu-b3b99ef53ba7f884)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_attention_parent_binding_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_attention_parent_binding_cpu-307a757868abd4c4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_binding_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_binding_cpu-3bce1016d7b23e76)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_capture_capability_dispatch_binding_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c05_capture_capability_dispatch_binding_cpu-3b66e93a995745b9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_capture_capability_evidence_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c05_capture_capability_evidence_cpu-c1dd3d31dc458c81)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_h2d_metadata_owner_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c05_h2d_metadata_owner_cpu-63873bf62428ada3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_owned_exec_resolver_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c05_owned_exec_resolver_cpu-6344bc60cda987cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_owned_h2d_exec_resolver_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c05_owned_h2d_exec_resolver_cpu-c22bff87157adbf3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_identity_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c06_identity_cpu-7d5910f0755209a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_registry_dispatch_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c06_registry_dispatch_cpu-06f7da35c5d41435)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_registry_observation_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c06_registry_observation_cpu-0055227881965e3e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_signature_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_c06_signature_cpu-2f48358d133c7c41)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_capture_inventory_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_capture_inventory_cpu-6671fd346ef19d8d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_device_slab_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_device_slab_cpu-a55f7a2fb93e19f6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_field_sources_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_field_sources_cpu-eec1b6af46163666)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_h2d_completion_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_h2d_completion_cpu-6e94e17f9ffede5b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_h2d_submission_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_h2d_submission_cpu-058d1221992c4986)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_host_slab_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_host_slab_cpu-97f35040eff29bb0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_pinned_host_slab_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_pinned_host_slab_cpu-1be6a6b7cbe81ce6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_projection_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_projection_cpu-552652f5da7ef577)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_slab_writer_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_slab_writer_cpu-65f80beed044bccf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_sources_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_exact_sources_cpu-b63e5c8c6ac4d216)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_layout_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_layout_cpu-a6bfc1e08286f32c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_layout_signature_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_layout_signature_cpu-563188f5dbfc68c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_packer_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_packer_cpu-51538753a5b49c22)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_padding_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_padding_cpu-8422d2e4d978a305)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_preflight_binding_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_preflight_binding_cpu-a3d8d7116d1cd37a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_preflight_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_decode_preflight_cpu-c12f682ae2788597)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_dispatch_cpu-7da4685c82bac72e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_dispatch_gpu-c6244737328b163c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_metrics_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_dispatch_metrics_cpu-30929a504ebbaae5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_registry_cpu-8a5482acf27641d2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_dispatch_cpu.rs (/tmp/riley-g04-followup-target13/debug/deps/graph_registry_dispatch_cpu-54ef0f9ea5ac70fc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/llama_batch_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/llama_batch_gpu-374f97a5714b5bb7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/llama_decode_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/llama_decode_gpu-7570a88fc9047e3c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/llama_forward_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/llama_forward_gpu-1ce9b1270b4cb7bb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/llama_generation_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/llama_generation_gpu-240196266fb0270e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/qwen_architecture_boundary.rs (/tmp/riley-g04-followup-target13/debug/deps/qwen_architecture_boundary-86a2641deb58000a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/qwen_compat_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/qwen_compat_gpu-3eba6c6563b0b43d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/smollm_cache_empty_gpu.rs (/tmp/riley-g04-followup-target13/debug/deps/smollm_cache_empty_gpu-abbbdbe34fa38803)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+

@@ -1,0 +1,63 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "a89e7850c13eda8b916a60d08bf87eaa5c14f17939b841d13a3f9665e21c9292",
+      "current_sha256": "47c23d1ad0ecd4af5be47a60b49d3a9611fba311288c88a1accc1af33e1fffae"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "97b0a2c5f0fb6ca40b4003c2f8dd4c200be3785052578d64d3d2fb5d2f537a65",
+      "current_sha256": "c3644d03c6f1bc4cb0ffbe2da1a39b243424de703a6aedd6b2c1cb03cc2aa16e"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "4b1d44a8461a1014964286be006fffb037c0f32048825e8258a323738788720e",
+      "current_sha256": "15d6e554da67aed587e6a19838771e478c1ce856148657b06a1a9d7f5d9a1028"
+    },
+    {
+      "path": "kernels/src/ffi_internal.hpp",
+      "previous_sha256": "06743f4b6d8ca2eb3c5651ba2edf73d28af05b00593a0874ac99afe80cbf921d",
+      "current_sha256": "958f0c39084edd48f3dabd7355fbbd337b15278d774ec859af39692bc254c5fb"
+    },
+    {
+      "path": "kernels/src/primitives.cu",
+      "previous_sha256": "c11b503958dba891c2e3b6a2587697b40445c3fd1247f0abacb3cca439c5b9b0",
+      "current_sha256": "63e99a3bff1709016e11c893d39a4630fd655633e8b009dbc6eaa13c87a9d22a"
+    },
+    {
+      "path": "kernels/src/gemm.cu",
+      "previous_sha256": "a650409770ff9afa6cc83d54df847f3e561262e8bd1c9cf8968d1100c3349315",
+      "current_sha256": "66914a5409caa60c7a3be667c211acfb49d062c676cdff352363fe15340d3cc4"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "413064ad13e81725d8eecc8c5ef24b1a476b2a0f5db8e26fe326d5fa53772b2f",
+      "current_sha256": "e6c97d3aa6a624734a0ab4142330753d92becba62415b9f0d209a1191c2e94f1"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "ab068efa8e4224a5f79cf0d226e86ef98805642326d8d6883b780451b84bf6bf",
+      "current_sha256": "c2926e8220ea3f6073e0b053252cb26f2989995a96a3e2ddde66cc3d54c975b0"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/batch_executor.rs",
+      "previous_sha256": "0fa9c62130cca6a7ff9649a7b1521b276c38eb2d92c263a132a5661426a83d97",
+      "current_sha256": "c43b1038be67466eab77da0350c7b68cb9c923a7f414f6725f138163e2723e65"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "71154ed0d4def5701e8e20c266414bcf24b979fb55e3ece2386e4719eb96e18e",
+      "current_sha256": "3da8b106a6540944fd6024617ae4774b4b0c6e95e457755bace238c6fe4752de"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_mlp_audit.rs",
+      "previous_sha256": null,
+      "current_sha256": "0341e7ba9499ccf962d63edccaf3667ce91cf2a1cd5b80cf15ab660123d95694"
+    }
+  ],
+  "status": "blocked_pending_explicit_payload_approval",
+  "remote_write_performed": false,
+  "approval_review_reason": "이전 9개 파일을 넘어선 신규 MLP 소스 11개 전송과 원격 반영에 명시적인 승인이 필요하다는 자동 승인 검토 거절."
+}

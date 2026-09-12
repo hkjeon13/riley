@@ -1,0 +1,34 @@
+{
+  "schema_version": "riley.multisequence-precise-local-validation.v1",
+  "completed": true,
+  "cpu_tests": {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "benchmarks/prototypes/multisequence_precise_v1",
+      "-p",
+      "test_probe.py",
+      "-v"
+    ],
+    "passed": 11,
+    "failed": 0,
+    "python": "3.10.11 (v3.10.11:7d4cc5aa85, Apr  4 2023, 19:05:19) [Clang 13.0.0 (clang-1300.0.29.30)]"
+  },
+  "source_files": {
+    "probe.py": "b1ac4ebb73e83482d15422b349e90fb578ab87f3858f288eafc6c9b6ff571792",
+    "native.cu": "f59b1948dc32fd4f3096bc666113a13b07c934c55f1a534474c16a612c1c1ed1",
+    "candidate_preview.cu": "694e8fc2e032a2f0728be4fe24a5c19857d5ef403b3d39871965b571436fc449",
+    "fixture_support_preview.hpp": "c71d102b6c3bbc3520f0261ebcfcf5c47023ecbe65379b402bfe4c8c23c3a20e",
+    "test_probe.py": "a431bc33a31c1c1fe6d7c095951bd46b51985fcbc443f26f2b2cfe3efbba85a1",
+    "README.md": "a46b911076d7d4649117d7eb9b27cae7cb2a4d18f664971811f7fb37e0390bb0",
+    "lineage/accepted_batch7_graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f"
+  },
+  "native_compile_executed": false,
+  "gpu_executed": false,
+  "performance_claim": false,
+  "production_sources_modified": false,
+  "scope": "CPU source transformation, full synthetic geometry and raw-accounting tests, mocked owned-process cleanup; no native numerical execution"
+}

@@ -1,0 +1,80 @@
+--- a/crates/riley-server/src/service.rs
++++ b/crates/riley-server/src/service.rs
+@@ -2184,6 +2184,7 @@
+     delivery: DeliveryOptions,
+ ) {
+     let mut text = String::new();
++    let mut received_events = 0_u64;
+     let mut tokens = CompletionTokenCollector::new(
+         delivery.include_token_ids,
+         delivery.maximum_output_tokens,
+@@ -2275,7 +2276,10 @@
+                 if visible_delta {
+                     tracker.token_delta();
+                 }
+-                if tracker.delta_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
++                // Raw events can carry no visible text. Keep disconnect
++                // polling bounded by received events, not the text metric.
++                received_events = received_events.saturating_add(1);
++                if received_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
+                     && client_disconnected(stream)
+                 {
+                     tracker.finish(
+@@ -2591,6 +2595,7 @@
+         Complete(Vec<String>),
+         /// Explicit source events; never infer model identities from text.
+         Events(Vec<GenerationEvent>),
++        CountedEvents(Vec<GenerationEvent>, Arc<AtomicUsize>),
+         EmptyTokenThenWaitForCancellation,
+         WaitForCancellation,
+         CancelOnShutdown,
+@@ -2779,6 +2784,14 @@
+             active.fetch_add(1, Ordering::AcqRel);
+             thread::spawn(move || {
+                 match script {
++                    Script::CountedEvents(events, delivered) => {
++                        for event in events {
++                            if sender.send(event).is_err() {
++                                break;
++                            }
++                            delivered.fetch_add(1, Ordering::AcqRel);
++                        }
++                    }
+                     Script::Events(events) => {
+                         for event in events {
+                             if sender.send(event).is_err() {
+@@ -3086,6 +3099,34 @@
+         server.shutdown().expect("bounded token shutdown");
+     }
+ 
++    #[test]
++    fn nonstream_disconnect_probe_cadence_counts_invisible_tokens() {
++        let delivered = Arc::new(AtomicUsize::new(0));
++        let events = (0..32)
++            .map(|index| GenerationEvent::CommittedToken {
++                text: String::new(),
++                token_id: 17,
++                generated_index: index,
++                prompt_token_ids: (index == 0).then(|| vec![1, 2]),
++            })
++            .collect();
++        let backend = TestBackend::new([Script::CountedEvents(events, Arc::clone(&delivered))]);
++        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
++        let server = start_server(test_config(), backend_trait).expect("probe cadence server");
++        let mut client = TcpStream::connect(server.local_address()).expect("connect");
++        let request = post_body(br#"{"model":"fixture-model","prompt":"hello","max_tokens":32,"return_token_ids":true}"#);
++        client.write_all(&request).expect("request");
++        client
++            .shutdown(Shutdown::Write)
++            .expect("make peer EOF observable by peek");
++        wait_until(|| backend.cancellations() == 1 && backend.active.load(Ordering::Acquire) == 0);
++        // A probe after the first invisible token permits at most 3 sends
++        // through the bounded channel. Correct polling consumes 16 events;
++        // at most two more can already be buffered before cancellation.
++        assert!((16..=18).contains(&delivered.load(Ordering::Acquire)));
++        server.shutdown().expect("probe cadence shutdown");
++    }
++
+     /// CPU-only transport diagnostic. Keep this opt-in: wall-clock results are
+     /// evidence for a matched before/after run, never a timing assertion in CI.
+     #[test]

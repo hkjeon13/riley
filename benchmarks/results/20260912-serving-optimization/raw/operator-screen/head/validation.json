@@ -1,0 +1,81 @@
+{
+  "family": "head",
+  "projection": "off",
+  "layers": "0,15,29",
+  "requests": [
+    {
+      "index": 0,
+      "warmup": true,
+      "validated_by_shared_http_runner": true
+    },
+    {
+      "index": 1,
+      "warmup": true,
+      "validated_by_shared_http_runner": true
+    },
+    {
+      "index": 2,
+      "warmup": true,
+      "validated_by_shared_http_runner": true
+    },
+    {
+      "index": 3,
+      "warmup": false,
+      "validated_by_shared_http_runner": true
+    },
+    {
+      "index": 4,
+      "warmup": false,
+      "validated_by_shared_http_runner": true
+    },
+    {
+      "index": 5,
+      "warmup": false,
+      "validated_by_shared_http_runner": true
+    }
+  ],
+  "warmup_requests": 3,
+  "retained_requests": 3,
+  "retained_replay_id_min": 97,
+  "binary_sha256": "8840bed5743be3e69308182941f5ffff7f59acb9c6acdea29c6892d03f13b59b",
+  "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+  "base_source_commit": "53677519082135c42a5d044044c5b31cad4a146a",
+  "argv": [
+    "/tmp/riley-opt-260912/operator-profile-target/release/riley",
+    "serve",
+    "--model",
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+    "--model-id",
+    "g04-smol",
+    "--bind",
+    "127.0.0.1:19341",
+    "--max-active-sequences",
+    "1",
+    "--batch-token-budget",
+    "128",
+    "--prefill-chunk-tokens",
+    "128",
+    "--max-sequence-tokens",
+    "160",
+    "--max-output-tokens",
+    "32",
+    "--kv-blocks",
+    "10",
+    "--residual-rmsnorm",
+    "separate",
+    "--execution-completion",
+    "iteration-batch",
+    "--metadata-transport",
+    "packed-async",
+    "--execution-graph-policy",
+    "require",
+    "--sampling-backend",
+    "gpu-greedy",
+    "--graph-numerics",
+    "vllm-smol-p128-v1"
+  ],
+  "raw_log_sha256": "24fb33fdeec03d7c22388b8a173fe2c9ccfde7f846dee797bb3616b9512b5a28",
+  "retained_log_sha256": "701e4a1aa4d3f33db3b0366527ba1e3c051ffba72ba717d575a451d5da8a748b",
+  "performance_claim_eligible": false,
+  "server_exit_code": 0
+}

@@ -1,0 +1,212 @@
+{
+  "schema_version": "riley.prefill-operator-summary.v1",
+  "performance_claim_eligible": false,
+  "log_sha256": "389f08f2fe4aba9a15467a0d9af4d276c1d04cfe982446a08a0f3643b19fd482",
+  "captures": [
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 1,
+      "phase": "prefill",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+      "tool_sha256": "462e9696921f95f58b2edbd773f23b88e905f11289cadc3be7dcaeff1136ea10",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78"
+    },
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 2,
+      "phase": "decode",
+      "operator": "off",
+      "layer_mask": 0,
+      "interval_count": 0,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+      "tool_sha256": "462e9696921f95f58b2edbd773f23b88e905f11289cadc3be7dcaeff1136ea10",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78"
+    }
+  ],
+  "external_event_inventories": [
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    },
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    }
+  ],
+  "whole_graph": {
+    "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+    "performance_claim_eligible": false,
+    "classification": {
+      "source": "position",
+      "prefill_tokens": 128
+    },
+    "graph_inventories": [
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 1,
+        "inventory_status": 0,
+        "nodes": 403,
+        "kernel_nodes": 397,
+        "memcpy_nodes": 6,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 1152
+      },
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 2,
+        "inventory_status": 0,
+        "nodes": 282,
+        "kernel_nodes": 277,
+        "memcpy_nodes": 5,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 0
+      }
+    ],
+    "groups": {
+      "prefill": {
+        "replays": 3,
+        "successful_replays": 3,
+        "capture_ids": [
+          1
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 3158,
+            "sum": 9551
+          },
+          "host_staging_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 2118,
+            "sum": 6250
+          },
+          "host_launch_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13186,
+            "sum": 39374
+          },
+          "host_wait_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13670445,
+            "sum": 41018665
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13680735.588,
+            "sum": 41048991.202999994
+          }
+        }
+      },
+      "decode": {
+        "replays": 93,
+        "successful_replays": 93,
+        "capture_ids": [
+          2
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 352,
+            "sum": 33921
+          },
+          "host_staging_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1540,
+            "sum": 144101
+          },
+          "host_launch_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 4631,
+            "sum": 441587
+          },
+          "host_wait_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1104907,
+            "sum": 102201410
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1107136.011,
+            "sum": 102415200.34999996
+          }
+        }
+      }
+    },
+    "failed_replays": 0,
+    "read_records": 96,
+    "projection_groups": [],
+    "unmeasured": [
+      "per_kernel_cuda_time",
+      "Rust_metadata_pack",
+      "request_latency_without_instrumentation"
+    ]
+  },
+  "operator_groups": [],
+  "replay_totals": [],
+  "interpretation": [
+    "CUDA spans include the perturbation from external event nodes; these are not serving performance results.",
+    "Sum is formed per replay before taking its median; failed or missing intervals produce a null replay sum.",
+    "Host wait includes GPU execution and is not added to GPU operator or whole-graph spans.",
+    "Only one prefill family is selected per process. Unselected families, norms, embedding, rotary/KV, SwiGLU, head, argmax and transfers are unmeasured.",
+    "Position 127 is the batched prefill replay; captured handle IDs bind all prefill operator results.",
+    "Different captures/logs require matching binary, workload, GPU and environment receipts for comparison."
+  ],
+  "whole_graph_perturbation": {
+    "baseline_log_sha256": "e6329c7531652c09f92c081cde317cbbe660978777919af36fb1f1e3002787bc",
+    "groups": [
+      {
+        "phase": "prefill",
+        "off_median_ns": 13676287.651,
+        "selected_median_ns": 13680735.588,
+        "ratio": 1.0003252298513678
+      },
+      {
+        "phase": "decode",
+        "off_median_ns": 1106976.032,
+        "selected_median_ns": 1107136.011,
+        "ratio": 1.0001445189375158
+      }
+    ],
+    "matched_runtime_provenance_verified": false,
+    "performance_claim_eligible": false
+  }
+}

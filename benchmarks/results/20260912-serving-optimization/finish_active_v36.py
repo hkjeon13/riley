@@ -1,0 +1,4 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912');p=r/'prefill-shapes-source-v11/crates/riley-server/src/main.rs';s=p.read_text().replace('matches!(options.max_active_sequences,1|2|4|8)','matches!(options.max_active_sequences,1|2|4|8|16|32)').replace('variable-smol-v3 requires capacity1/2/4/8,','variable-smol-v3 requires capacity1/2/4/8/16/32,');p.write_text(s)
+s=(r/'build_test_v36.py').read_text();s=s[:s.index("run('cpu-v36-runtime")]+"run('cpu-v36-cli.log',['cargo','test','-p','riley-server','--features','cuda,server','--bin','riley'])\nrun('cpu-v36-release.log',['cargo','build','--release','-p','riley-server','--features','cuda,server','--bin','riley'])\n";(r/'build_cli_v36.py').write_text(s)
+p=r/'run_v3_http_v36_c32.py';p.write_text(p.read_text().replace('shared-final','shared-r2-final'))

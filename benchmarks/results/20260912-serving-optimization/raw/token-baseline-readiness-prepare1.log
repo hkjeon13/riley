@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_serving_token_optimization.py", line 804, in <module>
+    main()
+    ~~~~^^
+  File "/tmp/riley-opt-260912/run_serving_token_optimization.py", line 793, in main
+    plan, prepared, session, reference, request, binding = prepare(args.plan)
+                                                           ~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/run_serving_token_optimization.py", line 402, in prepare
+    plan_path = Path(plan_path).resolve(strict=True)
+  File "/data/riley-vllm-interim.CfrT9T/python/cpython-3.13.15-linux-x86_64-gnu/lib/python3.13/pathlib/_local.py", line 670, in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen posixpath>", line 451, in realpath
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/riley-opt-260912/token-baseline-readiness-plan.json'

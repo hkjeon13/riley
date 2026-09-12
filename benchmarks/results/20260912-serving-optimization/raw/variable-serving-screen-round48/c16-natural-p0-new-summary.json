@@ -1,0 +1,78 @@
+{
+  "schema_version": "riley.mixed-p128-phase.v1",
+  "phase": "retained",
+  "requested": 384,
+  "attempted": 384,
+  "unresolved_attempts": 0,
+  "not_started": 0,
+  "succeeded": 384,
+  "failed": 0,
+  "phase_started_ns": 891476921836231,
+  "phase_finished_ns": 891482636732441,
+  "completed": true,
+  "expected_corpus_counts": {
+    "natural-16": 128,
+    "natural-128": 128,
+    "natural-398": 128
+  },
+  "actual_corpus_counts": {
+    "natural-16": 128,
+    "natural-128": 128,
+    "natural-398": 128
+  },
+  "observed_max_request_in_flight": 16,
+  "reference_matches": 384,
+  "strict_reference_pass": true,
+  "worker_errors": [],
+  "performance_qualified": false,
+  "correctness_qualified": false,
+  "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry",
+  "common_wall_started_ns": 891476921911826,
+  "common_wall_finished_ns": 891482636305930,
+  "common_wall_ns": 5714394104,
+  "successful_output_tokens": 28672,
+  "observed_output_tokens_including_partial_failures": 28672,
+  "successful_output_tokens_per_wall_second": 5017.5048269649415,
+  "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+  "phase_wall_ns": 5714896210,
+  "successful_output_tokens_per_phase_wall_second": 5017.063993188426,
+  "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+  "descriptive_statistics_only": true,
+  "timing_scope": "client delivery; incomplete phases are not comparable",
+  "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+  "e2e_ms": {
+    "samples": 384,
+    "median": 195.4808295,
+    "p95": 401.938834,
+    "p99": 431.362838,
+    "max": 481.753839
+  },
+  "token_ttft_ms": {
+    "samples": 384,
+    "median": 9.3537315,
+    "p95": 12.365547,
+    "p99": 72.909098,
+    "max": 95.227885
+  },
+  "token_tpot_ms": {
+    "samples": 384,
+    "median": 3.041008701787277,
+    "p95": 3.1392877419354837,
+    "p99": 3.3309890967741933,
+    "max": 3.568672806451613
+  },
+  "first_text_ms": {
+    "samples": 384,
+    "median": 9.3537315,
+    "p95": 12.365547,
+    "p99": 72.909098,
+    "max": 95.227885
+  },
+  "token_itl_ms": {
+    "samples": 28288,
+    "median": 2.154429,
+    "p95": 9.892349,
+    "p99": 10.385254,
+    "max": 11.559788
+  }
+}

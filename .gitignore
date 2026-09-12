@@ -8,3 +8,15 @@
 __pycache__/
 *.py[cod]
 /benchmarks/competitive/.campaign-work/
+
+# Keep large local benchmark artifacts out of Git (benchmarks/README.md).
+/benchmarks/results/**/*.bf16
+/benchmarks/results/**/*.bin
+/benchmarks/results/**/*.sqlite
+/benchmarks/results/**/*.nsys-rep
+/benchmarks/results/**/*.tar.gz
+/benchmarks/results/**/*.xz
+/benchmarks/results/**/*.o
+/benchmarks/results/**/*.parquet
+/benchmarks/results/**/raw/head-options-v1/probe
+/benchmarks/results/**/raw/multisequence-projection-candidates-v1/build/multisequence_projection_candidates

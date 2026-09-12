@@ -13,6 +13,10 @@ use std::error;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
@@ -31,11 +35,12 @@ use crate::http::{
     write_sse_head,
 };
 use crate::openai::{
-    ApiError, CompletionRequest, CompletionResponse, ErrorObject, ErrorResponse, ModelListResponse,
-    ModelObject, SseStreamEncoder, normalize_completion_request,
+    ApiError, CompletionRequest, CompletionResponse, CompletionTokenCollector, ErrorObject,
+    ErrorResponse, ModelListResponse, ModelObject, SseStreamEncoder, normalize_completion_request,
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
+#[cfg(not(unix))]
 const CONNECTION_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const DISCONNECT_PEEK_TIMEOUT: Duration = Duration::from_millis(1);
@@ -554,12 +559,95 @@ pub struct ServerHandle {
     stopping: Arc<AtomicBool>,
     backend: Arc<dyn CompletionBackend>,
     shutdown_grace: Duration,
+    listener_wakeup: ListenerWakeup,
     listener_thread: Option<JoinHandle<()>>,
     worker_threads: Vec<JoinHandle<()>>,
     connections: Arc<ConnectionRegistry>,
     observations: Arc<ObservationBuffer>,
     metrics: Arc<ServiceMetrics>,
     joined: bool,
+}
+
+/// The wake socket is separate from the TCP backlog. Closing its sole writer
+/// is persistent readiness, including when shutdown precedes the first wait.
+struct ListenerWakeup {
+    #[cfg(unix)]
+    socket: Option<UnixStream>,
+}
+
+struct ListenerReadiness {
+    #[cfg(unix)]
+    socket: UnixStream,
+}
+
+impl ListenerWakeup {
+    fn wake(&mut self) {
+        #[cfg(unix)]
+        drop(self.socket.take());
+    }
+}
+
+impl ListenerReadiness {
+    fn pair() -> io::Result<(Self, ListenerWakeup)> {
+        #[cfg(unix)]
+        {
+            let (receiver, sender) = UnixStream::pair()?;
+            Ok((
+                Self { socket: receiver },
+                ListenerWakeup {
+                    socket: Some(sender),
+                },
+            ))
+        }
+        #[cfg(not(unix))]
+        {
+            Ok((Self {}, ListenerWakeup {}))
+        }
+    }
+
+    /// Returns false on shutdown or a terminal descriptor condition. Both
+    /// descriptors remain owned for the entire wait; no raw fd escapes it.
+    #[cfg(unix)]
+    #[allow(unsafe_code)] // poll only borrows the two live, locally owned descriptors.
+    fn wait(&self, listener: &TcpListener) -> io::Result<bool> {
+        let mut descriptors = [
+            libc::pollfd {
+                fd: listener.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: self.socket.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
+        loop {
+            // SAFETY: the initialized array is writable for exactly two pollfd
+            // entries, and both borrowed sockets outlive this blocking call.
+            let ready = unsafe { libc::poll(descriptors.as_mut_ptr(), 2, -1) };
+            if ready < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if ready != 0 {
+                // Give shutdown priority even if the TCP backlog is readable.
+                return Ok(
+                    descriptors[1].revents == 0 && descriptors[0].revents & libc::POLLIN != 0
+                );
+            }
+        }
+    }
+
+    // Preserve the existing bounded fallback on platforms without Unix poll.
+    #[cfg(not(unix))]
+    fn wait(&self, _listener: &TcpListener) -> io::Result<bool> {
+        thread::sleep(CONNECTION_POLL_INTERVAL);
+        Ok(true)
+    }
 }
 
 /// C02-only shutdown evidence returned after every service and backend thread
@@ -773,6 +861,7 @@ impl ServerHandle {
         // unbounded join.
         self.joined = true;
         self.stopping.store(true, Ordering::Release);
+        self.listener_wakeup.wake();
         self.backend.begin_shutdown();
         let deadline = Instant::now()
             .checked_add(self.shutdown_grace)
@@ -925,6 +1014,7 @@ pub fn start_server_with_c02_metrics(
     let listener = TcpListener::bind(config.bind_address)?;
     listener.set_nonblocking(true)?;
     let local_address = listener.local_addr()?;
+    let (listener_readiness, listener_wakeup) = ListenerReadiness::pair()?;
     let stopping = Arc::new(AtomicBool::new(false));
     let connection_capacity = config
         .worker_threads
@@ -983,6 +1073,7 @@ pub fn start_server_with_c02_metrics(
         .spawn(move || {
             listener_loop(
                 &listener,
+                &listener_readiness,
                 &connection_sender,
                 &listener_stopping,
                 &listener_connections,
@@ -996,6 +1087,7 @@ pub fn start_server_with_c02_metrics(
         stopping,
         backend,
         shutdown_grace: config.shutdown_grace,
+        listener_wakeup,
         listener_thread: Some(listener_thread),
         worker_threads,
         connections,
@@ -1019,6 +1111,7 @@ pub fn start_server(
 
 fn listener_loop(
     listener: &TcpListener,
+    readiness: &ListenerReadiness,
     sender: &SyncSender<ConnectionJob>,
     stopping: &AtomicBool,
     connections: &ConnectionRegistry,
@@ -1028,14 +1121,19 @@ fn listener_loop(
     while !stopping.load(Ordering::Acquire) {
         match listener.accept() {
             Ok((mut stream, _peer)) => {
+                // Accepted sockets inherit nonblocking mode on some platforms.
+                // Workers must wait for request bytes under the read deadline,
+                // even when readiness wakes us before the client writes them.
+                if stream.set_nonblocking(false).is_err()
+                    || stream.set_write_timeout(Some(write_timeout)).is_err()
+                {
+                    let _ = stream.shutdown(Shutdown::Both);
+                    continue;
+                }
                 if stopping.load(Ordering::Acquire) {
                     let _ = write_api_error(&mut stream, &ApiError::ShuttingDown);
                     let _ = stream.shutdown(Shutdown::Both);
                     break;
-                }
-                if stream.set_write_timeout(Some(write_timeout)).is_err() {
-                    let _ = stream.shutdown(Shutdown::Both);
-                    continue;
                 }
                 let _ = stream.set_nodelay(true);
                 let Ok(registry_slot) = connections.register(&stream) else {
@@ -1064,7 +1162,9 @@ fn listener_loop(
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(CONNECTION_POLL_INTERVAL);
+                if !matches!(readiness.wait(listener), Ok(true)) {
+                    break;
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => break,
@@ -1084,10 +1184,13 @@ fn worker_loop(
     config: ServerConfig,
 ) {
     loop {
+        // The listener owns the only sender. Once explicitly woken for
+        // shutdown, its exit disconnects the queue and wakes every idle worker.
+        // The mutex guard is released before a received job is processed.
         let job_result = receiver
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .recv_timeout(CONNECTION_POLL_INTERVAL);
+            .recv();
         match job_result {
             Ok(mut job) => {
                 if stopping.load(Ordering::Acquire) {
@@ -1108,8 +1211,7 @@ fn worker_loop(
                 }
                 connections.unregister(job.registry_slot);
             }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(_) => break,
         }
     }
 }
@@ -1672,6 +1774,7 @@ fn write_model(stream: &mut TcpStream, backend: &dyn CompletionBackend, requeste
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_completion(
     stream: &mut TcpStream,
     backend: &dyn CompletionBackend,
@@ -1695,6 +1798,11 @@ fn handle_completion(
         );
         return;
     };
+    let include_usage = request
+        .stream_options
+        .as_ref()
+        .and_then(|options| options.include_usage)
+        .unwrap_or(false);
     let request = match normalize_completion_request(request, config.request_limits) {
         Ok(request) => request,
         Err(error) => {
@@ -1735,6 +1843,12 @@ fn handle_completion(
         return;
     }
     let streaming = request.stream;
+    let delivery = DeliveryOptions {
+        include_token_ids: request.include_token_ids,
+        include_usage,
+        maximum_output_tokens: request.max_new_tokens,
+        maximum_prompt_tokens: model.context_window_tokens,
+    };
     let admission_started = Instant::now();
     let submitted = match backend.submit(request) {
         Ok(submitted) => submitted,
@@ -1757,7 +1871,9 @@ fn handle_completion(
         .checked_add(config.request_timeout)
         .unwrap_or_else(Instant::now);
     if streaming {
-        stream_completion(stream, submitted, backend, stopping, deadline, tracker);
+        stream_completion(
+            stream, submitted, backend, stopping, deadline, tracker, delivery,
+        );
     } else {
         collect_completion(
             stream,
@@ -1767,8 +1883,17 @@ fn handle_completion(
             deadline,
             config.maximum_non_streaming_bytes,
             tracker,
+            delivery,
         );
     }
+}
+
+#[derive(Clone, Copy)]
+struct DeliveryOptions {
+    include_token_ids: bool,
+    include_usage: bool,
+    maximum_output_tokens: usize,
+    maximum_prompt_tokens: usize,
 }
 
 struct RequestTracker {
@@ -1831,7 +1956,7 @@ impl RequestTracker {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn stream_completion(
     stream: &mut TcpStream,
     mut submitted: SubmittedRequest,
@@ -1839,6 +1964,7 @@ fn stream_completion(
     stopping: &AtomicBool,
     deadline: Instant,
     mut tracker: RequestTracker,
+    delivery: DeliveryOptions,
 ) {
     if write_sse_head(stream).is_err() {
         tracker.finish(
@@ -1850,7 +1976,13 @@ fn stream_completion(
         );
         return;
     }
-    let mut encoder = SseStreamEncoder::new(submitted.metadata().clone());
+    let mut encoder = SseStreamEncoder::new_with_options(
+        submitted.metadata().clone(),
+        delivery.include_token_ids,
+        delivery.include_usage,
+        delivery.maximum_output_tokens,
+        delivery.maximum_prompt_tokens,
+    );
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -1914,12 +2046,14 @@ fn stream_completion(
                 return;
             }
             Ok(event) => {
-                if matches!(event, GenerationEvent::TokenDelta { .. }) {
-                    tracker.token_delta();
-                }
-                let terminal = !matches!(event, GenerationEvent::TokenDelta { .. });
+                let terminal = matches!(
+                    event,
+                    GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }
+                );
                 let (finish_reason, error_class, completion_tokens) = match &event {
-                    GenerationEvent::TokenDelta { .. } => (None, None, None),
+                    GenerationEvent::TokenDelta { .. } | GenerationEvent::CommittedToken { .. } => {
+                        (None, None, None)
+                    }
                     GenerationEvent::Finished { reason, usage } => (
                         Some(*reason),
                         match reason {
@@ -1942,6 +2076,13 @@ fn stream_completion(
                     );
                     return;
                 };
+                // Preserve the historical visible-text observation. Raw-token
+                // arrival timing belongs to the opt-in HTTP client's clock.
+                if matches!(&event, GenerationEvent::TokenDelta { .. })
+                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty())
+                {
+                    tracker.token_delta();
+                }
                 if stream.write_all(frame.as_bytes()).is_err() {
                     tracker.finish(
                         backend,
@@ -2031,7 +2172,7 @@ fn write_stream_error(
     stream.flush()
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn collect_completion(
     stream: &mut TcpStream,
     mut submitted: SubmittedRequest,
@@ -2040,8 +2181,15 @@ fn collect_completion(
     deadline: Instant,
     maximum_bytes: usize,
     mut tracker: RequestTracker,
+    delivery: DeliveryOptions,
 ) {
     let mut text = String::new();
+    let mut received_events = 0_u64;
+    let mut tokens = CompletionTokenCollector::new(
+        delivery.include_token_ids,
+        delivery.maximum_output_tokens,
+        delivery.maximum_prompt_tokens,
+    );
     loop {
         let Some(wait) = event_wait(stopping, deadline) else {
             if client_disconnected(stream) {
@@ -2103,9 +2251,35 @@ fn collect_completion(
                 );
                 return;
             }
-            Ok(GenerationEvent::TokenDelta { text: delta }) => {
-                tracker.token_delta();
-                if tracker.delta_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
+            Ok(
+                event @ (GenerationEvent::TokenDelta { .. }
+                | GenerationEvent::CommittedToken { .. }),
+            ) => {
+                if tokens.observe(&event).is_err() {
+                    let _ = write_api_error(stream, &ApiError::Internal);
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::Failed,
+                        None,
+                        Some(ServiceErrorClass::Internal),
+                        None,
+                    );
+                    return;
+                }
+                let visible_delta = matches!(&event, GenerationEvent::TokenDelta { .. })
+                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty());
+                let (GenerationEvent::TokenDelta { text: delta }
+                | GenerationEvent::CommittedToken { text: delta, .. }) = event
+                else {
+                    unreachable!()
+                };
+                if visible_delta {
+                    tracker.token_delta();
+                }
+                // Raw events can carry no visible text. Keep disconnect
+                // polling bounded by received events, not the text metric.
+                received_events = received_events.saturating_add(1);
+                if received_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
                     && client_disconnected(stream)
                 {
                     tracker.finish(
@@ -2153,9 +2327,44 @@ fn collect_completion(
                 text.push_str(&delta);
             }
             Ok(GenerationEvent::Finished { reason, usage }) => {
+                if matches!(reason, FinishReason::Stop | FinishReason::Length)
+                    && tokens.validate_usage(usage).is_err()
+                {
+                    let _ = write_api_error(stream, &ApiError::Internal);
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::Failed,
+                        Some(reason),
+                        Some(ServiceErrorClass::Internal),
+                        None,
+                    );
+                    return;
+                }
                 let response =
                     match CompletionResponse::new(submitted.metadata(), text, reason, usage) {
-                        Ok(response) => write_json(stream, 200, &response),
+                        Ok(mut response) => {
+                            tokens.attach(&mut response);
+                            if delivery.include_token_ids {
+                                match serde_json::to_vec(&response) {
+                                    Ok(body) if body.len() <= maximum_bytes => {
+                                        write_response(stream, 200, JSON_CONTENT_TYPE, &body)
+                                    }
+                                    _ => {
+                                        let _ = write_api_error(stream, &ApiError::Internal);
+                                        tracker.finish(
+                                            backend,
+                                            RequestObservationStatus::Failed,
+                                            Some(reason),
+                                            Some(ServiceErrorClass::Internal),
+                                            None,
+                                        );
+                                        return;
+                                    }
+                                }
+                            } else {
+                                write_json(stream, 200, &response)
+                            }
+                        }
                         Err(_) => write_api_error(
                             stream,
                             &match reason {
@@ -2384,6 +2593,10 @@ mod tests {
 
     enum Script {
         Complete(Vec<String>),
+        /// Explicit source events; never infer model identities from text.
+        Events(Vec<GenerationEvent>),
+        CountedEvents(Vec<GenerationEvent>, Arc<AtomicUsize>),
+        EmptyTokenThenWaitForCancellation,
         WaitForCancellation,
         CancelOnShutdown,
         FloodUntilDisconnected,
@@ -2571,6 +2784,32 @@ mod tests {
             active.fetch_add(1, Ordering::AcqRel);
             thread::spawn(move || {
                 match script {
+                    Script::CountedEvents(events, delivered) => {
+                        for event in events {
+                            if sender.send(event).is_err() {
+                                break;
+                            }
+                            delivered.fetch_add(1, Ordering::AcqRel);
+                        }
+                    }
+                    Script::Events(events) => {
+                        for event in events {
+                            if sender.send(event).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Script::EmptyTokenThenWaitForCancellation => {
+                        let _ = sender.send(GenerationEvent::CommittedToken {
+                            text: String::new(),
+                            token_id: 17,
+                            generated_index: 0,
+                            prompt_token_ids: Some(vec![1, 2]),
+                        });
+                        while !worker_cancellation.is_cancelled() {
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                    }
                     Script::Complete(deltas) => {
                         let completion_tokens =
                             u64::try_from(deltas.len()).expect("test token count fits u64");
@@ -2686,6 +2925,264 @@ mod tests {
         let mut response = Vec::new();
         stream.read_to_end(&mut response).expect("read response");
         response
+    }
+
+    fn committed_fixture() -> Vec<GenerationEvent> {
+        vec![
+            GenerationEvent::CommittedToken {
+                text: String::new(),
+                token_id: 17,
+                generated_index: 0,
+                prompt_token_ids: Some(vec![1, 2]),
+            },
+            GenerationEvent::CommittedToken {
+                text: "가".to_owned(),
+                token_id: 18,
+                generated_index: 1,
+                prompt_token_ids: None,
+            },
+            GenerationEvent::Finished {
+                reason: FinishReason::Length,
+                usage: TokenUsage::new(2, 2).expect("fixture usage"),
+            },
+        ]
+    }
+
+    fn token_request(streaming: bool) -> Vec<u8> {
+        let mut body = json!({"model":"fixture-model", "prompt":"hello", "max_tokens":2,
+            "stream":streaming, "return_token_ids":true});
+        if streaming {
+            body["stream_options"] = json!({"include_usage":true});
+        }
+        post_body(&serde_json::to_vec(&body).expect("request JSON"))
+    }
+
+    #[test]
+    fn committed_tokens_and_usage_survive_concurrent_http_delivery() {
+        for streaming in [false, true] {
+            let backend: Arc<dyn CompletionBackend> =
+                TestBackend::new((0..4).map(|_| Script::Events(committed_fixture())));
+            let server = start_server(test_config(), backend).expect("token server");
+            let address = server.local_address();
+            let clients: Vec<_> = (0..4)
+                .map(|_| thread::spawn(move || send_request(address, &token_request(streaming))))
+                .collect();
+            let mut ids = std::collections::BTreeSet::new();
+            for client in clients {
+                let response = client.join().expect("client");
+                assert_eq!(response_status(&response), 200);
+                if streaming {
+                    let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
+                    let frames: Vec<Value> = body
+                        .lines()
+                        .filter_map(|line| line.strip_prefix("data: "))
+                        .filter(|data| *data != "[DONE]")
+                        .map(|data| serde_json::from_str(data).expect("SSE JSON"))
+                        .collect();
+                    assert_eq!(frames.len(), 4);
+                    assert_eq!(frames[0]["choices"][0]["text"], "");
+                    assert_eq!(frames[0]["choices"][0]["token_ids"], json!([17]));
+                    assert_eq!(frames[0]["choices"][0]["prompt_token_ids"], json!([1, 2]));
+                    assert_eq!(frames[1]["choices"][0]["text"], "가");
+                    assert_eq!(frames[1]["choices"][0]["token_ids"], json!([18]));
+                    assert!(frames[1]["choices"][0].get("prompt_token_ids").is_none());
+                    assert_eq!(frames[2]["choices"][0]["finish_reason"], "length");
+                    assert_eq!(frames[3]["choices"], json!([]));
+                    assert_eq!(frames[3]["usage"]["completion_tokens"], 2);
+                    assert_eq!(body.matches("data: [DONE]").count(), 1);
+                    assert!(ids.insert(frames[0]["id"].as_str().expect("id").to_owned()));
+                    assert!(frames.iter().all(|frame| frame["id"] == frames[0]["id"]));
+                } else {
+                    let body: Value =
+                        serde_json::from_slice(response_body(&response)).expect("completion JSON");
+                    assert_eq!(body["choices"][0]["text"], "가");
+                    assert_eq!(body["choices"][0]["token_ids"], json!([17, 18]));
+                    assert_eq!(body["choices"][0]["prompt_token_ids"], json!([1, 2]));
+                    assert_eq!(body["usage"]["completion_tokens"], 2);
+                    assert!(ids.insert(body["id"].as_str().expect("id").to_owned()));
+                }
+            }
+            server.shutdown().expect("token server shutdown");
+        }
+    }
+
+    #[test]
+    fn missing_token_metadata_fails_before_first_payload_and_bad_usage_cannot_finish() {
+        let missing = vec![GenerationEvent::CommittedToken {
+            text: "must not publish".to_owned(),
+            token_id: 9999,
+            generated_index: 0,
+            prompt_token_ids: None,
+        }];
+        let mut bad_usage = committed_fixture();
+        *bad_usage.last_mut().expect("terminal") = GenerationEvent::Finished {
+            reason: FinishReason::Length,
+            usage: TokenUsage::new(2, 1).expect("wrong usage"),
+        };
+        for events in [
+            missing,
+            bad_usage,
+            vec![GenerationEvent::TokenDelta {
+                text: "must not publish".to_owned(),
+            }],
+        ] {
+            for streaming in [false, true] {
+                let backend: Arc<dyn CompletionBackend> =
+                    TestBackend::new([Script::Events(events.clone())]);
+                let server = start_server(test_config(), backend).expect("malformed token server");
+                let response = send_request(server.local_address(), &token_request(streaming));
+                let body = std::str::from_utf8(response_body(&response)).expect("error UTF-8");
+                assert!(body.contains("internal_error"));
+                assert!(!body.contains("must not publish"));
+                assert!(!body.contains("9999"));
+                assert!(!body.contains("\"finish_reason\":\"length\""));
+                assert!(!body.contains("\"usage\""));
+                assert_eq!(
+                    response_status(&response),
+                    if streaming { 200 } else { 500 }
+                );
+                server.shutdown().expect("malformed server shutdown");
+            }
+        }
+    }
+
+    #[test]
+    fn cancellation_after_invisible_token_emits_no_success_usage() {
+        let mut events = committed_fixture();
+        events.truncate(1);
+        events.push(GenerationEvent::Finished {
+            reason: FinishReason::Cancelled,
+            usage: TokenUsage::new(2, 1).expect("cancelled usage"),
+        });
+        let backend: Arc<dyn CompletionBackend> = TestBackend::new([Script::Events(events)]);
+        let server = start_server(test_config(), backend).expect("cancelled token server");
+        let response = send_request(server.local_address(), &token_request(true));
+        let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
+        assert!(body.contains("\"token_ids\":[17]"));
+        assert!(body.contains("cancelled"));
+        assert!(!body.contains("\"usage\""));
+        assert_eq!(body.matches("data: [DONE]").count(), 1);
+        server.shutdown().expect("cancelled server shutdown");
+    }
+
+    #[test]
+    fn disconnect_after_invisible_token_cancels_source() {
+        let backend = TestBackend::new([Script::EmptyTokenThenWaitForCancellation]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("disconnect token server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect");
+        client
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("timeout");
+        client.write_all(&token_request(true)).expect("request");
+        let mut received = Vec::new();
+        let mut buffer = [0_u8; 512];
+        while !String::from_utf8_lossy(&received).contains("\"token_ids\":[17]") {
+            let count = client.read(&mut buffer).expect("first token frame");
+            assert!(count > 0);
+            received.extend_from_slice(&buffer[..count]);
+        }
+        drop(client);
+        wait_until(|| backend.cancellation_count.load(Ordering::Acquire) == 1);
+        server.shutdown().expect("disconnect token shutdown");
+    }
+
+    #[test]
+    fn opt_in_nonstream_response_counts_serialized_token_bytes() {
+        let backend: Arc<dyn CompletionBackend> =
+            TestBackend::new([Script::Events(committed_fixture())]);
+        let mut config = test_config();
+        config.maximum_non_streaming_bytes = 32;
+        let server = start_server(config, backend).expect("bounded token server");
+        let response = send_request(server.local_address(), &token_request(false));
+        assert_eq!(response_status(&response), 500);
+        server.shutdown().expect("bounded token shutdown");
+    }
+
+    #[test]
+    fn nonstream_disconnect_probe_cadence_counts_invisible_tokens() {
+        let delivered = Arc::new(AtomicUsize::new(0));
+        let events = (0..32)
+            .map(|index| GenerationEvent::CommittedToken {
+                text: String::new(),
+                token_id: 17,
+                generated_index: index,
+                prompt_token_ids: (index == 0).then(|| vec![1, 2]),
+            })
+            .collect();
+        let backend = TestBackend::new([Script::CountedEvents(events, Arc::clone(&delivered))]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("probe cadence server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect");
+        let request = post_body(br#"{"model":"fixture-model","prompt":"hello","max_tokens":32,"return_token_ids":true}"#);
+        client.write_all(&request).expect("request");
+        client
+            .shutdown(Shutdown::Write)
+            .expect("make peer EOF observable by peek");
+        wait_until(|| backend.cancellations() == 1 && backend.active.load(Ordering::Acquire) == 0);
+        // A probe after the first invisible token permits at most 3 sends
+        // through the bounded channel. Correct polling consumes 16 events;
+        // at most two more can already be buffered before cancellation.
+        assert!((16..=18).contains(&delivered.load(Ordering::Acquire)));
+        server.shutdown().expect("probe cadence shutdown");
+    }
+
+    /// CPU-only transport diagnostic. Keep this opt-in: wall-clock results are
+    /// evidence for a matched before/after run, never a timing assertion in CI.
+    #[test]
+    #[ignore = "prints loopback transport latency; run alone in release mode"]
+    fn loopback_transport_timing() {
+        const WARMUP: usize = 20;
+        const SAMPLES: usize = 200;
+        let backend = TestBackend::new([]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend;
+        let server = start_server(test_config(), backend_trait).expect("start timing server");
+        let streaming_request =
+            post_body(br#"{"model":"fixture-model","prompt":"transport timing","stream":true}"#);
+        for (workload, request) in [
+            (
+                "healthz",
+                &b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n"[..],
+            ),
+            ("completion_sse", streaming_request.as_slice()),
+        ] {
+            for _ in 0..WARMUP {
+                assert_eq!(
+                    response_status(&send_request(server.local_address(), request)),
+                    200
+                );
+            }
+            let mut elapsed_us = Vec::with_capacity(SAMPLES);
+            for _ in 0..SAMPLES {
+                let started = Instant::now();
+                let response = send_request(server.local_address(), request);
+                elapsed_us.push(started.elapsed().as_secs_f64() * 1_000_000.0);
+                assert_eq!(response_status(&response), 200);
+                if workload == "completion_sse" {
+                    assert!(response.ends_with(b"data: [DONE]\n\n"));
+                }
+            }
+            let mean_us = elapsed_us.iter().sum::<f64>()
+                / f64::from(u32::try_from(SAMPLES).expect("sample count fits u32"));
+            elapsed_us.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                json!({
+                    "diagnostic": "loopback_transport_timing_v1",
+                    "workload": workload,
+                    "warmup": WARMUP,
+                    "samples": SAMPLES,
+                    "concurrency": 1,
+                    "connections_per_request": 1,
+                    "mean_us": mean_us,
+                    "p50_us": elapsed_us[SAMPLES / 2 - 1],
+                    "p95_us": elapsed_us[SAMPLES * 95 / 100 - 1],
+                    "p99_us": elapsed_us[SAMPLES * 99 / 100 - 1],
+                    "sorted_elapsed_us": elapsed_us,
+                })
+            );
+        }
+        server.shutdown().expect("shutdown timing server");
     }
 
     fn response_status(response: &[u8]) -> u16 {
@@ -3267,6 +3764,87 @@ mod tests {
         );
         assert_eq!(response_status(&response), 200);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn accepted_connection_waits_for_delayed_request_bytes() {
+        let backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let server = start_server(test_config(), backend).expect("start server");
+        let mut client = TcpStream::connect(server.local_address()).expect("connect client");
+        client
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("set read deadline");
+        wait_until(|| {
+            server
+                .connections
+                .slots
+                .lock()
+                .expect("connection registry")
+                .iter()
+                .any(Option::is_some)
+        });
+        // Deliberately leave an accepted socket idle before sending the head.
+        // Readiness must not turn this into an immediate WouldBlock/HTTP 408.
+        thread::sleep(Duration::from_millis(20));
+        client
+            .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("write delayed request");
+        let mut response = Vec::new();
+        client
+            .read_to_end(&mut response)
+            .expect("read delayed response");
+        assert_eq!(response_status(&response), 200);
+        server.shutdown().expect("shutdown after delayed request");
+    }
+
+    #[test]
+    fn shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections() {
+        for idle_time in [Duration::ZERO, Duration::from_millis(20)] {
+            let backend = TestBackend::new([]);
+            let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+            let mut config = test_config();
+            config.bind_address = SocketAddr::from(([0, 0, 0, 0], 0));
+            config.worker_threads = 8;
+            config.shutdown_grace = Duration::from_millis(200);
+            let mut server = start_server(config, backend_trait).expect("start idle server");
+            thread::sleep(idle_time);
+            server
+                .shutdown_inner()
+                .expect("join idle threads within global grace");
+            assert!(server.listener_thread.is_none());
+            assert!(server.worker_threads.is_empty());
+            assert!(backend.shutdown_called.load(Ordering::Acquire));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn listener_shutdown_wakeup_persists_and_takes_priority_over_backlog() {
+        for pending_connection in [false, true] {
+            let listener = std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                .expect("bind listener");
+            listener.set_nonblocking(true).expect("set listener mode");
+            let pending_client = pending_connection.then(|| {
+                TcpStream::connect(listener.local_addr().expect("listener address"))
+                    .expect("queue TCP connection")
+            });
+            let (readiness, mut wakeup) = super::ListenerReadiness::pair().expect("wake pair");
+            wakeup.wake();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let waiter = thread::spawn(move || {
+                sender
+                    .send(readiness.wait(&listener))
+                    .expect("publish readiness");
+            });
+            assert!(
+                !receiver
+                    .recv_timeout(TEST_TIMEOUT)
+                    .expect("persistent shutdown wake")
+                    .expect("wait for listener readiness")
+            );
+            waiter.join().expect("join readiness waiter");
+            drop(pending_client);
+        }
     }
 
     #[test]

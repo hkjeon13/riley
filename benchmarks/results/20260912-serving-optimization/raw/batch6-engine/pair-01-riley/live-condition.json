@@ -1,0 +1,17 @@
+{
+  "condition_id": "serving-gui-retained-512mib-cool48-v1",
+  "gui_retained": true,
+  "idle_memory_limit_mib": 512,
+  "start_temperature_limit_c": 48,
+  "canonical_idle_memory_limit_mib": 256,
+  "canonical_qualification": false,
+  "scope": "single-concurrency HTTP serving diagnostic",
+  "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+  "gpu": {
+    "at_utc": "2026-09-11T18:13:39.079406+00:00",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "temperature_c": 44,
+    "memory_used_mib": 305,
+    "compute_pids": []
+  }
+}

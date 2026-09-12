@@ -1,0 +1,18 @@
+
+running 3 tests
+test llama::batch_executor::full_decode::tests::full_decode_canonical_64_tokens ... G03_FULL_DECODE checkpoint=RILEY_CANONICAL_CHECKPOINT steps=64 blocks=4 all_logits_exact=true all_cache_exact=true sha256=13cd889cde9d887692f00a37f1e9640e0207ccaba4bb8e227afddd2bc7e75083
+G03_FULL_PREFIX checkpoint=RILEY_CANONICAL_CHECKPOINT prompt_tokens=17 decode_tokens=48 eager_exact=true
+G03_FULL_FAILURE nonfinite_output_rejected=true no_partial_tokens=true
+G03_FULL_ENTRY checkpoint=RILEY_CANONICAL_CHECKPOINT steps=64 graph_exact=true eager_fallback_exact=true
+ok
+test llama::batch_executor::full_decode::tests::full_decode_odd_64_tokens ... G03_FULL_DECODE checkpoint=RILEY_ODD_CHECKPOINT steps=64 blocks=4 all_logits_exact=true all_cache_exact=true sha256=6a61bf0c3ad6195f7c39898f4dad401e1f0b9befde4e2eb5e06ce52784af8aae
+G03_FULL_PREFIX checkpoint=RILEY_ODD_CHECKPOINT prompt_tokens=17 decode_tokens=48 eager_exact=true
+G03_FULL_ENTRY checkpoint=RILEY_ODD_CHECKPOINT steps=64 graph_exact=true eager_fallback_exact=true
+ok
+test llama::batch_executor::full_decode::tests::full_decode_smol_64_tokens ... G03_FULL_DECODE checkpoint=RILEY_REAL_CHECKPOINT steps=64 blocks=4 all_logits_exact=true all_cache_exact=true sha256=ae7f6ff88f440cb94093405f3a4394f62507643fdb6a9cd782fa1ec35bf54377
+G03_FULL_PREFIX checkpoint=RILEY_REAL_CHECKPOINT prompt_tokens=17 decode_tokens=48 eager_exact=true
+G03_FULL_ENTRY checkpoint=RILEY_REAL_CHECKPOINT steps=64 graph_exact=true eager_fallback_exact=true
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 289 filtered out; finished in 11.46s
+

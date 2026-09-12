@@ -60,6 +60,25 @@ const fn is_deterministic_reduction_configuration(
     }
 }
 
+// A permissive prepare policy does not imply the selected algorithm split K.
+#[cfg(any(feature = "cuda", test))]
+const fn selected_graph_topology_supported(split_k: u32, scheme: u32) -> bool {
+    split_k <= 1 && scheme == REDUCTION_SCHEME_NONE
+}
+
+#[cfg(test)]
+mod selected_graph_topology_tests {
+    #[test]
+    fn selected_graph_rejects_split_or_reduction_topologies() {
+        use super::selected_graph_topology_supported as supported;
+        assert!(supported(0, 0));
+        assert!(supported(1, 0));
+        for (split, scheme) in [(2, 0), (2, 4), (2, 1), (1, 4), (1, 1), (0, u32::MAX)] {
+            assert!(!supported(split, scheme));
+        }
+    }
+}
+
 /// Reviewed deterministic cuBLASLt reduction policy selected during prepare.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[non_exhaustive]
@@ -527,6 +546,17 @@ impl CudaContext {
 }
 
 impl CudaPreparedGemm {
+    #[cfg(feature = "cuda")]
+    pub(crate) fn graph_resource_handle(&self) -> CudaResult<&ffi::GemmPlanHandle> {
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                "reserve GEMM resource",
+                "plan is poisoned",
+            ));
+        }
+        Ok(&self.native)
+    }
+
     /// Exact logical and storage contract used to prepare this plan.
     #[must_use]
     pub const fn config(&self) -> CudaGemmConfig {
@@ -637,6 +667,109 @@ impl CudaPreparedGemm {
             }
         }
         Ok(())
+    }
+
+    /// Additive selected-plan contract; preserves policy and algorithm verbatim.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn validate_selected_no_split_graph_capture(
+        &self,
+        stream: &CudaStream,
+        input: &CudaDeviceBuffer,
+        weight: &CudaDeviceBuffer,
+        output: &CudaDeviceBuffer,
+        workspace: Option<&CudaDeviceBuffer>,
+        operation: &'static str,
+    ) -> CudaResult<()> {
+        if self.poisoned {
+            return Err(CudaError::invalid_state(operation, "GEMM plan is poisoned"));
+        }
+        if !selected_graph_topology_supported(
+            self.algorithm.split_k,
+            self.algorithm.reduction_scheme,
+        ) {
+            return Err(CudaError::new(
+                CudaErrorKind::NotSupported,
+                CudaErrorDomain::Rust,
+                CudaErrorStage::Validation,
+                0,
+                operation,
+                "selected graph requires effective no-split topology",
+            ));
+        }
+        if self.algorithm.backend_id != NATIVE_CUBLASLT_BACKEND_ID
+            || !self.algorithm.deterministic
+            || self.algorithm.dimensions() != (self.config.m, self.config.n, self.config.k)
+        {
+            return Err(CudaError::invalid_state(
+                operation,
+                "selected GEMM metadata mismatch",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, operation)?;
+        let buffers = [
+            (Some(input), self.config.input_bytes, false),
+            (Some(weight), self.config.weight_bytes, false),
+            (Some(output), self.config.output_bytes, false),
+            (workspace, self.algorithm.workspace_bytes, true),
+        ];
+        for (index, (buffer, required, parent)) in buffers.iter().enumerate() {
+            let Some(buffer) = buffer else {
+                if *required != 0 {
+                    return Err(CudaError::out_of_range(
+                        operation,
+                        "required workspace missing",
+                    ));
+                }
+                continue;
+            };
+            ensure_same_context(&self.context, buffer.context_owner(), operation)?;
+            buffer.ensure_idle_for_operation(operation)?;
+            if if *parent {
+                buffer.byte_len() < *required
+            } else {
+                buffer.byte_len() != *required
+            } {
+                return Err(CudaError::out_of_range(
+                    operation,
+                    "selected GEMM buffer size mismatch",
+                ));
+            }
+            for (other, _, _) in &buffers[..index] {
+                if other.is_some_and(|other| {
+                    buffer
+                        .native_handle()
+                        .same_allocation(other.native_handle())
+                }) {
+                    return Err(CudaError::invalid_argument(
+                        operation,
+                        "selected GEMM allocations must be distinct",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn begin_selected_no_split_graph_capture_native(
+        &self,
+        stream: &mut CudaStream,
+        input: &CudaDeviceBuffer,
+        weight: &CudaDeviceBuffer,
+        output: &CudaDeviceBuffer,
+        workspace: Option<&CudaDeviceBuffer>,
+        mode: u32,
+    ) -> CudaResult<ffi::GraphCaptureHandle> {
+        stream
+            .native
+            .begin_graph_selected_no_split_gemm_bf16_capture(
+                &self.native,
+                input.native_handle(),
+                weight.native_handle(),
+                output.native_handle(),
+                workspace.map(CudaDeviceBuffer::native_handle),
+                mode,
+            )
     }
 
     /// Enters native C05-21 capture only after

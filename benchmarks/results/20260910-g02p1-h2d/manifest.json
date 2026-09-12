@@ -1,0 +1,47 @@
+{
+  "scope": "G02P1 actual exact whole-slab H2D cold audit; native aggregate pending",
+  "gpu": {
+    "passed": 5,
+    "exit_code": 0,
+    "actual_models": 2,
+    "borrowed_fixture": 1,
+    "owned_h2d_regressions": 2,
+    "replays_per_model": 64
+  },
+  "initial_run": {
+    "failed": 2,
+    "exit_code": 101,
+    "reason": "native H2D freshness stage omitted; fixed with existing guarded stage API"
+  },
+  "cpu": {
+    "cuda_lib": 84,
+    "graph_contracts": 32,
+    "runtime": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "new_module_diagnostics": [],
+    "inherited_warnings_remain": true
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "source-hashes.json": "4ca818a6a376827757d5bd88069082e7edad97f96b12f112701011f2fc651969",
+    "initial-freshness-rejection.log": "b904e0ca1229dd8b0b4471633ac86701f42e2a30959d903bc0b3f5fd4d3305b0",
+    "runtime-cpu.log": "042ca56c4408ff3a3469ea8f3ad58450a03f3977365d6a4777d8e6773520299c",
+    "runtime-identities.json": "8137e4e9e4c344a0dfcd1245192620a8c2109b17f608f1664f1ccc01e84d655c",
+    "model-preservation.json": "009cd67b64f74b09b513af8ad064671c672b3dbb5451123da09a319bff222971",
+    "clippy.log": "c3737ad8043dc11f9cf853f660134df642b9bc00931b90a52bba234714450b09",
+    "cuda-cpu.log": "cc5e5cc6a0e56d2a0809c5731b4b6adcf8d227ee56e3a6f4254b023e30138ae4",
+    "clippy.jsonl": "0f8a9ea40a94510b4c7a358c7ced970a6bf07527a3f820df64381a0f69fef6ff",
+    "remote-source-verification.json": "5f9d9ae9b1aa10a95cd65ce6411459be4bf861e2483007f16c007d2fbde0e0fd",
+    "README.md": "af250f5e2fac5280a0a8f4c8ce8e3e0b550165fd921eb849b6301d744eb12495",
+    "gpu-h2d.log": "52fbb94ca13bb5b7a7e29a183a5680a477a226e5edd640cd59e1ea9d9912df9d",
+    "source-overlay.tar.gz": "77df27fb17385a71bcc9c25812cd75cb1279a4a76564477e0b30f3c962cbaf37",
+    "gpu-model.log": "c91eff4a5dffa1253bcdc8fe9232d59360df034ccfabedd8a53b8ee0ac446621"
+  }
+}

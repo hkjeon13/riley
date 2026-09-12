@@ -1,0 +1,178 @@
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index 9ed80c6..accf67d 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -10,16 +10,16 @@ pub struct VariableSessionIdentity {
+ }
+ /// Owns the prepared reservation; no mutable native handle escapes while active.
+ /// A result remains outstanding until scheduler commit is explicitly confirmed.
+-pub struct BorrowedVariableSession<'a> {
+-    graph:BorrowedGraphResourceReservation<'a>, identity:VariableSessionIdentity,
++pub struct VariableSession<G: VariableGraph> {
++    graph:G, identity:VariableSessionIdentity,
+     issued:Option<u64>, next_cookie:u64, retained:Option<wire::Expectation>,
+     started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
+ }
+ fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
+-impl<'a> BorrowedVariableSession<'a> {
++impl<G: VariableGraph> VariableSession<G> {
+     /// The caller must have recorded the V3 model and bound the digest to its
+     /// actual prepared model/kernel catalog. This constructor does not create it.
+-    pub fn new(graph:BorrowedGraphResourceReservation<'a>,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
++    pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
+         if catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
+         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
+         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens},
+@@ -59,8 +59,7 @@ impl<'a> BorrowedVariableSession<'a> {
+         if self.poisoned || !self.completed || self.retained.as_ref().map(|e|e.iteration_id)!=Some(iteration) {return Err(bad("commit differs from completed iteration"));}
+         self.identity.last_accepted_replay=self.retained.take().unwrap().replay_id;self.completed=false;Ok(())
+     }
+-    /// Native destruction remains the authority for GPU parent release.
+-    pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
++    pub(crate) fn into_recorded_parts(self)->(G,VariableSessionIdentity) {(self.graph,self.identity)}
+ }
+ 
+ /// Cold scratch for the fixed SmolLM2 V3 implementation. KV and weights remain
+@@ -87,3 +86,59 @@ impl VariableGraphBuffers {
+     }
+     pub fn close(self)->riley_cuda::CudaResult<()> {self.head.close()}
+ }
++
++mod sealed {
++    pub trait Sealed {}
++    impl Sealed for riley_cuda::BorrowedGraphResourceReservation<'_> {}
++    impl Sealed for riley_cuda::OwnedGraphResourceReservation<super::VariableModelParents> {}
++}
++/// Native reservation operations; sealed so a caller cannot fabricate completion.
++pub trait VariableGraph: sealed::Sealed {
++    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
++    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()>;
++}
++impl VariableGraph for BorrowedGraphResourceReservation<'_> {
++    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::replay_transfer(self,input)}
++    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_transfer(self,output)}
++}
++impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelParents> {
++    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::replay_transfer(self,input)}
++    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_transfer(self,output)}
++}
++pub type BorrowedVariableSession<'a> = VariableSession<BorrowedGraphResourceReservation<'a>>;
++pub type OwnedVariableSession = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>>;
++/// No fields are exposed while the native graph owns parent leases.
++pub struct VariableModelParents {
++    executor:super::PreparedLlamaBatchExecutor,
++    stream:riley_cuda::CudaStream,
++    scratch:VariableGraphBuffers,
++}
++impl VariableSession<BorrowedGraphResourceReservation<'_>> {
++    pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
++}
++impl OwnedVariableSession {
++    pub fn close(self)->super::LlamaBatchExecutorResult<()> {
++        let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
++        let parents=self.graph.close().map_err(cuda)?;
++        let scratch=parents.scratch.close().map_err(cuda);
++        let executor=parents.executor.close();
++        let stream=parents.stream.close().map_err(cuda);
++        scratch.and(executor).and(stream)
++    }
++}
++impl super::PreparedLlamaBatchExecutor {
++    /// Moves the loaded model and every graph parent into an owned session.
++    /// The native reservation is destroyed before model/stream/scratch release.
++    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {
++        let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
++        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:VariableGraphBuffers::prepare(context,capacity).map_err(cuda)?};
++        let mut identity=None;
++        let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
++            let session=p.executor.prepare_variable_session(&mut p.stream,&mut p.scratch)?;
++            let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
++        })?;
++        let i=identity.expect("successful recording provides identity");
++        OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)
++            .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})
++    }
++}
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index ba75fee..a0ec1ea 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -2125,9 +2125,9 @@ pub fn execute_llama_iteration_multi_graph(
+ /// Executes V3 single-request work on a prepared retained reservation. Caller
+ /// must confirm the runtime commit after successful scheduler settlement.
+ #[cfg(feature = "cuda")]
+-pub fn execute_llama_iteration_variable_graph(
++pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_session::VariableGraph>(
+     authority:&crate::AuthorizedExecution<'_>,
+-    executor:&mut riley_runtime::llama::variable_session::BorrowedVariableSession<'_>,
++    executor:&mut riley_runtime::llama::variable_session::VariableSession<G>,
+ ) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+     let id=authority.plan().iteration_id();
+     let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,
+diff --git a/crates/riley-scheduler/tests/v3_owned_gpu.rs b/crates/riley-scheduler/tests/v3_owned_gpu.rs
+new file mode 100644
+index 0000000..d9be256
+--- /dev/null
++++ b/crates/riley-scheduler/tests/v3_owned_gpu.rs
+@@ -0,0 +1,61 @@
++#![cfg(feature="cuda")]
++use riley_cuda::CudaRuntime;
++use riley_model::{LoadedModel,LoadLimits};
++use riley_runtime::llama::{PreparedLlamaBatchExecutor,PreparedLlamaBatchExecutorConfig,PreparedLlamaForwardConfig,LlamaBatchMetadataConfig};
++use riley_scheduler::{Scheduler,SchedulerConfig,RequestDescriptor,OverloadPolicy,SampledIterationToken,IterationTiming};
++use std::{fs::File,io::Read,path::PathBuf};
++fn read32(f:&mut File)->std::io::Result<u32>{let mut b=[0;4];f.read_exact(&mut b)?;Ok(u32::from_le_bytes(b))}
++#[test]
++#[ignore="requires actual pinned checkpoint fixture and GPU"]
++fn owned_variable_scheduler_gpu_completion_and_settlement()->Result<(),Box<dyn std::error::Error>>{
++let root=PathBuf::from(std::env::var_os("RILEY_V3_MODEL_FIXTURE").ok_or("fixture directory missing")?);let model=LoadedModel::load(PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?).as_path(),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
++let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let mut requests=vec![];for _ in 0..count{let n=read32(&mut f)?;let mut tokens=vec![];for _ in 0..n{tokens.push(read32(&mut f)?);}requests.push(tokens);}
++let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;let mut replay_count=0;
++
++for prompt in requests {
++ let limit=match prompt.len(){16=>32,128=>64,_=>128};
++let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,64)?,PreparedLlamaForwardConfig::default());
++ let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;
++ assert_eq!(executor.maximum_position_count()?,8192);
++ let mut session=executor.into_owned_variable_session(&context,1024)?;
++ let mut scheduler=Scheduler::new(SchedulerConfig{max_waiting_requests:8,max_waiting_prompt_tokens:4096,max_active_sequences:1,
++ max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,
++ admission_timeout_ns:None,max_promised_kv_blocks:64,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,64,3,64)?)?;
++ scheduler.submit(RequestDescriptor::new(prompt.clone(),limit),0)?;
++ let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;
++ let mut generated=0;let mut iteration=0;
++ while generated<limit {
++  iteration+=1;let plan=scheduler.plan_iteration(iteration*2)?.into_parts().0.unwrap();
++  let authority=scheduler.authorize_execution(&plan)?;
++  let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session).unwrap();
++  assert!(session.issue().is_err(),"cannot issue before settlement");
++  assert!(session.confirm_scheduler_commit(plan.iteration_id().get()+1).is_err());
++  let samples=if downloaded.output_count()==1 {
++    let logits=downloaded.logits_bf16_native();let expected=&reference[generated*98304..(generated+1)*98304]; if logits!=expected {std::fs::write(root.join("loaded-mismatch.bf16"),logits)?; panic!("loaded/fixture mismatch prompt={} generated={} differing_bf16={}",prompt.len(),generated,logits.chunks_exact(2).zip(expected.chunks_exact(2)).filter(|(a,b)|a!=b).count());}
++    let token=logits.chunks_exact(2).enumerate().map(|(i,b)|(i,f32::from_bits((u16::from_le_bytes([b[0],b[1]])as u32)<<16)))
++       .max_by(|a,b|a.1.total_cmp(&b.1).then_with(||b.0.cmp(&a.0))).unwrap().0 as u32;
++    generated+=1;vec![SampledIterationToken::new(token,false)]
++  }else{assert!(downloaded.logits_bf16_native().is_empty());vec![]};
++  drop(authority);
++  let result=downloaded.into_result(&samples,IterationTiming::new(0,0)).unwrap();
++  let updates=scheduler.complete_iteration(&result,iteration*2+1)?;assert!(updates.settlement_failures().is_empty());
++  session.confirm_scheduler_commit(plan.iteration_id().get()).unwrap();replay_count+=1;
++ }
++ if prompt.len()==398 {
++  scheduler.submit(RequestDescriptor::new(prompt.clone(),4),iteration*2+2)?;
++  let plan=scheduler.plan_iteration(iteration*2+3)?.into_parts().0.unwrap();
++  let a=scheduler.authorize_execution(&plan)?;
++  let download=riley_scheduler::execution::execute_llama_iteration_variable_graph(&a,&mut session).unwrap();
++  assert_eq!(download.output_count(),0);drop(a);drop(download);replay_count+=1;
++  assert!(session.issue().is_err());
++  // Close the native graph before allowing KV reservation reclamation.
++  session.close()?;
++  let outcome=scheduler.abort_iteration(plan.iteration_id(),riley_scheduler::ExecutionAbort::DeviceQuiescedMutationUnknown,iteration*2+4)?;
++  assert!(outcome.settlement_failures().is_empty());
++  scheduler.close(iteration*2+5,None)?;
++  eprintln!("V3_OWNED pending_result_close_then_abort=true");
++ } else {scheduler.close(iteration*2+2,None)?;session.close()?;}
++
++ eprintln!("V3_OWNED_SCHEDULER prompt={} output={} iterations={} logits_reference_exact=true",prompt.len(),limit,iteration);
++}
++stream.close()?;assert!(context.allocation_stats()?.is_zero());eprintln!("V3_OWNED_SCHEDULER replays={} allocation_zero=true",replay_count);Ok(())}

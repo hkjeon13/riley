@@ -1,0 +1,19 @@
+SERVER_EXIT 1
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_v4_http_v46_c32.py", line 34, in <module>
+    for c in cases:responses.append(send(c))
+  File "/tmp/riley-opt-260912/run_v4_http_v46_c32.py", line 16, in send
+    with urllib.request.urlopen(req,timeout=120) as resp: raw=resp.read().decode()
+  File "/usr/lib/python3.10/urllib/request.py", line 216, in urlopen
+    return opener.open(url, data, timeout)
+  File "/usr/lib/python3.10/urllib/request.py", line 525, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.10/urllib/request.py", line 634, in http_response
+    response = self.parent.error(
+  File "/usr/lib/python3.10/urllib/request.py", line 563, in error
+    return self._call_chain(*args)
+  File "/usr/lib/python3.10/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.10/urllib/request.py", line 643, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 500: Internal Server Error

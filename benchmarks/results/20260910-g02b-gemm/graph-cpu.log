@@ -1,0 +1,42 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling riley-cuda v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-cuda)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.07s
+     Running tests/graph_cpu.rs (target/debug/deps/graph_cpu-2c3bb674bbef0252)
+
+running 32 tests
+test fill_graph_owners_keep_stream_buffer_and_launch_close_ordering_in_safe_types ... ok
+test deferred_close_abi_is_additive_for_every_safe_wrapper_owner ... ok
+test command_batch_tls_gate_blocks_same_thread_capture ... ok
+test graph_capture_is_a_real_type_level_exclusive_stream_lease ... ok
+test graph_public_values_fix_the_cpu_only_contract ... ok
+test capture_capability_query_is_pure_and_fail_closed ... ok
+test in_flight_smoke_close_uses_the_primary_context_control_lease ... ok
+test capture_begin_decodes_and_recovers_a_non_null_owner_before_returning_error ... ok
+test deferred_close_fifo_is_allocation_free_and_drains_after_physical_capture_end ... ok
+test native_thread_local_gate_rejects_same_thread_cuda_work_before_driver_entry ... ok
+test graph_contract_is_additive_and_declares_the_capture_owner_symbols ... ok
+test fill_capture_is_preallocated_and_replay_is_bound_to_its_exact_stream ... ok
+test feature_off_capture_stub_keeps_the_future_mutable_stream_borrow ... ok
+test native_graph_owners_are_wired_with_c05_5_fill_capture_replay ... ok
+test owned_bf16_row_gather_argmax_graph_uses_fixed_four_buffer_lifecycle_without_c07_mapping ... ok
+test owned_bf16_gated_multiply_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring ... ok
+test owned_bf16_residual_add_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring ... ok
+test owned_bf16_embedding_status_d2h_graph_has_fixed_validation_receipt_lifecycle ... ok
+test owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_contract ... ok
+test owned_bf16_argmax_graph_uses_fixed_two_buffer_lifecycle_without_c07_mapping ... ok
+test owned_fill_graph_owners_move_cold_resources_and_fail_closed_on_uncertain_replay ... ok
+test owned_canonical_gemm_graph_has_by_value_plan_and_four_buffer_lifecycle ... ok
+test owned_grouped_ragged_paged_attention_bf16_graph_has_fixed_nine_buffer_lifecycle ... ok
+test successful_abort_requires_nonpoisoned_release_metadata ... ok
+test primary_context_capture_admission_is_linearized_before_cuda ... ok
+test owned_bf16_row_gather_graph_uses_fixed_three_buffer_lifecycle_without_c07_mapping ... ok
+test owned_bf16_silu_graph_uses_fixed_two_buffer_lifecycle_without_model_wiring ... ok
+test owned_ragged_paged_kv_cache_write_bf16_graph_has_fixed_nine_buffer_lifecycle ... ok
+test owned_h2d_graph_owners_require_fresh_exact_payloads_and_recover_three_resources ... ok
+test owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle ... ok
+test owned_canonical_bf16_rms_norm_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring ... ok
+test owned_canonical_rms_norm_gemm_graph_has_one_intermediate_and_six_buffer_lifecycle ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+

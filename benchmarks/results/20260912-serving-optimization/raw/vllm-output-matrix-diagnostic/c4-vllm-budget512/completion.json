@@ -1,0 +1,450 @@
+{
+  "label": "c4-vllm-budget512",
+  "completed": true,
+  "diagnostic_only": true,
+  "performance_claim": false,
+  "concurrent_correctness_qualified": false,
+  "reference_equality_is_observation_only": true,
+  "requests_expected": 17,
+  "requests_recorded": 17,
+  "phases": [
+    {
+      "phase": "nonstream-first",
+      "requested": 4,
+      "recorded": 4,
+      "response_records": [
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-0.json",
+          "sha256": "dc669d7d881f6a1b034cf622d07b002a7f58bd0cd05c4af2b0cf7e03f6fc261b"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-1.json",
+          "sha256": "ea2ad807a3501d84c96882481609941c5b1e293732362d120eadc66dde919dfd"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-2.json",
+          "sha256": "9a07a502409fc5cccd525a19bd614f8b4307c9970e3fe1e554efa580cb59981c"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-3.json",
+          "sha256": "780b4081663ff411dc9a2234a2eb28bc0b679db29e4425b1b13d017dd67d6cff"
+        }
+      ],
+      "responses_complete": 4,
+      "http_200": 4,
+      "observed_max_request_in_flight": 4,
+      "reference_text_equal": 0,
+      "reference_token_ids_equal": 0,
+      "counts_prompt_usage_and_finish_valid": 4,
+      "parse_errors": 0,
+      "request_errors": 0,
+      "watchdog_timed_out_indices": [],
+      "worker_errors": [],
+      "total_request_deadline_seconds": 120,
+      "performance_claim": false
+    },
+    {
+      "phase": "nonstream-repeat",
+      "requested": 4,
+      "recorded": 4,
+      "response_records": [
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-0.json",
+          "sha256": "e44a670d387a0e4221f160b4e00118e5d783c5b7ccefdf703e359e911627fefd"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-1.json",
+          "sha256": "66a0a5f734a40362955cdeb8c3f8ea2711994e533d11c92345c15bfac88f8d86"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-2.json",
+          "sha256": "c483dfb858df7edea115905019517418feefb234af690c8a31323a5c25d2f08e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-3.json",
+          "sha256": "a82351ba3d6c842ed9ac841d17bedcaafe85b9f96a44de4385f83fe11a08850b"
+        }
+      ],
+      "responses_complete": 4,
+      "http_200": 4,
+      "observed_max_request_in_flight": 4,
+      "reference_text_equal": 0,
+      "reference_token_ids_equal": 0,
+      "counts_prompt_usage_and_finish_valid": 4,
+      "parse_errors": 0,
+      "request_errors": 0,
+      "watchdog_timed_out_indices": [],
+      "worker_errors": [],
+      "total_request_deadline_seconds": 120,
+      "performance_claim": false
+    },
+    {
+      "phase": "offered-c1-same-capacity",
+      "requested": 1,
+      "recorded": 1,
+      "response_records": [
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/offered-c1-same-capacity-0.json",
+          "sha256": "b0dca813452e311c6e515c8c9ecdcad1bb970cb43ec761275fd825f1f3fc3c9f"
+        }
+      ],
+      "responses_complete": 1,
+      "http_200": 1,
+      "observed_max_request_in_flight": 1,
+      "reference_text_equal": 1,
+      "reference_token_ids_equal": 1,
+      "counts_prompt_usage_and_finish_valid": 1,
+      "parse_errors": 0,
+      "request_errors": 0,
+      "watchdog_timed_out_indices": [],
+      "worker_errors": [],
+      "total_request_deadline_seconds": 120,
+      "performance_claim": false
+    },
+    {
+      "phase": "stream-with-usage",
+      "requested": 4,
+      "recorded": 4,
+      "response_records": [
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-0.json",
+          "sha256": "8155d27f1a3c2d9632bb59adbe8cfe75949620b6927c0d4b88a5ccfa7ff1c1f6"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-1.json",
+          "sha256": "eaf89ca1ac95bb3fd1adf575fa4b00b05ce0198a8cb2665200f0bb62ca445c5e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-2.json",
+          "sha256": "f287d84e47eda61cf18b7c0e66ebbb38f825a688a1027185d3dff7548eb54630"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-3.json",
+          "sha256": "9acd5aa29d74c3ed4fb5ef6d1139149c2b3318324872ef48e9b05f880003d5c8"
+        }
+      ],
+      "responses_complete": 4,
+      "http_200": 4,
+      "observed_max_request_in_flight": 4,
+      "reference_text_equal": 0,
+      "reference_token_ids_equal": 0,
+      "counts_prompt_usage_and_finish_valid": 4,
+      "parse_errors": 0,
+      "request_errors": 0,
+      "watchdog_timed_out_indices": [],
+      "worker_errors": [],
+      "total_request_deadline_seconds": 120,
+      "performance_claim": false
+    },
+    {
+      "phase": "nonstream-logprobs-diagnostic",
+      "requested": 4,
+      "recorded": 4,
+      "response_records": [
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.json",
+          "sha256": "a807e31bb3f477f8a6fef166ae08dc8ad358b59aa621cca9683ffdec5abe6114"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.json",
+          "sha256": "0b10fdc52dfb7d7bbba38670c71b8eedf24a3feccfa9c860de3f823e4453d29d"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.json",
+          "sha256": "fd76f5819a78435f02adc424f6c7517f0cd3ebd11d5a8cd1d2059e5ae6a3cd6c"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.json",
+          "sha256": "5015c6eae445669897555e31fe113709fab4014e780f66d91650a0ea33aa620b"
+        }
+      ],
+      "responses_complete": 4,
+      "http_200": 4,
+      "observed_max_request_in_flight": 4,
+      "reference_text_equal": 0,
+      "reference_token_ids_equal": 0,
+      "counts_prompt_usage_and_finish_valid": 4,
+      "parse_errors": 0,
+      "request_errors": 0,
+      "watchdog_timed_out_indices": [],
+      "worker_errors": [],
+      "total_request_deadline_seconds": 120,
+      "performance_claim": false
+    }
+  ],
+  "errors": [],
+  "blender_after": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "/home/psyche/lotte-tower/output/lotte_world_tower.blend",
+        "--window-geometry",
+        "0",
+        "0",
+        "1620",
+        "810",
+        "--python",
+        "/home/psyche/lotte-tower/output/scripts/start_blender_mcp.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "/home/psyche/lotte-tower-comparison/claude_fable51_20260908_1410/output/lotte_world_tower.blend",
+        "--window-geometry",
+        "2000",
+        "1100",
+        "1620",
+        "810",
+        "--python",
+        "/home/psyche/lotte-tower-comparison/claude_fable51_20260908_1410/output/scripts/start_blender_mcp_gui.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "--window-geometry",
+        "2100",
+        "1274",
+        "1620",
+        "810",
+        "/home/psyche/lotte-tower-comparison/codex_gpt5_20260908_132327/output/lotte_world_tower.blend",
+        "--python",
+        "/home/psyche/lotte-tower-comparison/codex_gpt5_20260908_132327/output/scripts/start_isolated_blender_mcp.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "gpu_after": {
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "driver_version": "580.173.02",
+    "temperature_c": 42,
+    "memory_used_mib": 695,
+    "compute_pids": [
+      "4177823",
+      "4177821",
+      "4177822"
+    ],
+    "diagnostic_only": true,
+    "blender_retained": true
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/launch.json",
+      "sha256": "529bf8b44594125cd7d6f5c0a39d158c51bee9f47abda69a3bd43f4f54fe5089"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-0.json",
+      "sha256": "dc669d7d881f6a1b034cf622d07b002a7f58bd0cd05c4af2b0cf7e03f6fc261b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-0.response",
+      "sha256": "8d3b1a4a2f15f3b4d5a62b3383f7c41cc3a16d6a33df720732e0dd9c1f9ced52"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-1.json",
+      "sha256": "ea2ad807a3501d84c96882481609941c5b1e293732362d120eadc66dde919dfd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-1.response",
+      "sha256": "cd4fd99df2366f6819a5b2e2465548c4da83e37fc28a804752e6f15343fe3a0c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-2.json",
+      "sha256": "9a07a502409fc5cccd525a19bd614f8b4307c9970e3fe1e554efa580cb59981c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-2.response",
+      "sha256": "f418b32c3938d97bce882960324539cc7a1a8780503d48fb99828148469d5959"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-3.json",
+      "sha256": "780b4081663ff411dc9a2234a2eb28bc0b679db29e4425b1b13d017dd67d6cff"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-3.response",
+      "sha256": "c58dcd5a186eff23fb1d19fc02a64279edd9119c24f4b3d16dfa8a1ed3ea5c56"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-accounting.json",
+      "sha256": "c4930c54388aaa12b5f3515c75627d6f87400b03bee7d68f4e2b07c3f59407ee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.json",
+      "sha256": "a807e31bb3f477f8a6fef166ae08dc8ad358b59aa621cca9683ffdec5abe6114"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.response",
+      "sha256": "0917e2f93448702a713ada83ba21f8334c16feea5f0a43247f0c554573b50643"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.json",
+      "sha256": "0b10fdc52dfb7d7bbba38670c71b8eedf24a3feccfa9c860de3f823e4453d29d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.response",
+      "sha256": "8c06cb54a750c823f1e560635cf345a536a949f17826259604e710900dec9174"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.json",
+      "sha256": "fd76f5819a78435f02adc424f6c7517f0cd3ebd11d5a8cd1d2059e5ae6a3cd6c"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.response",
+      "sha256": "589a3622fc3e62649b989e3068c541d631577d0fba04cb5a58fc36f3da9b96a8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.json",
+      "sha256": "5015c6eae445669897555e31fe113709fab4014e780f66d91650a0ea33aa620b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.response",
+      "sha256": "2520c8cfe0793e25bcaa9f8430df9b1555017eaf0b962a982b31d108976867af"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-accounting.json",
+      "sha256": "2b25bccf91ddcd8ec13f2f24d3a0248dde6c6e0f15a053689ff1ba3fc6bc33d7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-0.json",
+      "sha256": "e44a670d387a0e4221f160b4e00118e5d783c5b7ccefdf703e359e911627fefd"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-0.response",
+      "sha256": "cf019c2eafd6a7d624498637a1cec95c97f9e64cba029b048fca96c162053b56"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-1.json",
+      "sha256": "66a0a5f734a40362955cdeb8c3f8ea2711994e533d11c92345c15bfac88f8d86"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-1.response",
+      "sha256": "7566aefa490086ceecafe5d2c4a3ca4abe6a55dfe1f15f696a8fb375575793ce"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-2.json",
+      "sha256": "c483dfb858df7edea115905019517418feefb234af690c8a31323a5c25d2f08e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-2.response",
+      "sha256": "f101349222e62326188d6272995af9809bf7731b769965cf43d492a908abf27e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-3.json",
+      "sha256": "a82351ba3d6c842ed9ac841d17bedcaafe85b9f96a44de4385f83fe11a08850b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-3.response",
+      "sha256": "f40d3a838769d2bc1153bac8bb058bc8169d4900ffb9a6bf1a0a459de1f4a036"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-accounting.json",
+      "sha256": "cde5617ffe950cf042ffc7c0d5897199f631c1c60c5c722f3e6bae3507246a1d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/offered-c1-same-capacity-0.json",
+      "sha256": "b0dca813452e311c6e515c8c9ecdcad1bb970cb43ec761275fd825f1f3fc3c9f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/offered-c1-same-capacity-0.response",
+      "sha256": "52a7a7d7dc8641d3df112838e9368a52137e3a25d1281176f93887832ff2e9ee"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/offered-c1-same-capacity-accounting.json",
+      "sha256": "198770d7c53aad2414979b6ea7346c0daae04df3253ba0cec215624a93211a8a"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/owned-driver-mappings-after.json",
+      "sha256": "fb07a4b63aa8bfa1b634ed621f1b21b0b879fbd6880a92ae5e84012f0cae5401"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/owned-driver-mappings-before.json",
+      "sha256": "fb07a4b63aa8bfa1b634ed621f1b21b0b879fbd6880a92ae5e84012f0cae5401"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/preparation.json",
+      "sha256": "bd076b2edb478113568ef83c0c4042061e54c55c65fce5242e48ea1c109796c5"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/process-exit.json",
+      "sha256": "3383a71507bc6c0d73698717ef2906be1c5692d7903e0522cc06b981cac032fc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/server.log",
+      "sha256": "63784b6ad7acec06a83f6c8888453be4c7ed1c701775c78d7d90e85fc0b28289"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-0.json",
+      "sha256": "8155d27f1a3c2d9632bb59adbe8cfe75949620b6927c0d4b88a5ccfa7ff1c1f6"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-0.response",
+      "sha256": "ac42ec3c96d52dfd47949fe7fe134d179e389f712bfdfeaa0fd60a1bd7db559f"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-1.json",
+      "sha256": "eaf89ca1ac95bb3fd1adf575fa4b00b05ce0198a8cb2665200f0bb62ca445c5e"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-1.response",
+      "sha256": "de8af178b06a6e36b6988a11ef87b6e44827ba491d6ce0ca5ea9ccea7d125a09"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-2.json",
+      "sha256": "f287d84e47eda61cf18b7c0e66ebbb38f825a688a1027185d3dff7548eb54630"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-2.response",
+      "sha256": "abe485d3ac99fe41cf9aa60c2ae2b2c4694c82b4bf8490f5ef3b2ede4bbed6b4"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-3.json",
+      "sha256": "9acd5aa29d74c3ed4fb5ef6d1139149c2b3318324872ef48e9b05f880003d5c8"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-3.response",
+      "sha256": "2d6fe018143e2c3378a36e0b413654cf49698e3bdb1e25d53d94da39e9b73569"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-accounting.json",
+      "sha256": "7e7aa1bf0dd6566d19eabc9a66f5ca5444ddd77dfc3d6a84004406808feac661"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/vllm-startup.json",
+      "sha256": "973e1d6f9b03d1dba2087087a159423f4760ac7a002107a2db34da0cf7744c82"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/vllm-startup.log",
+      "sha256": "7086d4825a82ebfec86213224c42323a677e3d47d41c14951f1f3b242b1b5222"
+    }
+  ]
+}

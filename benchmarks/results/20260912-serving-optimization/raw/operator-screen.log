@@ -1,0 +1,33 @@
+{"verified_successor_pids": [3781905, 3781907, 3781909]}
+{"stopped": [3781905, 3781907, 3781909], "recovery_seconds": 1800}
+{"starting": "off-before", "diagnostic": true}
+{"completed": "off-before"}
+{"starting": "qkv", "diagnostic": true}
+{"completed": "qkv"}
+{"starting": "rope_kv", "diagnostic": true}
+{"completed": "rope_kv"}
+{"starting": "attention", "diagnostic": true}
+{"completed": "attention"}
+{"starting": "o", "diagnostic": true}
+{"completed": "o"}
+{"starting": "post_norm", "diagnostic": true}
+{"completed": "post_norm"}
+{"starting": "gate_up", "diagnostic": true}
+{"completed": "gate_up"}
+{"starting": "swiglu", "diagnostic": true}
+{"completed": "swiglu"}
+{"starting": "down", "diagnostic": true}
+{"completed": "down"}
+{"starting": "next_norm", "diagnostic": true}
+{"completed": "next_norm"}
+{"starting": "head", "diagnostic": true}
+{"completed": "head"}
+{"starting": "prefill-q", "diagnostic": true}
+{"completed": "prefill-q"}
+{"starting": "prefill-gate", "diagnostic": true}
+{"completed": "prefill-gate"}
+{"starting": "prefill-down", "diagnostic": true}
+{"completed": "prefill-down"}
+{"starting": "off-after", "diagnostic": true}
+{"completed": "off-after"}
+{"alive_and_listening": true, "commands_and_gui_environment_match": true, "processes": [{"original_pid": 3781905, "port": 9876, "tag": "027d10920dbe4d2c8e602dbd1738b4ea", "launch_intent": true, "new_pid": 3826422, "start": "80561262"}, {"original_pid": 3781907, "port": 9911, "tag": "4f9720f1522c41e4a88fc4b7da3ae9b1", "launch_intent": true, "new_pid": 3826423, "start": "80561265"}, {"original_pid": 3781909, "port": 9887, "tag": "f36bd8e56b724ba4bed286577f960b5c", "launch_intent": true, "new_pid": 3826436, "start": "80561269"}], "time": 1789148460.7531366}

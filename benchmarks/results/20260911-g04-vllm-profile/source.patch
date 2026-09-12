@@ -1,0 +1,2166 @@
+diff --git a/benchmarks/profiling/VLLM_SMOL_P128_PROFILE.md b/benchmarks/profiling/VLLM_SMOL_P128_PROFILE.md
+new file mode 100644
+index 0000000..7fe60cd
+--- /dev/null
++++ b/benchmarks/profiling/VLLM_SMOL_P128_PROFILE.md
+@@ -0,0 +1,26 @@
++# SmolLM2 P128 profile matched to vLLM
++
++`vllm-smol-p128-v1` is an explicit numerical contract for SmolLM2-135M BF16 on SM89, CUDA runtime 13.0 and cuBLASLt 13.1.1. It requires one 128-token prompt and at most 32 output tokens. The recorded complete-model qualification uses `Hello` repeated 128 times against vLLM 0.27.1 with compiled model segments, FlashAttention2 and cache disabled. Other models, lengths and numerical environments are not qualified by this receipt.
++
++The default graph and HF eager contracts are unchanged. This profile uses reverse-tile tensor-core attention, FP32 fused residual lifetime, the compiled RMSNorm reduction/FMA order, and BF16 split-K partial sums matching packed prefill GEMMs. It reuses the scheduler's physical KV mapping and the existing retained parent allocations. Request admission rejects unsupported lengths; eager fallback is forbidden.
++
++Server selection:
++
++```
++--execution-graph-policy require --graph-numerics vllm-smol-p128-v1
++```
++
++Use the qualified single-row executor configuration: one active sequence, batch token budget and prefill chunk size 1, separate residual-norm selection, iteration completion, packed metadata and at least ten KV blocks. CPU and GPU greedy sampling are both qualified for the recorded request. Graph-specific numerical operators replace the configured eager arithmetic only under this explicit profile.
++
++Engine-only runner identity:
++
++```
++--runtime-flag-name graph_numerics --runtime-flag-value vllm-smol-p128-v1
++--semantic-class VLLM_REFERENCE --correctness-gate-id g04-vllm-smol-p128-v1
++```
++
++The runner still requires all source, environment, workload and correctness-report bindings. `--prepare-only true` loads the model, prepares the graph and trial, and closes resources without executing a performance trial. Its receipt is `riley.native-profile-preparation.v1`. Actual measured runs use the separate closed `riley.vllm-profile-run.v1` schema and `check_vllm_profile_run.py --binding FILE`. A binding contains the preparation receipt's `source`, `environment`, `workload`, plus exact `input_token_ids` and `generated_token_ids` from the reference.
++
++This is not an E0 bitwise optimization of the previous Riley eager path. The existing E0 schema and pair checker remain unchanged and must reject these results. GPU graph event timing remains unmeasured; host execution time is not GPU time. SmolLM2 remains a diagnostic cell and does not establish broader M4/M5 performance claims.
++
++The first implementation still records canonical GEMMs followed by the bounded prefill override; the override returns immediately during decode. This is a known performance cost, not a correctness gap. No speedup is implied by correctness qualification. Future changes to launch structure, arithmetic, model, environment or workload require fresh qualification.
+diff --git a/benchmarks/schemas/vllm-profile-run.schema.json b/benchmarks/schemas/vllm-profile-run.schema.json
+new file mode 100644
+index 0000000..552dc27
+--- /dev/null
++++ b/benchmarks/schemas/vllm-profile-run.schema.json
+@@ -0,0 +1,665 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://riley.dev/schemas/vllm-profile-run-v1.schema.json",
++  "title": "Riley candidate run qualified against a pinned vLLM reference",
++  "description": "Distinct numerical contract; not an E0 bitwise comparison with the old Riley eager profile.",
++  "type": "object",
++  "additionalProperties": false,
++  "required": [
++    "schema_version",
++    "role",
++    "pair_index",
++    "run_id",
++    "recorded_at_utc",
++    "status",
++    "failure_count",
++    "source",
++    "environment",
++    "workload",
++    "trace",
++    "primary_metric",
++    "aggregate",
++    "requests"
++  ],
++  "properties": {
++    "schema_version": {
++      "const": "riley.vllm-profile-run.v1"
++    },
++    "role": {
++      "const": "candidate"
++    },
++    "pair_index": {
++      "type": "integer",
++      "minimum": 1,
++      "maximum": 5
++    },
++    "run_id": {
++      "$ref": "#/$defs/id"
++    },
++    "recorded_at_utc": {
++      "type": "string",
++      "format": "date-time"
++    },
++    "status": {
++      "enum": [
++        "success",
++        "failure"
++      ]
++    },
++    "failure_count": {
++      "type": "integer",
++      "minimum": 0,
++      "maximum": 18446744073709551615
++    },
++    "source": {
++      "$ref": "#/$defs/source"
++    },
++    "environment": {
++      "$ref": "#/$defs/environment"
++    },
++    "workload": {
++      "$ref": "#/$defs/workload"
++    },
++    "trace": {
++      "$ref": "#/$defs/trace"
++    },
++    "primary_metric": {
++      "$ref": "#/$defs/primaryMetric"
++    },
++    "aggregate": {
++      "$ref": "#/$defs/aggregate"
++    },
++    "requests": {
++      "type": "array",
++      "minItems": 1,
++      "items": {
++        "$ref": "#/$defs/request"
++      }
++    }
++  },
++  "$defs": {
++    "id": {
++      "type": "string",
++      "minLength": 1,
++      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
++    },
++    "sha256": {
++      "type": "string",
++      "pattern": "^[0-9a-f]{64}$"
++    },
++    "gitCommit": {
++      "type": "string",
++      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
++    },
++    "runtimeFlag": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "name",
++        "value"
++      ],
++      "properties": {
++        "name": {
++          "const": "graph_numerics"
++        },
++        "value": {
++          "const": "vllm-smol-p128-v1"
++        }
++      }
++    },
++    "source": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "git_commit",
++        "git_dirty",
++        "executable_sha256",
++        "implementation_id",
++        "runtime_flag",
++        "semantic_class",
++        "correctness_gate_id",
++        "correctness_report_sha256"
++      ],
++      "properties": {
++        "git_commit": {
++          "$ref": "#/$defs/gitCommit"
++        },
++        "git_dirty": {
++          "type": "boolean"
++        },
++        "executable_sha256": {
++          "$ref": "#/$defs/sha256"
++        },
++        "implementation_id": {
++          "$ref": "#/$defs/id"
++        },
++        "runtime_flag": {
++          "$ref": "#/$defs/runtimeFlag"
++        },
++        "semantic_class": {
++          "const": "VLLM_REFERENCE"
++        },
++        "correctness_gate_id": {
++          "const": "g04-vllm-smol-p128-v1"
++        },
++        "correctness_report_sha256": {
++          "$ref": "#/$defs/sha256"
++        }
++      }
++    },
++    "gpu": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "model",
++        "uuid",
++        "device_index",
++        "pci_bus_id",
++        "compute_capability",
++        "vram_bytes"
++      ],
++      "properties": {
++        "model": {
++          "type": "string",
++          "minLength": 1
++        },
++        "uuid": {
++          "type": "string",
++          "minLength": 1
++        },
++        "device_index": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "pci_bus_id": {
++          "type": "string",
++          "minLength": 1
++        },
++        "compute_capability": {
++          "type": "string",
++          "pattern": "^[0-9]+\\.[0-9]+$"
++        },
++        "vram_bytes": {
++          "type": "integer",
++          "minimum": 1
++        }
++      }
++    },
++    "host": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "environment_id",
++        "cpu_model",
++        "physical_core_count",
++        "logical_core_count",
++        "ram_bytes",
++        "os_release",
++        "kernel_release",
++        "architecture"
++      ],
++      "properties": {
++        "environment_id": {
++          "$ref": "#/$defs/id"
++        },
++        "cpu_model": {
++          "type": "string",
++          "minLength": 1
++        },
++        "physical_core_count": {
++          "type": "integer",
++          "minimum": 1
++        },
++        "logical_core_count": {
++          "type": "integer",
++          "minimum": 1
++        },
++        "ram_bytes": {
++          "type": "integer",
++          "minimum": 1
++        },
++        "os_release": {
++          "type": "string",
++          "minLength": 1
++        },
++        "kernel_release": {
++          "type": "string",
++          "minLength": 1
++        },
++        "architecture": {
++          "type": "string",
++          "minLength": 1
++        }
++      }
++    },
++    "software": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "nvidia_driver_version",
++        "cuda_runtime_version",
++        "cuda_toolkit_version",
++        "cublas_version",
++        "container_image_sha256"
++      ],
++      "properties": {
++        "nvidia_driver_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "cuda_runtime_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "cuda_toolkit_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "cublas_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "container_image_sha256": {
++          "oneOf": [
++            {
++              "$ref": "#/$defs/sha256"
++            },
++            {
++              "type": "null"
++            }
++          ]
++        }
++      }
++    },
++    "environment": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "gpu",
++        "host",
++        "software"
++      ],
++      "properties": {
++        "gpu": {
++          "$ref": "#/$defs/gpu"
++        },
++        "host": {
++          "$ref": "#/$defs/host"
++        },
++        "software": {
++          "$ref": "#/$defs/software"
++        }
++      }
++    },
++    "workload": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "workload_id",
++        "model_id",
++        "model_revision",
++        "weights_sha256",
++        "tokenizer_sha256",
++        "dtype",
++        "concurrency",
++        "prompt_tokens",
++        "output_tokens",
++        "warmups",
++        "measured_iterations",
++        "sampling_id",
++        "seed"
++      ],
++      "properties": {
++        "workload_id": {
++          "$ref": "#/$defs/id"
++        },
++        "model_id": {
++          "type": "string",
++          "minLength": 1
++        },
++        "model_revision": {
++          "type": "string",
++          "minLength": 1
++        },
++        "weights_sha256": {
++          "$ref": "#/$defs/sha256"
++        },
++        "tokenizer_sha256": {
++          "$ref": "#/$defs/sha256"
++        },
++        "dtype": {
++          "type": "string",
++          "minLength": 1
++        },
++        "concurrency": {
++          "type": "integer",
++          "minimum": 1,
++          "maximum": 8
++        },
++        "prompt_tokens": {
++          "type": "integer",
++          "minimum": 1,
++          "maximum": 8192
++        },
++        "output_tokens": {
++          "type": "integer",
++          "minimum": 2,
++          "maximum": 512
++        },
++        "warmups": {
++          "type": "integer",
++          "minimum": 5,
++          "maximum": 100
++        },
++        "measured_iterations": {
++          "type": "integer",
++          "minimum": 30,
++          "maximum": 100
++        },
++        "sampling_id": {
++          "const": "greedy"
++        },
++        "seed": {
++          "type": "null"
++        }
++      }
++    },
++    "trace": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "capacity",
++        "retained_records",
++        "dropped_records"
++      ],
++      "properties": {
++        "capacity": {
++          "type": "integer",
++          "minimum": 1,
++          "maximum": 18446744073709551615
++        },
++        "retained_records": {
++          "type": "integer",
++          "minimum": 0,
++          "maximum": 18446744073709551615
++        },
++        "dropped_records": {
++          "type": "integer",
++          "minimum": 0,
++          "maximum": 18446744073709551615
++        }
++      }
++    },
++    "primaryMetric": {
++      "const": "aggregate.host.execute_ns"
++    },
++    "durationMeasurement": {
++      "oneOf": [
++        {
++          "type": "object",
++          "additionalProperties": false,
++          "required": [
++            "validity",
++            "value"
++          ],
++          "properties": {
++            "validity": {
++              "const": "measured"
++            },
++            "value": {
++              "type": "number",
++              "minimum": 0
++            }
++          }
++        },
++        {
++          "type": "object",
++          "additionalProperties": false,
++          "required": [
++            "validity",
++            "value"
++          ],
++          "properties": {
++            "validity": {
++              "const": "unmeasured"
++            },
++            "value": {
++              "type": "null"
++            }
++          }
++        }
++      ]
++    },
++    "countMeasurement": {
++      "oneOf": [
++        {
++          "type": "object",
++          "additionalProperties": false,
++          "required": [
++            "validity",
++            "value"
++          ],
++          "properties": {
++            "validity": {
++              "const": "measured"
++            },
++            "value": {
++              "type": "integer",
++              "minimum": 0,
++              "maximum": 18446744073709551615
++            }
++          }
++        },
++        {
++          "type": "object",
++          "additionalProperties": false,
++          "required": [
++            "validity",
++            "value"
++          ],
++          "properties": {
++            "validity": {
++              "const": "unmeasured"
++            },
++            "value": {
++              "type": "null"
++            }
++          }
++        }
++      ]
++    },
++    "hostAggregate": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "plan_ns",
++        "execute_ns",
++        "sampling_ns",
++        "commit_ns"
++      ],
++      "properties": {
++        "plan_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        },
++        "execute_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        },
++        "sampling_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        },
++        "commit_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        }
++      }
++    },
++    "cudaAggregate": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "stream_span_ns",
++        "idle_ns"
++      ],
++      "properties": {
++        "stream_span_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        },
++        "idle_ns": {
++          "$ref": "#/$defs/durationMeasurement"
++        }
++      }
++    },
++    "copyCounters": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "h2d_calls",
++        "h2d_bytes",
++        "d2h_calls",
++        "d2h_bytes"
++      ],
++      "properties": {
++        "h2d_calls": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "h2d_bytes": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "d2h_calls": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "d2h_bytes": {
++          "$ref": "#/$defs/countMeasurement"
++        }
++      }
++    },
++    "allocationCounters": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "device_allocations",
++        "device_frees",
++        "pinned_allocations",
++        "pinned_frees",
++        "peak_device_bytes"
++      ],
++      "properties": {
++        "device_allocations": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "device_frees": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "pinned_allocations": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "pinned_frees": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "peak_device_bytes": {
++          "$ref": "#/$defs/countMeasurement"
++        }
++      }
++    },
++    "counters": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "iterations",
++        "kernel_launches",
++        "copies",
++        "allocations"
++      ],
++      "properties": {
++        "iterations": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "kernel_launches": {
++          "$ref": "#/$defs/countMeasurement"
++        },
++        "copies": {
++          "$ref": "#/$defs/copyCounters"
++        },
++        "allocations": {
++          "$ref": "#/$defs/allocationCounters"
++        }
++      }
++    },
++    "aggregate": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "host",
++        "cuda",
++        "counters",
++        "throughput_output_tokens_per_second"
++      ],
++      "properties": {
++        "host": {
++          "$ref": "#/$defs/hostAggregate"
++        },
++        "cuda": {
++          "$ref": "#/$defs/cudaAggregate"
++        },
++        "counters": {
++          "$ref": "#/$defs/counters"
++        },
++        "throughput_output_tokens_per_second": {
++          "type": "number",
++          "exclusiveMinimum": 0
++        }
++      }
++    },
++    "request": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "input_index",
++        "prompt_u32le_sha256",
++        "generated_u32le_sha256",
++        "prompt_token_count",
++        "requested_output_token_count",
++        "generated_token_count",
++        "ttft_ms",
++        "tpot_ms",
++        "e2e_ms"
++      ],
++      "properties": {
++        "input_index": {
++          "type": "integer",
++          "minimum": 0
++        },
++        "prompt_u32le_sha256": {
++          "$ref": "#/$defs/sha256"
++        },
++        "generated_u32le_sha256": {
++          "$ref": "#/$defs/sha256"
++        },
++        "prompt_token_count": {
++          "type": "integer",
++          "minimum": 1
++        },
++        "requested_output_token_count": {
++          "type": "integer",
++          "minimum": 1
++        },
++        "generated_token_count": {
++          "type": "integer",
++          "minimum": 1,
++          "description": "Must equal requested_output_token_count; the standard JSON Schema cannot compare sibling values, so the v1 checker enforces this cross-field invariant."
++        },
++        "ttft_ms": {
++          "type": "number",
++          "minimum": 0
++        },
++        "tpot_ms": {
++          "type": "number",
++          "minimum": 0
++        },
++        "e2e_ms": {
++          "type": "number",
++          "minimum": 0
++        }
++      }
++    }
++  }
++}
+diff --git a/benchmarks/scripts/check_vllm_profile_run.py b/benchmarks/scripts/check_vllm_profile_run.py
+new file mode 100644
+index 0000000..fbd6e1f
+--- /dev/null
++++ b/benchmarks/scripts/check_vllm_profile_run.py
+@@ -0,0 +1,38 @@
++"""Validate one pinned vLLM-reference candidate run; never assert an E0 speedup."""
++from __future__ import annotations
++import argparse,hashlib,json,struct
++from pathlib import Path
++from jsonschema import Draft202012Validator,FormatChecker
++
++def token_hash(tokens):
++    if not tokens or any(type(t) is not int or not 0<=t<2**32 for t in tokens):
++        raise ValueError('reference token IDs must be nonempty u32 integers')
++    return hashlib.sha256(b''.join(struct.pack('<I',t) for t in tokens)).hexdigest()
++
++def validate(run,binding):
++    schema=json.loads((Path(__file__).resolve().parents[1]/'schemas/vllm-profile-run.schema.json').read_text())
++    Draft202012Validator(schema,format_checker=FormatChecker()).validate(run)
++    for field in ['source','environment','workload']:
++        if run[field]!=binding[field]:raise ValueError(f'{field} differs from pinned preparation')
++    if run['status']!='success' or run['failure_count']!=0:raise ValueError('run failed')
++    w=run['workload']
++    if (w['concurrency'],w['prompt_tokens'],w['output_tokens'])!=(1,128,32):raise ValueError('unsupported workload')
++    if w['sampling_id']!='greedy' or w['seed'] is not None:raise ValueError('sampling contract changed')
++    if len(binding['input_token_ids'])!=128 or len(binding['generated_token_ids'])!=32:raise ValueError('reference shape changed')
++    expected_prompt=token_hash(binding['input_token_ids']);expected_output=token_hash(binding['generated_token_ids'])
++    requests=run['requests']
++    if len(requests)!=w['measured_iterations']:raise ValueError('missing or extra requests')
++    if [row['input_index'] for row in requests]!=list(range(len(requests))):raise ValueError('request indices changed')
++    for row in requests:
++        if (row['prompt_token_count'],row['requested_output_token_count'],row['generated_token_count'])!=(128,32,32):raise ValueError('token counts changed')
++        if row['prompt_u32le_sha256']!=expected_prompt or row['generated_u32le_sha256']!=expected_output:raise ValueError('cross-engine token mismatch')
++        if row['e2e_ms']<row['ttft_ms']:raise ValueError('request time ordering invalid')
++    trace=run['trace']
++    if trace['dropped_records'] or trace['retained_records']>trace['capacity']:raise ValueError('incomplete trace')
++    if run['aggregate']['cuda']['stream_span_ns']!={'validity':'unmeasured','value':None}:raise ValueError('full graph CUDA timing is not qualified')
++    return {'schema_version':'riley.vllm-profile-validation.v1','valid':True,'requests':len(requests),'tokens_exact':True,'e0_claim':False,'speedup_claim':False}
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__);p.add_argument('run',type=Path);p.add_argument('--binding',required=True,type=Path);args=p.parse_args()
++    print(json.dumps(validate(json.loads(args.run.read_text()),json.loads(args.binding.read_text())),indent=2))
++if __name__=='__main__':main()
+diff --git a/benchmarks/scripts/tests/test_check_vllm_profile_run.py b/benchmarks/scripts/tests/test_check_vllm_profile_run.py
+new file mode 100644
+index 0000000..ff79b93
+--- /dev/null
++++ b/benchmarks/scripts/tests/test_check_vllm_profile_run.py
+@@ -0,0 +1,23 @@
++import copy,importlib.util,sys,unittest
++from pathlib import Path
++from test_check_native_profile_pair import ProfilePairFixture
++path=Path(__file__).resolve().parents[1]/'check_vllm_profile_run.py'
++spec=importlib.util.spec_from_file_location('check_vllm_profile_run',path);checker=importlib.util.module_from_spec(spec);sys.modules[spec.name]=checker;spec.loader.exec_module(checker)
++class VllmProfileTests(unittest.TestCase):
++ def fixture(self):
++  run=ProfilePairFixture._run(None,'candidate',1)
++  run['schema_version']='riley.vllm-profile-run.v1';run['source']['runtime_flag']={'name':'graph_numerics','value':'vllm-smol-p128-v1'};run['source']['semantic_class']='VLLM_REFERENCE';run['source']['correctness_gate_id']='g04-vllm-smol-p128-v1';run['aggregate']['cuda']['stream_span_ns']={'validity':'unmeasured','value':None}
++  binding={key:copy.deepcopy(run[key]) for key in ['source','environment','workload']};binding.update(input_token_ids=[19556]*128,generated_token_ids=list(range(32)))
++  for row in run['requests']:row['prompt_u32le_sha256']=checker.token_hash(binding['input_token_ids']);row['generated_u32le_sha256']=checker.token_hash(binding['generated_token_ids'])
++  return run,binding
++ def test_valid_reference_run(self):
++  run,binding=self.fixture();self.assertTrue(checker.validate(run,binding)['valid'])
++ def test_rejects_e0_and_changed_provenance(self):
++  for mutation in [lambda x:x['source'].__setitem__('semantic_class','E0'),lambda x:x['source'].__setitem__('git_commit','c'*40),lambda x:x.__setitem__('schema_version','riley.native-profile-run.v1')]:
++   run,binding=self.fixture();mutation(run)
++   with self.assertRaises(Exception):checker.validate(run,binding)
++ def test_rejects_token_mismatch_missing_records_and_unqualified_timing(self):
++  for mutation in [lambda x:x['requests'][0].__setitem__('generated_u32le_sha256','0'*64),lambda x:x['requests'].pop(),lambda x:x['trace'].__setitem__('dropped_records',1),lambda x:x['aggregate']['cuda'].__setitem__('stream_span_ns',{'validity':'measured','value':1})]:
++   run,binding=self.fixture();mutation(run)
++   with self.assertRaises(ValueError):checker.validate(run,binding)
++if __name__=='__main__':unittest.main()
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 78b3a0e..bcce850 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -10708,7 +10708,7 @@ impl GraphResourcesHandle {
+         staging: &PinnedHostBufferHandle,
+         geometry: [u64; 4],
+         eps: &[f32],
+-        hf: bool,
++        profile: u32,
+         publish_logits: bool,
+     ) -> CudaResult<()> {
+         if geometry[0] > 128
+@@ -10739,7 +10739,7 @@ impl GraphResourcesHandle {
+                 staging.as_ptr(),
+                 geometry.as_ptr(),
+                 eps.as_ptr(),
+-                u32::from(hf),
++                profile,
+                 u32::from(publish_logits),
+                 &mut error,
+             )
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index 8a757f6..92bde54 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1,6 +1,19 @@
+ //! Resource ownership for staged transfer, `SwiGLU` and MLP diagnostic graphs.
+ use crate::{CudaDeviceBuffer, CudaPinnedHostBuffer, CudaPreparedGemm, CudaResult, CudaStream};
+ 
++/// Versioned arithmetic for the retained full decode graph.
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++#[repr(u32)]
++pub enum DecodeNumericalProfile {
++    /// Existing canonical graph arithmetic.
++    Canonical = 0,
++    /// Existing HF-compatible SmolLM2 graph arithmetic.
++    HuggingFaceSmolLm2 = 1,
++    /// SM89/CUDA13 SmolLM2-135M, P128 and at most 32 generated tokens.
++    /// Preserves vLLM 0.27.1 compiled/FlashAttention2 arithmetic for this bucket.
++    VllmSmolP128V1 = 2,
++}
++
+ /// Owns the Rust parents of a recorded graph. Native handles point to independent
+ /// CUDA allocations, never into the Rust container, so moving the container is safe.
+ /// No parent access is exposed until native graph destruction succeeds.
+@@ -719,6 +732,39 @@ impl BorrowedGraphResourceReservation<'_> {
+         eps: &[f32],
+         hf: bool,
+         publish_logits: bool,
++    ) -> CudaResult<()> {
++        self.record_decode_with_profile(
++            devices,
++            workspace,
++            weights,
++            plans,
++            staging,
++            geometry,
++            eps,
++            if hf {
++                DecodeNumericalProfile::HuggingFaceSmolLm2
++            } else {
++                DecodeNumericalProfile::Canonical
++            },
++            publish_logits,
++        )
++    }
++
++    /// Records an explicitly selected numerical contract; no cross-profile fallback.
++    /// # Errors
++    /// Rejects unsupported geometry, environment, parents or capture failure.
++    #[allow(clippy::too_many_arguments)]
++    pub fn record_decode_with_profile(
++        &mut self,
++        devices: [usize; 21],
++        workspace: Option<usize>,
++        weights: &[usize],
++        plans: [usize; 5],
++        staging: usize,
++        geometry: [u64; 4],
++        eps: &[f32],
++        profile: DecodeNumericalProfile,
++        publish_logits: bool,
+     ) -> CudaResult<()> {
+         #[cfg(feature = "cuda")]
+         {
+@@ -772,7 +818,7 @@ impl BorrowedGraphResourceReservation<'_> {
+                 staging.native_handle(),
+                 geometry,
+                 eps,
+-                hf,
++                profile as u32,
+                 publish_logits,
+             )
+         }
+@@ -786,7 +832,7 @@ impl BorrowedGraphResourceReservation<'_> {
+                 staging,
+                 geometry,
+                 eps,
+-                hf,
++                profile as u32,
+                 publish_logits,
+             );
+             Err(crate::CudaError::unavailable("record decode"))
+diff --git a/crates/riley-cuda/src/lib.rs b/crates/riley-cuda/src/lib.rs
+index bc95f56..f1cbe4a 100644
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -17,7 +17,9 @@ mod graph;
+ mod graph_resources;
+ #[cfg(feature = "cuda")]
+ pub use graph_resources::OwnedGraphResourceReservation;
+-pub use graph_resources::{BorrowedGraphResourceParents, BorrowedGraphResourceReservation};
++pub use graph_resources::{
++    BorrowedGraphResourceParents, BorrowedGraphResourceReservation, DecodeNumericalProfile,
++};
+ #[cfg(any(feature = "cuda", test))]
+ mod hf_eager_allowlist;
+ mod memory;
+diff --git a/crates/riley-runtime/src/llama/batch_executor.rs b/crates/riley-runtime/src/llama/batch_executor.rs
+index 0915c4e..eed2770 100644
+--- a/crates/riley-runtime/src/llama/batch_executor.rs
++++ b/crates/riley-runtime/src/llama/batch_executor.rs
+@@ -379,6 +379,12 @@ impl PreparedLlamaBatchExecutor {
+         rows: &[LlamaBatchRow<'_>],
+         stream: &mut CudaStream,
+     ) -> LlamaBatchExecutorResult<()> {
++        if self.config.vllm_smol_p128_graph() {
++            return Err(LlamaBatchExecutorError::InvalidConfiguration {
++                field: "graph numerics",
++                reason: "vllm-smol-p128-v1 requires an owned graph",
++            });
++        }
+         self.execute_output(rows, BatchOutputMode::Logits, stream)
+     }
+ 
+diff --git a/crates/riley-runtime/src/llama/executor/config.rs b/crates/riley-runtime/src/llama/executor/config.rs
+index 62a6053..735df0c 100644
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -130,6 +130,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
+     residual_norm: ResidualNormImplementation,
+     execution_completion: ExecutionCompletionImplementation,
+     metadata_transport: BatchMetadataTransport,
++    vllm_smol_p128_graph: bool,
+     shape_policy: LlamaBatchShapePolicy,
+     shape_buckets: LlamaBatchShapeBuckets,
+ }
+@@ -148,11 +149,24 @@ impl PreparedLlamaBatchExecutorConfig {
+             residual_norm: ResidualNormImplementation::Separate,
+             execution_completion: ExecutionCompletionImplementation::PerOperation,
+             metadata_transport: BatchMetadataTransport::Synchronous,
++            vllm_smol_p128_graph: false,
+             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
+             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
+         }
+     }
+ 
++    /// Selects the explicit VllmSmolP128V1 owned graph. Eager fallback is forbidden.
++    #[must_use]
++    pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
++        self.vllm_smol_p128_graph = true;
++        self
++    }
++    /// Whether the bounded vLLM numerical graph is required.
++    #[must_use]
++    pub const fn vllm_smol_p128_graph(self) -> bool {
++        self.vllm_smol_p128_graph
++    }
++
+     #[must_use]
+     pub const fn metadata(self) -> LlamaBatchMetadataConfig {
+         self.metadata
+@@ -404,7 +418,22 @@ pub(in crate::llama) const fn normalize_prepared_config(
+         residual_norm: config.residual_norm,
+         execution_completion: config.execution_completion,
+         metadata_transport: config.metadata_transport,
++        vllm_smol_p128_graph: config.vllm_smol_p128_graph,
+         shape_policy: config.shape_policy,
+         shape_buckets: config.shape_buckets,
+     }
+ }
++
++#[cfg(test)]
++mod graph_numerical_profile_tests {
++    use super::*;
++    #[test]
++    fn explicit_profile_survives_normalization_without_changing_default() {
++        let c = PreparedLlamaBatchExecutorConfig::new(
++            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16).unwrap(),
++            PreparedLlamaForwardConfig::default(),
++        );
++        assert!(!normalize_prepared_config(c).vllm_smol_p128_graph());
++        assert!(normalize_prepared_config(c.with_vllm_smol_p128_graph()).vllm_smol_p128_graph());
++    }
++}
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index ea2a639..e684db1 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -33,6 +33,7 @@ impl PreparedLlamaBatchExecutor {
+         let owner = &mut self.owner;
+         let f = &mut owner.forward;
+         let profile = f.rms_norm_profile();
++        let vllm_profile = self.config.vllm_smol_p128_graph();
+         if f.plan.sequence_length() != 1
+             || owner.layout.head_dimension() != 64
+             || !matches!(
+@@ -133,7 +134,7 @@ impl PreparedLlamaBatchExecutor {
+         })
+         .map_err(cuda)?;
+         graph
+-            .record_decode(
++            .record_decode_with_profile(
+                 std::array::from_fn(|i| base + i),
+                 workspace,
+                 &weights,
+@@ -141,7 +142,13 @@ impl PreparedLlamaBatchExecutor {
+                 0,
+                 geometry,
+                 &eps,
+-                profile == LlamaRmsNormProfile::HuggingFaceSmolLm2,
++                if vllm_profile {
++                    riley_cuda::DecodeNumericalProfile::VllmSmolP128V1
++                } else if profile == LlamaRmsNormProfile::HuggingFaceSmolLm2 {
++                    riley_cuda::DecodeNumericalProfile::HuggingFaceSmolLm2
++                } else {
++                    riley_cuda::DecodeNumericalProfile::Canonical
++                },
+                 publish_logits,
+             )
+             .map_err(cuda)?;
+@@ -156,7 +163,15 @@ impl PreparedLlamaBatchExecutor {
+         };
+         let f = &self.owner.forward;
+         let capacity = self.config.metadata().max_block_entries();
+-        f.plan.sequence_length() == 1
++        (!self.config.vllm_smol_p128_graph()
++            || (f.rms_norm_profile() == LlamaRmsNormProfile::HuggingFaceSmolLm2
++                && f.plan.layers().len() == 30
++                && f.plan.dimensions().hidden_size() == 576
++                && f.plan.dimensions().intermediate_size() == 1536
++                && f.plan.dimensions().vocabulary_size() == 49152
++                && f.plan.dimensions().query_heads() == 9
++                && f.plan.dimensions().key_value_heads() == 3))
++            && f.plan.sequence_length() == 1
+             && self.owner.layout.head_dimension() == 64
+             && self.config.metadata().max_rows() == 1
+             && capacity <= 4096
+@@ -235,6 +250,11 @@ impl PreparedLlamaBatchExecutor {
+         steps: u32,
+         policy: ExecutionGraphPolicy,
+     ) -> LlamaBatchExecutorResult<Vec<u32>> {
++        if self.config.vllm_smol_p128_graph() {
++            return Err(rejected(
++                "vllm-smol-p128-v1 requires the persistent owned executor",
++            ));
++        }
+         use crate::llama::{LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRowKind};
+         use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
+         if self.is_poisoned() {
+@@ -536,10 +556,14 @@ impl PreparedLlamaBatchExecutor {
+         let f = &mut owner.forward;
+         let dims = f.plan.dimensions();
+         let capacity = self.config.metadata().max_block_entries() as u64;
+-        let profile = match f.rms_norm_profile() {
+-            LlamaRmsNormProfile::Canonical => 0_u32,
+-            LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
+-            _ => unreachable!(),
++        let profile = if self.config.vllm_smol_p128_graph() {
++            2_u32
++        } else {
++            match f.rms_norm_profile() {
++                LlamaRmsNormProfile::Canonical => 0_u32,
++                LlamaRmsNormProfile::HuggingFaceSmolLm2 => 1,
++                _ => unreachable!(),
++            }
+         };
+         let mut digest = Sha256::new();
+         digest.update(b"riley.full-decode.owner-content.v1\0");
+@@ -692,6 +716,11 @@ impl PreparedLlamaBatchExecutor {
+         }
+         let ((major, minor), runtime, cublas) =
+             native_identity.ok_or_else(|| rejected("missing native plan identity"))?;
++        if self.config.vllm_smol_p128_graph()
++            && (major != 8 || minor != 9 || runtime != 13000 || cublas != 130101)
++        {
++            return Err(rejected("vllm-smol-p128-v1 environment mismatch"));
++        }
+         let device = GraphDeviceSignature::new(
+             major,
+             minor,
+@@ -729,10 +758,10 @@ impl PreparedLlamaBatchExecutor {
+                     GraphMetadataLayoutSignature::new(2, layout.finalize().into()),
+                 ),
+                 GraphImplementationSignature::new(
+-                    GraphImplementationId::new(0xF001),
+-                    GraphImplementationId::new(0xF001),
+-                    GraphImplementationId::new(0xF001),
+-                    GraphImplementationId::new(0xF001),
++                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
++                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
++                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
++                    GraphImplementationId::new(if profile == 2 { 0xF101 } else { 0xF001 }),
+                     GraphGemmPlanSetId::new(1),
+                     GraphReductionPolicyId::new(profile),
+                 ),
+@@ -1203,6 +1232,7 @@ pub struct OwnedLlamaDecodeExecutor {
+     poisoned: bool,
+     output_ready: bool,
+     replays: u64,
++    vllm_smol_p128_graph: bool,
+ }
+ impl PreparedLlamaBatchExecutor {
+     /// Whether this exact prepared owner supports a persistent single-row graph.
+@@ -1225,6 +1255,7 @@ impl PreparedLlamaBatchExecutor {
+         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
+         let mut stream = context.create_stream().map_err(cuda)?;
+         let (signature, device_bytes) = self.full_decode_signature(&mut stream)?;
++        let vllm_smol_p128_graph = self.config.vllm_smol_p128_graph();
+         let vocabulary_size = self.vocabulary_size();
+         let maximum_position_count = self.maximum_position_count()?;
+         let config = self.config.metadata();
+@@ -1278,10 +1309,38 @@ impl PreparedLlamaBatchExecutor {
+             poisoned: false,
+             output_ready: false,
+             replays: 0,
++            vllm_smol_p128_graph,
+         })
+     }
+ }
+ impl OwnedLlamaDecodeExecutor {
++    /// Versioned request bounds, checked before any output is published.
++    /// # Errors
++    /// Rejects requests outside the explicitly selected numerical profile.
++    pub fn validate_request_shape(
++        &self,
++        prompt_tokens: usize,
++        output_tokens: usize,
++    ) -> LlamaBatchExecutorResult<()> {
++        if self.vllm_smol_p128_graph
++            && (prompt_tokens != 128 || output_tokens == 0 || output_tokens > 32)
++        {
++            return Err(rejected(
++                "vllm-smol-p128-v1 requires 128 prompt tokens and 1..32 output tokens",
++            ));
++        }
++        Ok(())
++    }
++    /// Stable arithmetic identity for request admission and evidence.
++    #[must_use]
++    pub const fn numerical_profile_id(&self) -> &'static str {
++        if self.vllm_smol_p128_graph {
++            "vllm-smol-p128-v1"
++        } else {
++            "existing"
++        }
++    }
++
+     /// Exact metadata bounds retained from the original executor.
+     #[must_use]
+     pub fn metadata_config(&self) -> crate::llama::LlamaBatchMetadataConfig {
+@@ -1332,6 +1391,9 @@ impl OwnedLlamaDecodeExecutor {
+         }
+         let token = packed.input_token_ids()[0];
+         let pos = packed.position_ids()[0];
++        if self.vllm_smol_p128_graph && pos >= 160 {
++            return Err(rejected("vllm-smol-p128-v1 position exceeds 159"));
++        }
+         if token as usize >= self.vocabulary_size || pos as usize >= self.maximum_position_count {
+             return Err(rejected("owned graph token or position out of bounds"));
+         }
+@@ -1511,4 +1573,125 @@ mod owned_tests {
+         context.close()?;
+         Ok(())
+     }
++    #[test]
++    #[ignore = "requires SmolLM2 checkpoint and CUDA"]
++    fn owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings()
++    -> Result<(), Box<dyn std::error::Error>> {
++        let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
++        let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
++        let prompt = model
++            .tokenizer()
++            .encode(&"Hello".repeat(128), riley_model::EncodeOptions::default())?;
++        assert_eq!(prompt.len(), 128);
++        let context = riley_cuda::CudaRuntime::initialize()?
++            .device(0)?
++            .create_context()?;
++        let mut stream = context.create_stream()?;
++        let config = PreparedLlamaBatchExecutorConfig::new(
++            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16)?,
++            PreparedLlamaForwardConfig::default(),
++        )
++        .with_grouped_ragged_attention_heads()
++        .with_separate_residual_norm()
++        .with_iteration_batch_completion()
++        .with_packed_async_metadata();
++        let candidate = PreparedLlamaBatchExecutor::prepare(
++            &model,
++            &context,
++            &mut stream,
++            config.with_vllm_smol_p128_graph(),
++        )?;
++        let mut candidate = candidate.into_owned_decode_graph(&context)?;
++        assert_eq!(candidate.numerical_profile_id(), "vllm-smol-p128-v1");
++        assert!(candidate.validate_request_shape(127, 32).is_err());
++        assert!(candidate.validate_request_shape(129, 32).is_err());
++        assert!(candidate.validate_request_shape(128, 33).is_err());
++        candidate.validate_request_shape(128, 32)?;
++        let mut expected_tokens = Vec::new();
++        for (request, limit) in [159_usize, 23, 150, 159].into_iter().enumerate() {
++            // New requests reuse the same retained parents and fresh scheduler mappings.
++            let mapping: Vec<u32> = (0..16)
++                .map(|i| ((i * 7 + request * 3) % 16) as u32)
++                .collect();
++            let mut token = 504;
++            let mut tokens = Vec::new();
++            for position in 0..limit {
++                if position < 128 {
++                    token = prompt[position];
++                }
++                let live = position / 16 + 1;
++                let mut valid = vec![16; live];
++                valid[live - 1] = (position % 16 + 1) as u16;
++                let input = [token];
++                let rows = [LlamaBatchRow::new(
++                    (request + 1) as u64,
++                    if position < 128 {
++                        LlamaBatchRowKind::Prefill
++                    } else {
++                        LlamaBatchRowKind::Decode
++                    },
++                    &input,
++                    (position + 1) as u32,
++                    LlamaBatchBlockTable::new(
++                        crate::paged_kv::BLOCK_TABLE_V1_VERSION,
++                        &mapping[..live],
++                        &valid,
++                        (position + 1) as u32,
++                    ),
++                    Some(0),
++                )];
++                let before = context.allocation_stats()?;
++                candidate.execute(&rows)?;
++                assert_eq!(context.allocation_stats()?, before);
++                token = candidate.greedy_token()?;
++                if position >= 127 {
++                    tokens.push(token);
++                }
++            }
++            let reference = [
++                28, 339, 5248, 253, 1838, 3241, 282, 253, 1443, 929, 3156, 28, 198, 198, 504, 808,
++                2775, 339, 1277, 288, 1643, 314, 338, 339, 5248, 2045, 288, 1138, 346, 253, 1443,
++                282,
++            ];
++            assert_eq!(tokens.as_slice(), &reference[..tokens.len()]);
++            if limit == 159 {
++                assert_eq!(tokens.len(), 32);
++                if expected_tokens.is_empty() {
++                    expected_tokens = tokens;
++                } else {
++                    assert_eq!(tokens, expected_tokens);
++                }
++            }
++            let invalid = [u32::MAX];
++            let invalid_rows = [LlamaBatchRow::new(
++                99,
++                LlamaBatchRowKind::Prefill,
++                &invalid,
++                1,
++                LlamaBatchBlockTable::new(
++                    crate::paged_kv::BLOCK_TABLE_V1_VERSION,
++                    &mapping[..1],
++                    &[1],
++                    1,
++                ),
++                Some(0),
++            )];
++            assert!(candidate.execute(&invalid_rows).is_err());
++            assert!(
++                candidate.greedy_token().is_err(),
++                "invalid input must revoke old output"
++            );
++        }
++        assert_eq!(candidate.replay_count(), 491);
++        candidate.close()?;
++        stream.close()?;
++        let stats = context.allocation_stats()?;
++        assert_eq!(stats.device_live_allocations(), 0);
++        assert_eq!(stats.pinned_host_live_allocations(), 0);
++        println!(
++            "G04_VLLM_PROFILE p128_o32=true vllm_tokens_exact=true requests=4 cancelled_prefill=23 cancelled_output=23 replays=491 captures=1 live_allocation_deltas_zero=true output_tokens={expected_tokens:?}"
++        );
++        context.close()?;
++        Ok(())
++    }
+ }
+diff --git a/crates/riley-server/src/benchmark.rs b/crates/riley-server/src/benchmark.rs
+index aa723d9..3519998 100644
+--- a/crates/riley-server/src/benchmark.rs
++++ b/crates/riley-server/src/benchmark.rs
+@@ -980,6 +980,17 @@ mod cuda_executor {
+             policy: riley_runtime::llama::ExecutionGraphPolicy,
+         ) -> NativeBenchmarkResult<Self> {
+             use riley_runtime::llama::ExecutionGraphPolicy;
++            if self
++                .executor
++                .as_ref()
++                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
++                && policy != ExecutionGraphPolicy::Require
++            {
++                return Err(invalid(
++                    "graph numerics",
++                    "vllm-smol-p128-v1 requires an explicitly required graph",
++                ));
++            }
+             if policy == ExecutionGraphPolicy::Disabled {
+                 return Ok(self);
+             }
+@@ -1041,6 +1052,25 @@ mod cuda_executor {
+                 .as_ref()
+                 .ok_or(NativeBenchmarkError::Terminal)?;
+             ensure_scheduler_idle(scheduler)?;
++            if self
++                .executor
++                .as_ref()
++                .is_some_and(|executor| executor.config().vllm_smol_p128_graph())
++            {
++                return Err(invalid(
++                    "graph numerics",
++                    "owned graph preparation is required before trials",
++                ));
++            }
++            if let Some(graph) = &self.decode_graph {
++                for request in &requests {
++                    graph
++                        .validate_request_shape(request.prompt_token_ids().len(), output_tokens)
++                        .map_err(|_| {
++                            invalid("graph numerics", "request outside numerical profile bounds")
++                        })?;
++                }
++            }
+             PreparedNativeBenchmarkTrial::prepare(
+                 requests,
+                 output_tokens,
+diff --git a/crates/riley-server/src/bin/riley-profile.rs b/crates/riley-server/src/bin/riley-profile.rs
+index 468cac5..3d71975 100644
+--- a/crates/riley-server/src/bin/riley-profile.rs
++++ b/crates/riley-server/src/bin/riley-profile.rs
+@@ -57,9 +57,10 @@ source provenance (all required):
+   --git-dirty false
+   --executable-sha256 SHA256
+   --implementation-id ID
+-  --runtime-flag-name residual_rmsnorm|execution_completion|batch_shape_policy|metadata_transport|greedy_output|decode_fast_path|execution_graph_policy
++  --runtime-flag-name residual_rmsnorm|execution_completion|batch_shape_policy|metadata_transport|greedy_output|decode_fast_path|execution_graph_policy|graph_numerics
+   --runtime-flag-value separate|fused|per-operation|iteration-batch|fixed-max|power-of-two|synchronous|packed-async|cpu-logits|gpu-token|fixed-sync-cpu|bucket-packed-gpu
+-  --semantic-class E0
++  --semantic-class E0|VLLM_REFERENCE  VLLM_REFERENCE only for graph_numerics=vllm-smol-p128-v1
++  --prepare-only true|false          prepare/validate/close without any performance trial
+   --correctness-gate-id ID
+   --correctness-report-sha256 SHA256
+ 
+@@ -81,6 +82,7 @@ workload (all required):
+ ";
+ 
+ const KNOWN_FLAGS: &[&str] = &[
++    "--prepare-only",
+     "--model",
+     "--prompts",
+     "--output",
+@@ -183,6 +185,7 @@ enum RuntimeSelection {
+     GreedyOutput(GreedyOutputMode),
+     DecodeFastPath(DecodeFastPathMode),
+     ExecutionGraph(bool),
++    VllmSmolP128,
+ }
+ 
+ #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+@@ -262,6 +265,7 @@ struct Workload {
+ 
+ #[derive(Debug, Eq, PartialEq)]
+ struct Options {
++    prepare_only: bool,
+     model_path: PathBuf,
+     prompts_path: PathBuf,
+     output_path: Option<PathBuf>,
+@@ -310,6 +314,7 @@ impl Options {
+             ("greedy_output", "gpu-token") => {
+                 Ok(RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken))
+             }
++            ("graph_numerics", "vllm-smol-p128-v1") => Ok(RuntimeSelection::VllmSmolP128),
+             ("execution_graph_policy", "disabled") => Ok(RuntimeSelection::ExecutionGraph(false)),
+             ("execution_graph_policy", "require") => Ok(RuntimeSelection::ExecutionGraph(true)),
+             ("decode_fast_path", "fixed-sync-cpu") => Ok(RuntimeSelection::DecodeFastPath(
+@@ -338,6 +343,7 @@ impl Options {
+             RuntimeSelection::GreedyOutput(_) => GPU_GREEDY_CORRECTNESS_GATE,
+             RuntimeSelection::DecodeFastPath(_) => DECODE_FAST_PATH_CORRECTNESS_GATE,
+             RuntimeSelection::ExecutionGraph(_) => "g04-full-decode-p128-o32",
++            RuntimeSelection::VllmSmolP128 => "g04-vllm-smol-p128-v1",
+         };
+         if self.source.correctness_gate_id != expected_correctness_gate {
+             return Err(format!(
+@@ -363,7 +369,8 @@ impl Options {
+                 | RuntimeSelection::MetadataTransport(MetadataTransportMode::PackedAsync)
+                 | RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
+                 | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu)
+-                | RuntimeSelection::ExecutionGraph(true),
++                | RuntimeSelection::ExecutionGraph(true)
++                | RuntimeSelection::VllmSmolP128,
+             ) => Ok(()),
+             _ => Err(
+                 "runtime flag must bind baseline/candidate to separate/fused, \
+@@ -385,8 +392,23 @@ impl Options {
+         validate_sha256("--executable-sha256", &self.source.executable_sha256)?;
+         validate_id("--implementation-id", &self.source.implementation_id)?;
+         validate_id("--runtime-flag-name", &self.source.runtime_flag.name)?;
+-        if self.source.semantic_class != "E0" {
+-            return Err("--semantic-class must be E0".to_owned());
++        let expected_class = if matches!(self.runtime_selection()?, RuntimeSelection::VllmSmolP128)
++        {
++            "VLLM_REFERENCE"
++        } else {
++            "E0"
++        };
++        if self.source.semantic_class != expected_class {
++            return Err(format!(
++                "--semantic-class must be {expected_class} for this profile"
++            ));
++        }
++        if expected_class == "VLLM_REFERENCE"
++            && (self.workload.concurrency != 1
++                || self.workload.prompt_tokens != 128
++                || self.workload.output_tokens != 32)
++        {
++            return Err("vllm-smol-p128-v1 evidence requires c1/p128/o32".to_owned());
+         }
+         validate_id("--correctness-gate-id", &self.source.correctness_gate_id)?;
+         validate_sha256(
+@@ -541,6 +563,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
+             | "bucket-packed-gpu"
+             | "disabled"
+             | "require"
++            | "vllm-smol-p128-v1"
+     ) {
+         return Err(
+             "--runtime-flag-value requires a supported residual, completion, shape, metadata, or greedy-output mode"
+@@ -553,6 +576,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
+     };
+ 
+     let options = Options {
++        prepare_only: match values.remove("--prepare-only").as_deref() {
++            None | Some("false") => false,
++            Some("true") => true,
++            _ => return Err("--prepare-only requires true or false".to_owned()),
++        },
+         model_path: PathBuf::from(take_required(&mut values, "--model")?),
+         prompts_path: PathBuf::from(take_required(&mut values, "--prompts")?),
+         output_path: (output != "-").then(|| PathBuf::from(output)),
+@@ -982,7 +1010,7 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String>
+     let workload = &options.workload;
+     let graph_lane = matches!(
+         options.runtime_selection()?,
+-        RuntimeSelection::ExecutionGraph(_)
++        RuntimeSelection::ExecutionGraph(_) | RuntimeSelection::VllmSmolP128
+     );
+     if graph_lane && workload.concurrency != 1 {
+         return Err("full graph profile requires c1".to_owned());
+@@ -1062,6 +1090,12 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String>
+             .with_iteration_batch_completion()
+             .with_fixed_maximum_shape()
+             .with_packed_async_metadata(),
++        RuntimeSelection::VllmSmolP128 => executor
++            .with_vllm_smol_p128_graph()
++            .with_separate_residual_norm()
++            .with_iteration_batch_completion()
++            .with_packed_async_metadata()
++            .with_grouped_ragged_attention_heads(),
+         RuntimeSelection::ExecutionGraph(_) => executor
+             .with_separate_residual_norm()
+             .with_iteration_batch_completion()
+@@ -1079,6 +1113,7 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String>
+         RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
+             | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu)
+             | RuntimeSelection::ExecutionGraph(_)
++            | RuntimeSelection::VllmSmolP128
+     );
+     Ok(NativeBenchmarkConfig {
+         device_ordinal: options.environment.gpu.device_index,
+@@ -1523,7 +1558,7 @@ fn run_profile(options: Options) -> Result<(), String> {
+         .with_execution_graph_policy(
+             if matches!(
+                 options.runtime_selection()?,
+-                RuntimeSelection::ExecutionGraph(true)
++                RuntimeSelection::ExecutionGraph(true) | RuntimeSelection::VllmSmolP128
+             ) {
+                 riley_runtime::llama::ExecutionGraphPolicy::Require
+             } else {
+@@ -1532,6 +1567,28 @@ fn run_profile(options: Options) -> Result<(), String> {
+         )
+         .map_err(|error| format!("native graph preparation failed: {error}"))?;
+ 
++    if options.prepare_only {
++        let requests = token_rows
++            .iter()
++            .cloned()
++            .map(PretokenizedBenchmarkRequest::new)
++            .collect();
++        let prepared = executor
++            .prepare_trial(requests, options.workload.output_tokens)
++            .map_err(|e| format!("trial preparation failed: {e}"))?;
++        drop(prepared);
++        let report = executor
++            .close()
++            .map_err(|e| format!("preparation cleanup failed: {e}"))?;
++        if !report.allocations_are_zero() || report.scheduler_completions() != 0 {
++            return Err("preparation cleanup was not idle".to_owned());
++        }
++        let receipt = serde_json::json!({"schema_version":"riley.native-profile-preparation.v1","prepared":true,"performance_trials":0,"source":options.source,"environment":options.environment,"workload":options.workload,"cleanup_allocations_zero":true});
++        let mut bytes = serde_json::to_vec_pretty(&receipt)
++            .map_err(|_| "cannot serialize preparation receipt".to_owned())?;
++        bytes.push(b'\n');
++        return write_output(options.output_path.as_deref(), &bytes);
++    }
+     let measured = run_trials(&mut executor, &options, &token_rows);
+     let cleanup = executor.close();
+     let aggregate = match (measured, cleanup) {
+@@ -1552,9 +1609,14 @@ fn run_profile(options: Options) -> Result<(), String> {
+         }
+     };
+     let (trace, aggregate, requests) = aggregate.finish()?;
++    let matched_vllm = matches!(options.runtime_selection()?, RuntimeSelection::VllmSmolP128);
+     let output_path = options.output_path;
+     let evidence = Evidence {
+-        schema_version: SCHEMA_VERSION,
++        schema_version: if matched_vllm {
++            "riley.vllm-profile-run.v1"
++        } else {
++            SCHEMA_VERSION
++        },
+         role: options.role,
+         pair_index: options.pair_index,
+         run_id: options.run_id,
+@@ -1707,6 +1769,41 @@ mod tests {
+         assert!(options.output_path.is_none());
+     }
+ 
++    #[test]
++    fn vllm_profile_has_distinct_semantics_and_prepare_only_mode() {
++        let mut args = valid_arguments("candidate", "execution_graph_policy", "require");
++        for (flag, value) in [
++            ("--runtime-flag-name", "graph_numerics"),
++            ("--runtime-flag-value", "vllm-smol-p128-v1"),
++            ("--semantic-class", "VLLM_REFERENCE"),
++            ("--correctness-gate-id", "g04-vllm-smol-p128-v1"),
++            ("--prompt-tokens", "128"),
++            ("--output-tokens", "32"),
++            ("--concurrency", "1"),
++        ] {
++            let i = args.iter().position(|x| x == flag).unwrap();
++            args[i + 1] = OsString::from(value);
++        }
++        args.extend([OsString::from("--prepare-only"), OsString::from("true")]);
++        let Command::Run(options) = parse_arguments(args.clone()).expect("matched profile") else {
++            panic!("run")
++        };
++        assert!(options.prepare_only);
++        assert!(
++            benchmark_config(&options)
++                .unwrap()
++                .executor
++                .vllm_smol_p128_graph()
++        );
++        let i = args.iter().position(|x| x == "--semantic-class").unwrap();
++        args[i + 1] = OsString::from("E0");
++        assert!(parse_arguments(args.clone()).is_err());
++        args[i + 1] = OsString::from("VLLM_REFERENCE");
++        let i = args.iter().position(|x| x == "--prompt-tokens").unwrap();
++        args[i + 1] = OsString::from("127");
++        assert!(parse_arguments(args).is_err());
++    }
++
+     #[test]
+     fn graph_profile_binds_single_row_and_native_host_identity() {
+         let mut args = valid_arguments("candidate", "execution_graph_policy", "require");
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 6837c9a..cc90f04 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2483,6 +2483,13 @@ mod cuda_backend {
+             )
+             .map_err(internal)?;
+             use riley_runtime::llama::ExecutionGraphPolicy;
++            if resources.executor.config().vllm_smol_p128_graph()
++                && resources.execution_graph_policy != ExecutionGraphPolicy::Require
++            {
++                return Err(internal(
++                    "vllm-smol-p128-v1 requires an explicitly required graph",
++                ));
++            }
+             let supported = resources.executor.supports_owned_decode_graph();
+             if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {
+                 return Err(internal(
+@@ -2501,8 +2508,14 @@ mod cuda_backend {
+                 (Some(resources.executor), None)
+             };
+             eprintln!(
+-                "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={}",
+-                use_graph, resources.execution_graph_policy, !use_graph, !use_graph
++                "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
++                use_graph,
++                resources.execution_graph_policy,
++                !use_graph,
++                !use_graph,
++                decode_graph
++                    .as_ref()
++                    .map_or("existing", |graph| graph.numerical_profile_id())
+             );
+             Ok(Self {
+                 metadata: resources.metadata,
+@@ -3105,6 +3118,13 @@ mod cuda_backend {
+                     },
+                 )
+                 .map_err(|_| private_request_error("prompt tokenization failed"))?;
++            if let Some(graph) = &self.decode_graph {
++                graph
++                    .validate_request_shape(prompt_token_ids.len(), request.max_new_tokens)
++                    .map_err(|_| {
++                        private_request_error("request is outside graph numerical profile bounds")
++                    })?;
++            }
+             let total_tokens = prompt_token_ids
+                 .len()
+                 .checked_add(request.max_new_tokens)
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index a30d39f..610b779 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -46,6 +46,7 @@ serve options:
+   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
++  --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+@@ -54,8 +55,7 @@ serve options:
+   --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
+   --c02-audit-dir PATH           absolute C02 generation-audit output directory
+   --c02-shutdown-artifact PATH   direct-child C02 shutdown-v2 JSON artifact in audit dir
+-  --shutdown-on-stdin            gracefully stop after one input line or EOF
+-";
++  --shutdown-on-stdin            gracefully stop after one input line or EOF";
+ 
+ #[allow(clippy::large_enum_variant)] // Parsed once at process startup; avoid an extra heap allocation.
+ #[derive(Debug, Eq, PartialEq)]
+@@ -86,6 +86,7 @@ struct ServeOptions {
+     sampling_backend: SamplingBackendMode,
+     execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
+     reduction_profile: ReductionProfileMode,
++    vllm_smol_p128_graph: bool,
+     max_weight_bytes: u64,
+     shutdown_on_stdin: bool,
+     c02_runtime_config: Option<C02RuntimeConfigOptions>,
+@@ -243,6 +244,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     let mut metadata_transport = None;
+     let mut sampling_backend = None;
+     let mut execution_graph_policy = None;
++    let mut graph_numerics = None;
+     let mut reduction_profile = None;
+     let mut max_weight_bytes = None;
+     let mut shutdown_on_stdin = false;
+@@ -359,6 +361,19 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+                 parse_metadata_transport(next_value(&mut arguments, "--metadata-transport")?)?,
+                 "--metadata-transport",
+             )?,
++            "--graph-numerics" => {
++                let value = next_value(&mut arguments, "--graph-numerics")?;
++                let enabled = match value.to_str() {
++                    Some("existing") => false,
++                    Some("vllm-smol-p128-v1") => true,
++                    _ => {
++                        return Err(
++                            "--graph-numerics requires existing or vllm-smol-p128-v1".to_owned()
++                        );
++                    }
++                };
++                set_once(&mut graph_numerics, enabled, "--graph-numerics")?;
++            }
+             "--execution-graph-policy" => {
+                 let value = next_value(&mut arguments, "--execution-graph-policy")?;
+                 let policy = match value.to_str() {
+@@ -485,6 +500,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     )?;
+     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
+ 
++    let vllm_smol_p128_graph = graph_numerics.unwrap_or(false);
++    if vllm_smol_p128_graph
++        && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
++    {
++        return Err("vllm-smol-p128-v1 requires --execution-graph-policy require".to_owned());
++    }
++    if vllm_smol_p128_graph && c02_runtime_config.is_some() {
++        return Err("vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts".to_owned());
++    }
+     Ok(CliCommand::Serve(ServeOptions {
+         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
+         model_id,
+@@ -506,6 +530,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         execution_graph_policy: execution_graph_policy
+             .unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled),
+         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
++        vllm_smol_p128_graph,
+         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+         shutdown_on_stdin,
+         c02_runtime_config,
+@@ -1005,6 +1030,11 @@ fn run_serve(
+             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+         }
+     };
++    let executor = if options.vllm_smol_p128_graph {
++        executor.with_vllm_smol_p128_graph()
++    } else {
++        executor
++    };
+     // Full graph kernels use the reviewed exact grouped-head implementation.
+     // Select it explicitly before deriving effective runtime facts; Disabled
+     // preserves the established CLI defaults.
+@@ -3796,6 +3826,7 @@ mod tests {
+                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                 sampling_backend: SamplingBackendMode::Cpu,
+                 reduction_profile: ReductionProfileMode::CanonicalV1,
++                vllm_smol_p128_graph: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4182,6 +4213,7 @@ mod tests {
+                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                 sampling_backend: SamplingBackendMode::GpuGreedy,
+                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
++                vllm_smol_p128_graph: false,
+                 max_weight_bytes: 4096,
+                 shutdown_on_stdin: true,
+                 c02_runtime_config: None,
+@@ -4335,6 +4367,7 @@ mod tests {
+                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                 sampling_backend: SamplingBackendMode::Cpu,
+                 reduction_profile: ReductionProfileMode::CanonicalV1,
++                vllm_smol_p128_graph: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4455,6 +4488,7 @@ mod tests {
+                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                 sampling_backend: SamplingBackendMode::Cpu,
+                 reduction_profile: ReductionProfileMode::CanonicalV1,
++                vllm_smol_p128_graph: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4576,3 +4610,79 @@ mod graph_policy_cli_tests {
+         );
+     }
+ }
++
++#[cfg(test)]
++mod graph_numerics_cli_tests {
++    use super::*;
++    #[test]
++    fn numerical_profile_requires_explicit_required_graph() {
++        for policy in ["auto", "disabled"] {
++            assert!(
++                parse_arguments(
++                    [
++                        "serve",
++                        "--model",
++                        "/tmp/model",
++                        "--graph-numerics",
++                        "vllm-smol-p128-v1",
++                        "--execution-graph-policy",
++                        policy
++                    ]
++                    .map(OsString::from)
++                )
++                .is_err()
++            );
++        }
++        let CliCommand::Serve(options) = parse_arguments(
++            [
++                "serve",
++                "--model",
++                "/tmp/model",
++                "--graph-numerics",
++                "vllm-smol-p128-v1",
++                "--execution-graph-policy",
++                "require",
++            ]
++            .map(OsString::from),
++        )
++        .expect("explicit profile") else {
++            panic!("serve")
++        };
++        assert!(options.vllm_smol_p128_graph);
++        let CliCommand::Serve(default) =
++            parse_arguments(["serve", "--model", "/tmp/model"].map(OsString::from))
++                .expect("default")
++        else {
++            panic!("serve")
++        };
++        assert!(!default.vllm_smol_p128_graph);
++        assert!(
++            parse_arguments(
++                [
++                    "serve",
++                    "--model",
++                    "/tmp/model",
++                    "--graph-numerics",
++                    "unknown"
++                ]
++                .map(OsString::from)
++            )
++            .is_err()
++        );
++        assert!(
++            parse_arguments(
++                [
++                    "serve",
++                    "--model",
++                    "/tmp/model",
++                    "--graph-numerics",
++                    "existing",
++                    "--graph-numerics",
++                    "existing"
++                ]
++                .map(OsString::from)
++            )
++            .is_err()
++        );
++    }
++}
+diff --git a/kernels/CMakeLists.txt b/kernels/CMakeLists.txt
+index ef69d8c..b59ee40 100644
+--- a/kernels/CMakeLists.txt
++++ b/kernels/CMakeLists.txt
+@@ -27,6 +27,8 @@ add_library(riley_cuda_native STATIC
+     src/fixed37_attention.cu
+     src/fixed37_primitives.cu
+     src/gemm.cu
++    src/graph_numerics_precise.cu
++    src/graph_numerics.cu
+     src/graph_resources.cu
+     src/graph.cu
+     src/host_runtime.cu
+@@ -136,3 +138,5 @@ install(TARGETS riley_cuda_native
+ install(FILES include/riley_cuda.h
+     DESTINATION include
+ )
++
++set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 2dd9ea4..0530b1b 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2323,6 +2323,13 @@ inline bool release_child(RileyCudaContext* context) noexcept {
+   return false;
+ }
+ 
++
++cudaError_t enqueue_compiled_norm(cudaStream_t,const void*,const void*,const void*,void*,void*,int) noexcept;
++cudaError_t enqueue_compiled_rope(cudaStream_t,const void*,const void*,void*,void*,const void*,const void*,const void*) noexcept;
++cudaError_t enqueue_compiled_swiglu(cudaStream_t,const void*,const void*,void*) noexcept;
++cudaError_t enqueue_compiled_attention(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
++cudaError_t enqueue_compiled_prefill_gemm(cudaStream_t,const void*,const void*,void*,int,int,int,const void*) noexcept;
++cudaError_t enqueue_compiled_kv_write(cudaStream_t,const void*,const void*,void*,void*,const void*) noexcept;
+ }  // namespace riley_cuda_internal
+ 
+ #endif  // RILEY_CUDA_FFI_INTERNAL_HPP_
+diff --git a/kernels/src/graph_numerics.cu b/kernels/src/graph_numerics.cu
+new file mode 100644
+index 0000000..fc45ad1
+--- /dev/null
++++ b/kernels/src/graph_numerics.cu
+@@ -0,0 +1,118 @@
++#include "ffi_internal.hpp"
++// Diagnostic SM89 BF16 tensor-core attention, fixed head dimension 64.
++#include <cuda_runtime.h>
++#include <math_constants.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++#ifndef MODE
++#define MODE 6
++#endif
++__device__ float exponential(float score,float maximum){
++#if MODE == 1 || MODE >= 4
++ return exp2f(fmaf(score,1.4426950408889634F,-maximum*1.4426950408889634F));
++#elif MODE == 2
++ float x=(score-maximum)*1.4426950408889634F,y;
++ asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x)); return y;
++#else
++ return exp2f((score-maximum)*1.4426950408889634F);
++#endif
++}
++__device__ uint32_t pair(__nv_bfloat16 a,__nv_bfloat16 b){return uint32_t(__bfloat16_as_ushort(a)) | (uint32_t(__bfloat16_as_ushort(b))<<16);}
++__device__ void mma(float* d,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uint32_t b0,uint32_t b1){
++ asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
++ : "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]) : "r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b0),"r"(b1));
++}
++__device__ int cache_index(int token,int head,int dim,const uint32_t* blocks){
++ return blocks ? ((blocks[token/16]*3+head)*16+token%16)*64+dim : (token*3+head)*64+dim;
++}
++__global__ void attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks){
++ if(dynamic_n)n=*dynamic_n+1;
++ int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
++ int row=blockIdx.x,kvh=blockIdx.y,qh=kvh*3+warp,count=n-rows+row+1;
++ int qb=(row*9+qh)*64;
++ if(n<rows || n>160){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
++ __shared__ float scores[3][128];
++ __shared__ __nv_bfloat16 probs[3][128];
++ float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);
++  for(int token=begin;token<end;token+=8){
++   float d[4]={};
++   for(int depth=0;depth<64;depth+=16){
++    uint32_t a=pair(q[qb+depth+2*t],q[qb+depth+2*t+1]);
++    uint32_t aa=pair(q[qb+depth+2*t+8],q[qb+depth+2*t+9]);
++    int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
++    uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
++    uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++    mma(d,a,a,aa,aa,b,bb);
++   }
++   if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[warp][token-begin+2*t+j]=d[j]*.125F;}
++  }
++  __syncwarp();
++  float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[warp][i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  #if MODE >= 4
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++#else
++  float alpha=exponential(maximum,mx);
++#endif
++  float local_den=0.;
++  for(int i=lane;i<128;i+=32){
++   float p=i<end-begin?exponential(scores[warp][i],mx):0.;
++   local_den+=p;probs[warp][i]=__float2bfloat16_rn(p);
++  }
++  for(int offset=16;offset>0;offset>>=1)local_den+=__shfl_xor_sync(0xffffffff,local_den,offset);
++#if MODE == 3 || MODE == 5 || MODE == 6
++#if MODE == 6
++  local_den=den*alpha;
++#else
++  local_den=0.;
++#endif
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
++    if(i<end-begin)local_den+=exponential(scores[warp][i],mx);}
++#if MODE != 6
++  local_den+=__shfl_xor_sync(0xffffffff,local_den,2);
++  local_den+=__shfl_xor_sync(0xffffffff,local_den,1);
++#endif
++#endif
++#if MODE == 6
++  den=local_den;
++#else
++  den=den*alpha+local_den;
++#endif
++  maximum=mx;
++  __syncwarp();
++  for(int block=0;block<8;++block){
++   for(int j=0;j<4;++j)accum[block][j]*=alpha;
++   for(int token=begin;token<end;token+=16){
++    int pi=token-begin;
++    uint32_t a=pair(probs[warp][pi+2*t],probs[warp][pi+2*t+1]);
++    uint32_t aa=pair(probs[warp][pi+2*t+8],probs[warp][pi+2*t+9]);
++    int dim=block*8+group;
++    auto val=[&](int pos){return pos<end?v[cache_index(pos,kvh,dim,blocks)]:zero;};
++    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
++    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
++    mma(accum[block],a,a,aa,aa,b,bb);
++   }
++  }
++  __syncwarp();
++ }
++#if MODE == 6
++ den+=__shfl_xor_sync(0xffffffff,den,2);
++ den+=__shfl_xor_sync(0xffffffff,den,1);
++#endif
++ float inverse=1.0F/den;
++ if(group==0)for(int block=0;block<8;++block)for(int j=0;j<2;++j)
++#if MODE >= 4
++  out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
++#else
++  out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]/den);
++#endif
++}
++
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_attention(cudaStream_t s,const void* q,const void* k,const void* v,void* out,const void* metadata) noexcept {
++ auto* m=(const uint8_t*)metadata;attention<<<dim3(1,3),96,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)out,1,160,(const int*)(m+4),(const uint32_t*)(m+16));return cudaGetLastError();}
++}
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+new file mode 100644
+index 0000000..08c2920
+--- /dev/null
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -0,0 +1,68 @@
++#include "ffi_internal.hpp"
++#include <cuda_bf16.h>
++__global__ void compiled_norm(const __nv_bfloat16* a,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode){
++ __shared__ float sums[8];int tid=threadIdx.x,lane=tid%32;float x[4]={};
++ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576){x[j]=__bfloat162float(a[i]);
++  if(mode==1)x[j]+=__bfloat162float(((const __nv_bfloat16*)b)[i]);if(mode==2)x[j]+=((const float*)b)[i];
++  if(mode==1)((float*)residual)[i]=x[j];if(mode==2)((__nv_bfloat16*)residual)[i]=__float2bfloat16_rn(x[j]);}}
++ float sum=x[1]*x[1];sum=fmaf(x[0],x[0],sum);sum=fmaf(x[2],x[2],sum);sum=fmaf(x[3],x[3],sum);
++ for(int step=16;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);
++ if(lane==0)sums[tid/32]=sum;__syncthreads();
++ if(tid<32){sum=lane<8?sums[lane]:0.;for(int step=4;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);if(lane==0)sums[0]=sum;}__syncthreads();
++ float mean=fmaf(sums[0],1.F/576.F,1e-5F),inv;
++ asm("rsqrt.approx.ftz.f32 %0, %1;":"=f"(inv):"f"(mean));
++ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576)out[i]=__float2bfloat16_rn((x[j]*inv)*__bfloat162float(w[i]));}
++}
++
++__global__ void compiled_rope(const __nv_bfloat16* q,const __nv_bfloat16* k,__nv_bfloat16* qo,__nv_bfloat16* ko,const float* cos,const float* sin,const uint32_t* pos){
++ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;int head=i/32,dim=i%32;
++ float c=__bfloat162float(__float2bfloat16_rn(cos[*pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[*pos*32+dim]));
++ const __nv_bfloat16* src=head<9?q:k;__nv_bfloat16* dst=head<9?qo:ko;int base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
++ dst[base+dim]=__float2bfloat16_rn(a*c-b*s);dst[base+dim+32]=__float2bfloat16_rn(b*c+a*s);
++}
++__global__ void compiled_swiglu(const __nv_bfloat16* g,const __nv_bfloat16* u,__nv_bfloat16* out){
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<1536){float x=__bfloat162float(g[i]);out[i]=__float2bfloat16_rn((x/(1.F+expf(-x)))*__bfloat162float(u[i]));}
++}
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_norm(cudaStream_t s,const void* a,const void* b,const void* w,void* residual,void* out,int mode) noexcept {
++ compiled_norm<<<1,256,0,s>>>((const __nv_bfloat16*)a,b,(const __nv_bfloat16*)w,residual,(__nv_bfloat16*)out,mode);return cudaGetLastError();}
++cudaError_t enqueue_compiled_rope(cudaStream_t s,const void* q,const void* k,void* qo,void* ko,const void* cos,const void* sin,const void* pos) noexcept {
++ compiled_rope<<<2,256,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(__nv_bfloat16*)qo,(__nv_bfloat16*)ko,(const float*)cos,(const float*)sin,(const uint32_t*)pos);return cudaGetLastError();}
++cudaError_t enqueue_compiled_swiglu(cudaStream_t s,const void* g,const void* u,void* out) noexcept {
++ compiled_swiglu<<<6,256,0,s>>>((const __nv_bfloat16*)g,(const __nv_bfloat16*)u,(__nv_bfloat16*)out);return cudaGetLastError();}
++}
++
++#include <cuda_runtime.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++__device__ uint32_t pack(__nv_bfloat16 a,__nv_bfloat16 b){return uint32_t(__bfloat16_as_ushort(a))|(uint32_t(__bfloat16_as_ushort(b))<<16);}
++__global__ void gemv_prefill(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,int n,int k,int interval,const uint32_t* position){
++ if(*position>=128)return;
++ int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4,base=(blockIdx.x*4+warp)*8;
++ if(base>=n)return;float d[4]={},total[4]={};
++ for(int depth=0;depth<k;depth+=16){
++  uint32_t a=pack(x[depth+2*t],x[depth+2*t+1]),aa=pack(x[depth+2*t+8],x[depth+2*t+9]);
++  uint32_t b=pack(w[(base+g)*k+depth+2*t],w[(base+g)*k+depth+2*t+1]),bb=pack(w[(base+g)*k+depth+2*t+8],w[(base+g)*k+depth+2*t+9]);
++  asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};": "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]):"r"(a),"r"(a),"r"(aa),"r"(aa),"r"(b),"r"(bb));
++  if(interval>0&&((depth+16)%interval==0||depth+16==k)){for(int j=0;j<4;++j){total[j]+=__bfloat162float(__float2bfloat16_rn(d[j]));d[j]=0.;}}
++ }
++ if(interval>0)for(int j=0;j<4;++j)d[j]=total[j];
++ if(g==0){y[base+2*t]=__float2bfloat16_rn(d[0]);y[base+2*t+1]=__float2bfloat16_rn(d[1]);}
++}
++
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_prefill_gemm(cudaStream_t s,const void* x,const void* w,void* y,int n,int k,int interval,const void* pos) noexcept {
++ gemv_prefill<<<(n+31)/32,128,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,n,k,interval,(const uint32_t*)pos);return cudaGetLastError();
++}
++}
++
++__global__ void compiled_kv_write(const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* keys,__nv_bfloat16* values,const uint32_t* metadata){
++ int i=threadIdx.x;if(i>=192)return;uint32_t pos=metadata[1],physical=metadata[4+pos/16];
++ int destination=((physical*3+i/64)*16+pos%16)*64+i%64;keys[destination]=k[i];values[destination]=v[i];
++}
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_kv_write(cudaStream_t s,const void* k,const void* v,void* keys,void* values,const void* metadata) noexcept {
++ compiled_kv_write<<<1,256,0,s>>>((const __nv_bfloat16*)k,(const __nv_bfloat16*)v,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(const uint32_t*)metadata);return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 0fa9412..1069415 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1,4 +1,6 @@
++#include <vector>
+ #include "ffi_internal.hpp"
++#include <cublasLt.h>
+ #include <new>
+ #include <cstdlib>
+ #include <cstring>
+@@ -39,6 +41,7 @@ struct RileyCudaGraphResources {
+ #endif
+   bool terminal = false;
+   bool completion_visible = false;
++  bool vllm_smol_p128 = false;
+   bool completion_unknown = false;
+   RileyCudaGraphCapture* scoped_capture = nullptr;
+ };
+@@ -288,7 +291,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
+     const uint64_t capacity=r->decode_capacity,pos=u32(4),live=pos/16+1;
+     const uint64_t slot=(16+6*capacity+3)&~uint64_t(3);
+-    if(u32(0)>=r->decode_vocab||live>capacity||u32(8)!=0||u32(12)!=live||u32(slot)!=0)
++    if((r->vllm_smol_p128&&pos>=160)||u32(0)>=r->decode_vocab||live>capacity||u32(8)!=0||u32(12)!=live||u32(slot)!=0)
+       return reject(error,"decode token or row mapping invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     for(uint64_t i=0;i<capacity;++i){
+       uint16_t valid;std::memcpy(&valid,source+16+4*capacity+2*i,2);
+@@ -790,8 +793,15 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
+     return reject(error,"decode lifecycle invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   const uint64_t layers=geometry[0],physical=geometry[1],capacity=geometry[2],vocab=geometry[3];
+   if(layers==0||layers>128||physical==0||physical>4096||capacity==0||capacity>physical||vocab==0||vocab>UINT32_MAX||
+-      weight_count!=3+9*layers||profile>1||publish_logits>1)
++      weight_count!=3+9*layers||profile>2||publish_logits>1)
+     return reject(error,"decode bucket unsupported",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  if(profile==2){
++    int major=0,minor=0,runtime=0;
++    if(cuDeviceGetAttribute(&major,CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,r->owner->device)!=CUDA_SUCCESS||
++       cuDeviceGetAttribute(&minor,CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,r->owner->device)!=CUDA_SUCCESS||
++       cudaRuntimeGetVersion(&runtime)!=cudaSuccess||major!=8||minor!=9||runtime!=13000||cublasLtGetVersion()!=130101)
++      return reject(error,"vllm-smol-p128-v1 requires SM89 and CUDA runtime 13.0",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  }
+   for(size_t i=0;i<22;++i){
+     if(i==21&&d[i]==nullptr) continue;
+     if(d[i]==nullptr||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses))
+@@ -815,11 +825,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
+       d[15]->byte_len!=k*16*physical*layers||d[16]->byte_len!=d[15]->byte_len||
+       d[17]->byte_len==0||d[17]->byte_len%128!=0||d[18]->byte_len!=d[17]->byte_len||
+       d[19]->byte_len<metadata||staging->byte_len<2*transfer||w[0]->byte_len!=vocab*h||w[1]->byte_len!=h||
+-      (profile==1&&h!=1152))
++      (profile>=1&&h!=1152)||(profile==2&&(k!=384||inter!=3072||layers!=30||vocab!=49152)))
+     return reject(error,"decode geometry mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t i=2;i<=5;++i) if(d[i]->byte_len!=h) return reject(error,"decode hidden geometry",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t i=10;i<=12;++i) if(d[i]->byte_len!=inter) return reject(error,"decode MLP geometry",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+-  for(uint64_t i=0;i<1+2*layers;++i) if(!std::isfinite(eps[i])||eps[i]<=0||(profile==1&&eps[i]!=1e-5F))
++  for(uint64_t i=0;i<1+2*layers;++i) if(!std::isfinite(eps[i])||eps[i]<=0||(profile>=1&&eps[i]!=1e-5F))
+     return reject(error,"decode norm profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(uint64_t l=0;l<layers;++l) if(w[3+9*l]->byte_len!=h||w[3+9*l+5]->byte_len!=h)
+     return reject(error,"decode norm size",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -846,23 +856,37 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
+     if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_decode_embedding(r->stream->stream,w[0]->device_data,d[0]->device_data,d[1]->device_data,d[14]->device_data,h/2,vocab));
+     for(uint64_t l=0;l<layers&&s==RILEY_CUDA_STATUS_SUCCESS;++l){
+       auto* weights=w+3+9*l;
+-      auto gemm=[&](size_t j,size_t out){return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");};
+-      s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,weights[0]->device_data,d[2]->device_data,h/2,eps[1+2*l],profile));
++      auto gemm=[&](size_t j,size_t out){
++        auto status=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[out],states[l*7+j],error,"decode GEMM");
++        if(status==RILEY_CUDA_STATUS_SUCCESS&&profile==2){
++          const int ns[7]={576,192,192,576,1536,1536,576};const int ks[7]={576,576,576,576,576,576,1536};const int chunks[7]={192,192,192,128,0,0,320};
++          const size_t inputs[7]={2,2,2,5,2,2,12};const size_t weight_ids[7]={1,2,3,4,6,7,8};
++          status=kernel(enqueue_compiled_prefill_gemm(r->stream->stream,d[inputs[j]]->device_data,weights[weight_ids[j]]->device_data,d[out]->device_data,ns[j],ks[j],chunks[j],static_cast<uint8_t*>(d[19]->device_data)+4));
++        }
++        return status;
++      };
++      if(profile==2){if(l==0)s=kernel(enqueue_compiled_norm(r->stream->stream,d[1]->device_data,nullptr,weights[0]->device_data,nullptr,d[2]->device_data,0));}else s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,weights[0]->device_data,d[2]->device_data,h/2,eps[1+2*l],profile));
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(0,3);
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(1,6);
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(2,7);
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_qkv_rope(r->stream->stream,d[3]->device_data,d[6]->device_data,d[4]->device_data,d[8]->device_data,d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4,h/128,k/128,d[17]->byte_len/128));
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_decode_kv_attention(r->stream->stream,d[4]->device_data,d[8]->device_data,d[7]->device_data,static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[5]->device_data,d[19]->device_data,capacity,h/128,k/128,physical));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_rope(r->stream->stream,d[3]->device_data,d[6]->device_data,d[4]->device_data,d[8]->device_data,d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_qkv_rope(r->stream->stream,d[3]->device_data,d[6]->device_data,d[4]->device_data,d[8]->device_data,d[17]->device_data,d[18]->device_data,static_cast<uint8_t*>(d[19]->device_data)+4,h/128,k/128,d[17]->byte_len/128));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_kv_write(r->stream->stream,d[8]->device_data,d[7]->device_data,static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[19]->device_data));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_decode_kv_attention(r->stream->stream,d[4]->device_data,d[8]->device_data,d[7]->device_data,static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[5]->device_data,d[19]->device_data,capacity,h/128,k/128,physical));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_attention(r->stream->stream,d[4]->device_data,static_cast<uint8_t*>(d[15]->device_data)+l*k*16*physical,static_cast<uint8_t*>(d[16]->device_data)+l*k*16*physical,d[5]->device_data,d[19]->device_data));
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(3,3);
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_mlp_residual(r->stream->stream,d[1]->device_data,d[3]->device_data,d[4]->device_data,h/2));
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_mlp_norm(r->stream->stream,d[4]->device_data,weights[5]->device_data,d[2]->device_data,h/2,eps[2+2*l],profile));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_residual(r->stream->stream,d[1]->device_data,d[3]->device_data,d[4]->device_data,h/2));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_norm(r->stream->stream,d[4]->device_data,weights[5]->device_data,d[2]->device_data,h/2,eps[2+2*l],profile));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_norm(r->stream->stream,d[3]->device_data,d[1]->device_data,weights[5]->device_data,d[11]->device_data,d[2]->device_data,1));
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(4,9);
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(5,10);
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_mlp_pointwise(r->stream->stream,d[9]->device_data,d[10]->device_data,d[11]->device_data,d[12]->device_data,inter/2));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_swiglu(r->stream->stream,d[9]->device_data,d[10]->device_data,d[12]->device_data));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_pointwise(r->stream->stream,d[9]->device_data,d[10]->device_data,d[11]->device_data,d[12]->device_data,inter/2));
+       if(s==RILEY_CUDA_STATUS_SUCCESS) s=gemm(6,5);
+-      if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_mlp_residual(r->stream->stream,d[4]->device_data,d[5]->device_data,d[1]->device_data,h/2));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile==2)s=kernel(enqueue_compiled_norm(r->stream->stream,d[5]->device_data,d[11]->device_data,(l+1<layers?w[3+9*(l+1)]:w[1])->device_data,d[1]->device_data,d[2]->device_data,2));
++      if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_residual(r->stream->stream,d[4]->device_data,d[5]->device_data,d[1]->device_data,h/2));
+     }
+-    if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,w[1]->device_data,d[2]->device_data,h/2,eps[0],profile));
++    if(s==RILEY_CUDA_STATUS_SUCCESS&&profile!=2) s=kernel(enqueue_mlp_norm(r->stream->stream,d[1]->device_data,w[1]->device_data,d[2]->device_data,h/2,eps[0],profile));
+     if(s==RILEY_CUDA_STATUS_SUCCESS) s=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[13],states[layers*7],error,"decode head");
+     if(s==RILEY_CUDA_STATUS_SUCCESS) s=kernel(enqueue_decode_argmax(r->stream->stream,d[13]->device_data,d[20]->device_data,vocab));
+     if(s==RILEY_CUDA_STATUS_SUCCESS&&publish_logits) s=copy(host+transfer,d[13]->device_data,vocab*2,cudaMemcpyDeviceToHost);
+@@ -871,7 +895,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_decode(
+     return s;
+   },error);
+   release_states();
+-  if(status==RILEY_CUDA_STATUS_SUCCESS){r->decode_capacity=capacity;r->decode_physical=physical;r->decode_vocab=vocab;r->rope_table_positions=d[17]->byte_len/128;r->rope_payload_position_offset=4;}
++  if(status==RILEY_CUDA_STATUS_SUCCESS){r->vllm_smol_p128=profile==2;r->decode_capacity=capacity;r->decode_physical=physical;r->decode_vocab=vocab;r->rope_table_positions=d[17]->byte_len/128;r->rope_payload_position_offset=4;}
+   return status;
+ }
+ 

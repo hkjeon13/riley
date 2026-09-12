@@ -1,0 +1,30 @@
+{
+  "completed": true,
+  "summary": {
+    "requests": 30,
+    "tokens_exact": true,
+    "valid": true,
+    "raw_environment_ids": [
+      "rtx4090-ubuntu22-driver580-v1"
+    ],
+    "raw_canonical_eligible": false,
+    "aggregate_output_tokens_per_second": 868.1985715436684,
+    "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+    "ttft_ms": {
+      "median": 7.243266503792256,
+      "p95": 9.544125059619546,
+      "p99": 10.175211005844176
+    },
+    "tpot_ms": {
+      "median": 0.9353068702283406,
+      "p95": 1.0178461933748857,
+      "p99": 1.1181130652285873
+    },
+    "e2e_ms": {
+      "median": 36.24173201387748,
+      "p95": 40.42717604897916,
+      "p99": 41.841769008897245
+    },
+    "output_tokens_per_request_service_second": 868.374224814516
+  }
+}

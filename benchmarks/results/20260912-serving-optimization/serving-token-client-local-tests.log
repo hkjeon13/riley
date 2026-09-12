@@ -1,0 +1,23 @@
+test_both_transports_and_vllm_shape_have_exact_raw_ids (test_serving_token_client.LoopbackTests) ... ok
+test_callback_failure_is_accounted_without_deadlock (test_serving_token_client.LoopbackTests) ... ok
+test_client_close_aborts_only_its_owned_pending_request (test_serving_token_client.LoopbackTests) ... ok
+test_error_http_body_is_retained (test_serving_token_client.LoopbackTests) ... ok
+test_late_payload_after_done_is_rejected_without_retiming_done (test_serving_token_client.LoopbackTests) ... ok
+test_phase_stops_refill_and_retains_failed_attempts (test_serving_token_client.LoopbackTests) ... ok
+test_stop_reference_can_be_shorter_than_requested_budget (test_serving_token_client.LoopbackTests) ... ok
+test_strict_mismatch_fails_but_observation_is_explicitly_unqualified (test_serving_token_client.LoopbackTests) ... ok
+test_total_deadline_bounds_trickling_body_and_headers_and_preserves_partial (test_serving_token_client.LoopbackTests) ... ok
+test_truncated_http_chunk_after_done_is_not_a_complete_response (test_serving_token_client.LoopbackTests) ... ok
+test_warmup_and_retained_closed_loop_accounting_observes_concurrency (test_serving_token_client.LoopbackTests) ... ok
+test_both_terminal_shapes_preserve_empty_token_times_and_exclude_usage (test_serving_token_client.ParserTests) ... ok
+test_framer_handles_split_utf8_crlf_and_same_read_timestamps (test_serving_token_client.ParserTests) ... ok
+test_malformed_identity_ids_usage_and_order_fail_in_both_modes (test_serving_token_client.ParserTests) ... ok
+test_nonstream_validates_exact_ids_and_usage_without_token_times (test_serving_token_client.ParserTests) ... ok
+test_observation_mode_exposes_mismatch_without_qualifying_it (test_serving_token_client.ParserTests) ... ok
+test_raw_failure_payload_and_clock_checks (test_serving_token_client.ParserTests) ... ok
+test_single_invisible_token_has_no_tpot_or_first_visible_text (test_serving_token_client.ParserTests) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.812s
+
+OK

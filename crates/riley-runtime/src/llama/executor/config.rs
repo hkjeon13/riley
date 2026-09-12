@@ -130,6 +130,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     residual_norm: ResidualNormImplementation,
     execution_completion: ExecutionCompletionImplementation,
     metadata_transport: BatchMetadataTransport,
+    vllm_smol_p128_graph: bool,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
 }
@@ -148,9 +149,28 @@ impl PreparedLlamaBatchExecutorConfig {
             residual_norm: ResidualNormImplementation::Separate,
             execution_completion: ExecutionCompletionImplementation::PerOperation,
             metadata_transport: BatchMetadataTransport::Synchronous,
+            vllm_smol_p128_graph: false,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
         }
+    }
+
+    /// Selects the explicit VllmSmolP128V1 owned graph. Eager fallback is forbidden.
+    #[must_use]
+    pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
+        self.vllm_smol_p128_graph = true;
+        self
+    }
+    /// Whether the bounded vLLM numerical graph is required.
+    #[must_use]
+    pub const fn vllm_smol_p128_graph(self) -> bool {
+        self.vllm_smol_p128_graph
+    }
+
+    /// Captures all 128 prompt tokens together while retaining M=1 decode plans.
+    #[must_use]
+    pub const fn vllm_smol_p128_batched_prefill(self) -> bool {
+        self.vllm_smol_p128_graph && self.metadata.max_input_tokens() == 128
     }
 
     #[must_use]
@@ -404,7 +424,38 @@ pub(in crate::llama) const fn normalize_prepared_config(
         residual_norm: config.residual_norm,
         execution_completion: config.execution_completion,
         metadata_transport: config.metadata_transport,
+        vllm_smol_p128_graph: config.vllm_smol_p128_graph,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
+    }
+}
+
+#[cfg(test)]
+mod graph_numerical_profile_tests {
+    use super::*;
+    #[test]
+    fn explicit_profile_survives_normalization_without_changing_default() {
+        let c = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        );
+        assert!(!normalize_prepared_config(c).vllm_smol_p128_graph());
+        assert!(normalize_prepared_config(c.with_vllm_smol_p128_graph()).vllm_smol_p128_graph());
+    }
+
+    #[test]
+    fn batched_prefill_requires_explicit_profile_and_exact_p128_capacity() {
+        for tokens in [1, 2, 127, 128, 129] {
+            let config = PreparedLlamaBatchExecutorConfig::new(
+                LlamaBatchMetadataConfig::new(1, tokens, 16, 1, 16).unwrap(),
+                PreparedLlamaForwardConfig::default(),
+            );
+            assert!(!config.vllm_smol_p128_batched_prefill());
+            assert_eq!(
+                normalize_prepared_config(config.with_vllm_smol_p128_graph())
+                    .vllm_smol_p128_batched_prefill(),
+                tokens == 128
+            );
+        }
     }
 }

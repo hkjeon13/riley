@@ -1,0 +1,66 @@
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-model)
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+warning: `riley-cuda` (lib test) generated 1 warning
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.73s
+  Executable unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_cuda-6dbae6b0417c0677)
+  Executable unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a)

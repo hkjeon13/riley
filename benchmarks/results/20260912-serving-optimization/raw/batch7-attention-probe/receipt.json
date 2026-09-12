@@ -1,0 +1,125 @@
+{
+  "schema_version": "riley.batch7-attention-correctness.v1",
+  "passed": true,
+  "gpu_tests_executed": true,
+  "cases": 8640,
+  "layers": 30,
+  "positions": 32,
+  "patterns": 3,
+  "mappings": 3,
+  "exact_outputs": true,
+  "finite_outputs": true,
+  "guards_intact": true,
+  "inputs_unchanged": true,
+  "oracle_outputs_unchanged": true,
+  "mapping_invariant": true,
+  "all_allocations_freed": true,
+  "source_root": "/tmp/riley-opt-260912/batch7-source",
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "43be2f99a2a1b8bf58bf7d6b873a05356508e59e00ec3701b24094cde088d6dc",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "8586726646729333e9bcea17c419b530aeb30e47cc1727189b701d9468d5dad5",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e",
+    "kernels/src/graph_numerics_precise.cu": "fbf8e8cd517abd29502d50c33a7d46fe7738bb7393ffbee7d9b0e532f305d87f",
+    "kernels/src/ffi_internal.hpp": "bd5abff3d42ba00692c0eb98127043a6f16beb9c4182b925c35555a0af89c617",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67"
+  },
+  "source_build": {
+    "path": "/tmp/riley-opt-260912/batch7-build.json",
+    "sha256": "4d3f65c70aa56beb487754f01ed04e04d36f4c6db64fd3ee17b665561fb25395"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch7-target/release/riley": "c803eaa21e233ce74f496396f3b85ccfd1a5cea9f0781b7ff9ff14f61fdace43",
+    "/tmp/riley-opt-260912/batch7-target/release/riley-profile": "32425c1b18dbd47011765a1b4555fa6cdfdd419d7179491ce1fdc1a33f629ccd"
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/batch7_attention_probe.py",
+    "sha256": "bf8f8deca087d6db53c6cce9238d05b2d014328b3f0000f864cbf30ebc56e7f1"
+  },
+  "probe_source": {
+    "path": "/tmp/riley-opt-260912/batch7_attention_probe.cu",
+    "sha256": "b2e847ab8497c62b04263b1038b7b3f70ead0c389068facf3ef78208f5f62d20"
+  },
+  "oracle_source": {
+    "path": "/tmp/riley-opt-260912/batch6-source/kernels/src/graph_numerics.cu",
+    "sha256": "d86de0d147fab0e7083095bd0b9515daf73cfe87465dde9c5ead2b6fda744dbf"
+  },
+  "candidate_entry": "enqueue_compiled_packed_decode_attention_two_warp",
+  "candidate_source_sha256": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e",
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/batch7-attention-probe/fixtures.json",
+    "sha256": "f1ef95d31932fab6c1fdab1fd5e5b61426a46074fae23a9c7f5a0042b119f16a"
+  },
+  "compile_receipt": {
+    "path": "/tmp/riley-opt-260912/batch7-attention-probe/compile.json",
+    "sha256": "ea6bf3f1bbc3ec1f0e43a43ce509693aba6f9fa3d3585347906a79d36f06d60b"
+  },
+  "probe_binary": {
+    "path": "/tmp/riley-opt-260912/batch7-attention-probe/build/batch7_attention_probe",
+    "sha256": "7f5a1864374a2a802129979cd7ac3f73ae1b00adec0467d19443ea6223d9c5ab"
+  },
+  "raw_results": {
+    "path": "/tmp/riley-opt-260912/batch7-attention-probe/native-results.jsonl",
+    "sha256": "5f9015774e7a485e81ebf31c1196e6514478828093900dbf689ecf4552193d9b"
+  },
+  "stderr": {
+    "path": "/tmp/riley-opt-260912/batch7-attention-probe/native-stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "argv": [
+    "/tmp/riley-opt-260912/batch7-attention-probe/build/batch7_attention_probe",
+    "--cases",
+    "/tmp/riley-opt-260912/batch7-attention-probe/cases.tsv",
+    "--device",
+    "0"
+  ],
+  "device": {
+    "schema": "riley.batch7-attention-native.v1",
+    "kind": "device",
+    "ordinal": 0,
+    "name": "NVIDIA GeForce RTX 4090",
+    "uuid_hex": "9087e4256acab722b8c9cc0423b39fb0",
+    "compute_major": 8,
+    "compute_minor": 9,
+    "driver_version": 13000,
+    "runtime_version": 13000
+  },
+  "allocation_summary": {
+    "schema": "riley.batch7-attention-native.v1",
+    "kind": "summary",
+    "passed": true,
+    "cases": 8640,
+    "failed_cases": 0,
+    "layers": 30,
+    "positions": 32,
+    "patterns": 3,
+    "mappings": 3,
+    "device_allocations_created": 60480,
+    "device_allocations_freed": 60480,
+    "live_device_allocations": 0,
+    "live_device_bytes": 0,
+    "cleanup_errors": 0,
+    "all_allocations_freed": true,
+    "stream_destroyed": true,
+    "performance_measured": false,
+    "performance_claim_eligible": false,
+    "error": ""
+  },
+  "performance_measured": false,
+  "performance_claim_eligible": false,
+  "desktop_session_policy": "left untouched; correctness-only execution"
+}

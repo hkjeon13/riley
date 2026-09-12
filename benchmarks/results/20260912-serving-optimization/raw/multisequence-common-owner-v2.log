@@ -1,0 +1,57 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10120:19
+      |
+10119 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10120 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10130 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10424:19
+      |
+10423 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10424 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10435 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10447 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-runtime)
+error[E0425]: cannot find value `multi_pinned_bytes` in this scope
+   --> crates/riley-runtime/src/llama/graph_decode_full.rs:506:41
+    |
+506 |                 (transfer * 2) as u64 + multi_pinned_bytes,
+    |                                         ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+warning: unused variable: `multi_pinned_bytes`
+    --> crates/riley-runtime/src/llama/graph_decode_full.rs:1483:13
+     |
+1483 |         let multi_pinned_bytes = multi.as_ref().map_or(0, |m| {
+     |             ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_multi_pinned_bytes`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `riley-runtime` (lib test) generated 1 warning
+error: could not compile `riley-runtime` (lib test) due to 1 previous error; 1 warning emitted

@@ -14,6 +14,12 @@ mod error;
 mod ffi;
 mod gemm;
 mod graph;
+mod graph_resources;
+#[cfg(feature = "cuda")]
+pub use graph_resources::OwnedGraphResourceReservation;
+pub use graph_resources::{
+    BorrowedGraphResourceParents, BorrowedGraphResourceReservation, DecodeNumericalProfile,
+};
 #[cfg(any(feature = "cuda", test))]
 mod hf_eager_allowlist;
 mod memory;
@@ -56,10 +62,16 @@ pub use gemm::{
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
 };
 pub use graph::{
-    Bf16EmbeddingStatusD2HStatus, CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode,
-    CudaGraphCaptureOperation, CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState,
-    CudaGraphStage, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
-    OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16EmbeddingStatusD2HGraph,
+    AttentionParentLayer, Bf16EmbeddingStatusD2HStatus, BorrowedArgmaxGraph,
+    BorrowedArgmaxResources, BorrowedEmbeddingGraph, BorrowedEmbeddingResources, BorrowedGemmGraph,
+    BorrowedGemmResources, BorrowedH2DGraph, BorrowedH2DResources, BorrowedNormGraph,
+    BorrowedNormResources, BorrowedOutputGraph, BorrowedOutputResources, BorrowedPointwiseGraph,
+    BorrowedPointwiseResources, BorrowedRopeGraph, BorrowedRopeResources,
+    BorrowedSelectedGemmGraph, BorrowedSelectedGemmResources, CapturedGraph,
+    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
+    CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage,
+    EmbeddingGraphGeometry, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
+    NormGraphProfile, OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16EmbeddingStatusD2HGraph,
     OwnedCapturedBf16RowGatherArgmaxD2HGraph, OwnedCapturedBf16RowGatherArgmaxGraph,
     OwnedCapturedBf16RowGatherGraph, OwnedCapturedCanonicalGemmBf16Graph,
     OwnedCapturedCanonicalRmsNormBf16Graph, OwnedCapturedCanonicalRmsNormGemmBf16Graph,
@@ -105,7 +117,9 @@ pub use graph::{
     OwnedGraphResidualAddBf16CaptureBeginError, OwnedGraphResidualAddBf16Exec,
     OwnedGraphResidualAddBf16Launch, OwnedGraphResidualAddBf16Resources, OwnedGraphSiluBf16Capture,
     OwnedGraphSiluBf16CaptureBeginError, OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch,
-    OwnedGraphSiluBf16Resources,
+    OwnedGraphSiluBf16Resources, PackedAttentionMetadataLayout, PackedParentAttentionResources,
+    PackedParentKvWriteGraph, PackedParentKvWriteResources, ParentAttentionGraph,
+    ParentAttentionResources, PointwiseGraphOperation, RopeGraphGeometry,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,

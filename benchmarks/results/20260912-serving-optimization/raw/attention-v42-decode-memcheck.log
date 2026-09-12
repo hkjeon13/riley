@@ -1,0 +1,8 @@
+========= COMPUTE-SANITIZER
+N=576 K=576 I=192 tiled=0 seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true
+N=192 K=576 I=192 tiled=0 seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true
+N=576 K=576 I=128 tiled=0 seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true
+N=1536 K=576 I=0 tiled=1 seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true
+N=576 K=1536 I=320 tiled=1 seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true
+attention active_rows=1..16 invalid_rows=0,17 contexts=1..4096 mixed disjoint_permuted_pages=true exact=true inactive_guard=true
+========= ERROR SUMMARY: 0 errors

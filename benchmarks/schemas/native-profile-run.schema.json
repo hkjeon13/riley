@@ -145,7 +145,7 @@
         "cuda_runtime_version": { "type": "string", "minLength": 1 },
         "cuda_toolkit_version": { "type": "string", "minLength": 1 },
         "cublas_version": { "type": "string", "minLength": 1 },
-        "container_image_sha256": { "$ref": "#/$defs/sha256" }
+        "container_image_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
       }
     },
     "environment": {

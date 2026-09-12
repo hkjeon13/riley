@@ -1,0 +1,738 @@
+{
+  "schema_version": "riley.engine-optimization.v1",
+  "measurement_started": true,
+  "condition": {
+    "condition_id": "serving-gui-retained-512mib-cool48-v1",
+    "gui_retained": true,
+    "idle_memory_limit_mib": 512,
+    "start_temperature_limit_c": 48,
+    "canonical_idle_memory_limit_mib": 256,
+    "canonical_qualification": false,
+    "scope": "single-concurrency engine-only diagnostic",
+    "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+  },
+  "inputs": {
+    "/tmp/riley-opt-260912/batch2-engine-plan.json": "3ff5d0d738a5f1b5061d7cac6b3e4e7a67f723e7472606c1c784d4c504c61ced",
+    "/tmp/riley-g04-vllm-profile-260911/request.json": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+    "/tmp/riley-opt-260912/batch2-binding.json": "3496b04726505b3418b279d1410a218b7fe77ca0d4d5e2ff33bcbba612df2df8"
+  },
+  "runner_sha256": "dcecda3438756d970c0438c4fcab66e0395e87780a7393ab5f17fa0b60f868d6",
+  "shared_runner_sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+  "source_commit": "1bfb23053fb15a3528eb6413abe6e1bbdb0db004",
+  "pairs": 5,
+  "warmups": 5,
+  "iterations": 30,
+  "warmup_token_validation": "delegated to pinned engine adapters; retained requests independently checked",
+  "legacy_vllm_raw": "preserved without rewriting; not canonical-eligible; actual environment is envelope plus live preflight",
+  "timing_boundary": "engine request TTFT/TPOT/E2E; not CUDA kernel timing",
+  "tail_estimator": "nearest rank per process; thirty samples do not establish high-concurrency tail stability",
+  "completed": true,
+  "pair_results": [
+    {
+      "index": 1,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "tokens_exact": true,
+        "aggregate_output_tokens_per_second": 397.68872987290297,
+        "throughput_boundary": "native-profile aggregate throughput field",
+        "aggregate_host": {
+          "plan_ns": {
+            "validity": "measured",
+            "value": 817519
+          },
+          "execute_ns": {
+            "validity": "measured",
+            "value": 2412621232
+          },
+          "sampling_ns": {
+            "validity": "measured",
+            "value": 45553
+          },
+          "commit_ns": {
+            "validity": "measured",
+            "value": 313624
+          }
+        },
+        "aggregate_cuda": {
+          "stream_span_ns": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "idle_ns": {
+            "validity": "unmeasured",
+            "value": null
+          }
+        },
+        "counters": {
+          "iterations": {
+            "validity": "measured",
+            "value": 960
+          },
+          "kernel_launches": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "copies": {
+            "h2d_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "h2d_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          },
+          "allocations": {
+            "device_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "device_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "peak_device_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          }
+        },
+        "ttft_ms": {
+          "median": 13.718862000000001,
+          "p95": 13.751937,
+          "p99": 13.753814
+        },
+        "tpot_ms": {
+          "median": 2.1535045806451616,
+          "p95": 2.1559649677419355,
+          "p99": 2.1559906774193545
+        },
+        "e2e_ms": {
+          "median": 80.4720315,
+          "p95": 80.584908,
+          "p99": 80.587648
+        },
+        "output_tokens_per_request_service_second": 397.69056070554944
+      },
+      "vllm": {
+        "requests": 30,
+        "tokens_exact": true,
+        "valid": true,
+        "raw_environment_ids": [
+          "rtx4090-ubuntu22-driver580-v1"
+        ],
+        "raw_canonical_eligible": false,
+        "aggregate_output_tokens_per_second": 883.9469802531733,
+        "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+        "ttft_ms": {
+          "median": 7.099256501533091,
+          "p95": 9.328249958343804,
+          "p99": 9.568626061081886
+        },
+        "tpot_ms": {
+          "median": 0.9211704506719065,
+          "p95": 0.9863998725890152,
+          "p99": 1.028579873813977
+        },
+        "e2e_ms": {
+          "median": 36.0059950617142,
+          "p95": 38.65942999254912,
+          "p99": 41.214226046577096
+        },
+        "output_tokens_per_request_service_second": 884.128574137092
+      },
+      "riley_over_vllm": {
+        "ttft_ms": 1.9324364455682648,
+        "tpot_ms": 2.33779164222472,
+        "e2e_ms": 2.2349620212431596,
+        "service_throughput": 0.44981077677949133
+      }
+    },
+    {
+      "index": 2,
+      "order": [
+        "vllm",
+        "riley"
+      ],
+      "vllm": {
+        "requests": 30,
+        "tokens_exact": true,
+        "valid": true,
+        "raw_environment_ids": [
+          "rtx4090-ubuntu22-driver580-v1"
+        ],
+        "raw_canonical_eligible": false,
+        "aggregate_output_tokens_per_second": 832.0365261973211,
+        "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+        "ttft_ms": {
+          "median": 7.044763478916138,
+          "p95": 14.761628932319582,
+          "p99": 15.608376008458436
+        },
+        "tpot_ms": {
+          "median": 0.94412571014536,
+          "p95": 1.1977342242795612,
+          "p99": 1.2656810633357494
+        },
+        "e2e_ms": {
+          "median": 37.55450347671285,
+          "p95": 46.31022992543876,
+          "p99": 50.36075401585549
+        },
+        "output_tokens_per_request_service_second": 832.1900777235434
+      },
+      "riley": {
+        "requests": 30,
+        "tokens_exact": true,
+        "aggregate_output_tokens_per_second": 397.46487051767247,
+        "throughput_boundary": "native-profile aggregate throughput field",
+        "aggregate_host": {
+          "plan_ns": {
+            "validity": "measured",
+            "value": 755725
+          },
+          "execute_ns": {
+            "validity": "measured",
+            "value": 2414080363
+          },
+          "sampling_ns": {
+            "validity": "measured",
+            "value": 39782
+          },
+          "commit_ns": {
+            "validity": "measured",
+            "value": 295060
+          }
+        },
+        "aggregate_cuda": {
+          "stream_span_ns": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "idle_ns": {
+            "validity": "unmeasured",
+            "value": null
+          }
+        },
+        "counters": {
+          "iterations": {
+            "validity": "measured",
+            "value": 960
+          },
+          "kernel_launches": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "copies": {
+            "h2d_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "h2d_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          },
+          "allocations": {
+            "device_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "device_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "peak_device_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          }
+        },
+        "ttft_ms": {
+          "median": 13.7370835,
+          "p95": 13.75227,
+          "p99": 13.758522
+        },
+        "tpot_ms": {
+          "median": 2.1541223387096773,
+          "p95": 2.1555903870967743,
+          "p99": 2.1565736774193547
+        },
+        "e2e_ms": {
+          "median": 80.51092299999999,
+          "p95": 80.568705,
+          "p99": 80.574111
+        },
+        "output_tokens_per_request_service_second": 397.4663497597903
+      },
+      "riley_over_vllm": {
+        "ttft_ms": 1.9499708600739991,
+        "tpot_ms": 2.2816054213564665,
+        "e2e_ms": 2.1438420308212556,
+        "service_throughput": 0.4776148627571478
+      }
+    },
+    {
+      "index": 3,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "tokens_exact": true,
+        "aggregate_output_tokens_per_second": 397.5406296368831,
+        "throughput_boundary": "native-profile aggregate throughput field",
+        "aggregate_host": {
+          "plan_ns": {
+            "validity": "measured",
+            "value": 769088
+          },
+          "execute_ns": {
+            "validity": "measured",
+            "value": 2413604434
+          },
+          "sampling_ns": {
+            "validity": "measured",
+            "value": 42538
+          },
+          "commit_ns": {
+            "validity": "measured",
+            "value": 276614
+          }
+        },
+        "aggregate_cuda": {
+          "stream_span_ns": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "idle_ns": {
+            "validity": "unmeasured",
+            "value": null
+          }
+        },
+        "counters": {
+          "iterations": {
+            "validity": "measured",
+            "value": 960
+          },
+          "kernel_launches": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "copies": {
+            "h2d_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "h2d_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          },
+          "allocations": {
+            "device_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "device_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "peak_device_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          }
+        },
+        "ttft_ms": {
+          "median": 13.731624499999999,
+          "p95": 13.749554,
+          "p99": 13.79303
+        },
+        "tpot_ms": {
+          "median": 2.1540574516129034,
+          "p95": 2.156345870967742,
+          "p99": 2.161532258064516
+        },
+        "e2e_ms": {
+          "median": 80.505044,
+          "p95": 80.584753,
+          "p99": 80.80053
+        },
+        "output_tokens_per_request_service_second": 397.5425745083311
+      },
+      "vllm": {
+        "requests": 30,
+        "tokens_exact": true,
+        "valid": true,
+        "raw_environment_ids": [
+          "rtx4090-ubuntu22-driver580-v1"
+        ],
+        "raw_canonical_eligible": false,
+        "aggregate_output_tokens_per_second": 868.1985715436684,
+        "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+        "ttft_ms": {
+          "median": 7.243266503792256,
+          "p95": 9.544125059619546,
+          "p99": 10.175211005844176
+        },
+        "tpot_ms": {
+          "median": 0.9353068702283406,
+          "p95": 1.0178461933748857,
+          "p99": 1.1181130652285873
+        },
+        "e2e_ms": {
+          "median": 36.24173201387748,
+          "p95": 40.42717604897916,
+          "p99": 41.841769008897245
+        },
+        "output_tokens_per_request_service_second": 868.374224814516
+      },
+      "riley_over_vllm": {
+        "ttft_ms": 1.8957778914817953,
+        "tpot_ms": 2.303048892484906,
+        "e2e_ms": 2.2213354474662927,
+        "service_throughput": 0.45780098389406465
+      }
+    },
+    {
+      "index": 4,
+      "order": [
+        "vllm",
+        "riley"
+      ],
+      "vllm": {
+        "requests": 30,
+        "tokens_exact": true,
+        "valid": true,
+        "raw_environment_ids": [
+          "rtx4090-ubuntu22-driver580-v1"
+        ],
+        "raw_canonical_eligible": false,
+        "aggregate_output_tokens_per_second": 883.53097958166,
+        "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+        "ttft_ms": {
+          "median": 7.044852478429675,
+          "p95": 7.685606018640101,
+          "p99": 7.7749170595780015
+        },
+        "tpot_ms": {
+          "median": 0.9128483868534527,
+          "p95": 1.0526774511221917,
+          "p99": 1.1304036428731297
+        },
+        "e2e_ms": {
+          "median": 35.36458051530644,
+          "p95": 39.68473104760051,
+          "p99": 42.81742998864502
+        },
+        "output_tokens_per_request_service_second": 883.71285325461
+      },
+      "riley": {
+        "requests": 30,
+        "tokens_exact": true,
+        "aggregate_output_tokens_per_second": 397.54339105051736,
+        "throughput_boundary": "native-profile aggregate throughput field",
+        "aggregate_host": {
+          "plan_ns": {
+            "validity": "measured",
+            "value": 702067
+          },
+          "execute_ns": {
+            "validity": "measured",
+            "value": 2413688435
+          },
+          "sampling_ns": {
+            "validity": "measured",
+            "value": 39594
+          },
+          "commit_ns": {
+            "validity": "measured",
+            "value": 267135
+          }
+        },
+        "aggregate_cuda": {
+          "stream_span_ns": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "idle_ns": {
+            "validity": "unmeasured",
+            "value": null
+          }
+        },
+        "counters": {
+          "iterations": {
+            "validity": "measured",
+            "value": 960
+          },
+          "kernel_launches": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "copies": {
+            "h2d_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "h2d_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          },
+          "allocations": {
+            "device_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "device_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "peak_device_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          }
+        },
+        "ttft_ms": {
+          "median": 13.7365435,
+          "p95": 13.76197,
+          "p99": 13.764401
+        },
+        "tpot_ms": {
+          "median": 2.153631806451613,
+          "p95": 2.155791290322581,
+          "p99": 2.157293129032258
+        },
+        "e2e_ms": {
+          "median": 80.49866,
+          "p95": 80.573939,
+          "p99": 80.620462
+        },
+        "output_tokens_per_request_service_second": 397.5449528614177
+      },
+      "riley_over_vllm": {
+        "ttft_ms": 1.9498695738568437,
+        "tpot_ms": 2.35924370078046,
+        "e2e_ms": 2.2762509501606756,
+        "service_throughput": 0.4498576108713443
+      }
+    },
+    {
+      "index": 5,
+      "order": [
+        "riley",
+        "vllm"
+      ],
+      "riley": {
+        "requests": 30,
+        "tokens_exact": true,
+        "aggregate_output_tokens_per_second": 397.6045867678383,
+        "throughput_boundary": "native-profile aggregate throughput field",
+        "aggregate_host": {
+          "plan_ns": {
+            "validity": "measured",
+            "value": 729231
+          },
+          "execute_ns": {
+            "validity": "measured",
+            "value": 2413289301
+          },
+          "sampling_ns": {
+            "validity": "measured",
+            "value": 40190
+          },
+          "commit_ns": {
+            "validity": "measured",
+            "value": 267728
+          }
+        },
+        "aggregate_cuda": {
+          "stream_span_ns": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "idle_ns": {
+            "validity": "unmeasured",
+            "value": null
+          }
+        },
+        "counters": {
+          "iterations": {
+            "validity": "measured",
+            "value": 960
+          },
+          "kernel_launches": {
+            "validity": "unmeasured",
+            "value": null
+          },
+          "copies": {
+            "h2d_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "h2d_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_calls": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "d2h_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          },
+          "allocations": {
+            "device_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "device_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_allocations": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "pinned_frees": {
+              "validity": "unmeasured",
+              "value": null
+            },
+            "peak_device_bytes": {
+              "validity": "unmeasured",
+              "value": null
+            }
+          }
+        },
+        "ttft_ms": {
+          "median": 13.726829,
+          "p95": 13.745784,
+          "p99": 13.746017
+        },
+        "tpot_ms": {
+          "median": 2.1538003548387095,
+          "p95": 2.15582464516129,
+          "p99": 2.1565142903225807
+        },
+        "e2e_ms": {
+          "median": 80.497018,
+          "p95": 80.567198,
+          "p99": 80.59796
+        },
+        "output_tokens_per_request_service_second": 397.60605420524325
+      },
+      "vllm": {
+        "requests": 30,
+        "tokens_exact": true,
+        "valid": true,
+        "raw_environment_ids": [
+          "rtx4090-ubuntu22-driver580-v1"
+        ],
+        "raw_canonical_eligible": false,
+        "aggregate_output_tokens_per_second": 878.8515594997568,
+        "throughput_boundary": "sum of measured vLLM batch_wall_ms",
+        "ttft_ms": {
+          "median": 7.1443000342696905,
+          "p95": 8.27746104914695,
+          "p99": 15.743704978376627
+        },
+        "tpot_ms": {
+          "median": 0.9320524367203395,
+          "p95": 0.9961736110609867,
+          "p99": 1.13049280574365
+        },
+        "e2e_ms": {
+          "median": 36.0310859978199,
+          "p95": 42.10857499856502,
+          "p99": 43.79314207471907
+        },
+        "output_tokens_per_request_service_second": 879.0274053935916
+      },
+      "riley_over_vllm": {
+        "ttft_ms": 1.9213679344589836,
+        "tpot_ms": 2.310814574357422,
+        "e2e_ms": 2.2340991333114566,
+        "service_throughput": 0.45232498072936866
+      }
+    }
+  ],
+  "paired_ratio_medians": {
+    "ttft_ms": 1.9324364455682648,
+    "tpot_ms": 2.310814574357422,
+    "e2e_ms": 2.2340991333114566,
+    "service_throughput": 0.45232498072936866
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "date": "2026-09-10",
+  "scope": "G02P2 cold layer resource audit only; remaining performance roadmap not complete",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "source_overlay_sha256": "8398bede60d859fdfc0a293af374e4dbb96e2ff38ac419e61247696ec7cb1a8f",
+  "source_files": 23,
+  "gpu_final": {
+    "exit_code": 0,
+    "passed": 26,
+    "note": "CUDA-enabled mixed CPU/GPU C07 suite"
+  },
+  "runtime_cpu": {
+    "exit_code": 0,
+    "passed": 258
+  },
+  "architecture": {
+    "exit_code": 0,
+    "passed": 15
+  },
+  "inventory": {
+    "exit_code": 0,
+    "passed": 1
+  },
+  "clippy_cuda": {
+    "exit_code": 0,
+    "baseline_warnings": 286,
+    "changed_norm_module_diagnostics": []
+  },
+  "format_and_diff_check": {
+    "exit_code": 0
+  },
+  "comparison_scope": "SmolLM2 first, then expand",
+  "artifact_hashes": {
+    "README.md": "fa0c182b78b097036be2cf9fa67e81a0af4e2b407a3456c6d81bfb0470a29d3a",
+    "boundaries.log": "6240e51ae2a7241c1bb6d2ad4a21f193b420950f2847790968046292ac207865",
+    "clippy-cpu.jsonl": "52184542df5e045242cf75542112683499540236740547c7450516a173cf23af",
+    "clippy-cpu.log": "423550c7f39dbd7242b731cbe05e88277a6ec9bc6272b1bc7bcaa2f114ff45f5",
+    "clippy-gpu-final.jsonl": "9e91754b313091192b73794aff60ff245140918e6fa730cba0a1dccdb3e74dc9",
+    "clippy-gpu-final.log": "cdbcdb958cbd320787f9fb332f865b1ff76f611dee4f08120dfd1152fe67b76b",
+    "clippy-gpu.jsonl": "8627af6b699c35666b2bfd1184b330ea653ac5c5946a5e408342e09a99de2023",
+    "clippy-gpu.log": "68a26e8b612d31cea6c3cffcd260f8f80475595c561f0493a6393277f4218947",
+    "gpu-final-norm-regression.log": "38592d07d8712fa7cf9b32c2aba7795a0680b98b7788fe5250778f33baa0e109",
+    "gpu-final.log": "6a9172ecfb49257e00120df5d671c920d7fe2f60d0c3184cbf4ba23c2353a518",
+    "gpu-layer-norm.log": "a500621271ae6f1b0ebfc2812e7f67e09268c66977ae156bf6e6a3279fa3f258",
+    "remote-source-verification.json": "62d9df377c82dc246551d0e6771e3e3011550eb35cfcb96e63caeae251b3b8e7",
+    "runtime-cpu.log": "eaf2df89babeb6eccc80b40611ed2427ca649a2d27adc76dfaae004c1db331a3",
+    "runtime-identities.json": "4843be94221bfe9a008d1757caf6cade093338c9d2686fbf612d474511ddca18",
+    "source-hashes.json": "7f4a95c608e4e9286b29c0509af23937f0f773c7a1387df56705fe6e0cbf50e2",
+    "source-overlay.tar.gz": "8398bede60d859fdfc0a293af374e4dbb96e2ff38ac419e61247696ec7cb1a8f",
+    "unrelated-model-preservation.json": "06822337659fdf43722037816c23b490237f06076f00cfb2f768fbda77b06bf7"
+  }
+}

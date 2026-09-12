@@ -1,0 +1,157 @@
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index d7a9d1b..b39bbd7 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -201,6 +201,56 @@ impl AuthorizedExecution<'_> {
+ #[cfg(test)]
+ mod tests {
+ 
++    #[test]
++    fn variable_policy_batches_live_decode_and_retries_without_false_progress() {
++        use crate::{IterationResult,IterationOutput,ExecutionAbort,ExecutionShapePolicy};
++        use crate::descriptor::{shape_progress::InputStage,variable_wire};
++        for cancel_last in [false,true] {
++        let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig {
++            max_waiting_requests:8,max_waiting_prompt_tokens:4096,max_active_sequences:4,
++            max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,
++            aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,
++            max_promised_kv_blocks:256,metrics_window_samples:16,
++        },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::VariablePrefillDecodeN).unwrap();
++        let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
++        let mut owner=super::VariableOwnerGeometry{generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
++        let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
++        let mut last=None;
++        loop {
++            now+=2;
++            let Some(plan)=scheduler.plan_iteration(now).unwrap().into_parts().0 else {break};
++            let prefill=!plan.prefill_items().is_empty();
++            assert!(plan.prefill_items().is_empty() || plan.decode_items().is_empty());
++            if prefill {assert_eq!(plan.prefill_items().len(),1);assert!(plan.total_tokens()<=73);}
++            widest=widest.max(plan.decode_items().len());
++            let signature:Vec<_>=plan.prefill_items().iter().chain(plan.decode_items()).map(|w|(w.request_id(),w.input_tokens().to_vec(),w.target_logical_length())).collect();
++            if !retried {
++                scheduler.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,now+1).unwrap();
++                last=Some(signature);retried=true;continue;
++            }
++            if let Some(expected)=last.take(){assert_eq!(signature,expected);}
++            replay+=1;
++            let authority=scheduler.authorize_execution(&plan).unwrap();
++            let cookies:Vec<_>=(0..plan.batch_size()).map(|i|replay*8+i as u64+1).collect();
++            let expectation=authority.variable_descriptor_expectation(&owner,replay,&cookies,ResultMode::FullLogits).unwrap();
++            assert_eq!(expectation.stage,if prefill{InputStage::Prefill}else{InputStage::Decode});
++            let mut bytes=vec![0;variable_wire::REQUEST_BYTES];variable_wire::encode_into(&mut bytes,&expectation).unwrap();
++            variable_wire::validate_packet(&bytes,&mut vec![0;bytes.len()],&expectation).unwrap();
++            partial |= prefill && plan.output_slots().is_empty();
++            let outputs=plan.output_slots().iter().map(|&slot|IterationOutput::new(slot,23,false)).collect();
++            drop(authority);
++            let result=IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
++            assert!(scheduler.complete_iteration(&result,now+1).unwrap().settlement_failures().is_empty());
++            owner.last_accepted_replay=replay;
++            if cancel_last && replay==1 {scheduler.cancel(ids[3],now+1).unwrap();}
++            assert!(replay<256);
++        }
++        assert!(partial && retried && widest>=3);
++        for (i,id) in ids.into_iter().enumerate() {assert_eq!(scheduler.request_state(id),Some(if cancel_last && i==3 {crate::RequestState::Cancelled}else{crate::RequestState::Finished}));}
++        scheduler.close(now+2,None).unwrap();
++        }
++    }
++
+     #[test]
+     fn variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler() {
+         use crate::{IterationResult, IterationOutput};
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index 1d0d8c9..49b47ab 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -27,6 +27,10 @@ pub enum ExecutionShapePolicy {
+     /// are limited to vocabulary 49152 and output limits 1..=32. This policy only
+     /// constrains host plans; it does not qualify a multi-sequence GPU executor.
+     CompletePrefill128DecodeN,
++    /// One variable-length prefill chunk or up to eight independent decode rows.
++    /// Alternates ready classes after dispatch; never mixes them in one plan.
++    /// This is a host contract only; GPU support must be checked separately.
++    VariablePrefillDecodeN,
+ }
+ 
+ /// All host-memory, work, and KV promises enforced by one scheduler.
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index f0dcba5..2453522 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1582,16 +1582,16 @@ impl Scheduler {
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
+-        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
+             // Alternate classes immediately when both are ready. Neither aging
+-            // nor decode subtraction may split a prompt into 127 input tokens.
++            // nor decode subtraction changes the independently bounded prefill chunk.
+             // A NotDispatched abort retains the previous class so a retry cannot
+             // count an unexecuted prefill as progress for admission/fairness.
+             if !prefill.is_empty()
+                 && (decode.is_empty() || self.last_dispatched_shape != Some(WorkKind::Prefill))
+             {
+                 let item = &prefill[0];
+-                if item.remaining_tokens != 128 {
++                if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN && item.remaining_tokens != 128 {
+                     return Err(SchedulerError::InvalidPlan {
+                         field: "complete prefill",
+                         reason: "opt-in policy requires the entire untouched P128 prompt",
+@@ -1600,7 +1600,7 @@ impl Scheduler {
+                 selected.push(Candidate {
+                     request_id: item.request_id,
+                     kind: WorkKind::Prefill,
+-                    token_count: 128,
++                    token_count: item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(self.config.iteration_token_budget),
+                 });
+             } else {
+                 for item in decode {
+@@ -1677,7 +1677,7 @@ impl Scheduler {
+     }
+ 
+     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
+-        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
+             self.last_dispatched_shape = Some(if inflight.prefill_count == 1 {
+                 WorkKind::Prefill
+             } else {
+@@ -2098,7 +2098,7 @@ impl Scheduler {
+             }
+         }
+         for output in result.outputs() {
+-            if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN
++            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN)
+                 && output.token_id() >= 49_152
+             {
+                 return Err(SchedulerError::InvalidIterationResult {
+@@ -2662,6 +2662,10 @@ fn validate_descriptor(
+     policy: ExecutionShapePolicy,
+     descriptor: &RequestDescriptor,
+ ) -> SchedulerResult<usize> {
++    if policy == ExecutionShapePolicy::VariablePrefillDecodeN
++        && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
++        return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
++    }
+     if policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
+         if descriptor.prompt_token_ids.len() != 128 {
+             return Err(SchedulerError::InvalidConfiguration {
+@@ -2720,6 +2724,18 @@ fn validate_execution_shape_config(
+     if policy == ExecutionShapePolicy::General {
+         return Ok(());
+     }
++    if policy == ExecutionShapePolicy::VariablePrefillDecodeN {
++        for (valid,field,reason) in [
++            (matches!(config.max_active_sequences,1|2|4|8),"max_active_sequences","V3 supports capacities 1, 2, 4 or 8"),
++            (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
++            ((1..=1024).contains(&config.max_prefill_chunk_tokens),"max_prefill_chunk_tokens","V3 chunks must fit 1024 tokens"),
++            (config.max_sequence_tokens<=4096,"max_sequence_tokens","V3 context limit is 4096"),
++            (layout.layer_count()==30 && layout.key_value_head_count()==3 && layout.head_dimension()==64 && layout.physical_block_count()<=4096,"kv_layout","V3 requires Smol geometry and at most4096 physical pages"),
++        ] {
++            if !valid {return Err(SchedulerError::InvalidConfiguration{field,reason});}
++        }
++        return Ok(());
++    }
+     for (valid, field, reason) in [
+         (
+             matches!(config.max_active_sequences, 2 | 4 | 8),

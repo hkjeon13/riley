@@ -1,0 +1,2004 @@
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index 9602a4b..bcaff92 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -50,3 +50,148 @@ impl AuthorizedExecution<'_> {
+         self.scheduler.pool_physical_block_count()
+     }
+ }
++
++impl AuthorizedExecution<'_> {
++    /// Only the execution adapter can form this packet expectation. Its owner
++    /// identity and monotonically assigned cookies must come from the retained
++    /// runtime owner; request/KV fields always come from this scheduler borrow.
++    #[allow(dead_code)]
++    pub(crate) fn descriptor_expectation(
++        &self,
++        owner: crate::descriptor::OwnerExpectation,
++        replay: u64,
++        cookies: &[u64],
++    ) -> crate::descriptor::Result<crate::descriptor::SubmissionExpectation> {
++        use crate::descriptor::{
++            BlockOwnership, Error, ReservationExpectation, ResultMode, Stage, SubmissionExpectation,
++        };
++        let bad = || Error {
++            field: "scheduler authority",
++            reason: "incompatible live reservation or owner geometry",
++        };
++        if owner.physical_block_count as usize != self.physical_block_count()
++            || cookies.len() != self.rows.len()
++            || (!self.plan.prefill_items().is_empty() && !self.plan.decode_items().is_empty())
++        {
++            return Err(bad());
++        }
++        let stage = if self.plan.prefill_items().is_empty() {
++            Stage::Decode
++        } else {
++            Stage::Prefill128
++        };
++        let to32 = |v: usize| u32::try_from(v).map_err(|_| bad());
++        let mut rows = Vec::new();
++        for ((work, row), cookie) in self
++            .plan
++            .prefill_items()
++            .iter()
++            .chain(self.plan.decode_items())
++            .zip(&self.rows)
++            .zip(cookies)
++        {
++            if work.request_id() != row.request_id {
++                return Err(bad());
++            }
++            rows.push(ReservationExpectation {
++                sequence_tag: row.request_id.get(),
++                cookie: *cookie,
++                input_tokens: work.input_tokens().to_vec(),
++                committed_length: to32(row.committed_length)?,
++                target_length: to32(work.target_logical_length())?,
++                output_slot: work.output_slot().ok_or_else(bad)?.get(),
++                generated_index: to32(row.generated_index)?,
++                max_output_tokens: to32(row.max_output_tokens)?,
++                physical_ids: row.table.physical_block_ids().to_vec(),
++                valid_tokens: row.table.valid_tokens().to_vec(),
++            });
++        }
++        let expectation = SubmissionExpectation {
++            owner,
++            replay_id: replay,
++            iteration_id: self.plan.iteration_id().get(),
++            stage,
++            mode: ResultMode::FullLogits,
++            rows,
++            block_ownership: self
++                .block_owners
++                .iter()
++                .map(|(id, tag)| BlockOwnership {
++                    physical_id: *id,
++                    sequence_tag: tag.get(),
++                })
++                .collect(),
++        };
++        crate::descriptor::validate_expectations(&expectation)?;
++        Ok(expectation)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use crate::descriptor::{
++        CatalogEntry, OwnerExpectation, ResultMode, Stage, decode_request, encode_request,
++    };
++    use crate::{
++        ExecutionShapePolicy, OverloadPolicy, RequestDescriptor, Scheduler, SchedulerConfig,
++    };
++    #[test]
++    fn live_scheduler_authority_encodes_exact_request_and_rejects_foreign_geometry() {
++        let mut scheduler = Scheduler::new_with_execution_shape(
++            SchedulerConfig {
++                max_waiting_requests: 8,
++                max_waiting_prompt_tokens: 1024,
++                max_active_sequences: 4,
++                max_sequence_tokens: 160,
++                iteration_token_budget: 128,
++                max_prefill_chunk_tokens: 128,
++                aging_threshold_ns: 1,
++                overload_policy: OverloadPolicy::Wait,
++                admission_timeout_ns: None,
++                max_promised_kv_blocks: 40,
++                metrics_window_samples: 16,
++            },
++            riley_runtime::paged_kv::KvLayout::checked(30, 40, 3, 64).unwrap(),
++            ExecutionShapePolicy::CompletePrefill128DecodeN,
++        )
++        .unwrap();
++        let id = scheduler
++            .submit(RequestDescriptor::new(vec![17; 128], 32), 0)
++            .unwrap()
++            .request_id();
++        let plan = scheduler.plan_iteration(1).unwrap().into_parts().0.unwrap();
++        let authority = scheduler.authorize_execution(&plan).unwrap();
++        let owner = OwnerExpectation {
++            generation: 1,
++            last_accepted_replay: 0,
++            catalog_digest: [0x5a; 32],
++            max_active_rows: 4,
++            physical_block_count: 40,
++            catalog: vec![CatalogEntry {
++                stage: Stage::Prefill128,
++                bucket: 1,
++                mode: ResultMode::FullLogits,
++            }],
++        };
++        let expectation = authority
++            .descriptor_expectation(owner.clone(), 1, &[1])
++            .unwrap();
++        assert_eq!(expectation.rows[0].sequence_tag, id.get());
++        assert_eq!(expectation.rows[0].committed_length, 0);
++        assert_eq!(expectation.rows[0].generated_index, 0);
++        let packet = encode_request(&expectation).unwrap();
++        assert_eq!(packet.len(), 1280);
++        decode_request(&packet, &expectation).unwrap();
++        let mut other = owner;
++        other.physical_block_count = 41;
++        assert!(authority.descriptor_expectation(other, 1, &[1]).is_err());
++        let mut missing_ownership = expectation;
++        missing_ownership.block_ownership.clear();
++        assert!(encode_request(&missing_ownership).is_err());
++        drop(authority);
++        scheduler
++            .abort_iteration(plan.iteration_id(), crate::ExecutionAbort::NotDispatched, 2)
++            .unwrap();
++        scheduler.close(3, None).unwrap();
++    }
++}
+diff --git a/crates/riley-scheduler/src/descriptor/fixtures/request-n3.bin b/crates/riley-scheduler/src/descriptor/fixtures/request-n3.bin
+new file mode 100644
+index 0000000000000000000000000000000000000000..eef4b806ad196936942190ccd10ca8d4b1cfacd8
+GIT binary patch
+literal 1280
+zcmeH@J#GR)3`V{D2T0fmqJWeL5g~zS5O<)Z2^~H6Sjr>~TmY_;np5R{yB>s=f&*l~
+z)f?O6S$oExtK}lH#H?ysErJS^9r;bLU$ZGjd8wWmo4MWGQTWe~U(6d`;?V<EbxY6%
+zu4FBE1t|udk>cDJ>Tk2OeW?K2f$AxL4PmM^n|t^5&JWO?hR}yG3}6E9FoGAz_m6!t
+zXL8cF_djG|ntjF(ckpdXdS*ut)L(Pg%xlm9?X}?%o}dG&bK74Tv$-0eAMby{4?Xp!
+N;Ok7GVgmnt0)HBW8X*7x
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/riley-scheduler/src/descriptor/fixtures/result-n3.bin b/crates/riley-scheduler/src/descriptor/fixtures/result-n3.bin
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e0af4e1869fa66228738ae9d09e971d6b170107
+GIT binary patch
+literal 393856
+zcmeIvJxawu5CGtLQ55XN1DH~5<Q+r=OMCCJ*r|;t@GRDz${DgNL0+`A_y%TolKq+R
+z<^J|=zl#=aI>|9&mwB9d)U)cd%=n17%Bj{XPM0aJ`~2`njB|D0Iv)GO^Tks9ytm#?
+znJshNk!8#^{1RhttHTv-yjdQ{_}Pn>jsD}*Tkbm_hjN}*^`UZ{Yfrt}=zr6fUpM;K
+z=hv3^%*$1yc~u`Ozxz-1Co?wsFN;P31PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C7
+z2oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N
+z0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+
+z009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBly
+zK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF
+z5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk
+z1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs
+z0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZ
+zfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&U
+zAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C7
+z2oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N
+z0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+
+z009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBly
+zK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF
+z5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk
+z1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs
+z0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZ
+zfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&U
+zAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C7
+z2oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N
+z0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+
+z009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBly
+zK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF
+z5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk
+z1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs
+z0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZ
+zfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&U
+zAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C7
+z2oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N
+z0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+
+z009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBly
+zK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF
+z5FkK+009C72oNAZfB*pk1PBlyK!5-N0t5&UAV7cs0RjXF5FkK+009C72oNAZfB*pk
+b1PBlyK!5-N0t5&UAV7cs0RjXF{6B#&@2(iX
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/riley-scheduler/src/descriptor/mod.rs b/crates/riley-scheduler/src/descriptor/mod.rs
+new file mode 100644
+index 0000000..e542d14
+--- /dev/null
++++ b/crates/riley-scheduler/src/descriptor/mod.rs
+@@ -0,0 +1,1004 @@
++//! Multi-sequence wire validation; live authority is supplied by the scheduler adapter.
++//!
++//! This crate owns no GPU/KV resources. Expectations are supplied by an
++//! authoritative scheduler/owner adapter; packet bytes never establish live
++//! ownership or quiescence. GPU dispatch wiring is separate; no performance claim.
++
++use std::collections::BTreeSet;
++use std::fmt;
++
++pub const REQUEST_BYTES: usize = 1280;
++pub const RESULT_PREFIX_BYTES: usize = 640;
++pub const LOGITS_BYTES: usize = 49152 * 2;
++pub const MAX_RESULT_BYTES: usize = RESULT_PREFIX_BYTES + 4 * LOGITS_BYTES;
++pub const CONTRACT_SHA256: &str =
++    "5bed6d70342dec4f30c85ba67dd41cf560e6b7f4b0de5dedfe59424cecc9b641";
++const REQUEST_MAGIC: u32 = 0x3144_4d52;
++const RESULT_MAGIC: u32 = 0x314f_4d52;
++const PREFILL_MAGIC: u32 = 0x5031_3238;
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct Error {
++    pub field: &'static str,
++    pub reason: &'static str,
++}
++impl fmt::Display for Error {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(f, "{}: {}", self.field, self.reason)
++    }
++}
++impl std::error::Error for Error {}
++pub type Result<T> = std::result::Result<T, Error>;
++fn check(ok: bool, field: &'static str, reason: &'static str) -> Result<()> {
++    if ok {
++        Ok(())
++    } else {
++        Err(Error { field, reason })
++    }
++}
++fn overflow(field: &'static str) -> Error {
++    Error {
++        field,
++        reason: "checked arithmetic overflow",
++    }
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
++#[repr(u32)]
++pub enum Stage {
++    Prefill128 = 0,
++    Decode = 1,
++}
++impl Stage {
++    fn parse(value: u32) -> Result<Self> {
++        match value {
++            0 => Ok(Self::Prefill128),
++            1 => Ok(Self::Decode),
++            _ => Err(Error {
++                field: "stage",
++                reason: "unknown stage",
++            }),
++        }
++    }
++}
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
++#[repr(u32)]
++pub enum ResultMode {
++    Greedy = 0,
++    FullLogits = 1,
++}
++impl ResultMode {
++    fn parse(value: u32) -> Result<Self> {
++        match value {
++            0 => Ok(Self::Greedy),
++            1 => Ok(Self::FullLogits),
++            _ => Err(Error {
++                field: "result_mode",
++                reason: "unknown result mode",
++            }),
++        }
++    }
++}
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
++pub struct CatalogEntry {
++    pub stage: Stage,
++    pub bucket: u32,
++    pub mode: ResultMode,
++}
++
++/// Explicit caller authority, not extracted from packet fields. Catalog entries
++/// must correspond to actual prepared/qualified graphs in a future adapter.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct OwnerExpectation {
++    pub generation: u64,
++    pub last_accepted_replay: u64,
++    pub catalog_digest: [u8; 32],
++    pub max_active_rows: u32,
++    pub physical_block_count: u32,
++    pub catalog: Vec<CatalogEntry>,
++}
++/// Includes resident/off-batch requests and reserved destinations. Merely being
++/// within the physical pool is not ownership. The caller derives this ledger
++/// from real live/reserved KV state while holding its exclusive owner borrow.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct BlockOwnership {
++    pub physical_id: u32,
++    pub sequence_tag: u64,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct ReservationExpectation {
++    pub sequence_tag: u64,
++    pub cookie: u64,
++    pub input_tokens: Vec<u32>,
++    pub committed_length: u32,
++    pub target_length: u32,
++    pub output_slot: u32,
++    pub generated_index: u32,
++    pub max_output_tokens: u32,
++    pub physical_ids: Vec<u32>,
++    pub valid_tokens: Vec<u16>,
++}
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct SubmissionExpectation {
++    pub owner: OwnerExpectation,
++    pub replay_id: u64,
++    pub iteration_id: u64,
++    pub stage: Stage,
++    pub mode: ResultMode,
++    pub rows: Vec<ReservationExpectation>,
++    pub block_ownership: Vec<BlockOwnership>,
++}
++
++fn bucket(count: usize) -> Result<u32> {
++    match count {
++        1 => Ok(1),
++        2 => Ok(2),
++        3 | 4 => Ok(4),
++        _ => Err(Error {
++            field: "active_rows",
++            reason: "requires one through four rows",
++        }),
++    }
++}
++pub fn result_bytes(bucket: u32, mode: ResultMode) -> Result<usize> {
++    check(
++        matches!(bucket, 1 | 2 | 4),
++        "bucket",
++        "unsupported exact bucket",
++    )?;
++    let rows = if mode == ResultMode::FullLogits {
++        bucket as usize
++    } else {
++        0
++    };
++    RESULT_PREFIX_BYTES
++        .checked_add(
++            rows.checked_mul(LOGITS_BYTES)
++                .ok_or_else(|| overflow("result_bytes"))?,
++        )
++        .ok_or_else(|| overflow("result_bytes"))
++}
++
++/// Validate expectations themselves before accepting any caller-supplied bytes.
++/// This verifies structural consistency; it cannot inspect real GPU memory or
++/// independently certify that the caller's scheduler snapshot is truthful.
++pub fn validate_expectations(e: &SubmissionExpectation) -> Result<()> {
++    check(
++        e.owner.generation != 0,
++        "owner_generation",
++        "zero owner identity",
++    )?;
++    check(
++        matches!(e.owner.max_active_rows, 2 | 4),
++        "max_active_rows",
++        "owner capacity must be two or four",
++    )?;
++    check(
++        e.owner.physical_block_count >= e.owner.max_active_rows * 10,
++        "physical_block_count",
++        "pool cannot cover fixed maximum reservations",
++    )?;
++    let next = e
++        .owner
++        .last_accepted_replay
++        .checked_add(1)
++        .ok_or_else(|| overflow("replay_id"))?;
++    check(
++        e.replay_id == next && e.iteration_id != 0,
++        "replay_identity",
++        "expected next replay and nonzero iteration required",
++    )?;
++    let b = bucket(e.rows.len())?;
++    check(
++        e.rows.len() <= e.owner.max_active_rows as usize,
++        "active_rows",
++        "owner capacity exceeded",
++    )?;
++    check(
++        e.stage != Stage::Prefill128 || e.rows.len() == 1,
++        "stage",
++        "P128 represents exactly one request",
++    )?;
++    let mut entries = BTreeSet::new();
++    for entry in &e.owner.catalog {
++        check(
++            matches!(entry.bucket, 1 | 2 | 4)
++                && entry.bucket <= e.owner.max_active_rows
++                && (entry.stage != Stage::Prefill128 || entry.bucket == 1),
++            "catalog",
++            "invalid cold catalog entry",
++        )?;
++        check(entries.insert(*entry), "catalog", "duplicate catalog entry")?;
++    }
++    check(
++        entries.contains(&CatalogEntry {
++            stage: e.stage,
++            bucket: b,
++            mode: e.mode,
++        }),
++        "catalog",
++        "exact stage/bucket/result mode was not prepared; no fallback",
++    )?;
++    check(
++        e.block_ownership.len() <= e.owner.physical_block_count as usize,
++        "block_ownership",
++        "ledger exceeds pool",
++    )?;
++    let mut all_ids = BTreeSet::new();
++    for own in &e.block_ownership {
++        check(
++            own.physical_id < e.owner.physical_block_count && own.sequence_tag != 0,
++            "block_ownership",
++            "invalid owner ledger record",
++        )?;
++        check(
++            all_ids.insert(own.physical_id),
++            "block_ownership",
++            "duplicate physical block authority",
++        )?;
++    }
++    let (mut tags, mut cookies, mut slots, mut used) = (
++        BTreeSet::new(),
++        BTreeSet::new(),
++        BTreeSet::new(),
++        BTreeSet::new(),
++    );
++    for row in &e.rows {
++        check(
++            row.sequence_tag != 0 && tags.insert(row.sequence_tag),
++            "sequence_tag",
++            "zero or duplicate sequence tag",
++        )?;
++        check(
++            row.cookie != 0 && cookies.insert(row.cookie),
++            "reservation_cookie",
++            "zero or duplicate cookie",
++        )?;
++        check(
++            row.output_slot < e.rows.len() as u32 && slots.insert(row.output_slot),
++            "output_slot",
++            "slots must be dense and unique",
++        )?;
++        check(
++            (1..=32).contains(&row.max_output_tokens)
++                && row.generated_index < row.max_output_tokens,
++            "generation_bound",
++            "request output bound is exhausted or unsupported",
++        )?;
++        let input_count = if e.stage == Stage::Prefill128 { 128 } else { 1 };
++        check(
++            row.input_tokens.len() == input_count && row.input_tokens.iter().all(|&t| t < 49152),
++            "input_tokens",
++            "wrong count or vocabulary bound",
++        )?;
++        let target = row
++            .committed_length
++            .checked_add(input_count as u32)
++            .ok_or_else(|| overflow("target_length"))?;
++        check(
++            row.target_length == target && target <= 160,
++            "target_length",
++            "target differs from committed prefix plus inputs",
++        )?;
++        let pos = target.checked_sub(1).ok_or_else(|| overflow("position"))?;
++        match e.stage {
++            Stage::Prefill128 => check(
++                row.committed_length == 0 && target == 128 && row.generated_index == 0,
++                "prefill",
++                "requires a fresh complete P128 prompt",
++            )?,
++            Stage::Decode => check(
++                (128..160).contains(&pos) && row.generated_index == pos - 127,
++                "decode",
++                "independent decode position or generated index differs",
++            )?,
++        }
++        let live = target.div_ceil(16) as usize;
++        check(
++            row.physical_ids.len() == live && row.valid_tokens.len() == live && live <= 10,
++            "block_table",
++            "table must exactly cover reserved target",
++        )?;
++        for (index, (&id, &valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
++            let expected_valid = if index + 1 == live {
++                (pos % 16 + 1) as u16
++            } else {
++                16
++            };
++            check(
++                valid == expected_valid,
++                "valid_tokens",
++                "noncanonical target valid counts",
++            )?;
++            check(
++                id < e.owner.physical_block_count && used.insert(id),
++                "physical_ids",
++                "out-of-pool or aliased physical block",
++            )?;
++            check(
++                e.block_ownership
++                    .iter()
++                    .any(|own| own.physical_id == id && own.sequence_tag == row.sequence_tag),
++                "block_ownership",
++                "block is absent or belongs to another resident request",
++            )?;
++        }
++    }
++    Ok(())
++}
++
++/// CPU ownership/readiness guard for one owner instance. `settle_success` and
++/// `settle_failure` require the caller to have performed the real scheduler/KV
++/// settlement; these methods do not perform or prove it. A failed completion
++/// poisons this instance even after its diagnostic transaction is removed.
++pub struct CodecOwner {
++    expectation: OwnerExpectation,
++    transaction: Option<Transaction>,
++    poisoned: bool,
++}
++impl CodecOwner {
++    pub fn new(expectation: OwnerExpectation) -> Self {
++        Self {
++            expectation,
++            transaction: None,
++            poisoned: false,
++        }
++    }
++    pub fn expectation(&self) -> &OwnerExpectation {
++        &self.expectation
++    }
++    pub fn admit(&mut self, packet: &[u8], e: SubmissionExpectation) -> Result<()> {
++        if let Some(transaction) = self.transaction.as_mut() {
++            // An attempted replacement cannot preserve a previously ready
++            // result or erase the old reservation authority.
++            transaction.ready = None;
++            if transaction.state == State::Validated {
++                transaction.state = State::FailedQuiesced;
++            }
++            self.poisoned = true;
++            return Err(Error {
++                field: "owner",
++                reason: "unsettled transaction cannot be replaced",
++            });
++        }
++        check(!self.poisoned, "owner", "owner is poisoned")?;
++        check(
++            e.owner == self.expectation,
++            "owner",
++            "caller expectation is not the current owner state",
++        )?;
++        let transaction = Transaction::admit(packet, e)?;
++        self.expectation.last_accepted_replay = transaction.expectation.replay_id;
++        self.transaction = Some(transaction);
++        Ok(())
++    }
++    pub fn accept_result(&mut self, bytes: &[u8], completion: CompletionEvidence) -> Result<()> {
++        let transaction = self.transaction.as_mut().ok_or(Error {
++            field: "owner",
++            reason: "no admitted transaction",
++        })?;
++        let result = transaction.accept_result(bytes, completion);
++        if result.is_err() {
++            self.poisoned = true;
++        }
++        if self.poisoned && transaction.state == State::Validated {
++            transaction.ready = None;
++            transaction.state = State::FailedQuiesced;
++            return Err(Error {
++                field: "owner",
++                reason: "poisoned owner cannot publish a completed row",
++            });
++        }
++        result
++    }
++    pub fn result(&self) -> Result<&ValidatedBulk> {
++        check(
++            !self.poisoned,
++            "owner",
++            "poisoned owner output is not ready",
++        )?;
++        self.transaction
++            .as_ref()
++            .ok_or(Error {
++                field: "output",
++                reason: "no admitted transaction",
++            })?
++            .result()
++    }
++    pub fn retained_expectation(&self) -> Option<&SubmissionExpectation> {
++        self.transaction.as_ref().map(|t| &t.expectation)
++    }
++    pub fn settlement_advice(&self) -> Option<SettlementAdvice> {
++        self.transaction
++            .as_ref()
++            .map(Transaction::settlement_advice)
++    }
++    pub fn establish_quiescence_after_failure(&mut self, proof: CompletionEvidence) -> Result<()> {
++        self.transaction
++            .as_mut()
++            .ok_or(Error {
++                field: "owner",
++                reason: "no admitted transaction",
++            })?
++            .establish_quiescence_after_failure(proof)
++    }
++    pub fn settle_success(&mut self, scheduler_commit_confirmed: bool) -> Result<ValidatedBulk> {
++        check(
++            scheduler_commit_confirmed
++                && !self.poisoned
++                && self
++                    .transaction
++                    .as_ref()
++                    .is_some_and(|t| t.state == State::Validated && t.ready.is_some()),
++            "settlement",
++            "whole result and explicit scheduler commit required",
++        )?;
++        Ok(self.transaction.take().unwrap().ready.take().unwrap())
++    }
++    pub fn settle_failure(&mut self, containment_confirmed: bool) -> Result<()> {
++        check(
++            containment_confirmed
++                && self
++                    .transaction
++                    .as_ref()
++                    .is_some_and(|t| t.state == State::FailedQuiesced),
++            "settlement",
++            "proven quiescence and explicit containment required",
++        )?;
++        self.transaction = None;
++        self.poisoned = true;
++        Ok(())
++    }
++}
++
++fn span(bytes: &[u8], offset: usize, count: usize) -> Result<&[u8]> {
++    let end = offset
++        .checked_add(count)
++        .ok_or_else(|| overflow("byte_extent"))?;
++    bytes.get(offset..end).ok_or(Error {
++        field: "byte_extent",
++        reason: "out-of-bounds byte view",
++    })
++}
++fn read16(bytes: &[u8], offset: usize) -> Result<u16> {
++    Ok(u16::from_le_bytes(
++        span(bytes, offset, 2)?.try_into().unwrap(),
++    ))
++}
++fn read32(bytes: &[u8], offset: usize) -> Result<u32> {
++    Ok(u32::from_le_bytes(
++        span(bytes, offset, 4)?.try_into().unwrap(),
++    ))
++}
++fn read64(bytes: &[u8], offset: usize) -> Result<u64> {
++    Ok(u64::from_le_bytes(
++        span(bytes, offset, 8)?.try_into().unwrap(),
++    ))
++}
++fn put(bytes: &mut [u8], offset: usize, value: &[u8]) -> Result<()> {
++    let end = offset
++        .checked_add(value.len())
++        .ok_or_else(|| overflow("byte_extent"))?;
++    bytes
++        .get_mut(offset..end)
++        .ok_or(Error {
++            field: "byte_extent",
++            reason: "out-of-bounds write",
++        })?
++        .copy_from_slice(value);
++    Ok(())
++}
++fn put16(bytes: &mut [u8], offset: usize, value: u16) -> Result<()> {
++    put(bytes, offset, &value.to_le_bytes())
++}
++fn put32(bytes: &mut [u8], offset: usize, value: u32) -> Result<()> {
++    put(bytes, offset, &value.to_le_bytes())
++}
++fn put64(bytes: &mut [u8], offset: usize, value: u64) -> Result<()> {
++    put(bytes, offset, &value.to_le_bytes())
++}
++fn zero(bytes: &[u8], offset: usize, count: usize, field: &'static str) -> Result<()> {
++    check(
++        span(bytes, offset, count)?.iter().all(|&x| x == 0),
++        field,
++        "nonzero reserved or inactive bytes",
++    )
++}
++
++fn write_header(bytes: &mut [u8], e: &SubmissionExpectation, result: bool) -> Result<()> {
++    let b = bucket(e.rows.len())?;
++    put32(bytes, 0, if result { RESULT_MAGIC } else { REQUEST_MAGIC })?;
++    put16(bytes, 4, 1)?;
++    put16(bytes, 6, 128)?;
++    let total = u32::try_from(bytes.len()).map_err(|_| overflow("packet_bytes"))?;
++    let payload = if result {
++        if e.mode == ResultMode::FullLogits {
++            b
++        } else {
++            0
++        }
++    } else if e.stage == Stage::Prefill128 {
++        128
++    } else {
++        0
++    };
++    for (offset, value) in [
++        (8, total),
++        (12, 128),
++        (16, e.stage as u32),
++        (20, b),
++        (24, e.rows.len() as u32),
++        (28, e.rows.len() as u32),
++        (32, 4),
++        (36, 10),
++        (40, 49152),
++        (44, e.owner.physical_block_count),
++        (104, e.mode as u32),
++        (108, 0),
++        (112, payload),
++        (116, 0),
++    ] {
++        put32(bytes, offset, value)?;
++    }
++    put64(bytes, 48, e.owner.generation)?;
++    put64(bytes, 56, e.replay_id)?;
++    put64(bytes, 64, e.iteration_id)?;
++    put(bytes, 72, &e.owner.catalog_digest)?;
++    put64(bytes, 120, 0)?;
++    Ok(())
++}
++fn check_header(bytes: &[u8], e: &SubmissionExpectation, result: bool) -> Result<()> {
++    let expected_len = if result {
++        result_bytes(bucket(e.rows.len())?, e.mode)?
++    } else {
++        REQUEST_BYTES
++    };
++    check(
++        bytes.len() == expected_len,
++        "packet_bytes",
++        "exact selected packet size required",
++    )?;
++    check(
++        read32(bytes, 0)? == if result { RESULT_MAGIC } else { REQUEST_MAGIC },
++        "magic",
++        "unknown packet kind",
++    )?;
++    check(
++        read16(bytes, 4)? == 1 && read16(bytes, 6)? == 128,
++        "version",
++        "unknown header/version",
++    )?;
++    check(
++        Stage::parse(read32(bytes, 16)?)? == e.stage,
++        "stage",
++        "stage differs from submitted plan",
++    )?;
++    check(
++        ResultMode::parse(read32(bytes, 104)?)? == e.mode,
++        "result_mode",
++        "result mode differs from catalog binding",
++    )?;
++    let mut expected = vec![0; expected_len];
++    write_header(&mut expected, e, result)?;
++    check(
++        span(bytes, 0, 128)? == &expected[..128],
++        "header",
++        "header geometry, identity, digest, status or padding differs",
++    )
++}
++
++/// New fixed request encoder. No allocation size or ownership is inferred from
++/// input packet bytes; all expected source tokens/reservations are explicit.
++pub fn encode_request(e: &SubmissionExpectation) -> Result<[u8; REQUEST_BYTES]> {
++    validate_expectations(e)?;
++    let mut bytes = [0; REQUEST_BYTES];
++    write_header(&mut bytes, e, false)?;
++    for (index, row) in e.rows.iter().enumerate() {
++        let base = 128 + index * 128;
++        put32(&mut bytes, base, *row.input_tokens.last().unwrap())?;
++        put32(&mut bytes, base + 4, row.target_length - 1)?;
++        put32(&mut bytes, base + 12, row.physical_ids.len() as u32)?;
++        for (block, (&id, &valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
++            put32(&mut bytes, base + 16 + block * 4, id)?;
++            put16(&mut bytes, base + 56 + block * 2, valid)?;
++        }
++        put64(&mut bytes, base + 80, row.sequence_tag)?;
++        put64(&mut bytes, base + 88, row.cookie)?;
++        for (offset, value) in [
++            (96, row.target_length),
++            (100, row.output_slot),
++            (104, row.input_tokens.len() as u32),
++            (108, row.generated_index),
++            (112, 1),
++        ] {
++            put32(&mut bytes, base + offset, value)?;
++        }
++        put16(&mut bytes, base + 116, 1)?;
++    }
++    if e.stage == Stage::Prefill128 {
++        bytes.copy_within(128..208, 640);
++        put32(&mut bytes, 720, PREFILL_MAGIC)?;
++        put32(&mut bytes, 724, 128)?;
++        for (index, &token) in e.rows[0].input_tokens.iter().enumerate() {
++            put32(&mut bytes, 728 + index * 4, token)?;
++        }
++    }
++    Ok(bytes)
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct DecodedRow {
++    pub sequence_tag: u64,
++    pub cookie: u64,
++    pub token: u32,
++    pub position: u32,
++    pub target_length: u32,
++    pub output_slot: u32,
++    pub input_count: u32,
++    pub generated_index: u32,
++    pub physical_ids: Vec<u32>,
++    pub valid_tokens: Vec<u16>,
++}
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct DecodedRequest {
++    pub stage: Stage,
++    pub bucket: u32,
++    pub mode: ResultMode,
++    pub rows: Vec<DecodedRow>,
++}
++
++/// Decoded fields are data, not reservation authority. Admission still requires
++/// the complete independent expectation and full byte equality to that binding.
++pub fn decode_request(bytes: &[u8], e: &SubmissionExpectation) -> Result<DecodedRequest> {
++    validate_expectations(e)?;
++    check_header(bytes, e, false)?;
++    let mut rows = Vec::with_capacity(e.rows.len());
++    for (index, expected) in e.rows.iter().enumerate() {
++        let b = 128 + index * 128;
++        let live = usize::try_from(read32(bytes, b + 12)?).map_err(|_| overflow("live_blocks"))?;
++        check(
++            (1..=10).contains(&live),
++            "live_blocks",
++            "row count outside fixed capacity",
++        )?;
++        let mut ids = Vec::with_capacity(live);
++        let mut valid = Vec::with_capacity(live);
++        for block in 0..live {
++            ids.push(read32(bytes, b + 16 + 4 * block)?);
++            valid.push(read16(bytes, b + 56 + 2 * block)?);
++        }
++        let row = DecodedRow {
++            sequence_tag: read64(bytes, b + 80)?,
++            cookie: read64(bytes, b + 88)?,
++            token: read32(bytes, b)?,
++            position: read32(bytes, b + 4)?,
++            target_length: read32(bytes, b + 96)?,
++            output_slot: read32(bytes, b + 100)?,
++            input_count: read32(bytes, b + 104)?,
++            generated_index: read32(bytes, b + 108)?,
++            physical_ids: ids,
++            valid_tokens: valid,
++        };
++        check(
++            row.sequence_tag == expected.sequence_tag && row.cookie == expected.cookie,
++            "row_identity",
++            "row differs from bound reservation",
++        )?;
++        check(
++            row.token == *expected.input_tokens.last().unwrap()
++                && row.position == expected.target_length - 1
++                && row.target_length == expected.target_length
++                && row.output_slot == expected.output_slot
++                && row.input_count == expected.input_tokens.len() as u32
++                && row.generated_index == expected.generated_index,
++            "row_fields",
++            "row differs from immutable submission",
++        )?;
++        check(
++            row.physical_ids == expected.physical_ids && row.valid_tokens == expected.valid_tokens,
++            "block_table",
++            "row differs from reserved owner table",
++        )?;
++        check(
++            read32(bytes, b + 112)? == 1 && read16(bytes, b + 116)? == 1,
++            "row_flags",
++            "active/schema differs",
++        )?;
++        zero(bytes, b + 8, 4, "legacy_slot")?;
++        zero(bytes, b + 76, 4, "legacy_slot")?;
++        zero(bytes, b + 16 + 4 * live, 4 * (10 - live), "unused_physical")?;
++        zero(bytes, b + 56 + 2 * live, 2 * (10 - live), "unused_valid")?;
++        zero(bytes, b + 118, 10, "row_reserved")?;
++        rows.push(row);
++    }
++    zero(
++        bytes,
++        128 + e.rows.len() * 128,
++        (4 - e.rows.len()) * 128,
++        "inactive_rows",
++    )?;
++    if e.stage == Stage::Prefill128 {
++        check(
++            span(bytes, 640, 80)? == span(bytes, 128, 80)?
++                && read32(bytes, 720)? == PREFILL_MAGIC
++                && read32(bytes, 724)? == 128,
++            "prefill_view",
++            "compatibility view differs",
++        )?;
++        for (i, &token) in e.rows[0].input_tokens.iter().enumerate() {
++            check(
++                read32(bytes, 728 + i * 4)? == token,
++                "prefill_tokens",
++                "full prompt differs from submission",
++            )?;
++        }
++    } else {
++        zero(bytes, 640, 600, "decode_prefill_region")?;
++    }
++    zero(bytes, 1240, 40, "packet_padding")?;
++    Ok(DecodedRequest {
++        stage: e.stage,
++        bucket: bucket(e.rows.len())?,
++        mode: e.mode,
++        rows,
++    })
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct ValidatedRow {
++    sequence_tag: u64,
++    cookie: u64,
++    execution_row: u32,
++    output_slot: u32,
++    position: u32,
++    generated_index: u32,
++    token_id: u32,
++    logits: Option<Vec<u8>>,
++}
++impl ValidatedRow {
++    pub fn sequence_tag(&self) -> u64 {
++        self.sequence_tag
++    }
++    pub fn cookie(&self) -> u64 {
++        self.cookie
++    }
++    pub fn execution_row(&self) -> u32 {
++        self.execution_row
++    }
++    pub fn output_slot(&self) -> u32 {
++        self.output_slot
++    }
++    pub fn position(&self) -> u32 {
++        self.position
++    }
++    pub fn generated_index(&self) -> u32 {
++        self.generated_index
++    }
++    pub fn token_id(&self) -> u32 {
++        self.token_id
++    }
++    pub fn logits(&self) -> Option<&[u8]> {
++        self.logits.as_deref()
++    }
++}
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct ValidatedBulk {
++    owner_generation: u64,
++    replay_id: u64,
++    iteration_id: u64,
++    rows_by_slot: Vec<ValidatedRow>,
++}
++impl ValidatedBulk {
++    pub fn owner_generation(&self) -> u64 {
++        self.owner_generation
++    }
++    pub fn replay_id(&self) -> u64 {
++        self.replay_id
++    }
++    pub fn iteration_id(&self) -> u64 {
++        self.iteration_id
++    }
++    pub fn rows_by_slot(&self) -> &[ValidatedRow] {
++        &self.rows_by_slot
++    }
++}
++/// Supplied only after the real owner establishes stream/graph completion.
++/// These values are assertions by the adapter, not hardware observations here.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum CompletionEvidence {
++    Quiesced,
++    Unknown,
++}
++
++/// Atomic validation: no row getter or partial output escapes before every
++/// active/inactive record and all transferred logits pass. Rows are returned in
++/// dense scheduler-slot order, independent of execution-row order.
++pub fn validate_bulk_result(
++    bytes: &[u8],
++    e: &SubmissionExpectation,
++    completion: CompletionEvidence,
++) -> Result<ValidatedBulk> {
++    check(
++        completion == CompletionEvidence::Quiesced,
++        "completion",
++        "GPU quiescence not established",
++    )?;
++    validate_expectations(e)?;
++    check_header(bytes, e, true)?;
++    let b = bucket(e.rows.len())? as usize;
++    let mut rows = Vec::with_capacity(e.rows.len());
++    for (index, expected) in e.rows.iter().enumerate() {
++        let base = 128 + 128 * index;
++        check(
++            read64(bytes, base)? == expected.sequence_tag
++                && read64(bytes, base + 8)? == expected.cookie
++                && read64(bytes, base + 16)? == e.replay_id
++                && read64(bytes, base + 24)? == e.iteration_id,
++            "result_identity",
++            "stale or misrouted result row",
++        )?;
++        check(
++            read32(bytes, base + 32)? == index as u32
++                && read32(bytes, base + 36)? == expected.output_slot
++                && read32(bytes, base + 40)? == expected.target_length - 1
++                && read32(bytes, base + 44)? == expected.generated_index,
++            "result_routing",
++            "execution row/slot/position/index differs",
++        )?;
++        let token = read32(bytes, base + 48)?;
++        check(
++            token < 49152 && read32(bytes, base + 52)? == 0 && read32(bytes, base + 88)? == 1,
++            "result_status",
++            "invalid token, nonfinite status or incomplete row",
++        )?;
++        check(
++            read32(bytes, base + 56)? == 32,
++            "embedding_report",
++            "report size differs",
++        )?;
++        zero(bytes, base + 60, 28, "embedding_report")?;
++        zero(bytes, base + 92, 4, "result_reserved")?;
++        zero(bytes, base + 112, 16, "result_reserved")?;
++        let logits = if e.mode == ResultMode::FullLogits {
++            let offset = RESULT_PREFIX_BYTES + index * LOGITS_BYTES;
++            check(
++                read64(bytes, base + 96)? == offset as u64
++                    && read64(bytes, base + 104)? == LOGITS_BYTES as u64,
++                "logits_span",
++                "arbitrary or mismatched logits offset/length",
++            )?;
++            let raw = span(bytes, offset, LOGITS_BYTES)?;
++            check(
++                raw.chunks_exact(2)
++                    .all(|v| u16::from_le_bytes([v[0], v[1]]) & 0x7f80 != 0x7f80),
++                "logits",
++                "nonfinite BF16 output",
++            )?;
++            Some(raw.to_vec())
++        } else {
++            zero(bytes, base + 96, 16, "greedy_logits_span")?;
++            None
++        };
++        rows.push(ValidatedRow {
++            sequence_tag: expected.sequence_tag,
++            cookie: expected.cookie,
++            execution_row: index as u32,
++            output_slot: expected.output_slot,
++            position: expected.target_length - 1,
++            generated_index: expected.generated_index,
++            token_id: token,
++            logits,
++        });
++    }
++    zero(
++        bytes,
++        128 + e.rows.len() * 128,
++        (4 - e.rows.len()) * 128,
++        "inactive_result_rows",
++    )?;
++    if e.mode == ResultMode::FullLogits {
++        zero(
++            bytes,
++            RESULT_PREFIX_BYTES + e.rows.len() * LOGITS_BYTES,
++            (b - e.rows.len()) * LOGITS_BYTES,
++            "inactive_logits",
++        )?;
++    }
++    rows.sort_by_key(|row| row.output_slot);
++    Ok(ValidatedBulk {
++        owner_generation: e.owner.generation,
++        replay_id: e.replay_id,
++        iteration_id: e.iteration_id,
++        rows_by_slot: rows,
++    })
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum SettlementAdvice {
++    RetainAll,
++    ContainAffectedRequests,
++    SchedulerCommitAllowed,
++}
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++enum State {
++    Awaiting,
++    Validated,
++    FailedQuiesced,
++    Unknown,
++}
++
++/// One admitted transaction with a retained immutable expectation snapshot.
++/// No subsequent packet may replace this snapshot. This is a readiness model,
++/// not a KV allocator, scheduler, CUDA completion detector or publisher.
++pub struct Transaction {
++    expectation: SubmissionExpectation,
++    state: State,
++    ready: Option<ValidatedBulk>,
++}
++impl Transaction {
++    pub fn admit(packet: &[u8], expectation: SubmissionExpectation) -> Result<Self> {
++        decode_request(packet, &expectation)?;
++        Ok(Self {
++            expectation,
++            state: State::Awaiting,
++            ready: None,
++        })
++    }
++    pub fn accept_result(&mut self, bytes: &[u8], completion: CompletionEvidence) -> Result<()> {
++        // Every attempted result read invalidates the previous getter, including
++        // repeated/stale attempts after a completed validation.
++        self.ready = None;
++        if self.state != State::Awaiting {
++            if self.state == State::Validated {
++                self.state = State::FailedQuiesced;
++            }
++            return Err(Error {
++                field: "transaction",
++                reason: "result already attempted; no retry/publication",
++            });
++        }
++        if completion == CompletionEvidence::Unknown {
++            self.state = State::Unknown;
++            return Err(Error {
++                field: "completion",
++                reason: "unknown completion retains all ownership",
++            });
++        }
++        self.state = State::FailedQuiesced;
++        let result = validate_bulk_result(bytes, &self.expectation, completion)?;
++        self.ready = Some(result);
++        self.state = State::Validated;
++        Ok(())
++    }
++    pub fn result(&self) -> Result<&ValidatedBulk> {
++        self.ready.as_ref().ok_or(Error {
++            field: "output",
++            reason: "whole-batch output is not ready",
++        })
++    }
++    pub fn retained_expectation(&self) -> &SubmissionExpectation {
++        &self.expectation
++    }
++    pub fn settlement_advice(&self) -> SettlementAdvice {
++        match self.state {
++            State::Awaiting | State::Unknown => SettlementAdvice::RetainAll,
++            State::FailedQuiesced => SettlementAdvice::ContainAffectedRequests,
++            State::Validated => SettlementAdvice::SchedulerCommitAllowed,
++        }
++    }
++    /// Later external proof may permit containment, never a second result read
++    /// or token publication after unknown completion.
++    pub fn establish_quiescence_after_failure(&mut self, proof: CompletionEvidence) -> Result<()> {
++        check(
++            self.state == State::Unknown && proof == CompletionEvidence::Quiesced,
++            "completion",
++            "requires later explicit quiescence proof after unknown completion",
++        )?;
++        self.state = State::FailedQuiesced;
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/crates/riley-scheduler/src/descriptor/tests.rs b/crates/riley-scheduler/src/descriptor/tests.rs
+new file mode 100644
+index 0000000..f71a69e
+--- /dev/null
++++ b/crates/riley-scheduler/src/descriptor/tests.rs
+@@ -0,0 +1,764 @@
++use super::*;
++
++const GOLDEN_REQUEST: &[u8] = include_bytes!("fixtures/request-n3.bin");
++const GOLDEN_RESULT: &[u8] = include_bytes!("fixtures/result-n3.bin");
++
++fn catalog() -> Vec<CatalogEntry> {
++    let mut result = Vec::new();
++    for mode in [ResultMode::Greedy, ResultMode::FullLogits] {
++        result.push(CatalogEntry {
++            stage: Stage::Prefill128,
++            bucket: 1,
++            mode,
++        });
++        for bucket in [1, 2, 4] {
++            result.push(CatalogEntry {
++                stage: Stage::Decode,
++                bucket,
++                mode,
++            });
++        }
++    }
++    result
++}
++fn row(
++    tag: u64,
++    cookie: u64,
++    token: u32,
++    pos: u32,
++    slot: u32,
++    ids: Vec<u32>,
++) -> ReservationExpectation {
++    let mut valid = vec![16; ids.len()];
++    *valid.last_mut().unwrap() = (pos % 16 + 1) as u16;
++    ReservationExpectation {
++        sequence_tag: tag,
++        cookie,
++        input_tokens: vec![token],
++        committed_length: pos,
++        target_length: pos + 1,
++        output_slot: slot,
++        generated_index: pos - 127,
++        max_output_tokens: 32,
++        physical_ids: ids,
++        valid_tokens: valid,
++    }
++}
++fn expectation() -> SubmissionExpectation {
++    let rows = vec![
++        row(101, 5001, 28, 128, 2, vec![7, 2, 19, 5, 11, 23, 0, 16, 9]),
++        row(
++            202,
++            5002,
++            339,
++            144,
++            0,
++            vec![34, 28, 31, 24, 36, 25, 39, 29, 33, 21],
++        ),
++        row(
++            303,
++            5003,
++            5248,
++            158,
++            1,
++            vec![3, 4, 6, 8, 10, 12, 13, 14, 15, 17],
++        ),
++    ];
++    let mut block_ownership: Vec<_> = rows
++        .iter()
++        .flat_map(|r| {
++            r.physical_ids.iter().map(move |&id| BlockOwnership {
++                physical_id: id,
++                sequence_tag: r.sequence_tag,
++            })
++        })
++        .collect();
++    // A real off-batch resident request: in-pool does not mean available.
++    block_ownership.push(BlockOwnership {
++        physical_id: 1,
++        sequence_tag: 404,
++    });
++    SubmissionExpectation {
++        owner: OwnerExpectation {
++            generation: 1,
++            last_accepted_replay: 6,
++            catalog_digest: [0x5a; 32],
++            max_active_rows: 4,
++            physical_block_count: 40,
++            catalog: catalog(),
++        },
++        replay_id: 7,
++        iteration_id: 42,
++        stage: Stage::Decode,
++        mode: ResultMode::FullLogits,
++        rows,
++        block_ownership,
++    }
++}
++fn prefill() -> SubmissionExpectation {
++    let mut e = expectation();
++    e.stage = Stage::Prefill128;
++    e.rows.truncate(1);
++    let r = &mut e.rows[0];
++    r.input_tokens = (0..128).collect();
++    r.committed_length = 0;
++    r.target_length = 128;
++    r.generated_index = 0;
++    r.output_slot = 0;
++    r.physical_ids.truncate(8);
++    r.valid_tokens = vec![16; 8];
++    e
++}
++fn shape(active: usize, mode: ResultMode) -> SubmissionExpectation {
++    let mut e = expectation();
++    e.mode = mode;
++    if active == 4 {
++        // Distinct four-request fixture, canonical nine-block targets.
++        e.rows = (0..4)
++            .map(|i| {
++                row(
++                    100 + i,
++                    6000 + i,
++                    30 + i as u32,
++                    128,
++                    i as u32,
++                    ((i * 10) as u32..(i * 10 + 9) as u32).collect(),
++                )
++            })
++            .collect();
++        e.block_ownership = e
++            .rows
++            .iter()
++            .flat_map(|r| {
++                r.physical_ids.iter().map(move |&id| BlockOwnership {
++                    physical_id: id,
++                    sequence_tag: r.sequence_tag,
++                })
++            })
++            .collect();
++    } else {
++        e.rows.truncate(active);
++        for (i, row) in e.rows.iter_mut().enumerate() {
++            row.output_slot = i as u32;
++        }
++    }
++    e
++}
++fn synthetic_result(e: &SubmissionExpectation) -> Vec<u8> {
++    validate_expectations(e).unwrap();
++    let mut bytes = vec![0; result_bytes(bucket(e.rows.len()).unwrap(), e.mode).unwrap()];
++    write_header(&mut bytes, e, true).unwrap();
++    for (i, r) in e.rows.iter().enumerate() {
++        let b = 128 + 128 * i;
++        for (off, value) in [
++            (0, r.sequence_tag),
++            (8, r.cookie),
++            (16, e.replay_id),
++            (24, e.iteration_id),
++        ] {
++            put64(&mut bytes, b + off, value).unwrap();
++        }
++        for (off, value) in [
++            (32, i as u32),
++            (36, r.output_slot),
++            (40, r.target_length - 1),
++            (44, r.generated_index),
++            (48, 0),
++            (52, 0),
++            (56, 32),
++            (88, 1),
++        ] {
++            put32(&mut bytes, b + off, value).unwrap();
++        }
++        if e.mode == ResultMode::FullLogits {
++            put64(&mut bytes, b + 96, (640 + i * LOGITS_BYTES) as u64).unwrap();
++            put64(&mut bytes, b + 104, LOGITS_BYTES as u64).unwrap();
++        }
++    }
++    bytes
++}
++
++#[test]
++fn independent_golden_request_exact_and_result_scatter() {
++    let e = expectation();
++    let encoded = encode_request(&e).unwrap();
++    assert_eq!(encoded.as_slice(), GOLDEN_REQUEST);
++    assert_eq!(synthetic_result(&e), GOLDEN_RESULT);
++    let decoded = decode_request(GOLDEN_REQUEST, &e).unwrap();
++    assert_eq!(decoded.bucket, 4);
++    assert_eq!(decoded.rows[0].physical_ids[6], 0);
++    assert_eq!(
++        decoded
++            .rows
++            .iter()
++            .map(|r| r.output_slot)
++            .collect::<Vec<_>>(),
++        [2, 0, 1]
++    );
++    let output = validate_bulk_result(GOLDEN_RESULT, &e, CompletionEvidence::Quiesced).unwrap();
++    assert_eq!(
++        output
++            .rows_by_slot()
++            .iter()
++            .map(|r| r.sequence_tag())
++            .collect::<Vec<_>>(),
++        [202, 303, 101]
++    );
++    assert_eq!(
++        output
++            .rows_by_slot()
++            .iter()
++            .map(|r| r.execution_row())
++            .collect::<Vec<_>>(),
++        [1, 2, 0]
++    );
++    assert_eq!(output.replay_id(), 7);
++    assert_eq!(output.iteration_id(), 42);
++    assert_eq!(output.owner_generation(), 1);
++}
++
++#[test]
++fn every_request_byte_is_bound_in_both_stages() {
++    for e in [expectation(), prefill()] {
++        let original = encode_request(&e).unwrap();
++        for offset in 0..REQUEST_BYTES {
++            let mut changed = original;
++            changed[offset] ^= 1;
++            assert!(
++                decode_request(&changed, &e).is_err(),
++                "unbound byte {offset}"
++            );
++        }
++    }
++}
++
++#[test]
++fn p128_compatibility_view_and_all_prompt_tokens() {
++    let e = prefill();
++    let bytes = encode_request(&e).unwrap();
++    assert_eq!(&bytes[640..720], &bytes[128..208]);
++    assert_eq!(read32(&bytes, 720).unwrap(), 0x50313238);
++    assert_eq!(read32(&bytes, 724).unwrap(), 128);
++    assert_eq!(read32(&bytes, 728).unwrap(), 0);
++    assert_eq!(read32(&bytes, 1236).unwrap(), 127);
++    assert_eq!(decode_request(&bytes, &e).unwrap().rows[0].input_count, 128);
++    validate_bulk_result(&synthetic_result(&e), &e, CompletionEvidence::Quiesced).unwrap();
++}
++
++#[test]
++fn all_exact_bucket_and_output_mode_sizes() {
++    for active in 1..=4 {
++        for mode in [ResultMode::Greedy, ResultMode::FullLogits] {
++            let e = shape(active, mode);
++            let request = encode_request(&e).unwrap();
++            let b = if active <= 2 { active } else { 4 };
++            assert_eq!(decode_request(&request, &e).unwrap().bucket, b as u32);
++            let bytes = synthetic_result(&e);
++            assert_eq!(
++                bytes.len(),
++                640 + if mode == ResultMode::FullLogits {
++                    b * 98304
++                } else {
++                    0
++                }
++            );
++            let out = validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).unwrap();
++            assert_eq!(out.rows_by_slot().len(), active);
++            assert_eq!(
++                out.rows_by_slot()[0].logits().is_some(),
++                mode == ResultMode::FullLogits
++            );
++        }
++    }
++    assert!(result_bytes(3, ResultMode::Greedy).is_err());
++}
++
++#[test]
++fn unknown_stage_mode_version_and_lengths_rejected() {
++    let e = expectation();
++    let good = encode_request(&e).unwrap();
++    for (offset, value) in [
++        (0, 0),
++        (4, 2),
++        (6, 127),
++        (8, 1279),
++        (12, 64),
++        (16, 2),
++        (20, 3),
++        (24, 0),
++        (28, 4),
++        (104, 2),
++        (108, 1),
++    ] {
++        let mut bytes = good;
++        if offset == 4 || offset == 6 {
++            put16(&mut bytes, offset, value as u16).unwrap();
++        } else {
++            put32(&mut bytes, offset, value).unwrap();
++        }
++        assert!(decode_request(&bytes, &e).is_err(), "accepted {offset}");
++    }
++    assert!(decode_request(&good[..1279], &e).is_err());
++    let mut extra = good.to_vec();
++    extra.push(0);
++    assert!(decode_request(&extra, &e).is_err());
++    let result = synthetic_result(&e);
++    assert!(
++        validate_bulk_result(
++            &result[..result.len() - 1],
++            &e,
++            CompletionEvidence::Quiesced
++        )
++        .is_err()
++    );
++}
++
++#[test]
++fn explicit_ownership_blocks_forged_off_batch_reassignment() {
++    let mut e = expectation();
++    e.rows[0].physical_ids[0] = 1;
++    assert_eq!(encode_request(&e).unwrap_err().field, "block_ownership");
++    let mut e = expectation();
++    e.block_ownership.retain(|owner| owner.physical_id != 0);
++    assert_eq!(encode_request(&e).unwrap_err().field, "block_ownership");
++    let mut e = expectation();
++    e.block_ownership.push(e.block_ownership[0]);
++    assert!(encode_request(&e).is_err());
++    // A structurally plausible forged packet cannot amend the external ledger.
++    let e = expectation();
++    let mut forged = encode_request(&e).unwrap();
++    put32(&mut forged, 144, 1).unwrap();
++    assert!(decode_request(&forged, &e).is_err());
++}
++
++#[test]
++fn duplicate_physical_tags_cookies_slots_and_sparse_output_rejected() {
++    let mut variants = Vec::new();
++    let mut e = expectation();
++    e.rows[1].sequence_tag = e.rows[0].sequence_tag;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[1].cookie = e.rows[0].cookie;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[1].output_slot = e.rows[0].output_slot;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[1].output_slot = 3;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[1].physical_ids[0] = e.rows[0].physical_ids[0];
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].physical_ids[1] = e.rows[0].physical_ids[0];
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].physical_ids[0] = 40;
++    variants.push(e);
++    for e in variants {
++        assert!(encode_request(&e).is_err());
++    }
++}
++
++#[test]
++fn canonical_target_table_and_generation_bounds() {
++    let mut variants = Vec::new();
++    let mut e = expectation();
++    e.rows[0].valid_tokens[0] = 15;
++    variants.push(e);
++    let mut e = expectation();
++    *e.rows[0].valid_tokens.last_mut().unwrap() = 0;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].physical_ids.pop();
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].committed_length -= 1;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].generated_index += 1;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].max_output_tokens = 1;
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].input_tokens.push(3);
++    variants.push(e);
++    let mut e = expectation();
++    e.rows[0].input_tokens[0] = 49152;
++    variants.push(e);
++    let mut e = prefill();
++    e.rows[0].input_tokens.pop();
++    variants.push(e);
++    let mut e = prefill();
++    e.rows[0].committed_length = 1;
++    e.rows[0].target_length = 129;
++    variants.push(e);
++    for e in variants {
++        assert!(encode_request(&e).is_err());
++    }
++    // p159 fits160 KV positions but cannot issue output index32 under O<=32.
++    let mut e = expectation();
++    let r = &mut e.rows[2];
++    r.committed_length = 159;
++    r.target_length = 160;
++    r.generated_index = 32;
++    *r.valid_tokens.last_mut().unwrap() = 16;
++    assert_eq!(encode_request(&e).unwrap_err().field, "generation_bound");
++}
++
++#[test]
++fn checked_overflow_and_no_catalog_fallback() {
++    let mut e = expectation();
++    e.owner.last_accepted_replay = u64::MAX;
++    e.replay_id = 0;
++    assert_eq!(encode_request(&e).unwrap_err().field, "replay_id");
++    let mut e = expectation();
++    e.rows[0].committed_length = u32::MAX;
++    assert_eq!(encode_request(&e).unwrap_err().field, "target_length");
++    let mut e = expectation();
++    e.owner.catalog.retain(|entry| entry.bucket != 4);
++    assert_eq!(encode_request(&e).unwrap_err().field, "catalog");
++    let mut e = expectation();
++    e.owner
++        .catalog
++        .retain(|entry| entry.mode == ResultMode::Greedy);
++    assert_eq!(encode_request(&e).unwrap_err().field, "catalog");
++    let mut e = expectation();
++    e.owner.max_active_rows = 2;
++    assert!(encode_request(&e).is_err());
++    assert!(span(&[0], usize::MAX, 2).is_err());
++}
++
++#[test]
++fn result_header_every_byte_and_row_identity_rejected() {
++    let e = expectation();
++    let good = GOLDEN_RESULT;
++    for offset in 0..128 {
++        let mut bytes = good.to_vec();
++        bytes[offset] ^= 1;
++        assert!(
++            validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err(),
++            "header {offset}"
++        );
++    }
++    for base in [128, 256, 384] {
++        for off in [
++            0, 8, 16, 24, 32, 36, 40, 44, 52, 56, 60, 64, 72, 80, 88, 92, 96, 104, 112, 127,
++        ] {
++            let mut bytes = good.to_vec();
++            bytes[base + off] ^= 1;
++            assert!(
++                validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err(),
++                "row {base} field {off}"
++            );
++        }
++    }
++}
++
++#[test]
++fn malformed_last_row_never_exposes_earlier_rows() {
++    let e = expectation();
++    let request = encode_request(&e).unwrap();
++    let mut tx = Transaction::admit(&request, e.clone()).unwrap();
++    let mut bytes = GOLDEN_RESULT.to_vec();
++    put32(&mut bytes, 384 + 52, 1).unwrap();
++    assert!(
++        tx.accept_result(&bytes, CompletionEvidence::Quiesced)
++            .is_err()
++    );
++    assert!(tx.result().is_err());
++    assert_eq!(
++        tx.settlement_advice(),
++        SettlementAdvice::ContainAffectedRequests
++    );
++    assert_eq!(tx.retained_expectation(), &e);
++}
++
++#[test]
++fn inactive_rows_logits_and_arbitrary_spans_rejected() {
++    let e = expectation();
++    for offset in [512, 592, 639, 295552, MAX_RESULT_BYTES - 1] {
++        let mut bytes = GOLDEN_RESULT.to_vec();
++        bytes[offset] = 1;
++        assert!(validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err());
++    }
++    let mut bytes = GOLDEN_RESULT.to_vec();
++    put64(&mut bytes, 128 + 96, u64::MAX - 1).unwrap();
++    assert!(validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err());
++    let mut e = expectation();
++    e.mode = ResultMode::Greedy;
++    let mut bytes = synthetic_result(&e);
++    bytes[128 + 96] = 1;
++    assert!(validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err());
++}
++
++#[test]
++fn bf16_bits_preserved_and_nonfinite_rejected() {
++    let e = expectation();
++    let mut bytes = GOLDEN_RESULT.to_vec();
++    put16(&mut bytes, 640, 0x8000).unwrap();
++    put16(&mut bytes, 642, 0x0001).unwrap();
++    let validated = validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).unwrap();
++    assert_eq!(
++        &validated.rows_by_slot()[2].logits().unwrap()[..4],
++        &[0, 128, 1, 0]
++    );
++    for word in [0x7f80, 0xff80, 0x7fc1, 0x7f81] {
++        put16(&mut bytes, 640, word).unwrap();
++        assert_eq!(
++            validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced)
++                .unwrap_err()
++                .field,
++            "logits"
++        );
++    }
++}
++
++#[test]
++fn greedy_tokens_scatter_independently_from_execution_rows() {
++    let mut e = expectation();
++    e.mode = ResultMode::Greedy;
++    let mut bytes = synthetic_result(&e);
++    for (i, token) in [11, 22, 33].iter().enumerate() {
++        put32(&mut bytes, 128 + 128 * i + 48, *token).unwrap();
++    }
++    let output = validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).unwrap();
++    assert_eq!(
++        output
++            .rows_by_slot()
++            .iter()
++            .map(|r| r.token_id())
++            .collect::<Vec<_>>(),
++        [22, 33, 11]
++    );
++    for invalid in [49152, u32::MAX] {
++        put32(&mut bytes, 128 + 48, invalid).unwrap();
++        assert!(validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err());
++    }
++}
++
++#[test]
++fn unknown_completion_retains_snapshot_no_late_publication() {
++    let e = expectation();
++    let mut owner = CodecOwner::new(e.owner.clone());
++    owner.admit(GOLDEN_REQUEST, e.clone()).unwrap();
++    assert!(
++        owner
++            .accept_result(GOLDEN_RESULT, CompletionEvidence::Unknown)
++            .is_err()
++    );
++    assert_eq!(owner.settlement_advice(), Some(SettlementAdvice::RetainAll));
++    assert_eq!(owner.retained_expectation(), Some(&e));
++    assert!(owner.result().is_err());
++    assert!(owner.settle_failure(true).is_err());
++    assert!(
++        owner
++            .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++            .is_err()
++    );
++    assert!(owner.result().is_err());
++    owner
++        .establish_quiescence_after_failure(CompletionEvidence::Quiesced)
++        .unwrap();
++    assert_eq!(
++        owner.settlement_advice(),
++        Some(SettlementAdvice::ContainAffectedRequests)
++    );
++    owner.settle_failure(true).unwrap();
++    let mut next = e;
++    next.owner = owner.expectation().clone();
++    next.replay_id = 8;
++    assert!(owner.admit(&encode_request(&next).unwrap(), next).is_err());
++}
++
++#[test]
++fn any_repeated_result_attempt_invalidates_ready_output() {
++    let e = expectation();
++    let mut owner = CodecOwner::new(e.owner.clone());
++    owner.admit(GOLDEN_REQUEST, e).unwrap();
++    owner
++        .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++        .unwrap();
++    assert!(owner.result().is_ok());
++    assert!(
++        owner
++            .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++            .is_err()
++    );
++    assert!(owner.result().is_err());
++    assert!(owner.settle_success(true).is_err());
++}
++
++#[test]
++fn owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter() {
++    let e = expectation();
++    let mut owner = CodecOwner::new(e.owner.clone());
++    let mut bad = GOLDEN_REQUEST.to_vec();
++    bad[0] ^= 1;
++    assert!(owner.admit(&bad, e.clone()).is_err());
++    assert_eq!(owner.expectation().last_accepted_replay, 6);
++    assert!(owner.retained_expectation().is_none());
++    assert!(owner.result().is_err());
++    owner.admit(GOLDEN_REQUEST, e.clone()).unwrap();
++    owner
++        .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++        .unwrap();
++    assert!(owner.settle_success(false).is_err());
++    let result = owner.settle_success(true).unwrap();
++    assert_eq!(result.rows_by_slot().len(), 3);
++    assert!(owner.result().is_err());
++    assert!(owner.admit(GOLDEN_REQUEST, e).is_err());
++    assert_eq!(owner.expectation().last_accepted_replay, 7);
++}
++
++#[test]
++fn unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt() {
++    for ready in [false, true] {
++        let e = expectation();
++        let mut owner = CodecOwner::new(e.owner.clone());
++        owner.admit(GOLDEN_REQUEST, e.clone()).unwrap();
++        if ready {
++            owner
++                .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++                .unwrap();
++        }
++        let mut next = e.clone();
++        next.owner = owner.expectation().clone();
++        next.replay_id = 8;
++        next.iteration_id = 43;
++        assert!(owner.admit(&encode_request(&next).unwrap(), next).is_err());
++        assert_eq!(owner.retained_expectation(), Some(&e));
++        assert!(owner.result().is_err());
++        if !ready {
++            assert!(
++                owner
++                    .accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++                    .is_err()
++            );
++        }
++        assert_eq!(
++            owner.settlement_advice(),
++            Some(SettlementAdvice::ContainAffectedRequests)
++        );
++        assert!(owner.settle_success(true).is_err());
++        owner.settle_failure(true).unwrap();
++    }
++}
++
++#[test]
++fn shrinking_and_growing_buckets_need_fresh_replay_and_result_shape() {
++    let initial = shape(4, ResultMode::Greedy);
++    let mut owner = CodecOwner::new(initial.owner.clone());
++    for (offset, active) in [4, 3, 1, 2].into_iter().enumerate() {
++        let mut e = shape(active, ResultMode::Greedy);
++        e.owner = owner.expectation().clone();
++        e.replay_id = e.owner.last_accepted_replay + 1;
++        e.iteration_id = 42 + offset as u64;
++        let request = encode_request(&e).unwrap();
++        let response = synthetic_result(&e);
++        owner.admit(&request, e).unwrap();
++        assert!(owner.result().is_err());
++        owner
++            .accept_result(&response, CompletionEvidence::Quiesced)
++            .unwrap();
++        assert_eq!(
++            owner.settle_success(true).unwrap().rows_by_slot().len(),
++            active
++        );
++    }
++}
++
++#[test]
++fn caller_changes_cannot_rewrite_admitted_snapshot() {
++    let mut e = expectation();
++    let original = e.clone();
++    let mut tx = Transaction::admit(GOLDEN_REQUEST, e.clone()).unwrap();
++    // A cancellation/routing change in outside state cannot rewrite the native
++    // reservation snapshot. Actual cancellation publication remains scheduler work.
++    e.rows.clear();
++    e.block_ownership.clear();
++    assert_eq!(tx.retained_expectation(), &original);
++    tx.accept_result(GOLDEN_RESULT, CompletionEvidence::Quiesced)
++        .unwrap();
++    assert_eq!(tx.result().unwrap().rows_by_slot().len(), 3);
++}
++
++#[test]
++fn two_row_owner_has_exact_catalog_capacity_and_pool_bounds() {
++    let mut e = shape(4, ResultMode::Greedy);
++    e.rows.truncate(2);
++    e.owner.max_active_rows = 2;
++    e.owner.physical_block_count = 20;
++    e.owner.catalog.retain(|entry| entry.bucket <= 2);
++    e.block_ownership.retain(|entry| entry.physical_id < 20);
++    let bytes = encode_request(&e).unwrap();
++    assert_eq!(decode_request(&bytes, &e).unwrap().bucket, 2);
++    validate_bulk_result(&synthetic_result(&e), &e, CompletionEvidence::Quiesced).unwrap();
++
++    let mut missing = e.clone();
++    missing.owner.catalog.retain(|entry| entry.bucket != 2);
++    assert_eq!(encode_request(&missing).unwrap_err().field, "catalog");
++    let mut invalid_catalog = e.clone();
++    invalid_catalog.owner.catalog.push(CatalogEntry {
++        stage: Stage::Decode,
++        bucket: 4,
++        mode: ResultMode::Greedy,
++    });
++    assert_eq!(
++        encode_request(&invalid_catalog).unwrap_err().field,
++        "catalog"
++    );
++    let mut undersized = e.clone();
++    undersized.owner.physical_block_count = 19;
++    assert_eq!(
++        encode_request(&undersized).unwrap_err().field,
++        "physical_block_count"
++    );
++    let mut over_capacity = e;
++    over_capacity
++        .rows
++        .push(shape(4, ResultMode::Greedy).rows[2].clone());
++    assert_eq!(
++        encode_request(&over_capacity).unwrap_err().field,
++        "active_rows"
++    );
++}
++
++#[test]
++fn prefill_then_decode_requires_new_binding_and_respects_o1_terminal() {
++    let mut p = prefill();
++    p.mode = ResultMode::Greedy;
++    let mut owner = CodecOwner::new(p.owner.clone());
++    owner
++        .admit(&encode_request(&p).unwrap(), p.clone())
++        .unwrap();
++    let p_result = synthetic_result(&p);
++    owner
++        .accept_result(&p_result, CompletionEvidence::Quiesced)
++        .unwrap();
++    owner.settle_success(true).unwrap();
++
++    let mut d = shape(1, ResultMode::Greedy);
++    d.owner = owner.expectation().clone();
++    d.replay_id = 8;
++    d.iteration_id = 43;
++    d.rows[0].cookie = p.rows[0].cookie + 1;
++    let bytes = encode_request(&d).unwrap();
++    assert!(bytes[640..1240].iter().all(|&x| x == 0));
++    assert!(validate_bulk_result(&p_result, &d, CompletionEvidence::Quiesced).is_err());
++    owner.admit(&bytes, d.clone()).unwrap();
++    owner
++        .accept_result(&synthetic_result(&d), CompletionEvidence::Quiesced)
++        .unwrap();
++    assert_eq!(
++        owner.settle_success(true).unwrap().rows_by_slot()[0].generated_index(),
++        1
++    );
++
++    let mut terminal = prefill();
++    terminal.rows[0].max_output_tokens = 1;
++    encode_request(&terminal).unwrap();
++    d.rows[0].max_output_tokens = 1;
++    assert_eq!(encode_request(&d).unwrap_err().field, "generation_bound");
++}
+diff --git a/crates/riley-scheduler/src/lib.rs b/crates/riley-scheduler/src/lib.rs
+index 6b3e083..02534fb 100644
+--- a/crates/riley-scheduler/src/lib.rs
++++ b/crates/riley-scheduler/src/lib.rs
+@@ -101,3 +101,6 @@ pub fn runtime_build_info() -> riley_core::Result<riley_runtime::BuildInfo> {
+ 
+ mod authority;
+ pub use authority::{AuthorizedExecution, AuthorizedExecutionRow};
++
++#[allow(dead_code)] // Runtime dispatch integration is assembled with the scoped authority adapter.
++mod descriptor;

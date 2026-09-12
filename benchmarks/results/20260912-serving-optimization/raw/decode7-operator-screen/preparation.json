@@ -1,0 +1,74 @@
+{
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "base_build_sha256": "4d3f65c70aa56beb487754f01ed04e04d36f4c6db64fd3ee17b665561fb25395",
+  "inputs": {
+    "/tmp/riley-opt-260912/decode7-profile-build.json": "4ce666b6437149b68f7add65b7b5b04577f2f7d4c0f54fa21db5218eb72995bf",
+    "/tmp/riley-opt-260912/batch7-http-plan.json": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6",
+    "/tmp/riley-opt-260912/batch7-binding.json": "9a623763436d7eb16b693c41a4d7cbc5625f4821d510edbf9a09ce882dbd2277",
+    "/tmp/riley-g04-vllm-profile-260911/request.json": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+    "/tmp/riley-opt-260912/remote_session_round11.py": "916ae1ae972915b29cd895d47ffefe033a0876365c68a03cb9c8ac4df929dc9e",
+    "/tmp/riley-opt-260912/remote_session.py": "047b133460322099851213149c623be4ef7f67a4b1ebfa7c2fedb4a70ef24712",
+    "/tmp/riley-opt-260912/decode7-operator-tools/profile_decode_operators_batch7.py": "6cb953a66df57150834e9df38d1a65fa82de976d2af1c583ffa2db3c912509d0",
+    "/tmp/riley-opt-260912/decode7-operator-tools/profile_owned_graph.py": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+    "/tmp/riley-opt-260912/run_operator_profile_batch7.py": "f67c7e80aa13444cdb345a8141b6d66217cf373dc656b932aeab2292e4c7f7b3",
+    "/tmp/riley-opt-260912/run_serving_optimization.py": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+    "/tmp/riley-opt-260912/build_decode_profile_batch7.py": "7a7cca5ad7857d08754df2112be13fa1013faad06966ed1e9e34b134ea37e919",
+    "/tmp/riley-opt-260912/run_decode_screen_batch7.py": "ead5b446d8ad62e42bb1a14b1fe3883fd23c6d5f0c372a6e35c45a18c9f39dc6"
+  },
+  "cases": [
+    [
+      "off-before",
+      "off"
+    ],
+    [
+      "qkv",
+      "qkv"
+    ],
+    [
+      "rope_kv",
+      "rope_kv"
+    ],
+    [
+      "attention",
+      "attention"
+    ],
+    [
+      "o",
+      "o"
+    ],
+    [
+      "post_norm",
+      "post_norm"
+    ],
+    [
+      "gate_up",
+      "gate_up"
+    ],
+    [
+      "swiglu",
+      "swiglu"
+    ],
+    [
+      "down",
+      "down"
+    ],
+    [
+      "next_norm",
+      "next_norm"
+    ],
+    [
+      "head",
+      "head"
+    ],
+    [
+      "off-after",
+      "off"
+    ]
+  ],
+  "requests_per_case": 6,
+  "retained_requests_per_case": 3,
+  "all_layers": true,
+  "head_layer": null,
+  "historical_projection_events": false,
+  "performance_claim_eligible": false
+}

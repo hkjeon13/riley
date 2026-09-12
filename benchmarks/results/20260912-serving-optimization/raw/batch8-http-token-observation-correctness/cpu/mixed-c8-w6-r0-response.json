@@ -1,0 +1,55 @@
+{
+  "started_ns": 834748300712294,
+  "http_status": 200,
+  "headers": [
+    [
+      "Content-Type",
+      "text/event-stream; charset=utf-8"
+    ],
+    [
+      "Cache-Control",
+      "no-cache"
+    ],
+    [
+      "Connection",
+      "close"
+    ],
+    [
+      "X-Content-Type-Options",
+      "nosniff"
+    ]
+  ],
+  "disconnect": null,
+  "disconnect_observed": false,
+  "complete": true,
+  "error": null,
+  "finished_ns": 834748348025536,
+  "deadline_fired": false,
+  "total_deadline_seconds": 30,
+  "owned_connection_closed": true,
+  "cleanup_errors": [],
+  "request": {
+    "model": "g04-smol",
+    "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+    "temperature": 0,
+    "top_p": 1,
+    "max_tokens": 1,
+    "stream": true
+  },
+  "request_body_sha256": "58b5280b75650770d6706889ddcfe87bce3fc49f0d6d9390fc58ea4704c45310",
+  "frames": [
+    {
+      "data": "{\"id\":\"cmpl-000000000000001c\",\"object\":\"text_completion\",\"created\":1789177595,\"model\":\"g04-smol\",\"choices\":[{\"text\":\",\",\"index\":0,\"logprobs\":null,\"finish_reason\":null}]}",
+      "arrived_ns": 834748347935588
+    },
+    {
+      "data": "{\"id\":\"cmpl-000000000000001c\",\"object\":\"text_completion\",\"created\":1789177595,\"model\":\"g04-smol\",\"choices\":[{\"text\":\"\",\"index\":0,\"logprobs\":null,\"finish_reason\":\"length\"}]}",
+      "arrived_ns": 834748347952393
+    },
+    {
+      "data": "[DONE]",
+      "arrived_ns": 834748347956633
+    }
+  ],
+  "raw_response_base64": "ZGF0YTogeyJpZCI6ImNtcGwtMDAwMDAwMDAwMDAwMDAxYyIsIm9iamVjdCI6InRleHRfY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODkxNzc1OTUsIm1vZGVsIjoiZzA0LXNtb2wiLCJjaG9pY2VzIjpbeyJ0ZXh0IjoiLCIsImluZGV4IjowLCJsb2dwcm9icyI6bnVsbCwiZmluaXNoX3JlYXNvbiI6bnVsbH1dfQoKZGF0YTogeyJpZCI6ImNtcGwtMDAwMDAwMDAwMDAwMDAxYyIsIm9iamVjdCI6InRleHRfY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODkxNzc1OTUsIm1vZGVsIjoiZzA0LXNtb2wiLCJjaG9pY2VzIjpbeyJ0ZXh0IjoiIiwiaW5kZXgiOjAsImxvZ3Byb2JzIjpudWxsLCJmaW5pc2hfcmVhc29uIjoibGVuZ3RoIn1dfQoKZGF0YTogW0RPTkVdCgo="
+}

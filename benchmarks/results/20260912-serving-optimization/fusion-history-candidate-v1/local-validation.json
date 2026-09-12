@@ -1,0 +1,36 @@
+{
+  "schema": "riley.fusion-history-candidate-local-validation.v1",
+  "completed_at_utc": "2026-09-12T03:40:14.794977+00:00",
+  "files": {
+    "README.md": "31e036dc9e039cd9fbf99e20a116dc37784ce8c878761f5e16d3bbf66c057b35",
+    "baseline_graph_numerics.cu": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+    "candidate.patch": "1e23e5c368169c2a535d31d8b6323ed2df266a728315aa61c12df9907325d656",
+    "generate.py": "271e5b6da8d1cf945707e7fb83cb948264023cf7bfeac1a8573e5268e05bbf5b",
+    "graph_numerics.cu": "1bbce29025fc91758f932a4bdbbf36e6e9097805df9c58157a90b18d7000ea9f",
+    "invariants.json": "80bdd60264653f93c4d3f4abd0842d410f37a36fc8469fff731dfd5c15ee9d08",
+    "test_candidate.py": "1d1e14dfcdcf419a01aa16fc0500d82becea91a8429a0ca44883f090bfb95944"
+  },
+  "production_source_sha256_after": "edb7990577187d9574bf6d7c751713581529e4da1b835d92ca4a012518de5552",
+  "tests": {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "benchmarks/results/20260912-serving-optimization/fusion-history-candidate-v1",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "passed": 9,
+    "failed": 0,
+    "elapsed_seconds": 2.917,
+    "scope": "pure Python source, address, layout and raw-bit contracts; no numerical GPU emulation"
+  },
+  "cuda_compile_executed": false,
+  "gpu_executed": false,
+  "remote_operations_executed": false,
+  "performance_claim_eligible": false,
+  "source_qualification_pending": true
+}

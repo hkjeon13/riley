@@ -1,0 +1,29 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a)
+
+running 1 test
+test llama::batch_executor::attention_model_gpu_tests::c07_model_owned_packed_attention_preserves_logits_tokens_and_kv_continuation ... Error: Metadata(InvalidBatch { field: "block_table.logical_length", reason: "must equal the row target logical length" })
+FAILED
+
+failures:
+
+failures:
+    llama::batch_executor::attention_model_gpu_tests::c07_model_owned_packed_attention_preserves_logits_tokens_and_kv_continuation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 280 filtered out; finished in 71.11s
+
+error: test failed, to rerun pass `-p riley-runtime --lib`

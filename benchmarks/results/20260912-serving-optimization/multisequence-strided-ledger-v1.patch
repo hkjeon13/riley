@@ -1,0 +1,248 @@
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 7fe7f6c..e136c68 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -9660,6 +9660,52 @@ impl Drop for GraphResourcesHandle {
+ mod graph_resource_native_gpu_tests {
+     use super::*;
+ 
++    #[test]
++    #[ignore = "requires CUDA GPU"]
++    fn aggregate_strided_plan_reservation_rollback_and_reuse() -> CudaResult<()> {
++        let _runtime = crate::CudaRuntime::initialize()?;
++        let mut context = ContextHandle::create(0)?;
++        let mut stream = StreamHandle::create(&context)?;
++        let mut other = StreamHandle::create(&context)?;
++        let mut buffer = DeviceBufferHandle::create(&context, 128)?;
++        for (n, k) in [
++            (960, 576),
++            (3072, 576),
++            (576, 576),
++            (576, 1536),
++            (49152, 576),
++        ] {
++            for batch in [2, 4] {
++                for padded in [false, true] {
++                    let stride = |v: u64| if padded { v.div_ceil(128) * 128 } else { v };
++                    let mut plan = GemmPlanHandle::create_strided_m1(
++                        &context,
++                        n,
++                        k,
++                        batch,
++                        stride(k),
++                        stride(n),
++                    )?;
++                    let ledger = GraphResourcesHandle::reserve(&stream, &[], &[], &[&plan, &plan])?;
++                    assert!(plan.close().is_err());
++                    assert!(
++                        GraphResourcesHandle::reserve(&other, &[&buffer], &[], &[&plan]).is_err()
++                    );
++                    // Busy-plan failure must roll back the preceding stream/buffer leases.
++                    GraphResourcesHandle::reserve(&other, &[&buffer], &[], &[])?.close()?;
++                    drop(ledger);
++                    GraphResourcesHandle::reserve(&stream, &[], &[], &[&plan])?.close()?;
++                    plan.close()?;
++                }
++            }
++        }
++        buffer.close()?;
++        other.close()?;
++        stream.close()?;
++        context.close()?;
++        Ok(())
++    }
++
+     #[test]
+     #[ignore = "requires CUDA GPU"]
+     fn aggregate_resource_duplicates_busy_rollback_and_drop() -> CudaResult<()> {
+diff --git a/crates/riley-cuda/src/gemm.rs b/crates/riley-cuda/src/gemm.rs
+index 1d37d48..509ad9a 100644
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -1801,6 +1801,17 @@ impl CudaContext {
+     }
+ }
+ impl CudaPreparedStridedGemm {
++    #[cfg(feature = "cuda")]
++    pub(crate) fn graph_resource_handle(&self) -> CudaResult<&ffi::GemmPlanHandle> {
++        if self.poisoned {
++            return Err(CudaError::invalid_state(
++                "reserve strided GEMM resource",
++                "plan is poisoned",
++            ));
++        }
++        Ok(&self.native)
++    }
++
+     pub const fn config(&self) -> CudaStridedGemmConfig {
+         self.config
+     }
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index fe933bd..b677b84 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -35,7 +35,9 @@ impl<P> OwnedGraphResourceReservation<P> {
+         let BorrowedGraphResourceReservation {
+             native,
+             parents: borrowed,
++            strided_plans,
+         } = record(&mut parents)?;
++        drop(strided_plans);
+         drop(borrowed);
+         Ok(Self { native, parents })
+     }
+@@ -83,6 +85,9 @@ pub struct BorrowedGraphResourceReservation<'a> {
+     native: crate::ffi::GraphResourcesHandle,
+     #[allow(dead_code)]
+     parents: BorrowedGraphResourceParents<'a>,
++    // Kept separate so existing single-row recording APIs cannot select these plans.
++    #[allow(dead_code)]
++    strided_plans: Vec<&'a mut crate::CudaPreparedStridedGemm>,
+ }
+ impl<'a> BorrowedGraphResourceReservation<'a> {
+     /// Reserves all parents atomically with rollback on a busy resource.
+@@ -90,26 +95,46 @@ impl<'a> BorrowedGraphResourceReservation<'a> {
+     /// Rejects foreign contexts, busy resources, unsupported plans or capacity.
+     #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))] // CUDA owns parents through close.
+     pub fn reserve(parents: BorrowedGraphResourceParents<'a>) -> CudaResult<Self> {
++        Self::reserve_with_strided(parents, Vec::new())
++    }
++
++    /// Retains additional strided plans under the same aggregate lease owner.
++    /// Existing single-row recording methods only index `parents.plans`.
++    /// This admission does not record a multi-row decode graph.
++    /// # Errors
++    /// Rejects poisoned, foreign, busy or unsupported plans and rolls back acquisitions.
++    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
++    pub fn reserve_with_strided(
++        parents: BorrowedGraphResourceParents<'a>,
++        strided_plans: Vec<&'a mut crate::CudaPreparedStridedGemm>,
++    ) -> CudaResult<Self> {
+         #[cfg(feature = "cuda")]
+         {
+             let devices: Vec<_> = parents.devices.iter().map(|b| b.native_handle()).collect();
+             let pinned: Vec<_> = parents.pinned.iter().map(|b| b.native_handle()).collect();
+-            let plans: Vec<_> = parents
++            let mut plans: Vec<_> = parents
+                 .plans
+                 .iter()
+                 .map(|p| p.graph_resource_handle())
+                 .collect::<CudaResult<_>>()?;
++            for plan in &strided_plans {
++                plans.push(plan.graph_resource_handle()?);
++            }
+             let native = crate::ffi::GraphResourcesHandle::reserve(
+                 &parents.stream.native,
+                 &devices,
+                 &pinned,
+                 &plans,
+             )?;
+-            Ok(Self { native, parents })
++            Ok(Self {
++                native,
++                parents,
++                strided_plans,
++            })
+         }
+         #[cfg(not(feature = "cuda"))]
+         {
+-            let _ = parents;
++            let _ = (parents, strided_plans);
+             Err(crate::CudaError::unavailable(
+                 "reserve aggregate graph resources",
+             ))
+diff --git a/crates/riley-cuda/tests/strided_gemm_gpu.rs b/crates/riley-cuda/tests/strided_gemm_gpu.rs
+index 2d45252..8949b0f 100644
+--- a/crates/riley-cuda/tests/strided_gemm_gpu.rs
++++ b/crates/riley-cuda/tests/strided_gemm_gpu.rs
+@@ -39,6 +39,21 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
+                 let mut x = context.allocate_device_buffer(config.input_bytes())?;
+                 let mut w = context.allocate_device_buffer(config.weight_bytes())?;
+                 let mut y = context.allocate_device_buffer(config.output_bytes())?;
++                let reservation =
++                    riley_cuda::BorrowedGraphResourceReservation::reserve_with_strided(
++                        riley_cuda::BorrowedGraphResourceParents {
++                            stream: &mut stream,
++                            devices: vec![&mut x, &mut w, &mut y],
++                            pinned: vec![&mut staging],
++                            plans: vec![],
++                        },
++                        vec![&mut plan],
++                    )?;
++                if padded {
++                    reservation.close()?;
++                } else {
++                    drop(reservation);
++                }
+                 x.upload_from_slice(0, &input, &mut staging, &mut stream)?;
+                 w.upload_from_slice(0, &weight, &mut staging, &mut stream)?;
+                 y.upload_from_slice(
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 30878ba..fd4f336 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -1087,6 +1087,12 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
++// Caller proves exact aggregate membership before binding; this does not acquire leases.
++RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
++    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
++    uint64_t input_stride, uint64_t output_stride,
++    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
+ cudaError_t enqueue_decode_embedding(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t) noexcept;
+ cudaError_t enqueue_decode_embedding_rows(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t, uint64_t) noexcept;
+ cudaError_t enqueue_decode_kv_attention(cudaStream_t, const void*, const void*, const void*, void*, void*, void*, const void*, uint64_t, uint64_t, uint64_t, uint64_t) noexcept;
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 15e26f2..86054b5 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1222,7 +1222,8 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+ 
+ bool aggregate_gemm_plan_matches_context(
+     const RileyCudaGemmPlan* plan, const RileyCudaContext* context) noexcept {
+-  return canonical_gemm_bf16_plan_is_ready(plan) &&
++  return (canonical_gemm_bf16_plan_is_ready(plan) ||
++          gemm_bf16_plan_is_ready(plan, true)) &&
+          same_context(plan->owner, context);
+ }
+ 
+@@ -1357,6 +1358,37 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
+   return RILEY_CUDA_STATUS_SUCCESS;
+ }
+ 
++RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
++    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
++    uint64_t input_stride, uint64_t output_stride,
++    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
++  if (state == nullptr)
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "null state");
++  *state = RileyCudaCanonicalGemmBf16GraphState{};
++  // The aggregate caller must prove exact ledger membership for all parents.
++  // Require its expected geometry as well: equal allocation sizes alone do not
++  // prove that a bucket's row stride or projection role matches this plan.
++  if (!gemm_bf16_plan_is_ready(plan, true) || plan->config.m != 1 ||
++      plan->batch_count != batch_count || plan->config.n != n || plan->config.k != k ||
++      input_stride != plan->input_bytes / (2 * batch_count) ||
++      output_stride != plan->output_bytes / (2 * batch_count))
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "strided bucket geometry differs");
++  RileyCudaCanonicalGemmBf16GraphState candidate{};
++  candidate.plan = plan; candidate.input = input; candidate.weight = weight;
++  candidate.input_byte_len = plan->input_bytes; candidate.weight_byte_len = plan->weight_bytes;
++  candidate.output_byte_len = plan->output_bytes;
++  candidate.selected_no_split = true; candidate.strided_m1 = true;
++  candidate.plan_lease_held = true; candidate.input_lease_held = true; candidate.weight_lease_held = true;
++  if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, candidate, true))
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
++        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "reserved plan/parent geometry differs");
++  *state = candidate;
++  return RILEY_CUDA_STATUS_SUCCESS;
++}
++
+ bool reserved_packed_decode_gemm_plan_matches(
+     const RileyCudaGemmPlan* plan, const RileyCudaContext* context,
+     uint64_t expected_n) noexcept {

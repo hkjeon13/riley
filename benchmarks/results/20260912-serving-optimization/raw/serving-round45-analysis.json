@@ -1,0 +1,288 @@
+{
+  "scope": "C4/C8 client serving screen; V33 budget128 vs V33 budget512 vs vLLM budget512, all matching active capacity, two reversed orders, not model-quality or high-concurrency/stability qualification",
+  "medians": {
+    "c4-fixed": {
+      "new": {
+        "throughput": 2245.54622217867,
+        "ttft_ms": 4.0375965,
+        "tpot_ms": 1.5718437142857142,
+        "e2e_p95_ms": 54.7664245,
+        "e2e_p99_ms": 57.795653
+      },
+      "previous": {
+        "throughput": 2242.449672219903,
+        "ttft_ms": 4.03657525,
+        "tpot_ms": 1.57373875,
+        "e2e_p95_ms": 54.673759000000004,
+        "e2e_p99_ms": 55.7786635
+      },
+      "vllm": {
+        "throughput": 1951.2104944998898,
+        "ttft_ms": 9.374048,
+        "tpot_ms": 1.5856738811594204,
+        "e2e_p95_ms": 63.078716,
+        "e2e_p99_ms": 66.617413
+      }
+    },
+    "c4-natural": {
+      "new": {
+        "throughput": 2492.6854510675385,
+        "ttft_ms": 4.42619175,
+        "tpot_ms": 1.4894215555555554,
+        "e2e_p95_ms": 208.7649585,
+        "e2e_p99_ms": 212.63340699999998
+      },
+      "previous": {
+        "throughput": 2271.2646118367275,
+        "ttft_ms": 4.32994,
+        "tpot_ms": 1.6383324801587302,
+        "e2e_p95_ms": 236.2917185,
+        "e2e_p99_ms": 237.111812
+      },
+      "vllm": {
+        "throughput": 2581.729506685616,
+        "ttft_ms": 9.3866955,
+        "tpot_ms": 1.377476077646544,
+        "e2e_p95_ms": 195.59056800000002,
+        "e2e_p99_ms": 207.2532365
+      }
+    },
+    "c8-fixed": {
+      "new": {
+        "throughput": 3029.498217289338,
+        "ttft_ms": 7.0708295,
+        "tpot_ms": 2.266663680952381,
+        "e2e_p95_ms": 86.6513085,
+        "e2e_p99_ms": 94.550201
+      },
+      "previous": {
+        "throughput": 3050.5128326698605,
+        "ttft_ms": 6.064398,
+        "tpot_ms": 2.2995525125225407,
+        "e2e_p95_ms": 85.63646700000001,
+        "e2e_p99_ms": 96.611305
+      },
+      "vllm": {
+        "throughput": 3045.2505094891717,
+        "ttft_ms": 13.54369525,
+        "tpot_ms": 1.8694313536231884,
+        "e2e_p95_ms": 80.7388795,
+        "e2e_p99_ms": 91.948262
+      }
+    },
+    "c8-natural": {
+      "new": {
+        "throughput": 3888.7019807390566,
+        "ttft_ms": 6.89561,
+        "tpot_ms": 1.9260375652418449,
+        "e2e_p95_ms": 255.7209315,
+        "e2e_p99_ms": 260.979739
+      },
+      "previous": {
+        "throughput": 3385.4261234686664,
+        "ttft_ms": 6.636082,
+        "tpot_ms": 2.178078495625547,
+        "e2e_p95_ms": 302.339969,
+        "e2e_p99_ms": 332.200697
+      },
+      "vllm": {
+        "throughput": 4548.418844469541,
+        "ttft_ms": 11.9039195,
+        "tpot_ms": 1.5337659082080466,
+        "e2e_p95_ms": 215.7305915,
+        "e2e_p99_ms": 222.5042295
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "c4-fixed": {
+      "previous": {
+        "throughput": 0.13808782409381326,
+        "ttft_ms": 0.02529991234525575,
+        "tpot_ms": -0.12041615638463954,
+        "e2e_p95_ms": 0.16948807196519589,
+        "e2e_p99_ms": 3.616059212318712
+      },
+      "vllm": {
+        "throughput": 15.084775758866598,
+        "ttft_ms": -56.927930174882825,
+        "tpot_ms": -0.8721949095607084,
+        "e2e_p95_ms": -13.177648543131415,
+        "e2e_p99_ms": -13.242423568744698
+      }
+    },
+    "c4-natural": {
+      "previous": {
+        "throughput": 9.748790963275411,
+        "ttft_ms": 2.2229349598377857,
+        "tpot_ms": -9.089176123075305,
+        "e2e_p95_ms": -11.64948148616558,
+        "e2e_p99_ms": -10.3235704680963
+      },
+      "vllm": {
+        "throughput": -3.449007937798676,
+        "ttft_ms": -52.84611341659053,
+        "tpot_ms": 8.12685459483793,
+        "e2e_p95_ms": 6.735698267413381,
+        "e2e_p99_ms": 2.595940401635155
+      }
+    },
+    "c8-fixed": {
+      "previous": {
+        "throughput": -0.6888879520670743,
+        "ttft_ms": 16.595736295671905,
+        "tpot_ms": -1.4302274634329426,
+        "e2e_p95_ms": 1.185057646060983,
+        "e2e_p99_ms": -2.1333983636801057
+      },
+      "vllm": {
+        "throughput": -0.5172741011207016,
+        "ttft_ms": -47.79246454175791,
+        "tpot_ms": 21.248831980875217,
+        "e2e_p95_ms": 7.32290197314418,
+        "e2e_p99_ms": 2.8297859507121492
+      }
+    },
+    "c8-natural": {
+      "previous": {
+        "throughput": 14.865953026756351,
+        "ttft_ms": 3.9108618609595247,
+        "tpot_ms": -11.571710151397262,
+        "e2e_p95_ms": -15.419409366943471,
+        "e2e_p99_ms": -21.439135631915907
+      },
+      "vllm": {
+        "throughput": -14.50431207611057,
+        "ttft_ms": -42.07277695384282,
+        "tpot_ms": 25.575718884774478,
+        "e2e_p95_ms": 18.537166992378083,
+        "e2e_p99_ms": 17.292035116123472
+      }
+    }
+  },
+  "requests": 2880,
+  "reference_observations": [
+    {
+      "case": "c4-fixed-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-fixed-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-fixed-p0-vllm",
+      "reference_matches": 110,
+      "requests": 120
+    },
+    {
+      "case": "c4-fixed-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-fixed-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-fixed-p1-vllm",
+      "reference_matches": 110,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p0-vllm",
+      "reference_matches": 100,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c4-natural-p1-vllm",
+      "reference_matches": 96,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p0-vllm",
+      "reference_matches": 111,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-fixed-p1-vllm",
+      "reference_matches": 110,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p0-vllm",
+      "reference_matches": 93,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "c8-natural-p1-vllm",
+      "reference_matches": 85,
+      "requests": 120
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "Assess dedicated decode batch against previous V3 and vLLM; high concurrency remains unqualified"
+}

@@ -1,0 +1,35 @@
+{
+  "phase": "nonstream-logprobs-diagnostic",
+  "requested": 4,
+  "recorded": 4,
+  "response_records": [
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+      "sha256": "d3c06921e1e86057211f6d907dab54ce1ed9457f1b20f166ab87e4d9c720d739"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+      "sha256": "80e7e55ac4ae1b2b223a502cf7b831e2256fb2ec3e6125198b645a344124964d"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.json",
+      "sha256": "8d75aec9c7afb450e331d0b8520f8d83030bfab4d6a33c949b8bac5e5a3ded9b"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-3.json",
+      "sha256": "565e438f5cdaabd9409c6b52c75541c100974abdb8484599cc2b01801e7b9fae"
+    }
+  ],
+  "responses_complete": 4,
+  "http_200": 4,
+  "observed_max_request_in_flight": 4,
+  "reference_text_equal": 1,
+  "reference_token_ids_equal": 1,
+  "counts_prompt_usage_and_finish_valid": 4,
+  "parse_errors": 0,
+  "request_errors": 0,
+  "watchdog_timed_out_indices": [],
+  "worker_errors": [],
+  "total_request_deadline_seconds": 120,
+  "performance_claim": false
+}

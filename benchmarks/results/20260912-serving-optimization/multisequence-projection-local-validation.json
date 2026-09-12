@@ -1,0 +1,41 @@
+{
+  "schema_version": "riley.multisequence-projection-local-validation.v1",
+  "completed": true,
+  "tests_passed": 13,
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "benchmarks/results/20260912-serving-optimization",
+    "-p",
+    "test_multisequence_projection_probe.py",
+    "-v"
+  ],
+  "returncode": 0,
+  "files": {
+    "multisequence_projection_probe.py": "ecdda89c60d8e04b53e6e69d0101c5d511f36d91a0f693771670e386dee1855c",
+    "multisequence_projection_probe.cpp": "962e3e8ff6cc58249254c75e62599b65e44521ebd4932cb546197738551ae3e9",
+    "test_multisequence_projection_probe.py": "0f6afe1d0b39f6a1862c96a808738706ffbc96b2c7f01a3b5556cfa19de8b9b9",
+    "MULTISEQUENCE_PROJECTION_PROBE.md": "f454a2589a2bc078fed05384b0f7621b6c881b98a52ed26de1548ef9ad43dc69"
+  },
+  "test_log_sha256": "83a7b51f4ee00445431794637cb13bba23ea4d0244502f4deac3df805322a5c1",
+  "host_syntax_only": {
+    "actual_public_abi": true,
+    "cuda_uuid_declarations_stubbed": true,
+    "no_object_or_link_output": true,
+    "warning_flags": [
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ]
+  },
+  "independent_review": "stage_contract_review: no concrete blocker; 12 CPU tests excluding host syntax passed",
+  "remote_commands_executed": false,
+  "gpu_tests_executed": false,
+  "production_files_modified": false,
+  "performance_measured": false,
+  "performance_claim_eligible": false,
+  "created_utc": "2026-09-12T02:09:01.012466+00:00"
+}

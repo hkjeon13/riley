@@ -1,0 +1,63 @@
+{
+  "performance_claim": false,
+  "default_batch_invariance_observed": false,
+  "explicit_invariant_cross_concurrency_equal": true,
+  "distinct_sequences": {
+    "i0-c1": 1,
+    "i0-c4": 4,
+    "i1-c1": 1,
+    "i1-c4": 1
+  },
+  "tokens_at_8_and_29": {
+    "i0-c1": [
+      [
+        1443,
+        253
+      ]
+    ],
+    "i0-c4": [
+      [
+        1443,
+        253
+      ],
+      [
+        1443,
+        638
+      ],
+      [
+        2341,
+        30
+      ],
+      [
+        2341,
+        1443
+      ]
+    ],
+    "i1-c1": [
+      [
+        1443,
+        638
+      ]
+    ],
+    "i1-c4": [
+      [
+        1443,
+        638
+      ]
+    ]
+  },
+  "inputs_equal": true,
+  "source_pins": {
+    "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/vllm/envs.py": "567c99293678739cdd133897e3c7edfeba3a7fc5c635c43b29aea6bb89251244",
+    "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/vllm/model_executor/layers/linear.py": "d0662fddc4785419002320a4d9eb5183c9268051ebcf31f1c8276e8529633308",
+    "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/vllm/model_executor/layers/batch_invariant.py": "2cfcd9ac7d9b954155f012ba44ac21f970ea28ab770248037a00988725176f98",
+    "/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/vllm/v1/attention/backends/flash_attn.py": "03017560e89dffc5453b6525bf76940e143b38939022ff5f74f872119fe12e48"
+  },
+  "raw_pins": {
+    "i1-c1-rows.json": "e67d196a0ffc044b75a127bd28c2786405513c7c5fcf58777e93b577b691fd60",
+    "i0-c1-rows.json": "9b455500b3590dcf6de3d940660af719129cdac9a016fee7bc59d9020dfa3e3d",
+    "i0-c4-rows.json": "b5a9def90527ced01dfed23349160a301dfc60fa2ca1215f5b226b2182244a1b",
+    "i1-c4-rows.json": "3b44962abb95f836bc7b5a476bef1ca211fe0661373184828539c088468985d7"
+  },
+  "limitation": "A single P128 prompt,8 requests per setting; option changes multiple kernels and does not isolate a particular operator. No reference gate changed and no performance measured."
+}

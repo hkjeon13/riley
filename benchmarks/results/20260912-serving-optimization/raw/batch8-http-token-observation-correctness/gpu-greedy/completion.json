@@ -1,0 +1,1272 @@
+{
+  "sampling_backend": "gpu-greedy",
+  "completed": true,
+  "completion_checks": 44,
+  "disconnect_checks": 2,
+  "checks": [
+    {
+      "check_id": "fixed-00",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000001",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-00-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-00-response.json",
+        "sha256": "4cd4235f52795d287c02f9d45c5ff3a948af23c90af2ad858e9fbdc27c4a954e"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753235318861,
+      "finished_ns": 834753275444906,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-01",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000002",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-01-request.json",
+        "sha256": "f7253fef556e7e2320bf8e4b3b2e72845baf6d15b7325d3a4e1e48af2c7a589a"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-01-response.json",
+        "sha256": "96d5610705762c75cf2e7f3ee82cc6ad26c57f7e6aca8329a0072cdfcdbc8424"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753276013419,
+      "finished_ns": 834753316428987,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-02",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000003",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-02-request.json",
+        "sha256": "c107c23c1afdda2a6f5b7bec1cf5b640f59c06c0f75c64865e57fe0668cb6646"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-02-response.json",
+        "sha256": "beacb949965e2a9de7abb09136c5d295e234be0fce5c207fc20815bcea0513dd"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753317096797,
+      "finished_ns": 834753355945593,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-03",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000004",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-03-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-03-response.json",
+        "sha256": "f80b01ce86c24631a585d1f8fd855f7fa7ff4601ab3172e4f9134916ce42fc19"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753356985805,
+      "finished_ns": 834753395224135,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-04",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000005",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-04-request.json",
+        "sha256": "809737c25fb5fd3bff81c2b20b58df27f2002b3361081923e8ea801c27f2c9f6"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-04-response.json",
+        "sha256": "e2c0947490ca68bb511a26caa24efb6c7f87c96623cbdcb9f35af69f37d42054"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753395819374,
+      "finished_ns": 834753401436154,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-05",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000006",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-05-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-05-response.json",
+        "sha256": "860fcabd713899c78c06a8d11850ff7bafad5c84c558ce4640c51428e117dcb7"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753401984486,
+      "finished_ns": 834753407519667,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-06",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000007",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-06-request.json",
+        "sha256": "a7f5e2232673643746aac6a8c1f12c4434288ab901d17903344eefadc7c5dda4"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-06-response.json",
+        "sha256": "970b7c57ff380b7054d09f2f74d3faadd6534721aebc83fa675c95ac59aa14da"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753408019240,
+      "finished_ns": 834753413383505,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-07",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000008",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-07-request.json",
+        "sha256": "7f0ac12e018a6712f861ef7a4e1d824186bdb1b36e1fdd2fca45d4fbe4321a81"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-07-response.json",
+        "sha256": "edd82f3a709877cd24e79d7dea7946a11a360e17c702478f1df17c4cd1ae7cf1"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753413888116,
+      "finished_ns": 834753419235367,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-08",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000009",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-08-request.json",
+        "sha256": "613c08444a15f538eda532464ddf1cccc2a3c0cfee877fb1153dead8e1bfe97e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-08-response.json",
+        "sha256": "eee49f7954cc638f6fb8254704a67deb3789bd06b0c72fbd8aa8df509cfd6431"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753419581926,
+      "finished_ns": 834753427168323,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-09",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000000a",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-09-request.json",
+        "sha256": "9bd912ddd9625ba482d4c5a6a58ae20d45b58395eb121e7254ddb8b7a934bfca"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-09-response.json",
+        "sha256": "3dae01146e44b5db353330244ae9e761c4c03ca390ad2fc60bd95cd2290896e1"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753427434720,
+      "finished_ns": 834753434946048,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-10",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000000b",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-10-request.json",
+        "sha256": "8f3225240a07efd56736a066963b4644e2d98cb46bfe7065221e86b7b468f713"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-10-response.json",
+        "sha256": "9c725ee5306f3d06901e493d8d2124be7c635546e6ed9aa1b5ec12cc806d26ec"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753435484368,
+      "finished_ns": 834753442736632,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "fixed-11",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000000c",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-11-request.json",
+        "sha256": "283ad28d5647064d24b163504b15be66333cc75bc4fd81700784c92b0b0e632e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/fixed-11-response.json",
+        "sha256": "9d77348e6367242be10db07fb8a37349abb6ebd52741a354855732e452687cd3"
+      },
+      "blank_generated_token_events": 3,
+      "started_ns": 834753443189182,
+      "finished_ns": 834753450483368,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c1-w0-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000000d",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c1-w0-r0-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c1-w0-r0-response.json",
+        "sha256": "55a683fcf5ab6be66688b0ded3cf6e1e0c164087d77bd4819e8cb67c0f54c200"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753451034778,
+      "finished_ns": 834753489418566,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c1-w0-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000000e",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c1-w0-r1-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c1-w0-r1-response.json",
+        "sha256": "6bb83f297647d52e400660f2f485a8f623440ebf0f31fbb02bc86fa2d54e8225"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753490042727,
+      "finished_ns": 834753495695831,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c2-w0-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000000f",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w0-r0-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w0-r0-response.json",
+        "sha256": "44eff9c5030d9001268c3b83890ecf864c5d1c8c5280e87b0a0d9c142c86137d"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753496710708,
+      "finished_ns": 834753536379667,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c2-w0-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000011",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w0-r1-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w0-r1-response.json",
+        "sha256": "6a0f1e7fb3070c1d512a2c564e6e4b5c0d9b8d3d7238cf1a55e2d1929470de35"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753536981830,
+      "finished_ns": 834753575427792,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c2-w1-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000010",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w1-r0-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w1-r0-response.json",
+        "sha256": "91bba224eacab560fa42a329e9d7044b73213a2d67dca4015d5faa9b004946ad"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753496811397,
+      "finished_ns": 834753570608346,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c2-w1-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000012",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w1-r1-request.json",
+        "sha256": "613c08444a15f538eda532464ddf1cccc2a3c0cfee877fb1153dead8e1bfe97e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-w1-r1-response.json",
+        "sha256": "7f160928185286fc920b9670fb3e2153c8fb56d02957a88dc3c25e5878128874"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753571207021,
+      "finished_ns": 834753582175119,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w0-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000015",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w0-r0-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w0-r0-response.json",
+        "sha256": "8c1d31dddd2f3ef9cbc21b27ff986fc12bb8fa70823e3a3c31d0e0306f375fbd"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753583286465,
+      "finished_ns": 834753663366005,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w0-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000019",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w0-r1-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w0-r1-response.json",
+        "sha256": "3a4454bd30c13fa89e8236938789cf883437ac4fe9b77f17f7886962d0a1a6c9"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753663942810,
+      "finished_ns": 834753687243290,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w1-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000014",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w1-r0-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w1-r0-response.json",
+        "sha256": "1a2538648b59ee6ad029a048e9efe2d09eaff62a404ace2fb979c895d75dbfaa"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753583603341,
+      "finished_ns": 834753625712206,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w1-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000018",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w1-r1-request.json",
+        "sha256": "613c08444a15f538eda532464ddf1cccc2a3c0cfee877fb1153dead8e1bfe97e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w1-r1-response.json",
+        "sha256": "67bf7ebc61f8c916e85bc2fc9d78d42813c5ff0ee579a687ea602dff453cffe1"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753626694314,
+      "finished_ns": 834753684280575,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w2-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000013",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w2-r0-request.json",
+        "sha256": "a7f5e2232673643746aac6a8c1f12c4434288ab901d17903344eefadc7c5dda4"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w2-r0-response.json",
+        "sha256": "98d84311f3b6dd605667ef54d839d259f3327c87c658e3e8c5cff5a476e9f6bd"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753583058354,
+      "finished_ns": 834753589215131,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w2-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000017",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w2-r1-request.json",
+        "sha256": "283ad28d5647064d24b163504b15be66333cc75bc4fd81700784c92b0b0e632e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w2-r1-response.json",
+        "sha256": "7f9c0a048edbfaeaff555e01f9337ee7ebc7aab23adaf0e881c96e3a363b3b9e"
+      },
+      "blank_generated_token_events": 3,
+      "started_ns": 834753589485314,
+      "finished_ns": 834753675837537,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w3-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000016",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w3-r0-request.json",
+        "sha256": "9bd912ddd9625ba482d4c5a6a58ae20d45b58395eb121e7254ddb8b7a934bfca"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w3-r0-response.json",
+        "sha256": "f73ca416a2886f599a06cbdbc84e950668c777896b6dfdc79f40058becc99236"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753583682102,
+      "finished_ns": 834753669144438,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c4-w3-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000001a",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w3-r1-request.json",
+        "sha256": "c107c23c1afdda2a6f5b7bec1cf5b640f59c06c0f75c64865e57fe0668cb6646"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-w3-r1-response.json",
+        "sha256": "309ef2017af9fb2003a3600bdeacceb1d8aebd694cd58ee222667eaf7cc650a7"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753669702623,
+      "finished_ns": 834753723283975,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w0-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000021",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w0-r0-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w0-r0-response.json",
+        "sha256": "db90ede73a42aa43ab6d0cfb39c6917510f94dc78a6bf001e0e2623db3483d73"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753725746493,
+      "finished_ns": 834753892271932,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w0-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000029",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w0-r1-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w0-r1-response.json",
+        "sha256": "db01776e5acd2f45ea530b7c39bbb4dce28dfad3c5cf3b1802137ea4089fec71"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753892627661,
+      "finished_ns": 834753970498466,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w1-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000001d",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w1-r0-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w1-r0-response.json",
+        "sha256": "0067e2a28cfb98eb610d0c4890870609fc8683e4660dbb32518fd3bb7c2a11d0"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753725649136,
+      "finished_ns": 834753808648777,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w1-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000025",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w1-r1-request.json",
+        "sha256": "613c08444a15f538eda532464ddf1cccc2a3c0cfee877fb1153dead8e1bfe97e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w1-r1-response.json",
+        "sha256": "37e66983882d4b1e973cc4a6cf70a1d2fa0241a2e42b745d8cdb5bf6fc40e5fc"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753809626273,
+      "finished_ns": 834753945813982,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w2-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000001e",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w2-r0-request.json",
+        "sha256": "a7f5e2232673643746aac6a8c1f12c4434288ab901d17903344eefadc7c5dda4"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w2-r0-response.json",
+        "sha256": "6f1198ff134df62b42e394cf440439cc956bbd99fbcfd69c077f0003dd0d8315"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753726290440,
+      "finished_ns": 834753813214640,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w2-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000026",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w2-r1-request.json",
+        "sha256": "283ad28d5647064d24b163504b15be66333cc75bc4fd81700784c92b0b0e632e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w2-r1-response.json",
+        "sha256": "30efdbaade10ea7bcb4a6fb7c3911c77e913e785a159d144a8ec86381146ac15"
+      },
+      "blank_generated_token_events": 3,
+      "started_ns": 834753813753966,
+      "finished_ns": 834753952308066,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w3-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000022",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w3-r0-request.json",
+        "sha256": "9bd912ddd9625ba482d4c5a6a58ae20d45b58395eb121e7254ddb8b7a934bfca"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w3-r0-response.json",
+        "sha256": "45f41d3f3e5ea699af8cabdf32c6876e6ec050176d46ca6a975d8fbfce9f73a3"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753726421906,
+      "finished_ns": 834753898144306,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w3-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000002a",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w3-r1-request.json",
+        "sha256": "c107c23c1afdda2a6f5b7bec1cf5b640f59c06c0f75c64865e57fe0668cb6646"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w3-r1-response.json",
+        "sha256": "9272bf09071de3f7d4a1c5f3c6cbe2ae8b67d69d171def8509083a69f74b4dab"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753898700694,
+      "finished_ns": 834754006553185,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w4-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-000000000000001c",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w4-r0-request.json",
+        "sha256": "8d7fad17b26c7471734b22645ab557a1c50db76469907d6c5e716dcc5d5e5acc"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w4-r0-response.json",
+        "sha256": "27b4ab289cc645268b25ce660555af38901a5698b3a63687074aaf692fd0d94d"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753725180079,
+      "finished_ns": 834753775254741,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w4-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000024",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w4-r1-request.json",
+        "sha256": "20cb68df3e24df2cbce038cc146ba00ace7796a3355597611dc1b44714269bd8"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w4-r1-response.json",
+        "sha256": "c5b74bea0b1228dd74519ce9b5f8ea5b04da60d1673e02dd68c1975694319e2c"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753775614668,
+      "finished_ns": 834753939072913,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w5-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000001f",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w5-r0-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w5-r0-response.json",
+        "sha256": "0581d6292cf98114537695f0621483684c2d04fc8ca9c8a6b0a3533c84d5e39f"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753726154247,
+      "finished_ns": 834753849747052,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w5-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000027",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w5-r1-request.json",
+        "sha256": "613c08444a15f538eda532464ddf1cccc2a3c0cfee877fb1153dead8e1bfe97e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w5-r1-response.json",
+        "sha256": "f6605d87a4cb6096718182c7ad6a6a5ee18910d62fe68b9c9aa6c84358599a7f"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753850316923,
+      "finished_ns": 834753959104173,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w6-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o1",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000020",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w6-r0-request.json",
+        "sha256": "a7f5e2232673643746aac6a8c1f12c4434288ab901d17903344eefadc7c5dda4"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w6-r0-response.json",
+        "sha256": "5ac86a916f78eb38034ddd773f3e568e2c7aab4c89f6581dae65afb7cf3217a0"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753725437571,
+      "finished_ns": 834753854442431,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w6-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-0000000000000028",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w6-r1-request.json",
+        "sha256": "283ad28d5647064d24b163504b15be66333cc75bc4fd81700784c92b0b0e632e"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w6-r1-response.json",
+        "sha256": "402f062652bf2a6a9ff9af9a8ca549ed0dca204b328d935d7e0d9f6b35ba6e25"
+      },
+      "blank_generated_token_events": 3,
+      "started_ns": 834753855062712,
+      "finished_ns": 834753965723199,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w7-r0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "stop",
+        "streaming": false,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000001b",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w7-r0-request.json",
+        "sha256": "9bd912ddd9625ba482d4c5a6a58ae20d45b58395eb121e7254ddb8b7a934bfca"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w7-r0-response.json",
+        "sha256": "4222625711e272b684d4906b90f04ac84ef651fae90bd72b4e2f1fc6d0165693"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753725706562,
+      "finished_ns": 834753735814827,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "mixed-c8-w7-r1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": false
+      },
+      "server_request_id": "cmpl-0000000000000023",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w7-r1-request.json",
+        "sha256": "c107c23c1afdda2a6f5b7bec1cf5b640f59c06c0f75c64865e57fe0668cb6646"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-w7-r1-response.json",
+        "sha256": "c3c7d6b4427724add8240b08671b9ae8384a85920c1d7c6bc78b7ec2099b34d0"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834753736128115,
+      "finished_ns": 834753934344628,
+      "published_ids_match_reference": false,
+      "performance_claim": false
+    },
+    {
+      "check_id": "post-disconnect-0",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000002c",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/post-disconnect-0-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/post-disconnect-0-response.json",
+        "sha256": "5f46d64d2c5c6204d6d861db41a7a7d4842b69ff62a4cd7fdbce674b586ff8e1"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834754008519624,
+      "finished_ns": 834754051362538,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "post-disconnect-1",
+      "kind": "completion",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "spec": {
+        "shape": "o32",
+        "streaming": true,
+        "raw": true
+      },
+      "server_request_id": "cmpl-000000000000002e",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/post-disconnect-1-request.json",
+        "sha256": "a4118a6cd2ab500fab031797440ccfe1d08f50f0e22131100327e1114f708d2b"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/post-disconnect-1-response.json",
+        "sha256": "da1d5aa589b7e4b995a614f37912e8a43b4d28837428eabde9101b74f30b25e6"
+      },
+      "blank_generated_token_events": 0,
+      "started_ns": 834754057332258,
+      "finished_ns": 834754096628099,
+      "published_ids_match_reference": true,
+      "performance_claim": false
+    },
+    {
+      "check_id": "disconnect-0",
+      "kind": "intentional_disconnect",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/disconnect-0-request.json",
+        "sha256": "ded236ea3dd57be0014456906f8b31778752cb1897ae37f5992ad97d9eae152d"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/disconnect-0-response.json",
+        "sha256": "f618c010af8b9f0b36037498c2c550283ede06ec97fc21fff497263ed687e0d1"
+      },
+      "boundary": "after_headers",
+      "claim": "connection closed and following request reuses engine; cancellation race outcome is not inferred",
+      "performance_claim": false
+    },
+    {
+      "check_id": "disconnect-1",
+      "kind": "intentional_disconnect",
+      "completed": true,
+      "sampler": "gpu-greedy",
+      "request": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/disconnect-1-request.json",
+        "sha256": "dd68427761c8afb8aa3e8f2d608aad80b643aa7cf2d7237fc698dfc53e74b6c1"
+      },
+      "response": {
+        "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/disconnect-1-response.json",
+        "sha256": "64677a40f8a46577d94c998ce6cb7201b7900d618e7f8570156b4d8fd4a173f5"
+      },
+      "boundary": "after_first_committed",
+      "claim": "connection closed and following request reuses engine; cancellation race outcome is not inferred",
+      "performance_claim": false
+    }
+  ],
+  "mixed_waves": [
+    {
+      "concurrency": 1,
+      "active_capacity": 1,
+      "requested": 2,
+      "completed": true,
+      "observed_max_request_in_flight": 1,
+      "failures": [],
+      "checks": [
+        "mixed-c1-w0-r0",
+        "mixed-c1-w0-r1"
+      ],
+      "performance_claim": false
+    },
+    {
+      "concurrency": 2,
+      "active_capacity": 1,
+      "requested": 4,
+      "completed": true,
+      "observed_max_request_in_flight": 2,
+      "failures": [],
+      "checks": [
+        "mixed-c2-w0-r0",
+        "mixed-c2-w0-r1",
+        "mixed-c2-w1-r0",
+        "mixed-c2-w1-r1"
+      ],
+      "performance_claim": false
+    },
+    {
+      "concurrency": 4,
+      "active_capacity": 1,
+      "requested": 8,
+      "completed": true,
+      "observed_max_request_in_flight": 4,
+      "failures": [],
+      "checks": [
+        "mixed-c4-w0-r0",
+        "mixed-c4-w0-r1",
+        "mixed-c4-w1-r0",
+        "mixed-c4-w1-r1",
+        "mixed-c4-w2-r0",
+        "mixed-c4-w2-r1",
+        "mixed-c4-w3-r0",
+        "mixed-c4-w3-r1"
+      ],
+      "performance_claim": false
+    },
+    {
+      "concurrency": 8,
+      "active_capacity": 1,
+      "requested": 16,
+      "completed": true,
+      "observed_max_request_in_flight": 8,
+      "failures": [],
+      "checks": [
+        "mixed-c8-w0-r0",
+        "mixed-c8-w0-r1",
+        "mixed-c8-w1-r0",
+        "mixed-c8-w1-r1",
+        "mixed-c8-w2-r0",
+        "mixed-c8-w2-r1",
+        "mixed-c8-w3-r0",
+        "mixed-c8-w3-r1",
+        "mixed-c8-w4-r0",
+        "mixed-c8-w4-r1",
+        "mixed-c8-w5-r0",
+        "mixed-c8-w5-r1",
+        "mixed-c8-w6-r0",
+        "mixed-c8-w6-r1",
+        "mixed-c8-w7-r0",
+        "mixed-c8-w7-r1"
+      ],
+      "performance_claim": false
+    }
+  ],
+  "runtime_config": {
+    "available": false,
+    "expected_status": 503,
+    "reason": "profile excludes C02 runtime config artifacts"
+  },
+  "preparation": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/preparation.json",
+    "sha256": "40c67df2a18580a1e893b9da6c7e6900d19e57e53e2ae8d3a8679aef4b3e1c68"
+  },
+  "launch": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/launch.json",
+    "sha256": "a48367ac0ca7fab55a4deb09da4b1b687d54767422e5e588f39907afd1ca7a5a"
+  },
+  "runtime_endpoint_response": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/runtime-endpoint-response.json",
+    "sha256": "b7420b5364cddfee090df14194f8596c69e5cf560537f8775b5277cabfc01b0c"
+  },
+  "wave_artifacts": [
+    {
+      "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c1-accounting.json",
+      "sha256": "a2a5fbbce1cfb887d6f7dbd1ec91ba85af29823b4545d1fbfd8fa5a6072543c7"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c2-accounting.json",
+      "sha256": "813c642bd65c5bcc7c01236e6afac11da427b0213da75e9a6f223f2505fa3d13"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c4-accounting.json",
+      "sha256": "480be7e3cb9e8263fb9224fd4cc61d7c5a74565e1eb5bb6b8bb45255d7c884c0"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/mixed-c8-accounting.json",
+      "sha256": "86449bf86cec00af556a20050ee88dfc0c0adddd19f2c7e4c4b5bbd0cff68b30"
+    }
+  ],
+  "process_exit": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/process-exit.json",
+    "sha256": "59597adc8dec46a4abf76e0356089381e6586f26add2804bb1435bad5d41115c"
+  },
+  "driver_maps_before": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/driver-maps-before.json",
+    "sha256": "591bfb6f7d27d407f25f29683bf84ad379e592967075a99d412bddbd31e0b595"
+  },
+  "driver_maps_after": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/driver-maps-after.json",
+    "sha256": "591bfb6f7d27d407f25f29683bf84ad379e592967075a99d412bddbd31e0b595"
+  },
+  "log": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/gpu-greedy/server.log",
+    "sha256": "374ab4d37cf0b6ea3058a66fca668708944f3e712a52ad08366217c849b38a13"
+  },
+  "c02_enabled": false,
+  "native_shutdown_allocation_receipt": false,
+  "performance_claim": false
+}

@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+    "serve",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--tokenizer",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "56039",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "4",
+    "--max-num-batched-tokens",
+    "128",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ],
+  "binary_sha256": "b52a1ef3361239be4475695976a254dd38aef925b39ebb0ec633a95935ccfdef",
+  "gpu_before": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 45, 123.96, 2730, 10251"
+}

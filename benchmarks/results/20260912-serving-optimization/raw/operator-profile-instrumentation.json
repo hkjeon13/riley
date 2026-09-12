@@ -1,0 +1,29 @@
+{
+  "schema_version": "riley.decode-operator-instrumentation.v1",
+  "source_root": "/tmp/riley-opt-260912/operator-profile-source",
+  "source_file": "kernels/src/graph_resources.cu",
+  "original_sha256": "2d148ef8cb76ee2fb23e1515063108d53c20cbc34ab125ab63cafd65fa3635b2",
+  "instrumented_sha256": "95557a0f9b52529071b76b782c0b0f78c89704d8ab464b7689c9f6ae15f1a8f5",
+  "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+  "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+  "applied": true,
+  "projection_events": true,
+  "families": [
+    "qkv",
+    "rope_kv",
+    "attention",
+    "o",
+    "post_norm",
+    "gate_up",
+    "swiglu",
+    "down",
+    "next_norm",
+    "head"
+  ],
+  "runtime_enable": "RILEY_OWNED_GRAPH_PROFILE=1",
+  "runtime_operator": "RILEY_DECODE_OPERATOR=<family>|off (default off)",
+  "runtime_layers": "RILEY_DECODE_OPERATOR_LAYERS=0,15,29|all (default 0,15,29; head is one interval)",
+  "runtime_exclusivity": "operator and historical projection modes require separate processes",
+  "synchronizations_added": 0,
+  "performance_claim_eligible": false
+}

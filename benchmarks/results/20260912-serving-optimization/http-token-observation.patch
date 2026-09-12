@@ -1,0 +1,1350 @@
+--- a/crates/riley-server/src/domain.rs
++++ b/crates/riley-server/src/domain.rs
+@@ -70,6 +70,8 @@
+     pub stop_sequences: Vec<String>,
+     /// Whether the HTTP response should use SSE.
+     pub stream: bool,
++    /// Whether delivery must expose authoritative committed token identities.
++    pub include_token_ids: bool,
+ }
+ 
+ /// Stable metadata shared by streaming and non-streaming responses.
+@@ -326,6 +328,17 @@
+         /// Text made visible by this event.
+         text: String,
+     },
++    /// One authoritative scheduler-committed token, including invisible tokens.
++    CommittedToken {
++        /// Visible text produced by the existing generation state.
++        text: String,
++        /// Actual model token accepted by the scheduler.
++        token_id: u32,
++        /// Zero-based position in the committed output sequence.
++        generated_index: usize,
++        /// Actual submitted prompt IDs, present only with the first token.
++        prompt_token_ids: Option<Vec<u32>>,
++    },
+     /// Successful terminal event. No later token delta is valid.
+     Finished {
+         /// Public terminal reason.
+--- a/crates/riley-server/src/openai.rs
++++ b/crates/riley-server/src/openai.rs
+@@ -82,6 +82,12 @@
+     /// Selects SSE when true.
+     #[serde(default)]
+     pub stream: Option<bool>,
++    /// Exposes actual model token IDs when explicitly enabled.
++    #[serde(default)]
++    pub return_token_ids: Option<bool>,
++    /// Optional terminal usage reporting for streaming responses.
++    #[serde(default)]
++    pub stream_options: Option<CompletionStreamOptions>,
+     /// The initial endpoint supports exactly one completion.
+     #[serde(default)]
+     pub n: Option<u64>,
+@@ -108,6 +114,15 @@
+     pub unsupported_fields: BTreeMap<String, Value>,
+ }
+ 
++/// Supported streaming options; unknown nested fields are rejected.
++#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
++#[serde(deny_unknown_fields)]
++pub struct CompletionStreamOptions {
++    /// Emit one terminal usage-only chunk before `[DONE]`.
++    #[serde(default)]
++    pub include_usage: Option<bool>,
++}
++
+ /// Converts an OpenAI-compatible DTO into a transport-independent request.
+ ///
+ /// # Errors
+@@ -192,10 +207,18 @@
+         },
+         stop_sequences,
+         stream: request.stream.unwrap_or(false),
++        include_token_ids: request.return_token_ids.unwrap_or(false),
+     })
+ }
+ 
+ fn validate_supported_options(request: &CompletionRequest) -> Result<(), ValidationError> {
++    if request.stream_options.is_some() && !request.stream.unwrap_or(false) {
++        return Err(ValidationError::new(
++            "stream_options",
++            ValidationErrorCode::UnsupportedParameter,
++            "stream options require stream=true",
++        ));
++    }
+     if request.logprobs.is_some() {
+         return Err(ValidationError::new(
+             "logprobs",
+@@ -591,6 +614,105 @@
+     }
+ }
+ 
++/// Validates bounded token delivery independently of text detokenization.
++#[derive(Clone, Debug, Eq, PartialEq)]
++pub(crate) struct CompletionTokenCollector {
++    enabled: bool,
++    maximum_output_tokens: usize,
++    maximum_prompt_tokens: usize,
++    prompt_token_ids: Option<Vec<u32>>,
++    token_ids: Vec<u32>,
++}
++
++impl CompletionTokenCollector {
++    pub(crate) const fn new(
++        enabled: bool,
++        maximum_output_tokens: usize,
++        maximum_prompt_tokens: usize,
++    ) -> Self {
++        Self {
++            enabled,
++            maximum_output_tokens,
++            maximum_prompt_tokens,
++            prompt_token_ids: None,
++            token_ids: Vec::new(),
++        }
++    }
++
++    pub(crate) fn observe(&mut self, event: &GenerationEvent) -> Result<(), TokenObservationError> {
++        match event {
++            GenerationEvent::TokenDelta { .. } if self.enabled => Err(TokenObservationError),
++            GenerationEvent::CommittedToken {
++                token_id,
++                generated_index,
++                prompt_token_ids,
++                ..
++            } => {
++                if !self.enabled
++                    || *generated_index != self.token_ids.len()
++                    || self.token_ids.len() >= self.maximum_output_tokens
++                    || (self.token_ids.is_empty() != prompt_token_ids.is_some())
++                {
++                    return Err(TokenObservationError);
++                }
++                if let Some(prompt) = prompt_token_ids {
++                    if prompt.is_empty()
++                        || prompt.len() > self.maximum_prompt_tokens
++                        || self.prompt_token_ids.is_some()
++                    {
++                        return Err(TokenObservationError);
++                    }
++                    let mut copy = Vec::new();
++                    copy.try_reserve_exact(prompt.len())
++                        .map_err(|_| TokenObservationError)?;
++                    copy.extend_from_slice(prompt);
++                    self.prompt_token_ids = Some(copy);
++                }
++                if self.token_ids.is_empty() {
++                    self.token_ids
++                        .try_reserve_exact(self.maximum_output_tokens)
++                        .map_err(|_| TokenObservationError)?;
++                }
++                self.token_ids.push(*token_id);
++                Ok(())
++            }
++            _ => Ok(()),
++        }
++    }
++
++    pub(crate) fn validate_usage(&self, usage: TokenUsage) -> Result<(), TokenObservationError> {
++        if self.enabled
++            && (self.token_ids.len() as u64 != usage.completion_tokens()
++                || self
++                    .prompt_token_ids
++                    .as_ref()
++                    .is_none_or(|ids| ids.len() as u64 != usage.prompt_tokens()))
++        {
++            return Err(TokenObservationError);
++        }
++        Ok(())
++    }
++
++    pub(crate) fn attach(self, response: &mut CompletionResponse) {
++        if self.enabled {
++            response.choices[0].token_ids = Some(self.token_ids);
++            response.choices[0].prompt_token_ids = self.prompt_token_ids;
++        }
++    }
++}
++
++/// Token identities, ordering, bounds, or terminal accounting were inconsistent.
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++pub struct TokenObservationError;
++
++impl fmt::Display for TokenObservationError {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        formatter.write_str("committed token delivery is inconsistent")
++    }
++}
++
++impl error::Error for TokenObservationError {}
++
+ /// One choice in a non-streaming completion response.
+ #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+ pub struct CompletionChoice {
+@@ -602,6 +724,12 @@
+     pub logprobs: Option<Value>,
+     /// Successful terminal reason.
+     pub finish_reason: CompletionFinishReason,
++    /// Generated model IDs, included only when requested.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub token_ids: Option<Vec<u32>>,
++    /// Actual tokenizer output supplied to the model, included only on request.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub prompt_token_ids: Option<Vec<u32>>,
+ }
+ 
+ /// Non-streaming `/v1/completions` response.
+@@ -644,6 +772,8 @@
+                 index: 0,
+                 logprobs: None,
+                 finish_reason: CompletionFinishReason::try_from(reason)?,
++                token_ids: None,
++                prompt_token_ids: None,
+             }],
+             usage: usage.into(),
+         })
+@@ -661,6 +791,12 @@
+     pub logprobs: Option<Value>,
+     /// Null for deltas and present only in the terminal finish chunk.
+     pub finish_reason: Option<CompletionFinishReason>,
++    /// Delta model IDs, never inferred from text.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub token_ids: Option<Vec<u32>>,
++    /// Present only with the first generated token.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub prompt_token_ids: Option<Vec<u32>>,
+ }
+ 
+ /// JSON data carried by one SSE completion event.
+@@ -676,6 +812,9 @@
+     pub model: String,
+     /// Exactly one delta or finish choice.
+     pub choices: Vec<CompletionChunkChoice>,
++    /// Present in the opt-in terminal usage-only chunk.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub usage: Option<CompletionUsage>,
+ }
+ 
+ impl CompletionChunk {
+@@ -702,7 +841,10 @@
+                 index: 0,
+                 logprobs: None,
+                 finish_reason,
++                token_ids: None,
++                prompt_token_ids: None,
+             }],
++            usage: None,
+         }
+     }
+ }
+@@ -789,6 +931,8 @@
+ pub struct SseStreamEncoder {
+     metadata: RequestMetadata,
+     phase: SseStreamPhase,
++    tokens: CompletionTokenCollector,
++    include_usage: bool,
+ }
+ 
+ impl SseStreamEncoder {
+@@ -798,6 +942,29 @@
+         Self {
+             metadata,
+             phase: SseStreamPhase::Open,
++            tokens: CompletionTokenCollector::new(false, 0, 0),
++            include_usage: false,
++        }
++    }
++
++    /// Creates an opt-in encoder with explicit request token bounds.
++    #[must_use]
++    pub const fn new_with_options(
++        metadata: RequestMetadata,
++        include_token_ids: bool,
++        include_usage: bool,
++        maximum_output_tokens: usize,
++        maximum_prompt_tokens: usize,
++    ) -> Self {
++        Self {
++            metadata,
++            phase: SseStreamPhase::Open,
++            tokens: CompletionTokenCollector::new(
++                include_token_ids,
++                maximum_output_tokens,
++                maximum_prompt_tokens,
++            ),
++            include_usage,
+         }
+     }
+ 
+@@ -814,10 +981,42 @@
+     /// Returns [`SseEncodingError`] for an invalid event order, a failed JSON
+     /// serialization, or a non-success finish reason.
+     pub fn encode_event(&mut self, event: &GenerationEvent) -> Result<String, SseEncodingError> {
++        self.require_phase("generation event", SseStreamPhase::Open)?;
++        self.tokens
++            .observe(event)
++            .map_err(SseEncodingError::TokenObservation)?;
+         match event {
+             GenerationEvent::TokenDelta { text } => self.encode_delta(text),
+-            GenerationEvent::Finished { reason, .. } => match reason {
+-                FinishReason::Stop | FinishReason::Length => self.encode_finish(*reason),
++            GenerationEvent::CommittedToken {
++                text,
++                token_id,
++                prompt_token_ids,
++                ..
++            } => {
++                let mut chunk = CompletionChunk::delta(&self.metadata, text.clone());
++                chunk.choices[0].token_ids = Some(vec![*token_id]);
++                chunk.choices[0]
++                    .prompt_token_ids
++                    .clone_from(prompt_token_ids);
++                serialize_sse_json(&chunk).map_err(SseEncodingError::Json)
++            }
++            GenerationEvent::Finished { reason, usage } => match reason {
++                FinishReason::Stop | FinishReason::Length => {
++                    self.tokens
++                        .validate_usage(*usage)
++                        .map_err(SseEncodingError::TokenObservation)?;
++                    let usage_frame = if self.include_usage {
++                        let mut chunk = CompletionChunk::new(&self.metadata, String::new(), None);
++                        chunk.choices.clear();
++                        chunk.usage = Some((*usage).into());
++                        serialize_sse_json(&chunk).map_err(SseEncodingError::Json)?
++                    } else {
++                        String::new()
++                    };
++                    let mut frame = self.encode_finish_frame(*reason)?;
++                    frame.push_str(&usage_frame);
++                    Ok(frame)
++                }
+                 FinishReason::Cancelled => self.encode_error(&ApiError::Cancelled),
+                 FinishReason::Error => self.encode_error(&ApiError::Internal),
+             },
+@@ -829,10 +1028,14 @@
+     ///
+     /// # Errors
+     ///
+-    /// Returns [`SseEncodingError`] unless the stream is open, or if JSON
+-    /// serialization fails.
++    /// Returns [`SseEncodingError`] unless the stream is open, if JSON
++    /// serialization fails, or when raw token delivery requires
++    /// [`Self::encode_event`] with committed metadata.
+     pub fn encode_delta(&mut self, text: &str) -> Result<String, SseEncodingError> {
+         self.require_phase("token delta", SseStreamPhase::Open)?;
++        if self.tokens.enabled {
++            return Err(SseEncodingError::TokenObservation(TokenObservationError));
++        }
+         serialize_sse_json(&CompletionChunk::delta(&self.metadata, text.to_owned()))
+             .map_err(SseEncodingError::Json)
+     }
+@@ -842,8 +1045,17 @@
+     /// # Errors
+     ///
+     /// Returns [`SseEncodingError`] for invalid ordering, cancellation or
+-    /// execution-error finish reasons, or JSON serialization failure.
++    /// execution-error finish reasons, or JSON serialization failure. Opt-in
++    /// token/usage delivery requires [`Self::encode_event`] with checked usage.
+     pub fn encode_finish(&mut self, reason: FinishReason) -> Result<String, SseEncodingError> {
++        self.require_phase("finish", SseStreamPhase::Open)?;
++        if self.tokens.enabled || self.include_usage {
++            return Err(SseEncodingError::TokenObservation(TokenObservationError));
++        }
++        self.encode_finish_frame(reason)
++    }
++
++    fn encode_finish_frame(&mut self, reason: FinishReason) -> Result<String, SseEncodingError> {
+         self.require_phase("finish", SseStreamPhase::Open)?;
+         let reason = CompletionFinishReason::try_from(reason)
+             .map_err(SseEncodingError::UnsupportedFinish)?;
+@@ -917,6 +1129,8 @@
+     Json(serde_json::Error),
+     /// A cancellation or internal failure was passed as a success reason.
+     UnsupportedFinish(UnsupportedFinishReason),
++    /// Model token identities or terminal accounting were inconsistent.
++    TokenObservation(TokenObservationError),
+ }
+ 
+ impl fmt::Display for SseEncodingError {
+@@ -930,6 +1144,7 @@
+             }
+             Self::Json(source) => write!(formatter, "could not serialize SSE JSON: {source}"),
+             Self::UnsupportedFinish(source) => source.fmt(formatter),
++            Self::TokenObservation(source) => source.fmt(formatter),
+         }
+     }
+ }
+@@ -939,6 +1154,7 @@
+         match self {
+             Self::Json(source) => Some(source),
+             Self::UnsupportedFinish(source) => Some(source),
++            Self::TokenObservation(source) => Some(source),
+             Self::InvalidTransition { .. } => None,
+         }
+     }
+@@ -951,9 +1167,9 @@
+     use serde_json::{Value, json};
+ 
+     use super::{
+-        ApiError, CompletionFinishReason, CompletionRequest, CompletionResponse, PromptInput,
+-        SSE_DONE_FRAME, SseEncodingError, SseStreamEncoder, SseStreamPhase, StopInput,
+-        ValidationErrorCode, normalize_completion_request,
++        ApiError, CompletionFinishReason, CompletionRequest, CompletionResponse,
++        CompletionTokenCollector, PromptInput, SSE_DONE_FRAME, SseEncodingError, SseStreamEncoder,
++        SseStreamPhase, StopInput, ValidationErrorCode, normalize_completion_request,
+     };
+     use crate::domain::{
+         FinishReason, GenerationEvent, RequestLimits, RequestMetadata, TokenUsage,
+@@ -1024,6 +1240,191 @@
+         assert_eq!(defaults.sampling.temperature.to_bits(), 1.0_f32.to_bits());
+         assert_eq!(defaults.sampling.top_p.to_bits(), 1.0_f32.to_bits());
+         assert!(!defaults.stream);
++        assert!(!defaults.include_token_ids);
++    }
++
++    #[test]
++    fn optional_token_request_flags_are_typed_and_stream_usage_requires_streaming() {
++        for flag in [false, true] {
++            let request: CompletionRequest = serde_json::from_value(json!({
++                "model": "fixture-model", "prompt": "hello", "stream": true,
++                "return_token_ids": flag, "stream_options": {"include_usage": flag}
++            }))
++            .expect("boolean observation options");
++            assert_eq!(
++                request
++                    .stream_options
++                    .as_ref()
++                    .expect("options")
++                    .include_usage,
++                Some(flag)
++            );
++            assert_eq!(
++                normalize_completion_request(request, RequestLimits::default())
++                    .expect("supported options")
++                    .include_token_ids,
++                flag
++            );
++        }
++        let request: CompletionRequest = serde_json::from_value(json!({
++            "model": "fixture-model", "prompt": "hello", "stream_options": {"include_usage": true}
++        }))
++        .expect("typed nonstream option");
++        assert_eq!(
++            normalize_completion_request(request, RequestLimits::default())
++                .expect_err("stream options need stream")
++                .parameter(),
++            "stream_options"
++        );
++        for addition in [
++            json!({"return_token_ids": 1}),
++            json!({"return_token_ids": "true"}),
++            json!({"stream_options": true}),
++            json!({"stream_options": {"include_usage": "true"}}),
++            json!({"stream_options": {"unknown": true}}),
++        ] {
++            let mut request = json!({"model":"fixture-model", "prompt":"hello", "stream":true});
++            request
++                .as_object_mut()
++                .expect("object")
++                .extend(addition.as_object().expect("object").clone());
++            assert!(serde_json::from_value::<CompletionRequest>(request).is_err());
++        }
++    }
++
++    fn committed(index: usize, prompt: Option<Vec<u32>>) -> GenerationEvent {
++        GenerationEvent::CommittedToken {
++            text: String::new(),
++            token_id: 17,
++            generated_index: index,
++            prompt_token_ids: prompt,
++        }
++    }
++
++    #[test]
++    fn token_collector_rejects_missing_repeated_or_out_of_order_metadata_and_bounds() {
++        let first = committed(0, Some(vec![1, 2]));
++        for invalid in [
++            committed(0, None),
++            committed(1, Some(vec![1, 2])),
++            committed(0, Some(vec![])),
++            committed(0, Some(vec![1, 2, 3])),
++        ] {
++            let mut collector = CompletionTokenCollector::new(true, 2, 2);
++            assert!(collector.observe(&invalid).is_err());
++            assert!(collector.token_ids.is_empty());
++        }
++        for invalid in [
++            committed(0, None),
++            committed(2, None),
++            committed(1, Some(vec![1, 2])),
++        ] {
++            let mut collector = CompletionTokenCollector::new(true, 2, 2);
++            collector.observe(&first).expect("first token");
++            assert!(collector.observe(&invalid).is_err());
++            assert_eq!(collector.token_ids, [17]);
++        }
++        let mut collector = CompletionTokenCollector::new(true, 1, 2);
++        collector.observe(&first).expect("first token");
++        assert!(collector.observe(&committed(1, None)).is_err());
++        assert!(
++            collector
++                .validate_usage(TokenUsage::new(1, 1).expect("usage"))
++                .is_err()
++        );
++        assert!(
++            collector
++                .validate_usage(TokenUsage::new(2, 2).expect("usage"))
++                .is_err()
++        );
++        assert!(
++            collector
++                .validate_usage(TokenUsage::new(2, 1).expect("usage"))
++                .is_ok()
++        );
++        assert!(
++            CompletionTokenCollector::new(false, 1, 2)
++                .observe(&first)
++                .is_err()
++        );
++        assert!(
++            collector
++                .observe(&GenerationEvent::TokenDelta {
++                    text: "no identity".to_owned()
++                })
++                .is_err()
++        );
++    }
++
++    #[test]
++    fn opted_in_sse_keeps_empty_tokens_and_requires_checked_usage_before_one_done() {
++        let metadata = RequestMetadata::new("cmpl-123", "fixture-model", 42).expect("metadata");
++        let mut encoder = SseStreamEncoder::new_with_options(metadata, true, true, 2, 2);
++        assert!(encoder.encode_delta("unattributed").is_err());
++        assert!(encoder.encode_finish(FinishReason::Length).is_err());
++        assert!(encoder.encode_done().is_err());
++        let frame = encoder
++            .encode_event(&committed(0, Some(vec![1, 2])))
++            .expect("invisible token");
++        let value: Value =
++            serde_json::from_str(frame.trim().strip_prefix("data: ").expect("data")).expect("JSON");
++        assert_eq!(value["choices"][0]["text"], "");
++        assert_eq!(value["choices"][0]["token_ids"], json!([17]));
++        assert_eq!(value["choices"][0]["prompt_token_ids"], json!([1, 2]));
++        assert!(value.get("usage").is_none());
++        assert!(
++            encoder
++                .encode_event(&GenerationEvent::Finished {
++                    reason: FinishReason::Length,
++                    usage: TokenUsage::new(2, 2).expect("bad usage")
++                })
++                .is_err()
++        );
++        assert_eq!(encoder.phase(), SseStreamPhase::Open);
++        let finish = encoder
++            .encode_event(&GenerationEvent::Finished {
++                reason: FinishReason::Stop,
++                usage: TokenUsage::new(2, 1).expect("usage"),
++            })
++            .expect("checked finish and usage");
++        let frames: Vec<Value> = finish
++            .lines()
++            .filter_map(|line| line.strip_prefix("data: "))
++            .map(|line| serde_json::from_str(line).expect("JSON"))
++            .collect();
++        assert_eq!(frames.len(), 2);
++        assert_eq!(frames[0]["choices"][0]["finish_reason"], "stop");
++        assert!(frames[0]["choices"][0].get("token_ids").is_none());
++        assert_eq!(frames[1]["choices"], json!([]));
++        assert_eq!(
++            frames[1]["usage"],
++            json!({"prompt_tokens":2,"completion_tokens":1,"total_tokens":3})
++        );
++        assert!(encoder.encode_event(&committed(1, None)).is_err());
++        assert_eq!(encoder.encode_done().expect("done"), SSE_DONE_FRAME);
++        assert!(encoder.encode_done().is_err());
++    }
++
++    #[test]
++    fn usage_only_opt_in_does_not_invent_token_ids_and_direct_finish_cannot_omit_usage() {
++        let metadata = RequestMetadata::new("cmpl-123", "fixture-model", 42).expect("metadata");
++        let mut encoder = SseStreamEncoder::new_with_options(metadata, false, true, 2, 2);
++        let delta = encoder
++            .encode_event(&GenerationEvent::TokenDelta {
++                text: "가".to_owned(),
++            })
++            .expect("text delta");
++        assert!(!delta.contains("token_ids"));
++        assert!(encoder.encode_finish(FinishReason::Length).is_err());
++        let finish = encoder
++            .encode_event(&GenerationEvent::Finished {
++                reason: FinishReason::Length,
++                usage: TokenUsage::new(2, 2).expect("source usage"),
++            })
++            .expect("source terminal usage");
++        assert_eq!(finish.matches("\"usage\"").count(), 1);
++        assert!(!finish.contains("token_ids"));
++        assert_eq!(encoder.encode_done().expect("done"), SSE_DONE_FRAME);
+     }
+ 
+     #[test]
+@@ -1224,6 +1625,8 @@
+         assert_eq!(value["choices"][0]["logprobs"], Value::Null);
+         assert_eq!(value["choices"][0]["finish_reason"], "stop");
+         assert_eq!(value["usage"]["total_tokens"], 5);
++        assert!(value["choices"][0].get("token_ids").is_none());
++        assert!(value["choices"][0].get("prompt_token_ids").is_none());
+ 
+         assert!(
+             CompletionResponse::new(&metadata, String::new(), FinishReason::Error, usage).is_err()
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -261,6 +261,13 @@
+ /// scheduler commit succeeds.  A call must be finite so cancellation and
+ /// shutdown are observed at iteration boundaries.
+ pub trait EngineBackend: 'static {
++    /// Whether this backend publishes authoritative committed model token IDs.
++    /// Text-only and mock backends reject opt-in token requests by default.
++    #[must_use]
++    fn supports_token_ids(&self) -> bool {
++        false
++    }
++
+     /// Validates, tokenizes, and admits a request into backend-owned state.
+     ///
+     /// # Errors
+@@ -1679,6 +1686,10 @@
+         let _ = admitted.try_send(Err(EngineError::Overloaded));
+         return;
+     }
++    if request.include_token_ids && !backend.supports_token_ids() {
++        let _ = admitted.try_send(Err(EngineError::InvalidRequest));
++        return;
++    }
+     match backend.admit(request_id, &metadata, &request) {
+         Ok(()) => {
+             let replaced = requests.insert(
+@@ -2311,6 +2322,9 @@
+         cancellation_deferred: bool,
+         pre_iteration_cancel_delta: String,
+         generation_audit: Option<C02RequestAudit>,
++        include_token_ids: bool,
++        prompt_ids_for_delivery: Option<Vec<u32>>,
++        next_delivery_index: usize,
+     }
+ 
+     struct C02RequestAudit {
+@@ -2597,7 +2611,10 @@
+                 } else {
+                     ""
+                 };
+-                if !delta.is_empty() {
++                // Cancellation flushes withheld text without a new commit.
++                // The raw-token stream terminates as an error, so it omits
++                // this unattributed flush; ordinary text delivery is unchanged.
++                if !delta.is_empty() && !request.include_token_ids {
+                     events.push(BackendEvent::new(
+                         request.engine_id,
+                         GenerationEvent::TokenDelta {
+@@ -2624,6 +2641,15 @@
+                         | RequestFinishReason::ExecutorFailure => unreachable!(),
+                     };
+                     if matches!(reason, FinishReason::Length | FinishReason::Stop) {
++                        if request.include_token_ids
++                            && (request.next_delivery_index
++                                != completion.generated_token_ids().len()
++                                || request.prompt_ids_for_delivery.is_some())
++                        {
++                            return Err(internal(
++                                "terminal committed token delivery count differs",
++                            ));
++                        }
+                         if let Some(generation_audit) = generation_audit.as_ref() {
+                             let audit = request.generation_audit.take().ok_or_else(|| {
+                                 internal("C02 audit sink has no request-local committed record")
+@@ -3101,6 +3127,10 @@
+     }
+ 
+     impl EngineBackend for CudaBackend {
++        fn supports_token_ids(&self) -> bool {
++            true
++        }
++
+         fn admit(
+             &mut self,
+             request_id: EngineRequestId,
+@@ -3183,6 +3213,15 @@
+                 .then(|| C02RequestAudit::new(metadata, request.stream, request.max_new_tokens))
+                 .transpose()?;
+             let now_ns = self.now_ns();
++            let prompt_ids_for_delivery = if request.include_token_ids {
++                let mut ids = Vec::new();
++                ids.try_reserve_exact(prompt_token_ids.len())
++                    .map_err(|_| internal("prompt token delivery allocation failed"))?;
++                ids.extend_from_slice(&prompt_token_ids);
++                Some(ids)
++            } else {
++                None
++            };
+             let submission = self
+                 .scheduler_mut()?
+                 .submit(
+@@ -3199,6 +3238,9 @@
+                 cancellation_deferred: false,
+                 pre_iteration_cancel_delta,
+                 generation_audit,
++                include_token_ids: request.include_token_ids,
++                prompt_ids_for_delivery,
++                next_delivery_index: 0,
+             });
+             Ok(())
+         }
+@@ -3400,12 +3442,31 @@
+                 let request_index = self
+                     .request_index_by_scheduler(token.request_id())
+                     .ok_or_else(|| internal("committed token targets unknown request"))?;
+-                events.push(BackendEvent::new(
+-                    self.requests[request_index].engine_id,
+-                    GenerationEvent::TokenDelta {
+-                        text: pending.text_delta.clone(),
+-                    },
+-                ));
++                let text = pending.text_delta.clone();
++                let request = &mut self.requests[request_index];
++                let event = if request.include_token_ids {
++                    if token.generated_index() != request.next_delivery_index
++                        || (token.generated_index() == 0)
++                            != request.prompt_ids_for_delivery.is_some()
++                    {
++                        return Err(internal(
++                            "committed token delivery metadata is inconsistent",
++                        ));
++                    }
++                    request.next_delivery_index = request
++                        .next_delivery_index
++                        .checked_add(1)
++                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
++                    GenerationEvent::CommittedToken {
++                        text,
++                        token_id: token.token_id(),
++                        generated_index: token.generated_index(),
++                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
++                    }
++                } else {
++                    GenerationEvent::TokenDelta { text }
++                };
++                events.push(BackendEvent::new(request.engine_id, event));
+             }
+             events.extend(self.process_completions(updates.completions())?);
+             if !updates.settlement_failures().is_empty() {
+@@ -3681,6 +3742,7 @@
+             },
+             stop_sequences: Vec::new(),
+             stream: true,
++            include_token_ids: false,
+         }
+     }
+ 
+@@ -4031,6 +4093,109 @@
+     }
+ 
+     #[test]
++    fn committed_empty_token_is_delivered_and_channel_overflow_cancels() {
++        // Explicit committed-event fixtures exercise publication only. The
++        // text-only backend never manufactures token IDs from its mock text.
++        for capacity in [1, 3] {
++            let counters = Arc::new(MockCounters::default());
++            let mut backend = MockBackend::new(Arc::clone(&counters), Duration::ZERO);
++            let request_id = EngineRequestId(1);
++            backend.requests.insert(
++                request_id,
++                MockRequest {
++                    prompt_tokens: 2,
++                    generated: 2,
++                    remaining: 0,
++                },
++            );
++            let (sender, receiver) = std::sync::mpsc::sync_channel(capacity);
++            let cancellation = Arc::new(std::sync::atomic::AtomicU8::new(super::REQUEST_LIVE));
++            let stats = Arc::new(super::EngineStats::default());
++            stats.active_requests.store(1, Ordering::Release);
++            let mut requests = BTreeMap::from([(
++                request_id,
++                super::RequestControl {
++                    cancellation: Arc::clone(&cancellation),
++                    events: sender,
++                    stats: Arc::clone(&stats),
++                },
++            )]);
++            let events = (0..2)
++                .map(|index| {
++                    BackendEvent::new(
++                        request_id,
++                        GenerationEvent::CommittedToken {
++                            text: String::new(),
++                            token_id: 17 + u32::try_from(index).expect("small index"),
++                            generated_index: index,
++                            prompt_token_ids: (index == 0).then(|| vec![1, 2]),
++                        },
++                    )
++                })
++                .collect();
++            super::publish_events(&mut backend, &mut requests, events);
++            assert!(
++                matches!(receiver.try_recv(), Ok(GenerationEvent::CommittedToken {
++                token_id:17, generated_index:0, text, prompt_token_ids:Some(ids),
++            }) if text.is_empty() && ids == [1,2])
++            );
++            if capacity == 1 {
++                assert_eq!(counters.cancelled.load(Ordering::Acquire), 1);
++                assert!(requests.is_empty());
++                assert!(receiver.try_recv().is_err());
++            } else {
++                assert!(matches!(
++                    receiver.try_recv(),
++                    Ok(GenerationEvent::CommittedToken {
++                        token_id: 18,
++                        generated_index: 1,
++                        prompt_token_ids: None,
++                        ..
++                    })
++                ));
++                assert_eq!(counters.cancelled.load(Ordering::Acquire), 0);
++                cancellation.store(super::REQUEST_CANCELLED, Ordering::Release);
++                super::publish_events(
++                    &mut backend,
++                    &mut requests,
++                    vec![
++                        BackendEvent::new(
++                            request_id,
++                            GenerationEvent::CommittedToken {
++                                text: String::new(),
++                                token_id: 19,
++                                generated_index: 2,
++                                prompt_token_ids: None,
++                            },
++                        ),
++                        BackendEvent::new(
++                            request_id,
++                            GenerationEvent::Finished {
++                                reason: FinishReason::Cancelled,
++                                usage: TokenUsage::new(2, 2).expect("usage"),
++                            },
++                        ),
++                    ],
++                );
++                assert!(matches!(
++                    receiver.try_recv(),
++                    Ok(GenerationEvent::Finished {
++                        reason: FinishReason::Cancelled,
++                        ..
++                    })
++                ));
++                assert!(receiver.try_recv().is_err());
++                assert!(requests.is_empty());
++            }
++            assert_eq!(
++                cancellation.load(Ordering::Acquire),
++                super::REQUEST_TERMINAL
++            );
++            assert_eq!(stats.active_requests.load(Ordering::Acquire), 0);
++        }
++    }
++
++    #[test]
+     fn graceful_shutdown_rejects_new_work_and_closes_backend() {
+         let counters = Arc::new(MockCounters::default());
+         let engine = engine(Arc::clone(&counters), 8, 4, Duration::from_millis(5));
+@@ -4061,6 +4226,20 @@
+     }
+ 
+     #[test]
++    fn text_only_backend_rejects_token_ids_before_admission() {
++        let counters = Arc::new(MockCounters::default());
++        let engine = engine(Arc::clone(&counters), 8, 2, Duration::ZERO);
++        let mut input = request(2);
++        input.include_token_ids = true;
++        assert!(matches!(
++            engine.submit(input),
++            Err(EngineError::InvalidRequest)
++        ));
++        assert_eq!(engine.status().active_requests, 0);
++        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
++    }
++
++    #[test]
+     fn concurrent_requests_finish_without_deadlock() {
+         let counters = Arc::new(MockCounters::default());
+         let engine = engine(Arc::clone(&counters), 8, 8, Duration::ZERO);
+@@ -4080,6 +4259,9 @@
+                         GenerationEvent::Failed { class } => {
+                             panic!("unexpected failure: {class:?}")
+                         }
++                        GenerationEvent::CommittedToken { .. } => {
++                            panic!("text-only mock produced model IDs")
++                        }
+                     }
+                 }
+             }));
+--- a/crates/riley-server/src/service.rs
++++ b/crates/riley-server/src/service.rs
+@@ -35,8 +35,8 @@
+     write_sse_head,
+ };
+ use crate::openai::{
+-    ApiError, CompletionRequest, CompletionResponse, ErrorObject, ErrorResponse, ModelListResponse,
+-    ModelObject, SseStreamEncoder, normalize_completion_request,
++    ApiError, CompletionRequest, CompletionResponse, CompletionTokenCollector, ErrorObject,
++    ErrorResponse, ModelListResponse, ModelObject, SseStreamEncoder, normalize_completion_request,
+ };
+ 
+ const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
+@@ -1774,6 +1774,7 @@
+     }
+ }
+ 
++#[allow(clippy::too_many_lines)]
+ fn handle_completion(
+     stream: &mut TcpStream,
+     backend: &dyn CompletionBackend,
+@@ -1797,6 +1798,11 @@
+         );
+         return;
+     };
++    let include_usage = request
++        .stream_options
++        .as_ref()
++        .and_then(|options| options.include_usage)
++        .unwrap_or(false);
+     let request = match normalize_completion_request(request, config.request_limits) {
+         Ok(request) => request,
+         Err(error) => {
+@@ -1837,6 +1843,12 @@
+         return;
+     }
+     let streaming = request.stream;
++    let delivery = DeliveryOptions {
++        include_token_ids: request.include_token_ids,
++        include_usage,
++        maximum_output_tokens: request.max_new_tokens,
++        maximum_prompt_tokens: model.context_window_tokens,
++    };
+     let admission_started = Instant::now();
+     let submitted = match backend.submit(request) {
+         Ok(submitted) => submitted,
+@@ -1859,7 +1871,9 @@
+         .checked_add(config.request_timeout)
+         .unwrap_or_else(Instant::now);
+     if streaming {
+-        stream_completion(stream, submitted, backend, stopping, deadline, tracker);
++        stream_completion(
++            stream, submitted, backend, stopping, deadline, tracker, delivery,
++        );
+     } else {
+         collect_completion(
+             stream,
+@@ -1869,8 +1883,17 @@
+             deadline,
+             config.maximum_non_streaming_bytes,
+             tracker,
+-        );
+-    }
++            delivery,
++        );
++    }
++}
++
++#[derive(Clone, Copy)]
++struct DeliveryOptions {
++    include_token_ids: bool,
++    include_usage: bool,
++    maximum_output_tokens: usize,
++    maximum_prompt_tokens: usize,
+ }
+ 
+ struct RequestTracker {
+@@ -1933,7 +1956,7 @@
+     }
+ }
+ 
+-#[allow(clippy::too_many_lines)]
++#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+ fn stream_completion(
+     stream: &mut TcpStream,
+     mut submitted: SubmittedRequest,
+@@ -1941,6 +1964,7 @@
+     stopping: &AtomicBool,
+     deadline: Instant,
+     mut tracker: RequestTracker,
++    delivery: DeliveryOptions,
+ ) {
+     if write_sse_head(stream).is_err() {
+         tracker.finish(
+@@ -1952,7 +1976,13 @@
+         );
+         return;
+     }
+-    let mut encoder = SseStreamEncoder::new(submitted.metadata().clone());
++    let mut encoder = SseStreamEncoder::new_with_options(
++        submitted.metadata().clone(),
++        delivery.include_token_ids,
++        delivery.include_usage,
++        delivery.maximum_output_tokens,
++        delivery.maximum_prompt_tokens,
++    );
+     loop {
+         let Some(wait) = event_wait(stopping, deadline) else {
+             if client_disconnected(stream) {
+@@ -2016,12 +2046,14 @@
+                 return;
+             }
+             Ok(event) => {
+-                if matches!(event, GenerationEvent::TokenDelta { .. }) {
+-                    tracker.token_delta();
+-                }
+-                let terminal = !matches!(event, GenerationEvent::TokenDelta { .. });
++                let terminal = matches!(
++                    event,
++                    GenerationEvent::Finished { .. } | GenerationEvent::Failed { .. }
++                );
+                 let (finish_reason, error_class, completion_tokens) = match &event {
+-                    GenerationEvent::TokenDelta { .. } => (None, None, None),
++                    GenerationEvent::TokenDelta { .. } | GenerationEvent::CommittedToken { .. } => {
++                        (None, None, None)
++                    }
+                     GenerationEvent::Finished { reason, usage } => (
+                         Some(*reason),
+                         match reason {
+@@ -2044,6 +2076,13 @@
+                     );
+                     return;
+                 };
++                // Preserve the historical visible-text observation. Raw-token
++                // arrival timing belongs to the opt-in HTTP client's clock.
++                if matches!(&event, GenerationEvent::TokenDelta { .. })
++                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty())
++                {
++                    tracker.token_delta();
++                }
+                 if stream.write_all(frame.as_bytes()).is_err() {
+                     tracker.finish(
+                         backend,
+@@ -2133,7 +2172,7 @@
+     stream.flush()
+ }
+ 
+-#[allow(clippy::too_many_lines)]
++#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+ fn collect_completion(
+     stream: &mut TcpStream,
+     mut submitted: SubmittedRequest,
+@@ -2142,8 +2181,14 @@
+     deadline: Instant,
+     maximum_bytes: usize,
+     mut tracker: RequestTracker,
++    delivery: DeliveryOptions,
+ ) {
+     let mut text = String::new();
++    let mut tokens = CompletionTokenCollector::new(
++        delivery.include_token_ids,
++        delivery.maximum_output_tokens,
++        delivery.maximum_prompt_tokens,
++    );
+     loop {
+         let Some(wait) = event_wait(stopping, deadline) else {
+             if client_disconnected(stream) {
+@@ -2205,8 +2250,31 @@
+                 );
+                 return;
+             }
+-            Ok(GenerationEvent::TokenDelta { text: delta }) => {
+-                tracker.token_delta();
++            Ok(
++                event @ (GenerationEvent::TokenDelta { .. }
++                | GenerationEvent::CommittedToken { .. }),
++            ) => {
++                if tokens.observe(&event).is_err() {
++                    let _ = write_api_error(stream, &ApiError::Internal);
++                    tracker.finish(
++                        backend,
++                        RequestObservationStatus::Failed,
++                        None,
++                        Some(ServiceErrorClass::Internal),
++                        None,
++                    );
++                    return;
++                }
++                let visible_delta = matches!(&event, GenerationEvent::TokenDelta { .. })
++                    || matches!(&event, GenerationEvent::CommittedToken { text, .. } if !text.is_empty());
++                let (GenerationEvent::TokenDelta { text: delta }
++                | GenerationEvent::CommittedToken { text: delta, .. }) = event
++                else {
++                    unreachable!()
++                };
++                if visible_delta {
++                    tracker.token_delta();
++                }
+                 if tracker.delta_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
+                     && client_disconnected(stream)
+                 {
+@@ -2255,9 +2323,44 @@
+                 text.push_str(&delta);
+             }
+             Ok(GenerationEvent::Finished { reason, usage }) => {
++                if matches!(reason, FinishReason::Stop | FinishReason::Length)
++                    && tokens.validate_usage(usage).is_err()
++                {
++                    let _ = write_api_error(stream, &ApiError::Internal);
++                    tracker.finish(
++                        backend,
++                        RequestObservationStatus::Failed,
++                        Some(reason),
++                        Some(ServiceErrorClass::Internal),
++                        None,
++                    );
++                    return;
++                }
+                 let response =
+                     match CompletionResponse::new(submitted.metadata(), text, reason, usage) {
+-                        Ok(response) => write_json(stream, 200, &response),
++                        Ok(mut response) => {
++                            tokens.attach(&mut response);
++                            if delivery.include_token_ids {
++                                match serde_json::to_vec(&response) {
++                                    Ok(body) if body.len() <= maximum_bytes => {
++                                        write_response(stream, 200, JSON_CONTENT_TYPE, &body)
++                                    }
++                                    _ => {
++                                        let _ = write_api_error(stream, &ApiError::Internal);
++                                        tracker.finish(
++                                            backend,
++                                            RequestObservationStatus::Failed,
++                                            Some(reason),
++                                            Some(ServiceErrorClass::Internal),
++                                            None,
++                                        );
++                                        return;
++                                    }
++                                }
++                            } else {
++                                write_json(stream, 200, &response)
++                            }
++                        }
+                         Err(_) => write_api_error(
+                             stream,
+                             &match reason {
+@@ -2486,6 +2589,9 @@
+ 
+     enum Script {
+         Complete(Vec<String>),
++        /// Explicit source events; never infer model identities from text.
++        Events(Vec<GenerationEvent>),
++        EmptyTokenThenWaitForCancellation,
+         WaitForCancellation,
+         CancelOnShutdown,
+         FloodUntilDisconnected,
+@@ -2673,6 +2779,24 @@
+             active.fetch_add(1, Ordering::AcqRel);
+             thread::spawn(move || {
+                 match script {
++                    Script::Events(events) => {
++                        for event in events {
++                            if sender.send(event).is_err() {
++                                break;
++                            }
++                        }
++                    }
++                    Script::EmptyTokenThenWaitForCancellation => {
++                        let _ = sender.send(GenerationEvent::CommittedToken {
++                            text: String::new(),
++                            token_id: 17,
++                            generated_index: 0,
++                            prompt_token_ids: Some(vec![1, 2]),
++                        });
++                        while !worker_cancellation.is_cancelled() {
++                            thread::sleep(Duration::from_millis(2));
++                        }
++                    }
+                     Script::Complete(deltas) => {
+                         let completion_tokens =
+                             u64::try_from(deltas.len()).expect("test token count fits u64");
+@@ -2790,6 +2914,178 @@
+         response
+     }
+ 
++    fn committed_fixture() -> Vec<GenerationEvent> {
++        vec![
++            GenerationEvent::CommittedToken {
++                text: String::new(),
++                token_id: 17,
++                generated_index: 0,
++                prompt_token_ids: Some(vec![1, 2]),
++            },
++            GenerationEvent::CommittedToken {
++                text: "가".to_owned(),
++                token_id: 18,
++                generated_index: 1,
++                prompt_token_ids: None,
++            },
++            GenerationEvent::Finished {
++                reason: FinishReason::Length,
++                usage: TokenUsage::new(2, 2).expect("fixture usage"),
++            },
++        ]
++    }
++
++    fn token_request(streaming: bool) -> Vec<u8> {
++        let mut body = json!({"model":"fixture-model", "prompt":"hello", "max_tokens":2,
++            "stream":streaming, "return_token_ids":true});
++        if streaming {
++            body["stream_options"] = json!({"include_usage":true});
++        }
++        post_body(&serde_json::to_vec(&body).expect("request JSON"))
++    }
++
++    #[test]
++    fn committed_tokens_and_usage_survive_concurrent_http_delivery() {
++        for streaming in [false, true] {
++            let backend: Arc<dyn CompletionBackend> =
++                TestBackend::new((0..4).map(|_| Script::Events(committed_fixture())));
++            let server = start_server(test_config(), backend).expect("token server");
++            let address = server.local_address();
++            let clients: Vec<_> = (0..4)
++                .map(|_| thread::spawn(move || send_request(address, &token_request(streaming))))
++                .collect();
++            let mut ids = std::collections::BTreeSet::new();
++            for client in clients {
++                let response = client.join().expect("client");
++                assert_eq!(response_status(&response), 200);
++                if streaming {
++                    let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
++                    let frames: Vec<Value> = body
++                        .lines()
++                        .filter_map(|line| line.strip_prefix("data: "))
++                        .filter(|data| *data != "[DONE]")
++                        .map(|data| serde_json::from_str(data).expect("SSE JSON"))
++                        .collect();
++                    assert_eq!(frames.len(), 4);
++                    assert_eq!(frames[0]["choices"][0]["text"], "");
++                    assert_eq!(frames[0]["choices"][0]["token_ids"], json!([17]));
++                    assert_eq!(frames[0]["choices"][0]["prompt_token_ids"], json!([1, 2]));
++                    assert_eq!(frames[1]["choices"][0]["text"], "가");
++                    assert_eq!(frames[1]["choices"][0]["token_ids"], json!([18]));
++                    assert!(frames[1]["choices"][0].get("prompt_token_ids").is_none());
++                    assert_eq!(frames[2]["choices"][0]["finish_reason"], "length");
++                    assert_eq!(frames[3]["choices"], json!([]));
++                    assert_eq!(frames[3]["usage"]["completion_tokens"], 2);
++                    assert_eq!(body.matches("data: [DONE]").count(), 1);
++                    assert!(ids.insert(frames[0]["id"].as_str().expect("id").to_owned()));
++                    assert!(frames.iter().all(|frame| frame["id"] == frames[0]["id"]));
++                } else {
++                    let body: Value =
++                        serde_json::from_slice(response_body(&response)).expect("completion JSON");
++                    assert_eq!(body["choices"][0]["text"], "가");
++                    assert_eq!(body["choices"][0]["token_ids"], json!([17, 18]));
++                    assert_eq!(body["choices"][0]["prompt_token_ids"], json!([1, 2]));
++                    assert_eq!(body["usage"]["completion_tokens"], 2);
++                    assert!(ids.insert(body["id"].as_str().expect("id").to_owned()));
++                }
++            }
++            server.shutdown().expect("token server shutdown");
++        }
++    }
++
++    #[test]
++    fn missing_token_metadata_fails_before_first_payload_and_bad_usage_cannot_finish() {
++        let missing = vec![GenerationEvent::CommittedToken {
++            text: "must not publish".to_owned(),
++            token_id: 9999,
++            generated_index: 0,
++            prompt_token_ids: None,
++        }];
++        let mut bad_usage = committed_fixture();
++        *bad_usage.last_mut().expect("terminal") = GenerationEvent::Finished {
++            reason: FinishReason::Length,
++            usage: TokenUsage::new(2, 1).expect("wrong usage"),
++        };
++        for events in [
++            missing,
++            bad_usage,
++            vec![GenerationEvent::TokenDelta {
++                text: "must not publish".to_owned(),
++            }],
++        ] {
++            for streaming in [false, true] {
++                let backend: Arc<dyn CompletionBackend> =
++                    TestBackend::new([Script::Events(events.clone())]);
++                let server = start_server(test_config(), backend).expect("malformed token server");
++                let response = send_request(server.local_address(), &token_request(streaming));
++                let body = std::str::from_utf8(response_body(&response)).expect("error UTF-8");
++                assert!(body.contains("internal_error"));
++                assert!(!body.contains("must not publish"));
++                assert!(!body.contains("9999"));
++                assert!(!body.contains("\"finish_reason\":\"length\""));
++                assert!(!body.contains("\"usage\""));
++                assert_eq!(
++                    response_status(&response),
++                    if streaming { 200 } else { 500 }
++                );
++                server.shutdown().expect("malformed server shutdown");
++            }
++        }
++    }
++
++    #[test]
++    fn cancellation_after_invisible_token_emits_no_success_usage() {
++        let mut events = committed_fixture();
++        events.truncate(1);
++        events.push(GenerationEvent::Finished {
++            reason: FinishReason::Cancelled,
++            usage: TokenUsage::new(2, 1).expect("cancelled usage"),
++        });
++        let backend: Arc<dyn CompletionBackend> = TestBackend::new([Script::Events(events)]);
++        let server = start_server(test_config(), backend).expect("cancelled token server");
++        let response = send_request(server.local_address(), &token_request(true));
++        let body = std::str::from_utf8(response_body(&response)).expect("SSE UTF-8");
++        assert!(body.contains("\"token_ids\":[17]"));
++        assert!(body.contains("cancelled"));
++        assert!(!body.contains("\"usage\""));
++        assert_eq!(body.matches("data: [DONE]").count(), 1);
++        server.shutdown().expect("cancelled server shutdown");
++    }
++
++    #[test]
++    fn disconnect_after_invisible_token_cancels_source() {
++        let backend = TestBackend::new([Script::EmptyTokenThenWaitForCancellation]);
++        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
++        let server = start_server(test_config(), backend_trait).expect("disconnect token server");
++        let mut client = TcpStream::connect(server.local_address()).expect("connect");
++        client
++            .set_read_timeout(Some(TEST_TIMEOUT))
++            .expect("timeout");
++        client.write_all(&token_request(true)).expect("request");
++        let mut received = Vec::new();
++        let mut buffer = [0_u8; 512];
++        while !String::from_utf8_lossy(&received).contains("\"token_ids\":[17]") {
++            let count = client.read(&mut buffer).expect("first token frame");
++            assert!(count > 0);
++            received.extend_from_slice(&buffer[..count]);
++        }
++        drop(client);
++        wait_until(|| backend.cancellation_count.load(Ordering::Acquire) == 1);
++        server.shutdown().expect("disconnect token shutdown");
++    }
++
++    #[test]
++    fn opt_in_nonstream_response_counts_serialized_token_bytes() {
++        let backend: Arc<dyn CompletionBackend> =
++            TestBackend::new([Script::Events(committed_fixture())]);
++        let mut config = test_config();
++        config.maximum_non_streaming_bytes = 32;
++        let server = start_server(config, backend).expect("bounded token server");
++        let response = send_request(server.local_address(), &token_request(false));
++        assert_eq!(response_status(&response), 500);
++        server.shutdown().expect("bounded token shutdown");
++    }
++
+     /// CPU-only transport diagnostic. Keep this opt-in: wall-clock results are
+     /// evidence for a matched before/after run, never a timing assertion in CI.
+     #[test]

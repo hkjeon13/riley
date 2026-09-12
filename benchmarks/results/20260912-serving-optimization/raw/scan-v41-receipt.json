@@ -1,0 +1,24 @@
+{
+  "build": {
+    "source_commit": "4941e7318ae5cd6a6857a9743946854922e04b51",
+    "binaries": {
+      "/tmp/riley-opt-260912/variable-candidate-v41/riley": "3d30e9dc14d998f9e3a7af27658614fd0d3ee006084555180974c91895810c14"
+    },
+    "build_log_sha256": "d8aeedc3b8b6619dfca7c06d1232e2068f5a2835dd54efe0efe56aa41a912793",
+    "change": "AVX2 full validation with scalar fallback, four independent reductions and vectorized inactive-byte check"
+  },
+  "cpu_tests": 40,
+  "guard_page_test": true,
+  "exhaustive_bf16_and_unaligned_tails": true,
+  "gpu_tests": 3,
+  "full_logit_rows": 4896,
+  "http_completed": 37,
+  "http_disconnect_recovery": true,
+  "cleanup_zero": true,
+  "cuda_kernels_changed": false,
+  "retained_requests": 18432,
+  "riley_reference_matches": 12288,
+  "diagnostic_requests": 1536,
+  "goal_achieved": false,
+  "decision": "Retain SIMD validation for both widths. Serving throughput improves4.05-9.67 percent over matched V40 profiles, TTFT/TPOT and sampled E2E tails improve. vLLM gap remains at higher concurrency. Next isolate native execution/synchronization/readback with GPU trace. No long-term stability claim."
+}

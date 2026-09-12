@@ -1,0 +1,466 @@
+{
+  "phase": "nonstream-logprobs-diagnostic",
+  "index": 2,
+  "offered_concurrency": 4,
+  "request": {
+    "model": "g04-smol",
+    "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+    "max_tokens": 32,
+    "temperature": 0,
+    "top_p": 1,
+    "stream": false,
+    "return_token_ids": true,
+    "logprobs": 1
+  },
+  "status": 200,
+  "response_complete": true,
+  "diagnostic_only": true,
+  "performance_claim": false,
+  "started_ns": 832558964466384,
+  "headers": [
+    [
+      "date",
+      "Sat, 12 Sep 2026 01:10:05 GMT"
+    ],
+    [
+      "server",
+      "uvicorn"
+    ],
+    [
+      "content-length",
+      "3426"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "finished_ns": 832559029864959,
+  "raw_response": "{\"id\":\"cmpl-a6b5d00bf3602530\",\"object\":\"text_completion\",\"created\":1789175406,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\", I'm a little bit of a lot of the\\n\\nThe first thing to do is to use the following code to get the same result.\\n\\n\",\"logprobs\":{\"text_offset\":[0,1,3,5,7,14,18,21,23,27,30,34,35,36,39,45,51,54,57,60,63,67,71,81,86,89,93,97,102,109,110,111],\"token_logprobs\":[-1.5827136039733887,-3.350890636444092,-2.1421866416931152,-3.0639543533325195,-3.9919350147247314,-1.8984841108322144,-0.935452938079834,-2.165008783340454,-3.3119640350341797,-0.2558351457118988,-2.547959089279175,-3.371887683868408,-1.9076226949691772,-2.6608715057373047,-3.7260820865631104,-2.0919687747955322,-1.5364515781402588,-0.9070522785186768,-0.8793561458587646,-0.96272873878479,-3.235903739929199,-1.2965683937072754,-3.8420329093933105,-2.2946078777313232,-1.5104347467422485,-2.7107083797454834,-0.8217235207557678,-4.017773628234863,-2.497283697128296,-1.6632307767868042,-1.2966485023498535,-0.36749017238616943],\"tokens\":[\",\",\" I\",\"'m\",\" a\",\" little\",\" bit\",\" of\",\" a\",\" lot\",\" of\",\" the\",\"\\n\",\"\\n\",\"The\",\" first\",\" thing\",\" to\",\" do\",\" is\",\" to\",\" use\",\" the\",\" following\",\" code\",\" to\",\" get\",\" the\",\" same\",\" result\",\".\",\"\\n\",\"\\n\"],\"top_logprobs\":[{\",\":-1.5827136039733887},{\" I\":-3.350890636444092},{\"'m\":-2.1421866416931152},{\" a\":-3.0639543533325195},{\" little\":-3.9919350147247314},{\" bit\":-1.8984841108322144},{\" of\":-0.935452938079834},{\" a\":-2.165008783340454},{\" lot\":-3.3119640350341797},{\" of\":-0.2558351457118988},{\" the\":-2.547959089279175},{\"\\n\":-3.371887683868408},{\"\\n\":-1.9076226949691772},{\"The\":-2.6608715057373047},{\" first\":-3.7260820865631104},{\" thing\":-2.0919687747955322},{\" to\":-1.5364515781402588},{\" do\":-0.9070522785186768},{\" is\":-0.8793561458587646},{\" to\":-0.96272873878479},{\" use\":-3.235903739929199},{\" the\":-1.2965683937072754},{\" following\":-3.8420329093933105},{\" code\":-2.2946078777313232},{\" to\":-1.5104347467422485},{\" get\":-2.7107083797454834},{\" the\":-0.8217235207557678},{\" same\":-4.017773628234863},{\" result\":-2.497283697128296},{\".\":-1.6632307767868042},{\"\\n\":-1.2966485023498535},{\"\\n\":-0.36749017238616943}]},\"finish_reason\":\"length\",\"stop_reason\":null,\"token_ids\":[28,339,5248,253,1838,3241,282,253,2341,282,260,198,198,504,808,2775,288,536,314,288,722,260,1695,2909,288,820,260,1142,966,30,198,198],\"prompt_logprobs\":null,\"prompt_token_ids\":[19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556],\"routed_experts\":null}],\"service_tier\":null,\"system_fingerprint\":\"vllm-0.27.1-331b3ebe\",\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32,\"prompt_tokens_details\":null},\"kv_transfer_params\":null,\"ec_transfer_params\":null,\"metrics\":null}",
+  "observation": {
+    "structure_parsed": true,
+    "counts_prompt_usage_and_finish_valid": true,
+    "response_id": "cmpl-a6b5d00bf3602530",
+    "response_model": "g04-smol",
+    "text": ", I'm a little bit of a lot of the\n\nThe first thing to do is to use the following code to get the same result.\n\n",
+    "token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      2341,
+      282,
+      260,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      288,
+      536,
+      314,
+      288,
+      722,
+      260,
+      1695,
+      2909,
+      288,
+      820,
+      260,
+      1142,
+      966,
+      30,
+      198,
+      198
+    ],
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "generated_token_count": 32,
+    "prompt_token_count": 128,
+    "usage": {
+      "prompt_tokens": 128,
+      "total_tokens": 160,
+      "completion_tokens": 32,
+      "prompt_tokens_details": null
+    },
+    "finish_reason": "length",
+    "sse_done_count": 0,
+    "usage_only_frame_count": 0,
+    "choice_frame_token_counts": [
+      32
+    ],
+    "text_exact": false,
+    "token_ids_exact": false,
+    "prompt_token_ids_exact": true,
+    "first_different_generated_index": 8,
+    "greedy_logprob_observation": {
+      "requested_logprobs": 1,
+      "tokens": [
+        {
+          "generated_index": 0,
+          "token_id": 28,
+          "selected_logprob": -1.5827136039733887,
+          "maximum_returned_logprob": -1.5827136039733887,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 1,
+          "token_id": 339,
+          "selected_logprob": -3.350890636444092,
+          "maximum_returned_logprob": -3.350890636444092,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 2,
+          "token_id": 5248,
+          "selected_logprob": -2.1421866416931152,
+          "maximum_returned_logprob": -2.1421866416931152,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 3,
+          "token_id": 253,
+          "selected_logprob": -3.0639543533325195,
+          "maximum_returned_logprob": -3.0639543533325195,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 4,
+          "token_id": 1838,
+          "selected_logprob": -3.9919350147247314,
+          "maximum_returned_logprob": -3.9919350147247314,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 5,
+          "token_id": 3241,
+          "selected_logprob": -1.8984841108322144,
+          "maximum_returned_logprob": -1.8984841108322144,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 6,
+          "token_id": 282,
+          "selected_logprob": -0.935452938079834,
+          "maximum_returned_logprob": -0.935452938079834,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 7,
+          "token_id": 253,
+          "selected_logprob": -2.165008783340454,
+          "maximum_returned_logprob": -2.165008783340454,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 8,
+          "token_id": 2341,
+          "selected_logprob": -3.3119640350341797,
+          "maximum_returned_logprob": -3.3119640350341797,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 9,
+          "token_id": 282,
+          "selected_logprob": -0.2558351457118988,
+          "maximum_returned_logprob": -0.2558351457118988,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 10,
+          "token_id": 260,
+          "selected_logprob": -2.547959089279175,
+          "maximum_returned_logprob": -2.547959089279175,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 11,
+          "token_id": 198,
+          "selected_logprob": -3.371887683868408,
+          "maximum_returned_logprob": -3.371887683868408,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 12,
+          "token_id": 198,
+          "selected_logprob": -1.9076226949691772,
+          "maximum_returned_logprob": -1.9076226949691772,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 13,
+          "token_id": 504,
+          "selected_logprob": -2.6608715057373047,
+          "maximum_returned_logprob": -2.6608715057373047,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 14,
+          "token_id": 808,
+          "selected_logprob": -3.7260820865631104,
+          "maximum_returned_logprob": -3.7260820865631104,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 15,
+          "token_id": 2775,
+          "selected_logprob": -2.0919687747955322,
+          "maximum_returned_logprob": -2.0919687747955322,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 16,
+          "token_id": 288,
+          "selected_logprob": -1.5364515781402588,
+          "maximum_returned_logprob": -1.5364515781402588,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 17,
+          "token_id": 536,
+          "selected_logprob": -0.9070522785186768,
+          "maximum_returned_logprob": -0.9070522785186768,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 18,
+          "token_id": 314,
+          "selected_logprob": -0.8793561458587646,
+          "maximum_returned_logprob": -0.8793561458587646,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 19,
+          "token_id": 288,
+          "selected_logprob": -0.96272873878479,
+          "maximum_returned_logprob": -0.96272873878479,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 20,
+          "token_id": 722,
+          "selected_logprob": -3.235903739929199,
+          "maximum_returned_logprob": -3.235903739929199,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 21,
+          "token_id": 260,
+          "selected_logprob": -1.2965683937072754,
+          "maximum_returned_logprob": -1.2965683937072754,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 22,
+          "token_id": 1695,
+          "selected_logprob": -3.8420329093933105,
+          "maximum_returned_logprob": -3.8420329093933105,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 23,
+          "token_id": 2909,
+          "selected_logprob": -2.2946078777313232,
+          "maximum_returned_logprob": -2.2946078777313232,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 24,
+          "token_id": 288,
+          "selected_logprob": -1.5104347467422485,
+          "maximum_returned_logprob": -1.5104347467422485,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 25,
+          "token_id": 820,
+          "selected_logprob": -2.7107083797454834,
+          "maximum_returned_logprob": -2.7107083797454834,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 26,
+          "token_id": 260,
+          "selected_logprob": -0.8217235207557678,
+          "maximum_returned_logprob": -0.8217235207557678,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 27,
+          "token_id": 1142,
+          "selected_logprob": -4.017773628234863,
+          "maximum_returned_logprob": -4.017773628234863,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 28,
+          "token_id": 966,
+          "selected_logprob": -2.497283697128296,
+          "maximum_returned_logprob": -2.497283697128296,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 29,
+          "token_id": 30,
+          "selected_logprob": -1.6632307767868042,
+          "maximum_returned_logprob": -1.6632307767868042,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 30,
+          "token_id": 198,
+          "selected_logprob": -1.2966485023498535,
+          "maximum_returned_logprob": -1.2966485023498535,
+          "selected_at_returned_maximum": true
+        },
+        {
+          "generated_index": 31,
+          "token_id": 198,
+          "selected_logprob": -0.36749017238616943,
+          "maximum_returned_logprob": -0.36749017238616943,
+          "selected_at_returned_maximum": true
+        }
+      ],
+      "all_selected_at_returned_maximum": true,
+      "scope": "Reported selected probability versus returned top-1; not an independent full-logit oracle."
+    }
+  },
+  "deadline_fired": false,
+  "raw_bytes": {
+    "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.response",
+    "sha256": "be671c30b0c3d97f851592e3f5f3e60bc44f0085be72ccf19462c324bd585299"
+  },
+  "raw_byte_count": 3426
+}

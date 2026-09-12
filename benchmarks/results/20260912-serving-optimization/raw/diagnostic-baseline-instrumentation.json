@@ -1,0 +1,13 @@
+{
+  "schema_version": "riley.owned-graph-instrumentation.v1",
+  "source_root": "/tmp/riley-opt-260912/diagnostic-baseline-source",
+  "source_file": "kernels/src/graph_resources.cu",
+  "original_sha256": "3fb851aedfe20f0e48387abfc2ccdee51ba38d425ced394702c7332b54c516f7",
+  "instrumented_sha256": "08454f2027739ca20e1f138ea926293c6f2718079e8ea7a77641f7f84c2b1ddd",
+  "source_topology": "single_graph_v1",
+  "applied": true,
+  "runtime_enable": "RILEY_OWNED_GRAPH_PROFILE=1",
+  "projection_events": true,
+  "projection_selection": "RILEY_OWNED_GRAPH_PROJECTION=q|gate|down|off (default off)",
+  "performance_claim_eligible": false
+}

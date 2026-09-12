@@ -1,0 +1,88 @@
+{
+  "complete": true,
+  "diagnostic_only": true,
+  "performance_claim": false,
+  "concurrent_correctness_qualified": false,
+  "settings": [
+    {
+      "label": "c1-vllm-budget128",
+      "requests": 5,
+      "reference_ids_exact": 5,
+      "distinct_continuations": 1,
+      "first_difference_counts": {},
+      "reported_greedy_maximum_tokens_checked": 32,
+      "stream_token_frames": 32
+    },
+    {
+      "label": "c2-vllm-budget128",
+      "requests": 9,
+      "reference_ids_exact": 1,
+      "distinct_continuations": 3,
+      "first_difference_counts": {
+        "8": 4,
+        "29": 4
+      },
+      "reported_greedy_maximum_tokens_checked": 64,
+      "stream_token_frames": 64
+    },
+    {
+      "label": "c2-vllm-budget256",
+      "requests": 9,
+      "reference_ids_exact": 9,
+      "distinct_continuations": 1,
+      "first_difference_counts": {},
+      "reported_greedy_maximum_tokens_checked": 64,
+      "stream_token_frames": 64
+    },
+    {
+      "label": "c4-vllm-budget128",
+      "requests": 17,
+      "reference_ids_exact": 5,
+      "distinct_continuations": 4,
+      "first_difference_counts": {
+        "8": 8,
+        "29": 4
+      },
+      "reported_greedy_maximum_tokens_checked": 128,
+      "stream_token_frames": 128
+    },
+    {
+      "label": "c4-vllm-budget512",
+      "requests": 17,
+      "reference_ids_exact": 1,
+      "distinct_continuations": 3,
+      "first_difference_counts": {
+        "8": 16
+      },
+      "reported_greedy_maximum_tokens_checked": 128,
+      "stream_token_frames": 128
+    },
+    {
+      "label": "c8-vllm-budget128",
+      "requests": 33,
+      "reference_ids_exact": 1,
+      "distinct_continuations": 5,
+      "first_difference_counts": {
+        "29": 20,
+        "8": 12
+      },
+      "reported_greedy_maximum_tokens_checked": 256,
+      "stream_token_frames": 256
+    },
+    {
+      "label": "c8-vllm-budget1024",
+      "requests": 33,
+      "reference_ids_exact": 0,
+      "distinct_continuations": 3,
+      "first_difference_counts": {
+        "8": 32,
+        "29": 1
+      },
+      "reported_greedy_maximum_tokens_checked": 256,
+      "stream_token_frames": 256
+    }
+  ],
+  "requests": 123,
+  "receipt_sha256": "f75a4608c7958f201d2cd15352926d83e4c41dfac56c3d02fd93cf75b7307848",
+  "all_raw_response_hashes_and_fixed_contracts_checked": true
+}

@@ -1,0 +1,94 @@
+{
+  "schema": "riley.paired-rope-attention-diagnostic.v1",
+  "completed": true,
+  "preparation": {
+    "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/preparation.json",
+    "sha256": "1410f9a1863d5f4fe37922208e8e86bc938583fc9b119affbfa0cb7a305d9fc3"
+  },
+  "finalization": {
+    "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/finalization.json",
+    "sha256": "8c516910522adee684b4ce3fd0e4480617097d19771428d61a5467a6cc2c0b8e"
+  },
+  "processes": [
+    {
+      "label": "off-before-baseline",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-before-baseline/completion.json",
+        "sha256": "f246c906cf82731817f58818fbfe207b9533b8fde055d1fb58e440d470b9ab97"
+      }
+    },
+    {
+      "label": "off-before-candidate",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-before-candidate/completion.json",
+        "sha256": "c34b872b4df1184854e4483b6ea180e59ed27d0167a8954dc068d1a15efab83d"
+      }
+    },
+    {
+      "label": "combined-ab-baseline",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ab-baseline/completion.json",
+        "sha256": "ee0cebfa459ebe33b4052d6cf843e918e2ce4f034a248345cddcd8d3ee32ab17"
+      }
+    },
+    {
+      "label": "combined-ab-candidate",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ab-candidate/completion.json",
+        "sha256": "c8217c5696b42d8ee75c1bdadc56cbdeb0279ec313fae5d25bda4478b72d71a0"
+      }
+    },
+    {
+      "label": "combined-ba-candidate",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-candidate/completion.json",
+        "sha256": "7cf5661c9646378d9baf573e7c15b7f5033fa2349727789fbc48ab4bfab45680"
+      }
+    },
+    {
+      "label": "combined-ba-baseline",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/combined-ba-baseline/completion.json",
+        "sha256": "713873a4bea8d3bff31958977c13278c74aa0f0fc919849962afcdec4b59f3cc"
+      }
+    },
+    {
+      "label": "off-after-baseline",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-baseline/completion.json",
+        "sha256": "9904f92d3cce71d45208497cacbe97aedaf63ae1f93e63c2db2dd2939c29c3b8"
+      }
+    },
+    {
+      "label": "off-after-candidate",
+      "completion": {
+        "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/off-after-candidate/completion.json",
+        "sha256": "d572c6d5311d9e859a906b1c4c3bd0dee3156db316f27cb422c3c9edc4cee30d"
+      }
+    }
+  ],
+  "comparison": {
+    "path": "/tmp/riley-opt-260912/paired-rope-attention-round15/comparison.json",
+    "sha256": "05be2a65ad78aa78f2e3346118c812d01e8172e82e1b094f43696ffaed1bc2bb"
+  },
+  "restoration": {
+    "path": "/tmp/riley-opt-260912/blender-round15/verified.json",
+    "sha256": "39487322b5ca6cfd41d8a87892a47259ff901455f12222d890a9bc6261274d92"
+  },
+  "workload": {
+    "offered_concurrency": 1,
+    "warmup_nonstream": 5,
+    "warmup_stream": 5,
+    "retained_stream": 6,
+    "prompt_tokens": 128,
+    "output_tokens": 32,
+    "requests_per_process": 16,
+    "total_replays": 512,
+    "retained_replay_id_min": 321,
+    "retained_replays": 192,
+    "retained_prefill": 6,
+    "retained_decode": 186
+  },
+  "performance_claim_eligible": false,
+  "candidate_acceptance": null
+}

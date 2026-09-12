@@ -1,0 +1,7 @@
+c4-fixed-p0-previous complete
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/serving_screen_round44.py", line 65, in <module>
+    wait_ready(p,port)
+  File "/tmp/riley-opt-260912/batch7_http_check.py", line 80, in wait_ready
+    raise RuntimeError("owned batch7 HTTP server did not become ready")
+RuntimeError: owned batch7 HTTP server did not become ready

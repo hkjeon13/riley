@@ -1,0 +1,38 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+error: linking with `cc` failed: exit status: 1
+  |
+  = note: LC_ALL="C" PATH="/home/psyche/.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:/home/psyche/.cargo/bin:/data/cuda-12.8.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin" VSLANG="1033" "cc" "-m64" "/tmp/rustcQfFFmT/symbols.o" "<203 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "-lriley_cuda_native" "-Wl,-Bdynamic" "-lcublasLt" "-lcudart" "-lcuda" "-Wl,-Bstatic" "/tmp/riley-g01-native-260910-target/debug/deps/{libriley_core-91dd86805fbc0030.rlib}" "/home/psyche/.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libtest-bb17ba1fa02ea08e.rlib,libgetopts-d04d0c542852b7d7.rlib,libunicode_width-7748d1fe0f8acd00.rlib,librustc_std_workspace_std-6cf585dc4073d549.rlib,libstd-6273572f18644c87.rlib,libpanic_unwind-267e668abf74a283.rlib,libobject-ec6154ccae37a33e.rlib,libmemchr-500edd5521c440d4.rlib,libaddr2line-86d8d9428792e8ef.rlib,libgimli-10f06487503767c2.rlib,librustc_demangle-6a38424de1e5bca5.rlib,libstd_detect-de9763ea1c19dca3.rlib,libhashbrown-a7f5bb2f736d3c49.rlib,librustc_std_workspace_alloc-7e368919bdc4a44c.rlib,libminiz_oxide-376454d49910c786.rlib,libadler-fa99f5692b5dce85.rlib,libunwind-91cafdaf16f7fe40.rlib,libcfg_if-f7ee3f1ea78d9dae.rlib,liblibc-d3a35665f881365a.rlib,liballoc-715bc629a88bca60.rlib,librustc_std_workspace_core-ae70165d1278cff7.rlib,libcore-406129d0e3fbc101.rlib,libcompiler_builtins-1af05515ab19524a.rlib}" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "/tmp/riley-g01-native-260910-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-install/lib" "-L" "/data/cuda-12.8.1/lib64" "-L" "/data/cuda-12.8.1/lib64" "-L" "/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs" "-L" "/home/psyche/.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/tmp/riley-g01-native-260910-target/debug/deps/riley_cuda-6dbae6b0417c0677" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: /usr/bin/ld: /tmp/riley-g01-native-260910-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-install/lib/libriley_cuda_native.a(graph_resources.cu.o): in function `riley_cuda_graph_resources_reserve':
+          /tmp/riley-g01-native-260910/kernels/src/graph_resources.cu:109: undefined reference to `std::nothrow'
+          /usr/bin/ld: /tmp/riley-g01-native-260910/kernels/src/graph_resources.cu:109: undefined reference to `operator new(unsigned long, std::nothrow_t const&)'
+          /usr/bin/ld: /tmp/riley-g01-native-260910/kernels/src/graph_resources.cu:116: undefined reference to `operator delete(void*, unsigned long)'
+          /usr/bin/ld: /tmp/riley-g01-native-260910/kernels/src/graph_resources.cu:128: undefined reference to `operator delete(void*, unsigned long)'
+          /usr/bin/ld: /tmp/riley-g01-native-260910-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-install/lib/libriley_cuda_native.a(graph_resources.cu.o): in function `riley_cuda_graph_resources_close':
+          /tmp/riley-g01-native-260910/kernels/src/graph_resources.cu:148: undefined reference to `operator delete(void*, unsigned long)'
+          collect2: error: ld returned 1 exit status
+          
+  = note: some `extern` functions couldn't be found; some native libraries may need to be installed or have their path specified
+  = note: use the `-l` flag to specify native libraries to link
+  = note: use the `cargo:rustc-link-lib` directive to specify the native libraries to link with Cargo (see https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib)
+
+warning: `riley-cuda` (lib test) generated 1 warning
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+error: could not compile `riley-cuda` (lib test) due to 1 previous error; 1 warning emitted

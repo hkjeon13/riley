@@ -1,0 +1,27 @@
+{
+  "binary_sha256": "33c530edc68259c1932cd7e4bf94cfd4ecf7f73ecd1e5cfefaf655f01a201a2f",
+  "correctness_only": true,
+  "records": [
+    {
+      "capacity": 2,
+      "requests": 32,
+      "streaming_requests": 16,
+      "exact_reference_text_and_token_ids": true,
+      "exit_code": 0
+    },
+    {
+      "capacity": 4,
+      "requests": 32,
+      "streaming_requests": 16,
+      "exact_reference_text_and_token_ids": true,
+      "exit_code": 0
+    }
+  ],
+  "scheduler_tests": {
+    "normal_rows": 110,
+    "cancel_and_actual_page_reuse_rows": 119,
+    "passed": 2,
+    "log_sha256": "22dc088e55654a7051b776080ee97d1871ac1cc7460dde60820fcb598ea74f78"
+  },
+  "performance_qualified": false
+}

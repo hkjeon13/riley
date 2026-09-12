@@ -1,0 +1,52 @@
+{
+  "schema": "riley.multisequence-real-model-parity.v1",
+  "status": "passed-scoped-parity",
+  "source_commit": "7fb25b7171144a840dfed8ade0c988ad66e2db19",
+  "model_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+  "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+  "oracle": "retained profile2 packed M1 graph from the same source",
+  "buckets": [
+    2,
+    4
+  ],
+  "steps_per_bucket": 31,
+  "replays": 62,
+  "rows": 176,
+  "bf16_logit_words_compared": 8650752,
+  "full_physical_kv_exact": true,
+  "final_allocation_stats_zero": true,
+  "vllm_direct_comparison": false,
+  "serving_benchmark": false,
+  "logs": [
+    {
+      "path": "raw/multisequence-real-model-v1.log",
+      "commit": "8f6ad3a96611f67454b2bd27a304dbbf34191946",
+      "sha256": "f0b174d1396281c33d85216281ce32d88394af15bea2c2bc09d84ada68fd24c4",
+      "status": "failed"
+    },
+    {
+      "path": "raw/multisequence-real-model-v2.log",
+      "commit": "d2ee149e3f07feeeb81df5531115f27aad870748",
+      "sha256": "c8f4606cfba4e9718199ca8fdf169407a6d939006da17569020f5528c43ad032",
+      "status": "failed"
+    },
+    {
+      "path": "raw/multisequence-real-model-v3.log",
+      "commit": "abd6ede6c7af2633d7e8e99b3efda639603de88d",
+      "sha256": "8172cf468cf2f561c7990e7f5180c6ca0895a35bb6b8bb9c77dbac3a9b6491b9",
+      "status": "passed"
+    },
+    {
+      "path": "raw/multisequence-real-model-v4.log",
+      "commit": "7fb25b7171144a840dfed8ade0c988ad66e2db19",
+      "sha256": "d8a44f5f6f3b37d3586fd26e9f6ee1e7234e1f8204c2bb81a8668ca0c1fd7731",
+      "status": "passed"
+    },
+    {
+      "path": "raw/multisequence-full-dag-smoke-v3.log",
+      "commit": "7fb25b7171144a840dfed8ade0c988ad66e2db19",
+      "sha256": "984cdbeb02b25f0a34a31c0ef1c2133a200abd0ac1f9df377f38ccc6af0887ad",
+      "status": "passed"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "riley.prefill-operator-instrumentation.v1",
+  "source_root": "/tmp/riley-opt-260912/prefill-profile-source",
+  "source_file": "kernels/src/graph_resources.cu",
+  "original_sha256": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+  "instrumented_sha256": "47bb614cf4310403d50f2d530632b8779d2521e07f5d308756aae1f655f57c9a",
+  "tool_sha256": "462e9696921f95f58b2edbd773f23b88e905f11289cadc3be7dcaeff1136ea10",
+  "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+  "applied": true,
+  "families": [
+    "qkv",
+    "o",
+    "gate_up",
+    "down",
+    "attention"
+  ],
+  "runtime_enable": "RILEY_OWNED_GRAPH_PROFILE=1",
+  "runtime_operator": "RILEY_PREFILL_OPERATOR=<family>|off (default off)",
+  "runtime_layers": "RILEY_PREFILL_OPERATOR_LAYERS=all|0,15,29 (default all 30 layers)",
+  "runtime_exclusivity": "historical projection and decode modes must be unset or off",
+  "synchronizations_added": 0,
+  "performance_claim_eligible": false
+}

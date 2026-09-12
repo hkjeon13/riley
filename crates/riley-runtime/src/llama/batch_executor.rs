@@ -139,7 +139,13 @@ impl PreparedLlamaBatchExecutor {
         let bounds = config.metadata();
         let owner = PreparedLlamaBatchOwner::prepare(model, context, stream, config)?;
         shape_history.retain_prepared_variants(
-            owner.forward.plan.sequence_length(),
+            // The P128 graph has separate row scratch; its maximum admission
+            // bucket is independent of the retained M=1 decode GEMM plans.
+            if config.vllm_smol_p128_batched_prefill() {
+                bounds.max_input_tokens()
+            } else {
+                owner.forward.plan.sequence_length()
+            },
             |dense_rows| {
                 owner
                     .shape_variants
@@ -379,6 +385,12 @@ impl PreparedLlamaBatchExecutor {
         rows: &[LlamaBatchRow<'_>],
         stream: &mut CudaStream,
     ) -> LlamaBatchExecutorResult<()> {
+        if self.config.vllm_smol_p128_graph() {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "graph numerics",
+                reason: "vllm-smol-p128-v1 requires an owned graph",
+            });
+        }
         self.execute_output(rows, BatchOutputMode::Logits, stream)
     }
 
@@ -408,6 +420,15 @@ impl PreparedLlamaBatchExecutor {
         output_mode_requested: BatchOutputMode,
         stream: &mut CudaStream,
     ) -> LlamaBatchExecutorResult<()> {
+        if self.config.vllm_smol_p128_graph() {
+            self.output_ready = false;
+            self.output_count = 0;
+            self.owner.forward.output_ready = false;
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "graph numerics",
+                reason: "vllm-smol-p128-v1 requires an owned graph",
+            });
+        }
         if self.is_poisoned() {
             return Err(LlamaBatchExecutorError::Poisoned);
         }
@@ -1507,3 +1528,83 @@ mod tests {
         .expect("canonical ragged attention retains its existing model bound");
     }
 }
+
+#[cfg(all(test, feature = "cuda"))]
+#[path = "graph_decode_attention_model_gpu.rs"]
+mod attention_model_gpu_tests;
+
+#[cfg(all(test, feature = "cuda"))]
+#[path = "graph_decode_final_norm_model_gpu.rs"]
+mod final_norm_model_gpu_tests;
+
+#[cfg(feature = "cuda")]
+// Cold diagnostics remain disconnected from hot dispatch until G02H/G03.
+#[allow(dead_code)]
+#[path = "graph_decode_layer_norm_audit.rs"]
+mod layer_norm_audit;
+
+#[cfg(feature = "cuda")]
+// Diagnostic bridge; graph admission and hot dispatch stay disconnected.
+#[allow(dead_code)]
+#[path = "graph_decode_rope_audit.rs"]
+mod rope_audit;
+
+#[cfg(feature = "cuda")]
+// Cold diagnostics do not admit full decode graphs.
+#[allow(dead_code)]
+#[path = "graph_decode_kv_write_audit.rs"]
+mod kv_write_audit;
+
+#[cfg(feature = "cuda")]
+// Cold diagnostics remain separate from full decode admission.
+#[allow(dead_code)]
+#[path = "graph_decode_pointwise_audit.rs"]
+mod pointwise_audit;
+
+#[cfg(feature = "cuda")]
+// Cold diagnostics do not promote graph admission.
+#[allow(dead_code)]
+#[path = "graph_decode_embedding_audit.rs"]
+mod embedding_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold diagnostics, not retained graph admission.
+#[path = "graph_decode_gemm_audit.rs"]
+mod gemm_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold audit does not admit retained output graphs.
+#[path = "graph_decode_greedy_audit.rs"]
+mod greedy_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold audit, not full graph admission.
+#[path = "graph_decode_output_audit.rs"]
+mod output_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold diagnostic, not retained aggregate authority.
+#[path = "graph_decode_h2d_audit.rs"]
+mod h2d_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold lease validation does not authorize aggregate replay.
+#[path = "graph_decode_resource_audit.rs"]
+mod resource_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Cold MLP subgraph audit, not full decode admission.
+#[path = "graph_decode_mlp_audit.rs"]
+mod mlp_audit;
+
+#[cfg(feature = "cuda")]
+#[path = "graph_decode_qkv_audit.rs"]
+mod qkv_audit;
+
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // Opt-in full model graph; broad registry qualification remains separate.
+#[path = "graph_decode_full.rs"]
+mod full_decode;
+
+#[cfg(feature = "cuda")]
+pub use full_decode::OwnedLlamaDecodeExecutor;

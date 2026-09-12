@@ -1,0 +1,42 @@
+   Compiling riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.09s
+     Running tests/graph_dispatch_cpu.rs (target/debug/deps/graph_dispatch_cpu-fd75a4f3d9769514)
+
+running 10 tests
+test auto_reports_every_pre_lookup_eligibility_miss_with_a_closed_reason ... ok
+test auto_selects_only_exactly_matching_graph_entries ... ok
+test graph_dispatch_is_cpu_only_and_keeps_disabled_as_exact_eager ... ok
+test graph_signature_is_versioned_deterministic_and_hashable ... ok
+test unknown_capability_and_poison_never_select_a_graph ... ok
+test require_rejects_instead_of_silently_running_eager ... ok
+test graph_signature_misses_for_every_iteration_field ... ok
+test graph_signature_misses_for_every_model_device_and_tensor_field ... ok
+test graph_signature_misses_for_every_geometry_layout_and_plan_field ... ok
+test graph_dispatch_policy_does_not_own_cuda_or_model_execution ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_cpu.rs (target/debug/deps/graph_registry_cpu-cb518bfba370ebe5)
+
+running 6 tests
+test disabled_capacity_is_distinct_from_an_exact_not_prepared_miss ... ok
+test registry_keeps_poisoned_entries_exact_and_retained ... ok
+test registry_rejects_count_mode_and_retained_byte_quota_violations ... ok
+test registry_rejects_overflow_duplicate_keys_slots_and_storage_mismatch ... ok
+test registry_uses_full_signature_and_replay_mode_as_its_exact_key ... ok
+test registry_is_fixed_storage_send_sync_and_keeps_ownership_boundaries_closed ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_dispatch_cpu.rs (target/debug/deps/graph_registry_dispatch_cpu-f0811ea73a08c81b)
+
+running 6 tests
+test adapter_keeps_prelookup_rejections_and_disabled_policy_outside_registry_selection ... ok
+test adapter_maps_poison_capacity_and_require_to_closed_outcomes ... ok
+test adapter_selects_exact_full_and_piecewise_entries_with_slots ... ok
+test adapter_never_reuses_a_mismatched_signature_stage_or_sampling_backend ... ok
+test immutable_registry_selection_is_concurrent_and_keeps_exact_slots ... ok
+test registry_dispatch_stays_cpu_only_and_keeps_the_lookup_hook_private ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

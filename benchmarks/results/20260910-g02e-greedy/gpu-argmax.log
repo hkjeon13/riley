@@ -1,0 +1,32 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1524:8
+     |
+1524 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running tests/bf16_argmax_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/bf16_argmax_gpu-d66ed2529d45b04d)
+
+running 3 tests
+test deterministic_bf16_argmax_matches_cpu_bytes_for_odd_multi_row_edges ... ok
+test deterministic_bf16_argmax_observes_command_batch_order_without_allocations ... ok
+test deterministic_bf16_argmax_validation_fails_before_result_mutation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+
+running 1 test
+test borrowed_argmax_ties_nonfinite_completion_and_recovery ...      Running tests/graph_argmax_borrowed_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_argmax_borrowed_gpu-d0a49bfe938dbe6b)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

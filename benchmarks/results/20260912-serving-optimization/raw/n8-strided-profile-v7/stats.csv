@@ -1,0 +1,5 @@
+Generating SQLite file /tmp/riley-opt-260912/n8-strided-profile-v7/dense.sqlite from /tmp/riley-opt-260912/n8-strided-profile-v7/dense.nsys-rep
+Processing [/tmp/riley-opt-260912/n8-strided-profile-v7/dense.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,3633174,320,11353.7,9408.0,2432,32289,7136.0,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)"
+

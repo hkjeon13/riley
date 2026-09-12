@@ -1,0 +1,10 @@
+[package]
+name = "multisequence-descriptor-v1-prototype"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Deliberately isolated from the production workspace and its dependencies.
+[workspace]
+
+[dependencies]

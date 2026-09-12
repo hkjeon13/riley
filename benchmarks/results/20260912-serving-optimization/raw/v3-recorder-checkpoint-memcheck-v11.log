@@ -1,0 +1,12 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+V3_CHECKPOINT prompt=16 gpu_logits_argmax_exact=true full_kv_exact=true finite=true
+V3_CHECKPOINT prompt=128 gpu_logits_argmax_exact=true full_kv_exact=true finite=true
+V3_CHECKPOINT prompt=398 gpu_logits_argmax_exact=true full_kv_exact=true finite=true
+V3_CHECKPOINT cases=3 replays=12 allocation_zero=true
+test checkpoint_prefill_recorder_full_and_chunked ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.46s
+
+========= ERROR SUMMARY: 0 errors

@@ -1,0 +1,32 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1524:8
+     |
+1524 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.18s
+     Running tests/graph_c05_20_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_20_gpu-3173ff99a62f52d9)
+
+running 3 tests
+test owned_bf16_embedding_status_d2h_graph_preserves_raw_oob_no_write_parity ... ok
+test owned_bf16_embedding_status_d2h_graph_recovers_preflight_and_abort_resources ... ok
+test owned_bf16_embedding_status_d2h_graph_replays_byte_exact_against_eager ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 1 test
+test borrowed_embedding_reports_invalid_tokens_without_output_writes ...      Running tests/graph_embedding_borrowed_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_embedding_borrowed_gpu-f469fe66d7cff5d2)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

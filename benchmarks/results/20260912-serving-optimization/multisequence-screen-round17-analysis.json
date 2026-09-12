@@ -1,0 +1,91 @@
+{
+  "screening_only": true,
+  "restored": true,
+  "concurrency": {
+    "1": {
+      "baseline": {
+        "completed_retained_phases": 2,
+        "throughput": 918.8902772721648,
+        "ttft_ms": 5.164756000000001,
+        "tpot_ms": 0.9478020645161289,
+        "e2e_p99_ms": 35.344743
+      },
+      "candidate": {
+        "completed_retained_phases": 2,
+        "throughput": 990.8072576885118,
+        "ttft_ms": 5.1570535,
+        "tpot_ms": 0.8679885483870968,
+        "e2e_p99_ms": 32.759745499999994
+      },
+      "vllm": {
+        "completed_retained_phases": 2,
+        "throughput": 890.6028660375712,
+        "ttft_ms": 7.258613,
+        "tpot_ms": 0.8978502419354839,
+        "e2e_p99_ms": 47.855419499999996
+      },
+      "candidate_over_baseline": {
+        "throughput": 1.0782650357666652,
+        "ttft_ms": 0.9985086420345897,
+        "tpot_ms": 0.9157909450537245,
+        "e2e_p99_ms": 0.9268633103372683
+      },
+      "candidate_over_vllm": {
+        "throughput": 1.1125129903261655,
+        "ttft_ms": 0.7104736814044226,
+        "tpot_ms": 0.9667408971411372,
+        "e2e_p99_ms": 0.684556646713754
+      }
+    },
+    "4": {
+      "baseline": {
+        "completed_retained_phases": 2,
+        "throughput": 934.3914156766568,
+        "ttft_ms": 107.16441225,
+        "tpot_ms": 0.9545330241935484,
+        "e2e_p99_ms": 137.10389750000002
+      },
+      "candidate": {
+        "completed_retained_phases": 2,
+        "throughput": 1632.7656209615495,
+        "ttft_ms": 11.19105725,
+        "tpot_ms": 2.1602932258064516,
+        "e2e_p99_ms": 84.286081
+      },
+      "vllm": {
+        "completed_retained_phases": 0
+      },
+      "candidate_over_baseline": {
+        "throughput": 1.7474107676590245,
+        "ttft_ms": 0.10442885856447182,
+        "tpot_ms": 2.263193803725762,
+        "e2e_p99_ms": 0.6147606489450819
+      }
+    },
+    "8": {
+      "baseline": {
+        "completed_retained_phases": 2,
+        "throughput": 933.9492781477849,
+        "ttft_ms": 244.17448975,
+        "tpot_ms": 0.9548204193548386,
+        "e2e_p99_ms": 274.53859850000003
+      },
+      "candidate": {
+        "completed_retained_phases": 2,
+        "throughput": 1667.4330859594982,
+        "ttft_ms": 81.02866449999999,
+        "tpot_ms": 2.323174935483871,
+        "e2e_p99_ms": 166.81091800000002
+      },
+      "vllm": {
+        "completed_retained_phases": 0
+      },
+      "candidate_over_baseline": {
+        "throughput": 1.785357219041235,
+        "ttft_ms": 0.3318473792367165,
+        "tpot_ms": 2.4331014381255214,
+        "e2e_p99_ms": 0.6076046097394207
+      }
+    }
+  }
+}

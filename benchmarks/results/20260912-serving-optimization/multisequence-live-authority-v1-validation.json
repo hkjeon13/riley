@@ -1,0 +1,21 @@
+{
+  "status": "correctness_pass_not_serving_acceptance",
+  "source_commit": "807b615",
+  "log_sha256": "3d5eadfdbc81e0d7caf2bb38966da41205efffe1c093017969d08feff5c62a29",
+  "real_model_full_logits_rows": 110,
+  "completed_requests": 4,
+  "decode_active_shapes": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "oracle": "retained M1 graph, exact BF16 full logits",
+  "path": "live Scheduler authorization -> retained common GPU owner -> validated bulk output -> Scheduler.complete_iteration -> owner confirmation",
+  "remaining": [
+    "server activation",
+    "cancellation and failure containment integration tests",
+    "matched baseline and vLLM serving benchmark",
+    "high concurrency tail and stability qualification"
+  ]
+}

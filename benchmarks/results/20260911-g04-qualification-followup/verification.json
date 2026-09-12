@@ -1,0 +1,48 @@
+{
+  "source_commit": "9b53ffa14cea7c066fda8eff65b977c860b12afb",
+  "implementation_checks_passed": true,
+  "competitive_qualification_passed": false,
+  "performance_trials": 0,
+  "qualified_scope": "SmolLM2 c1 M=1 full decode, CUDA runtime 13.0",
+  "checks": {
+    "cuda13_graph_eager_all_logits_exact": true,
+    "cuda128_regression": true,
+    "replays_per_owner_test": 341,
+    "zero_final_allocations": true,
+    "release_http_policies": [
+      "require-M1",
+      "auto-M1",
+      "disabled-M1",
+      "reject-require-M2"
+    ],
+    "cpu_gpu_greedy_http_lifecycle_tests": 2,
+    "cpu_runtime_tests": 259,
+    "preflight_tests": 3,
+    "competitive_contract_tests": 45
+  },
+  "resolved": [
+    "CUDA runtime mismatch for the qualified M1 path",
+    "exact RAM snapshot identity"
+  ],
+  "blockers": [
+    "default vLLM cross-engine token mismatch",
+    "unrelated GPU compute sessions; preflight fails"
+  ],
+  "not_qualified": [
+    "general dense HF prefill on CUDA 13",
+    "CUDA13 Auto-M2 fallback",
+    "diagnostic norm rounding variant",
+    "M4/M5",
+    "performance comparison"
+  ],
+  "evidence": {
+    "diagnosis.json": "0cb2c0381960896b5d13da30e639e5e49d109f77265a87592e3263dc120bda60",
+    "cuda13-owned.log": "b14c543dbc41c038154c3e1119066fb8520f025d2dad81607a2a99925756b514",
+    "cuda128-regression.log": "63d96e4c2db8dd3540d8c3c123746dca22ee7ca1efb481fa37dffd749129226b",
+    "http13-lifecycle.log": "5161ccebb24c23772846d25eed88eb8dd54739c1b5c2e726dfa02ae99b8c324b",
+    "release-http-verification.json": "3b83dd50ac20e81367e65e0b4ee21a140b9acaa6391cf1cdcc605b2a3c93cef2",
+    "runtime-host.json": "7b87969d26ad2ac02ab4d84fc0aeaf57a4d42ff9155b2c40f542d5670ec99b8b",
+    "preflight-v2.stderr": "bc957b21a3d045ebc64d2dbbb50ca369e277e33dbc2db3b48fc3c7806cbbcd31",
+    "source-bundle.json": "120528fb4daf855526cc283764da8bca0cd0bf2c40fad882c2057a90e9f10b13"
+  }
+}

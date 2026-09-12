@@ -1,0 +1,84 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling typenum v1.20.1
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-cuda)
+   Compiling serde_json v1.0.145
+   Compiling serde v1.0.228
+   Compiling riley-core v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-core)
+   Compiling tinyvec_macros v0.1.1
+   Compiling cfg-if v1.0.4
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling cpufeatures v0.3.0
+   Compiling tinyvec v1.12.0
+   Compiling unicode-normalization v0.1.25
+   Compiling syn v2.0.119
+   Compiling hybrid-array v0.4.14
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling digest v0.11.3
+   Compiling sha2 v0.11.0
+   Compiling serde_derive v1.0.228
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+    --> crates/riley-cuda/src/ffi.rs:9936:19
+     |
+9935 | impl GraphResourcesHandle {
+     | ------------------------- methods in this implementation
+9936 |     pub(super) fn record_mlp(
+     |                   ^^^^^^^^^^
+...
+9946 |     pub(super) fn record_mlp_with_norm(
+     |                   ^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10240:19
+      |
+10239 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10240 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10251 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10263 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-model)
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g04-followup-source-260911/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.98s
+     Running unittests src/lib.rs (/tmp/riley-g04-followup-target128/debug/deps/riley_runtime-37b6549c31f0f56a)
+
+running 1 test
+G04_OWNED p128_o32=true full_logits_exact=true requests=3 cancelled_prefix=23 replays=341 captures=1 zero_allocations=true output_tokens=[28, 339, 5248, 253, 1838, 3241, 282, 253, 2341, 282, 260, 198, 198, 504, 808, 2775, 339, 1277, 288, 1643, 314, 338, 339, 5248, 2045, 288, 1138, 346, 638, 288, 1464, 253]
+test llama::batch_executor::full_decode::owned_tests::owned_graph_smol_p128_o32_reuses_scheduler_block_mappings ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 292 filtered out; finished in 11.70s
+

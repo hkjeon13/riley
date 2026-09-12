@@ -1,0 +1,324 @@
+{
+  "scope": "instrumented V44 binary, profiles V3/V4, each384 natural mixed requests; client16/32 and equal admission; budget/chunk512; diagnostic only. Native interval includes replay, synchronization and host readback, not GPU-only time.",
+  "cases": {
+    "c16-v3": {
+      "all": {
+        "prefill": {
+          "count": 384,
+          "execution_fraction_percent": 21.6365281621264,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 384
+          },
+          "us_median": 2713.0,
+          "encode_us_median": 10.0,
+          "native_us_median": 2682.0,
+          "validate_us_median": 21.0,
+          "tokens_sum": 69376
+        },
+        "decode": {
+          "count": 3588,
+          "execution_fraction_percent": 78.3634718378736,
+          "rows_mean": 7.884057971014493,
+          "rows_histogram": {
+            "1": 15,
+            "2": 13,
+            "3": 23,
+            "4": 12,
+            "5": 10,
+            "6": 19,
+            "7": 2,
+            "8": 3494
+          },
+          "us_median": 1316.0,
+          "encode_us_median": 12.0,
+          "native_us_median": 1249.0,
+          "validate_us_median": 53.0,
+          "tokens_sum": 28288
+        }
+      },
+      "middle80": {
+        "prefill": {
+          "count": 311,
+          "execution_fraction_percent": 21.78946423208043,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 311
+          },
+          "us_median": 2712,
+          "encode_us_median": 10,
+          "native_us_median": 2682,
+          "validate_us_median": 21,
+          "tokens_sum": 55970
+        },
+        "decode": {
+          "count": 2866,
+          "execution_fraction_percent": 78.21053576791957,
+          "rows_mean": 8,
+          "rows_histogram": {
+            "8": 2866
+          },
+          "us_median": 1319.0,
+          "encode_us_median": 12.0,
+          "native_us_median": 1250.0,
+          "validate_us_median": 53.0,
+          "tokens_sum": 22928
+        }
+      }
+    },
+    "c16-v4": {
+      "all": {
+        "prefill": {
+          "count": 384,
+          "execution_fraction_percent": 31.076196481939153,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 384
+          },
+          "us_median": 2829.0,
+          "encode_us_median": 10.0,
+          "native_us_median": 2783.0,
+          "validate_us_median": 36.0,
+          "tokens_sum": 69376
+        },
+        "decode": {
+          "count": 1869,
+          "execution_fraction_percent": 68.92380351806085,
+          "rows_mean": 15.135366506153023,
+          "rows_histogram": {
+            "1": 8,
+            "2": 8,
+            "3": 24,
+            "4": 8,
+            "5": 24,
+            "6": 2,
+            "7": 7,
+            "8": 2,
+            "9": 23,
+            "10": 2,
+            "11": 5,
+            "12": 3,
+            "13": 2,
+            "14": 5,
+            "15": 387,
+            "16": 1359
+          },
+          "us_median": 1603,
+          "encode_us_median": 26,
+          "native_us_median": 1467,
+          "validate_us_median": 108,
+          "tokens_sum": 28288
+        }
+      },
+      "middle80": {
+        "prefill": {
+          "count": 316,
+          "execution_fraction_percent": 31.602148152545073,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 316
+          },
+          "us_median": 2829.5,
+          "encode_us_median": 11.0,
+          "native_us_median": 2783.0,
+          "validate_us_median": 36.0,
+          "tokens_sum": 56926
+        },
+        "decode": {
+          "count": 1486,
+          "execution_fraction_percent": 68.39785184745493,
+          "rows_mean": 15.787348586810229,
+          "rows_histogram": {
+            "16": 1170,
+            "15": 316
+          },
+          "us_median": 1604.0,
+          "encode_us_median": 26.0,
+          "native_us_median": 1469.0,
+          "validate_us_median": 109.0,
+          "tokens_sum": 23460
+        }
+      }
+    },
+    "c32-v3": {
+      "all": {
+        "prefill": {
+          "count": 384,
+          "execution_fraction_percent": 21.53779080757019,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 384
+          },
+          "us_median": 2750.0,
+          "encode_us_median": 22.0,
+          "native_us_median": 2691.0,
+          "validate_us_median": 34.0,
+          "tokens_sum": 69376
+        },
+        "decode": {
+          "count": 3570,
+          "execution_fraction_percent": 78.46220919242981,
+          "rows_mean": 7.923809523809524,
+          "rows_histogram": {
+            "1": 6,
+            "2": 8,
+            "3": 10,
+            "4": 18,
+            "5": 15,
+            "6": 4,
+            "7": 7,
+            "8": 3502
+          },
+          "us_median": 1342.0,
+          "encode_us_median": 26.0,
+          "native_us_median": 1248.0,
+          "validate_us_median": 66.0,
+          "tokens_sum": 28288
+        }
+      },
+      "middle80": {
+        "prefill": {
+          "count": 312,
+          "execution_fraction_percent": 21.78109559066738,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 312
+          },
+          "us_median": 2750.5,
+          "encode_us_median": 23.0,
+          "native_us_median": 2691.0,
+          "validate_us_median": 34.0,
+          "tokens_sum": 56368
+        },
+        "decode": {
+          "count": 2851,
+          "execution_fraction_percent": 78.21890440933262,
+          "rows_mean": 8,
+          "rows_histogram": {
+            "8": 2851
+          },
+          "us_median": 1346,
+          "encode_us_median": 27,
+          "native_us_median": 1250,
+          "validate_us_median": 67,
+          "tokens_sum": 22808
+        }
+      }
+    },
+    "c32-v4": {
+      "all": {
+        "prefill": {
+          "count": 384,
+          "execution_fraction_percent": 31.231530304703064,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 384
+          },
+          "us_median": 2858.0,
+          "encode_us_median": 23.0,
+          "native_us_median": 2785.0,
+          "validate_us_median": 48.0,
+          "tokens_sum": 69376
+        },
+        "decode": {
+          "count": 1828,
+          "execution_fraction_percent": 68.76846969529694,
+          "rows_mean": 15.474835886214443,
+          "rows_histogram": {
+            "1": 4,
+            "2": 11,
+            "3": 14,
+            "4": 12,
+            "5": 5,
+            "6": 6,
+            "7": 11,
+            "8": 9,
+            "9": 6,
+            "10": 1,
+            "11": 8,
+            "12": 3,
+            "13": 5,
+            "14": 7,
+            "15": 5,
+            "16": 1721
+          },
+          "us_median": 1650.0,
+          "encode_us_median": 41.0,
+          "native_us_median": 1482.0,
+          "validate_us_median": 124.0,
+          "tokens_sum": 28288
+        }
+      },
+      "middle80": {
+        "prefill": {
+          "count": 315,
+          "execution_fraction_percent": 31.7086179988611,
+          "rows_mean": 1,
+          "rows_histogram": {
+            "1": 315
+          },
+          "us_median": 2859,
+          "encode_us_median": 23,
+          "native_us_median": 2785,
+          "validate_us_median": 48,
+          "tokens_sum": 56910
+        },
+        "decode": {
+          "count": 1454,
+          "execution_fraction_percent": 68.2913820011389,
+          "rows_mean": 16,
+          "rows_histogram": {
+            "16": 1454
+          },
+          "us_median": 1654.0,
+          "encode_us_median": 42.0,
+          "native_us_median": 1484.0,
+          "validate_us_median": 125.0,
+          "tokens_sum": 23264
+        }
+      }
+    }
+  },
+  "receipt": {
+    "binary_sha256": "b0946f86202616f55c410f113dabf2856934243a703216f95605b7001f80e530",
+    "numerical_observation_only": true,
+    "records": [
+      {
+        "profile": "v3",
+        "capacity": 16,
+        "client_concurrency": 16,
+        "requests": 384,
+        "streaming_requests": 384,
+        "exact_reference_text_and_token_ids": true,
+        "exit_code": 0
+      },
+      {
+        "profile": "v4",
+        "capacity": 16,
+        "client_concurrency": 16,
+        "requests": 384,
+        "streaming_requests": 384,
+        "exact_reference_text_and_token_ids": true,
+        "exit_code": 0
+      },
+      {
+        "profile": "v3",
+        "capacity": 32,
+        "client_concurrency": 32,
+        "requests": 384,
+        "streaming_requests": 384,
+        "exact_reference_text_and_token_ids": true,
+        "exit_code": 0
+      },
+      {
+        "profile": "v4",
+        "capacity": 32,
+        "client_concurrency": 32,
+        "requests": 384,
+        "streaming_requests": 384,
+        "exact_reference_text_and_token_ids": true,
+        "exit_code": 0
+      }
+    ]
+  }
+}

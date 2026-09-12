@@ -1,0 +1,33 @@
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c1-vllm-budget128"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c2-vllm-budget128"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c2-vllm-budget256"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c4-vllm-budget128"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c4-vllm-budget512"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c8-vllm-budget128"}
+{"prepared": true, "measurement_started": false, "output": "/tmp/riley-opt-260912/concurrency-screen/preparation-only/c8-vllm-budget1024"}
+{"verified_successor_pids": [4128432, 4128433, 4128445]}
+{"stopped": [4128432, 4128433, 4128445], "recovery_seconds": 1800}
+{"starting": "c1-vllm-budget128", "screening_only": true}
+{"completed": true, "output": "/tmp/riley-opt-260912/concurrency-screen/c1-vllm-budget128"}
+{"starting": "c2-vllm-budget128", "screening_only": true}
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_serving_concurrency.py", line 502, in <module>
+    raise SystemExit(main())
+  File "/tmp/riley-opt-260912/run_serving_concurrency.py", line 481, in main
+    pair[role] = run_lane(plan, parent, role, request, directory)
+  File "/tmp/riley-opt-260912/run_serving_concurrency.py", line 429, in run_lane
+    require(accounting["completed"], phase + " failed or incomplete; see accounting and request records")
+  File "/tmp/riley-opt-260912/run_serving_concurrency.py", line 54, in require
+    raise ValueError(message)
+ValueError: warmup-nonstream failed or incomplete; see accounting and request records
+{"alive_and_listening": true, "commands_and_gui_environment_match": true, "processes": [{"original_pid": 4128432, "port": 9876, "tag": "778980fb88c84606b05d544e87d9df4e", "launch_intent": true, "new_pid": 4177821, "start": "80934230"}, {"original_pid": 4128433, "port": 9911, "tag": "20cd1a6a0fa3461ca3393a07c57a88a6", "launch_intent": true, "new_pid": 4177822, "start": "80934233"}, {"original_pid": 4128445, "port": 9887, "tag": "5f04c7d8be754e9bb300914404e52e6c", "launch_intent": true, "new_pid": 4177823, "start": "80934238"}], "time": 1789152191.4587264}
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/measure_concurrency_round12.py", line 99, in <module>
+    main()
+  File "/tmp/riley-opt-260912/measure_concurrency_round12.py", line 79, in main
+    run(['python3', str(ROOT / 'run_serving_concurrency.py'), '--plan', item['plan']['path'],
+  File "/tmp/riley-opt-260912/measure_concurrency_round12.py", line 17, in run
+    subprocess.run(argv, check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/tmp/riley-opt-260912/run_serving_concurrency.py', '--plan', '/tmp/riley-opt-260912/concurrency-screen-plans/c2-vllm-budget128.json', '--request', '/tmp/riley-g04-vllm-profile-260911/request.json', '--binding', '/tmp/riley-opt-260912/batch7-binding.json', '--output', '/tmp/riley-opt-260912/concurrency-screen/c2-vllm-budget128', '--measure']' returned non-zero exit status 1.

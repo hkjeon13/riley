@@ -1,0 +1,539 @@
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index ecceb54..1ade7f6 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -204,6 +204,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/graph_multisequence_io.cu"),
+         kernels_dir.join("src/graph_multisequence_packet.inc"),
+         kernels_dir.join("src/graph_multisequence_record.inc"),
++        kernels_dir.join("src/graph_multisequence_catalog.inc"),
+         kernels_dir.join("src/host_runtime.cu"),
+         kernels_dir.join("src/memory.cu"),
+         kernels_dir.join("src/primitives.cu"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index a1d671b..b46e4d0 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11111,6 +11111,35 @@ unsafe extern "C" {
+         full: u32,
+         error: *mut ErrorInfo,
+     ) -> i32;
++    fn riley_cuda_graph_resources_append_multisequence_decode(
++        resources: *mut RawGraphResources,
++        devices: *const *mut RawDeviceBuffer,
++        device_count: u64,
++        weights: *const *mut RawDeviceBuffer,
++        weight_count: u64,
++        plans: *const *mut RawGemmPlan,
++        plan_count: u64,
++        staging: *mut RawPinnedHostBuffer,
++        bucket: u32,
++        physical: u32,
++        full: u32,
++        error: *mut ErrorInfo,
++    ) -> i32;
++    fn riley_cuda_graph_resources_replay_catalog(
++        resources: *mut RawGraphResources,
++        index: u32,
++        source: *const u8,
++        bytes: u64,
++        error: *mut ErrorInfo,
++    ) -> i32;
++    fn riley_cuda_graph_resources_read_catalog(
++        resources: *mut RawGraphResources,
++        index: u32,
++        output: *mut u8,
++        bytes: u64,
++        error: *mut ErrorInfo,
++    ) -> i32;
++
+ }
+ impl GraphResourcesHandle {
+     pub(super) fn record_multisequence_decode(
+@@ -11122,6 +11151,7 @@ impl GraphResourcesHandle {
+         bucket: u32,
+         physical: u32,
+         full: bool,
++        append: bool,
+     ) -> CudaResult<()> {
+         let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
+         let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
+@@ -11129,8 +11159,13 @@ impl GraphResourcesHandle {
+         let mut error = ErrorInfo::new();
+         // SAFETY: the enclosing owner retains all parent borrows. Native validates
+         // explicit counts, exact allocation geometry and ledger membership.
++        let call = if append {
++            riley_cuda_graph_resources_append_multisequence_decode
++        } else {
++            riley_cuda_graph_resources_record_multisequence_decode
++        };
+         let status = unsafe {
+-            riley_cuda_graph_resources_record_multisequence_decode(
++            call(
+                 self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                 devices.as_ptr(),
+                 devices.len() as u64,
+@@ -11148,3 +11183,34 @@ impl GraphResourcesHandle {
+         status_result(status, "record multi-sequence decode", &error)
+     }
+ }
++
++impl GraphResourcesHandle {
++    pub(super) fn replay_catalog(&mut self, index: u32, source: &[u8]) -> CudaResult<()> {
++        let mut error = ErrorInfo::new();
++        // SAFETY: synchronous copy from a live slice; native validates catalog and exact extent.
++        let status = unsafe {
++            riley_cuda_graph_resources_replay_catalog(
++                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
++                index,
++                source.as_ptr(),
++                source.len() as u64,
++                &mut error,
++            )
++        };
++        status_result(status, "replay graph catalog", &error)
++    }
++    pub(super) fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
++        let mut error = ErrorInfo::new();
++        // SAFETY: writable live slice; native checks the last completed entry and extent.
++        let status = unsafe {
++            riley_cuda_graph_resources_read_catalog(
++                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
++                index,
++                output.as_mut_ptr(),
++                output.len() as u64,
++                &mut error,
++            )
++        };
++        status_result(status, "read graph catalog", &error)
++    }
++}
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index ee8d180..24d40f2 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -56,6 +56,20 @@ impl<P> OwnedGraphResourceReservation<P> {
+         self.native.read_transfer(output)
+     }
+ 
++    /// Replays one cold catalog entry while retaining every parent.
++    /// # Errors
++    /// Rejects an absent entry, invalid packet or CUDA execution failure.
++    pub fn replay_catalog(&mut self, index: u32, input: &[u8]) -> CudaResult<()> {
++        self.native.replay_catalog(index, input)
++    }
++
++    /// Reads only the most recently completed catalog entry.
++    /// # Errors
++    /// Rejects stale selection or an incorrectly sized output buffer.
++    pub fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
++        self.native.read_catalog(index, output)
++    }
++
+     /// Returns parents only after the native reservation has been released.
+     /// # Errors
+     /// Unknown completion retains native parent protection and returns an error.
+@@ -1027,6 +1041,35 @@ impl BorrowedGraphResourceReservation<'_> {
+         bucket: u32,
+         physical: u32,
+         full: bool,
++    ) -> CudaResult<()> {
++        self.prepare_multisequence_entry(
++            devices, weights, plans, staging, bucket, physical, full, false,
++        )
++    }
++    pub fn append_multisequence_decode(
++        &mut self,
++        devices: &[usize; 18],
++        weights: &[usize],
++        plans: &[usize; 5],
++        staging: usize,
++        bucket: u32,
++        physical: u32,
++        full: bool,
++    ) -> CudaResult<()> {
++        self.prepare_multisequence_entry(
++            devices, weights, plans, staging, bucket, physical, full, true,
++        )
++    }
++    fn prepare_multisequence_entry(
++        &mut self,
++        devices: &[usize; 18],
++        weights: &[usize],
++        plans: &[usize; 5],
++        staging: usize,
++        bucket: u32,
++        physical: u32,
++        full: bool,
++        append: bool,
+     ) -> CudaResult<()> {
+         #[cfg(feature = "cuda")]
+         {
+@@ -1074,14 +1117,44 @@ impl BorrowedGraphResourceReservation<'_> {
+                 bucket,
+                 physical,
+                 full,
++                append,
+             )
+         }
+         #[cfg(not(feature = "cuda"))]
+         {
+-            let _ = (devices, weights, plans, staging, bucket, physical, full);
++            let _ = (
++                devices, weights, plans, staging, bucket, physical, full, append,
++            );
+             Err(crate::CudaError::unavailable(
+                 "record multi-sequence decode",
+             ))
+         }
+     }
+ }
++
++impl BorrowedGraphResourceReservation<'_> {
++    /// Replays a pre-recorded entry: 0 original, 1 appended N2, 2 appended N4.
++    pub fn replay_catalog(&mut self, index: u32, source: &[u8]) -> CudaResult<()> {
++        #[cfg(feature = "cuda")]
++        {
++            self.native.replay_catalog(index, source)
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = (index, source);
++            Err(crate::CudaError::unavailable("replay graph catalog"))
++        }
++    }
++    /// Reads only the entry selected by the most recent successful replay.
++    pub fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
++        #[cfg(feature = "cuda")]
++        {
++            self.native.read_catalog(index, output)
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = (index, output);
++            Err(crate::CudaError::unavailable("read graph catalog"))
++        }
++    }
++}
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multisequence_model_gpu.rs b/crates/riley-runtime/src/llama/graph_decode_multisequence_model_gpu.rs
+index 7a39e04..2b59a21 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_multisequence_model_gpu.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_multisequence_model_gpu.rs
+@@ -171,6 +171,17 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
+             scratch.push(context.allocate_device_buffer(size)?);
+         }
+         let mut staging = context.allocate_pinned_host_buffer((2 * result) as u64)?;
++        let mut extra_scratch = Vec::new();
++        if bucket == 4 {
++            for size in [
++                2304, 2304, 3840, 2304, 2304, 2304, 4608, 12288, 6144, 2304, 196608, 1280, 197248,
++                16,
++            ] {
++                extra_scratch.push(context.allocate_device_buffer(size)?);
++            }
++        }
++        let mut extra_staging = context.allocate_pinned_host_buffer(394496)?;
++
+         let mut plans = Vec::new();
+         for (n, k) in [
+             (960, 576),
+@@ -183,6 +194,19 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
+                 context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, bucket, false)?)?,
+             );
+         }
++        if bucket == 4 {
++            for (n, k) in [
++                (960, 576),
++                (3072, 576),
++                (576, 576),
++                (576, 1536),
++                (49152, 576),
++            ] {
++                plans.push(
++                    context.prepare_strided_gemm(CudaStridedGemmConfig::new(n, k, 2, false)?)?,
++                );
++            }
++        }
+         let owner = &mut parents.executor.owner;
+         let f = &mut owner.forward;
+         let mut weights = vec![
+@@ -226,11 +250,13 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
+             &mut owner.absolute_rope_cos,
+             &mut owner.absolute_rope_sin,
+         ]);
++        let extra_start = devices.len();
++        devices.extend(extra_scratch.iter_mut());
+         let mut graph = riley_cuda::BorrowedGraphResourceReservation::reserve_with_strided(
+             riley_cuda::BorrowedGraphResourceParents {
+                 stream: &mut parents.stream,
+                 devices,
+-                pinned: vec![&mut staging],
++                pinned: vec![&mut staging, &mut extra_staging],
+                 plans: vec![],
+             },
+             plans.iter_mut().collect(),
+@@ -244,22 +270,62 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
+             40,
+             true,
+         )?;
++        if bucket == 4 {
++            let indices = std::array::from_fn(|i| if i < 14 { extra_start + i } else { start + i });
++            graph.append_multisequence_decode(
++                &indices,
++                &weights,
++                &[5, 6, 7, 8, 9],
++                1,
++                2,
++                40,
++                true,
++            )?;
++            assert!(
++                graph
++                    .append_multisequence_decode(
++                        &indices,
++                        &weights,
++                        &[5, 6, 7, 8, 9],
++                        1,
++                        2,
++                        40,
++                        true
++                    )
++                    .is_err()
++            );
++        }
+         let mut first_failure = None;
+         'steps: for step in 0..31 {
+-            let active = if bucket == 4 && step % 3 == 1 {
+-                3
++            let active = if bucket == 4 {
++                [4, 3, 2, 4][step as usize % 4]
++            } else {
++                2
++            };
++            let selected_bucket = if active <= 2 { 2 } else { 4 };
++            let index = if bucket == 4 && selected_bucket == 2 {
++                1
+             } else {
+-                bucket
++                0
+             };
+-            let p = packet(bucket, active, &positions, &tokens, step + 1);
++            let selected_result = 640 + selected_bucket as usize * 98304;
++            let p = packet(selected_bucket, active, &positions, &tokens, step + 1);
+             let mut expected = Vec::new();
+             for r in 0..active as usize {
+                 expected.push(run(&mut oracle, r, &[tokens[r]], positions[r] + 1)?);
+                 tokens[r] = oracle.greedy_token()?;
+             }
+-            graph.replay_transfer(&p)?;
+-            let mut actual = vec![0; result];
+-            graph.read_transfer(&mut actual)?;
++            graph.replay_catalog(index, &p)?;
++            let mut actual = vec![0; selected_result];
++            assert!(
++                graph
++                    .read_catalog(if index == 0 { 1 } else { 0 }, &mut actual)
++                    .is_err()
++            );
++            if index != 0 {
++                assert!(graph.read_transfer(&mut actual).is_err());
++            }
++            graph.read_catalog(index, &mut actual)?;
+             for r in 0..active as usize {
+                 let logits = &actual[640 + r * 98304..640 + (r + 1) * 98304];
+                 let mismatches = logits
+@@ -346,7 +412,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
+     assert!(context.allocation_stats()?.is_zero());
+     context.close()?;
+     println!(
+-        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=2,4 replays=62 rows={total_rows} zero_allocations=true"
++        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=2,4 catalog_switches=true replays=62 rows={total_rows} zero_allocations=true"
+     );
+     Ok(())
+ }
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index d0123dd..6e4d4c7 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2577,6 +2577,17 @@ RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
+     RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical_blocks,
+     uint32_t full_logits, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+ 
++// Add a cold bucket under the same ledger. Catalog index0 is the original DAG,
++// index1 is appended N2 and index2 appended N4; each has fixed output mode.
++RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, uint64_t,
++    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaGemmPlan* const*, uint64_t,
++    RileyCudaPinnedHostBuffer*, uint32_t, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
++    RileyCudaGraphResources*, uint32_t, const uint8_t*, uint64_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_read_catalog(
++    RileyCudaGraphResources*, uint32_t, uint8_t*, uint64_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++
+ RileyCudaStatus riley_cuda_graph_resources_reserve(
+     RileyCudaStream* stream,
+     RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
+diff --git a/kernels/src/graph_multisequence_catalog.inc b/kernels/src/graph_multisequence_catalog.inc
+new file mode 100644
+index 0000000..cb96c8f
+--- /dev/null
++++ b/kernels/src/graph_multisequence_catalog.inc
+@@ -0,0 +1,77 @@
++namespace {
++// These fields describe the selected DAG, never ownership of its parent leases.
++// Lifecycle state (terminal/completion_unknown/scoped_capture) is deliberately
++// not restored: an ambiguous failure remains terminal across every entry.
++struct SavedGraphBinding {
++  cudaGraph_t graph,prefill_graph;
++  cudaGraphExec_t exec,prefill_exec;
++  RileyCudaPinnedHostBuffer *input,*output;
++  uint64_t transfer,offset,rope_positions,rope_offset,kv_logical,kv_valid,capacity,physical,vocab;
++  uint32_t attention_physical,multi_bucket,multi_physical,multi_full;
++  bool kv_bound,attention_bound,vllm,prefill128;
++  explicit SavedGraphBinding(RileyCudaGraphResources* r):
++    graph(r->graph),prefill_graph(r->prefill_graph),exec(r->exec),prefill_exec(r->prefill_exec),
++    input(r->input),output(r->output),transfer(r->transfer_bytes),offset(r->output_byte_offset),
++    rope_positions(r->rope_table_positions),rope_offset(r->rope_payload_position_offset),
++    kv_logical(r->kv_logical_block),kv_valid(r->kv_valid_tokens),capacity(r->decode_capacity),
++    physical(r->decode_physical),vocab(r->decode_vocab),attention_physical(r->attention_physical_block),
++    multi_bucket(r->multi_bucket),multi_physical(r->multi_physical),multi_full(r->multi_full),
++    kv_bound(r->kv_write_bound),attention_bound(r->bound_attention),vllm(r->vllm_smol_p128),prefill128(r->prefill128){}
++  void restore(RileyCudaGraphResources* r)const noexcept{
++    r->graph=graph;r->exec=exec;r->prefill_graph=prefill_graph;r->prefill_exec=prefill_exec;
++    r->input=input;r->output=output;r->transfer_bytes=transfer;r->output_byte_offset=offset;
++    r->rope_table_positions=rope_positions;r->rope_payload_position_offset=rope_offset;
++    r->kv_logical_block=kv_logical;r->kv_valid_tokens=kv_valid;r->decode_capacity=capacity;
++    r->decode_physical=physical;r->decode_vocab=vocab;r->attention_physical_block=attention_physical;
++    r->multi_bucket=multi_bucket;r->multi_physical=multi_physical;r->multi_full=multi_full;
++    r->kv_write_bound=kv_bound;r->bound_attention=attention_bound;r->vllm_smol_p128=vllm;r->prefill128=prefill128;
++  }
++};
++void select_catalog_binding(RileyCudaGraphResources* r,const RileyCudaGraphResources::CatalogEntry& e)noexcept{
++  r->graph=e.graph;r->exec=e.exec;r->prefill_graph=nullptr;r->prefill_exec=nullptr;
++  r->input=e.staging;r->output=e.staging;r->transfer_bytes=e.transfer;r->output_byte_offset=e.transfer;
++  r->rope_table_positions=0;r->rope_payload_position_offset=0;r->kv_logical_block=0;r->kv_valid_tokens=0;
++  r->decode_capacity=0;r->decode_physical=0;r->decode_vocab=0;r->attention_physical_block=0;
++  r->multi_bucket=e.bucket;r->multi_physical=e.physical;r->multi_full=e.full;
++  r->kv_write_bound=false;r->bound_attention=false;r->vllm_smol_p128=false;r->prefill128=false;
++}
++}
++extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
++    RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t device_count,
++    RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,uint64_t plan_count,
++    RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,RileyCudaErrorInfo* error)noexcept{
++  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  // Cold-only: never invalidate an already published completion to grow a catalog.
++  if((bucket!=2&&bucket!=4)||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
++    return reject(error,"catalog append requires a distinct cold decode bucket",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  auto& entry=r->catalog[bucket==2?0:1];
++  if(entry.graph||entry.exec)return reject(error,"catalog entry already recorded",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  SavedGraphBinding saved(r);select_catalog_binding(r,{});
++  status=riley_cuda_graph_resources_record_multisequence_decode(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,error);
++  // Retain even a partially constructed graph for aggregate close. Restoring
++  // the main binding must never discard native ownership after capture failure.
++  entry={r->graph,r->exec,r->input,r->transfer_bytes,r->multi_bucket,r->multi_physical,r->multi_full};
++  saved.restore(r);
++  return status;
++}
++extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
++    RileyCudaGraphResources* r,uint32_t index,const uint8_t* source,uint64_t bytes,RileyCudaErrorInfo* error)noexcept{
++  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  r->completion_visible=false;
++  if(index==0)return riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
++  if(index>2||!r->catalog[index-1].exec)return reject(error,"catalog entry absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);
++  status=riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
++  saved.restore(r);r->last_catalog=index;
++  return status;
++}
++extern "C" RileyCudaStatus riley_cuda_graph_resources_read_catalog(
++    RileyCudaGraphResources* r,uint32_t index,uint8_t* output,uint64_t bytes,RileyCudaErrorInfo* error)noexcept{
++  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
++  if(index!=r->last_catalog||index>2||!r->completion_visible)return reject(error,"catalog completion is stale",RILEY_CUDA_STATUS_INVALID_STATE);
++  if(index==0)return riley_cuda_graph_resources_read_transfer(r,output,bytes,error);
++  SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);r->last_catalog=0;
++  status=riley_cuda_graph_resources_read_transfer(r,output,bytes,error);
++  saved.restore(r);r->last_catalog=index;
++  return status;
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 53e8f9f..e2c302b 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -9,6 +9,17 @@
+ // The ledger remains the single authority for all retained parents. The
+ // optional transfer graph is a lifecycle probe, not a model decode graph.
+ struct RileyCudaGraphResources {
++  // Cold additional decode entries share the parent's single resource ledger.
++  struct CatalogEntry {
++    cudaGraph_t graph=nullptr;
++    cudaGraphExec_t exec=nullptr;
++    RileyCudaPinnedHostBuffer* staging=nullptr;
++    uint64_t transfer=0;
++    uint32_t bucket=0,physical=0,full=0;
++  };
++  CatalogEntry catalog[2]{};
++  uint32_t last_catalog=0;
++  bool catalog_sealed=false;
+   enum class Kind { Counter, Plan };
+   struct Entry {
+     Kind kind;
+@@ -184,7 +195,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
+   if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
+-      (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr) {
++      (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
++      (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
++      (*resources)->catalog[1].graph || (*resources)->catalog[1].exec) {
+     CaptureDomainControlLease admission((*resources)->owner->capture_domain);
+     if (!admission.active())
+       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+@@ -216,6 +229,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
+       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
+       else (*resources)->completion_unknown = true;
+     }
++    for(auto& entry:(*resources)->catalog){
++      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.exec){
++        status=runtime_error(cudaGraphExecDestroy(entry.exec),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
++        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.exec=nullptr;else (*resources)->completion_unknown=true;
++      }
++      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.graph){
++        status=runtime_error(cudaGraphDestroy(entry.graph),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
++        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.graph=nullptr;else (*resources)->completion_unknown=true;
++      }
++    }
+     status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+     if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+   }
+@@ -305,6 +328,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+   // Any attempted replay invalidates the previous result, even preflight errors.
+   r->completion_visible = false;
++  r->last_catalog = 0;
+   if (r->exec == nullptr || source == nullptr || bytes != r->transfer_bytes)
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
+@@ -361,6 +385,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kTransfer);
+   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+   r->terminal = true;
++  r->catalog_sealed=true;
+   std::memmove(r->input->host_data, source, static_cast<size_t>(bytes));
+   if (r->bound_attention) {
+     auto* host = static_cast<uint8_t*>(r->input->host_data) + r->rope_payload_position_offset;
+@@ -398,7 +423,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(
+   clear_error(error);
+   auto status = transfer_ready(r, error);
+   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+-  if (!r->completion_visible || destination == nullptr || bytes != r->transfer_bytes)
++  if (r->last_catalog != 0 || !r->completion_visible || destination == nullptr || bytes != r->transfer_bytes)
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "no completed output of the requested size");
+   std::memmove(destination, static_cast<uint8_t*>(r->output->host_data) + r->output_byte_offset, static_cast<size_t>(bytes));
+@@ -1087,3 +1112,5 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_test_replay_fault(
+ #endif
+ 
+ #include "graph_multisequence_record.inc"
++
++#include "graph_multisequence_catalog.inc"

@@ -1,0 +1,140 @@
+{
+  "schema_version": "riley.batch4-gpu-correctness.v1",
+  "passed": true,
+  "source_commit": "53677519082135c42a5d044044c5b31cad4a146a",
+  "source_clean": true,
+  "binaries": {
+    "/tmp/riley-opt-260912/batch4-target/release/riley": "8f47897a1c2651d89d88986ab5c9dbf9a8e08fe20796244bd127e3562b1301c6",
+    "/tmp/riley-opt-260912/batch4-target/release/riley-profile": "71a090ee84f7da736e0dd074d0de783ec19dc1024610b577826edb09674e497e"
+  },
+  "build_sha256": "e33eca0efd3670c2cac7d935245599bc65099c402021f9a5c78eea0c76ef307b",
+  "checks": [
+    {
+      "name": "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch4-batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation.log",
+      "sha256": "1376d2d6c1b8e9285a5ff88d34100bf65ce735a5525c0e942c7cceb7042217a8",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "batched_prefill_exact_logits_status_and_every_decode_kv",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch4-batched_prefill_exact_logits_status_and_every_decode_kv.log",
+      "sha256": "bcdac0db28f92c33dd6511e09c4d3de9a7731fdffa43aa76e9fdde464f93e7c9",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_exact_logits_status_and_every_decode_kv",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch4-owned_graph_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "31729f9de777a647cd9e88f0b10ca17bafa2be3edd900314f73ea2024890c057",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch4-owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "db1801d7842d408ed75b1d134587150133bcd71efa35d713c67eef0b3b32b0f7",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    }
+  ],
+  "profile_unit_tests": {
+    "name": "profile-unit-tests",
+    "passed": true,
+    "path": "/tmp/riley-opt-260912/batch4-profile-unit-tests.log",
+    "sha256": "b3d791f7e614f5ca30ac5024af6a11c6d979de6057b00b2a1afc55aa62662c9d",
+    "argv": [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--bin",
+      "riley-profile",
+      "--",
+      "--test-threads=1"
+    ],
+    "passed_tests": 10,
+    "failed_tests": 0,
+    "ignored_tests": 0
+  },
+  "reference_binding_sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b",
+  "gpu_tests_executed": true,
+  "vllm_reference_tokens_exact": true,
+  "full_logits_and_kv_exact": true,
+  "runner_sha256": "49bc9a9db8a174e056497da6982c8679cab2b02bcce51df8eaf1f7d97dc06b49",
+  "http_helper_sha256": "09bda904b05b7a76ebc49657e11def4f211decc6475fc547bbb4c2f3d4a2b57e",
+  "desktop_session_policy": "left untouched; no performance qualification",
+  "performance_claim_eligible": false,
+  "performance_measured": false
+}

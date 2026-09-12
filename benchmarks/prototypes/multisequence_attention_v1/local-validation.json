@@ -1,0 +1,233 @@
+{
+  "schema_version": "riley.multisequence-attention-local-validation.v1",
+  "completed": true,
+  "created_utc": "2026-09-12T03:06:27.728999+00:00",
+  "scope": "local CPU prototype preparation only",
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 13,
+      "sha256": "32dae3052f331ee34d628ef535709b301259a45df7c7522c4d35dcf49873f00b"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11717,
+      "sha256": "bbe622b1dbbe510059f4e2fa632fb875b74e39391fa81ceadd452e74537d2031"
+    },
+    {
+      "path": "candidate_preview.cu",
+      "bytes": 5621,
+      "sha256": "c6ee086306a56e52f0a5b041642f8fc5c3565e9f2080160570da400719ea07a9"
+    },
+    {
+      "path": "lineage/accepted_batch7_graph_numerics.cu",
+      "bytes": 13564,
+      "sha256": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e"
+    },
+    {
+      "path": "native.cu",
+      "bytes": 27747,
+      "sha256": "11eff6609013fdb114439ad00c575d92b74ad705d23f4265a7ba3b41a5303703"
+    },
+    {
+      "path": "probe.py",
+      "bytes": 27501,
+      "sha256": "fd6e20e76c8ea27c419b18fcc4c9d7abecfe6a5fb5e8a2a776f7c458b7c3e007"
+    },
+    {
+      "path": "test_probe.py",
+      "bytes": 14195,
+      "sha256": "622778e7a19520b624dfae1a0f0f68bc5fd05d741596a26a582bd1cd3491764b"
+    }
+  ],
+  "files_manifest_sha256": "79de23cca183bc3f1b7a589885f31db8021b3ec3d12f350ce6303ef72ca2f3d7",
+  "tests": {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "benchmarks/prototypes/multisequence_attention_v1",
+      "-p",
+      "test_*.py",
+      "-v"
+    ],
+    "exit_code": 0,
+    "tests_run": 13,
+    "duration_seconds": 7.04,
+    "result": "OK"
+  },
+  "source_lineage": {
+    "accepted_batch": 7,
+    "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+    "build_sha256": "4d3f65c70aa56beb487754f01ed04e04d36f4c6db64fd3ee17b665561fb25395",
+    "full_attention_tu_sha256": "a1bb90862e9eb6bb378ac36843c1d94b05b59f078d4a1f4b9de8c2018a1f666e",
+    "accepted_kernel_sha256": "498ade32596bf5ccf258bdb373926c7091625ef9f36a01810dac258a6a29d6d4",
+    "helper_bytes_sha256": "f6d2a01485b3de8cf8d578bb02ad6b656d2a6e5db5d777295c02e0fd3be19658",
+    "arithmetic_body_preserved_by_reverse_transform": true,
+    "changes": [
+      "namespace isolation",
+      "grid.z row selection and exact Q/output stride576 BF16",
+      "fresh active count from common packet header byte24; fixed cold bucket grid",
+      "C10 metadata pointer at packet byte128+128*row",
+      "uniform inactive positive-zero output before row reads/barriers"
+    ]
+  },
+  "fixture_counts": {
+    "cases": 34560,
+    "layers": 30,
+    "position_tuples": 32,
+    "patterns": 3,
+    "mappings": 3,
+    "modes": 4
+  },
+  "fixture_recipe": {
+    "synthetic_only_no_checkpoint_activations": true,
+    "q_output_bytes_per_row": 1152,
+    "metadata_bytes": 1280,
+    "row_offset": 128,
+    "row_stride": 128,
+    "c10_bytes": 80,
+    "block_ids_offset": 16,
+    "valid_counts_offset": 56,
+    "shared_physical_blocks": 64,
+    "shared_kv_bytes_each": 393216,
+    "guard_bytes_each_side": 256,
+    "modes": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        4
+      ]
+    ],
+    "positions": "128+((tuple+11*row)%32)",
+    "position159": "numerical-only; not admitted by public P128/O1..32 descriptor codec",
+    "fixture_authority": "host-owned synthetic rows and disjoint physical ledger; no live scheduler/KV integration",
+    "inactive_device_poison": "canonical packet validated first, then inactive metadata set to ff and inactive Q to BF16 NaN; not production admission",
+    "arithmetic_allocation_count": 432000,
+    "graph_transition_allocation_count": 17,
+    "allocation_count": 432017,
+    "active_count_binding": "fresh common device header packet[6], byte24; no captured active scalar",
+    "retained_graph": {
+      "transitions": [
+        {
+          "step": 0,
+          "layer": 0,
+          "position_tuple": 0,
+          "pattern": "bounded_fingerprint",
+          "mapping": "identity64",
+          "bucket": 4,
+          "active_rows": 3,
+          "positions": [
+            128,
+            139,
+            150
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 1
+        },
+        {
+          "step": 1,
+          "layer": 15,
+          "position_tuple": 17,
+          "pattern": "signed_zero_impulses",
+          "mapping": "affine7_3_mod64",
+          "bucket": 4,
+          "active_rows": 4,
+          "positions": [
+            145,
+            156,
+            135,
+            146
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 2
+        },
+        {
+          "step": 2,
+          "layer": 29,
+          "position_tuple": 5,
+          "pattern": "tail_cancellation",
+          "mapping": "reverse64",
+          "bucket": 4,
+          "active_rows": 3,
+          "positions": [
+            133,
+            144,
+            155
+          ],
+          "graph_nodes": 1,
+          "capture_count": 1,
+          "parameter_updates": 0,
+          "replay_index": 3
+        }
+      ],
+      "fixture_coordinates": [
+        [
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        [
+          15,
+          17,
+          1,
+          3,
+          2
+        ],
+        [
+          29,
+          5,
+          2,
+          2,
+          1
+        ]
+      ],
+      "capture_count": 1,
+      "kernel_nodes": 1,
+      "parameter_updates": 0,
+      "refresh": "same fixed parent allocations; fresh H2D outside capture; no owner integration"
+    },
+    "oracle": "independent aligned Q/C10/output for each active row; same immutable shared KV pool",
+    "candidate_launches_per_case": 1,
+    "candidate_grid": "9 x 2 x bucket, 64 threads per CTA"
+  },
+  "additional_static_checks": [
+    "exactly one capture and instantiate call",
+    "one replay call inside three-step loop",
+    "no allocation or parent replacement inside replay loop",
+    "graph/exec close precedes parent close"
+  ],
+  "native_compilation_executed": false,
+  "gpu_executed": false,
+  "retained_graph_gpu_freshness_verified": false,
+  "remote_access_or_copy_performed": false,
+  "production_files_modified": false,
+  "production_integration": false,
+  "performance_claim": false,
+  "pending": [
+    "actual production-flag CUDA compilation",
+    "34,560 exact BF16 arithmetic cases",
+    "three retained-graph A3/A4/A3 GPU replays",
+    "projection admission",
+    "full owner/model/KV and serving qualification"
+  ]
+}

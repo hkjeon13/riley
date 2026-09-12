@@ -1,0 +1,30 @@
+{
+  "schema_version": "riley.mixed-p128-phase.v1",
+  "phase": "warmup",
+  "requested": 12,
+  "attempted": 12,
+  "unresolved_attempts": 0,
+  "not_started": 0,
+  "succeeded": 12,
+  "failed": 0,
+  "phase_started_ns": 876357119253776,
+  "phase_finished_ns": 876359615202765,
+  "completed": true,
+  "expected_corpus_counts": {
+    "natural-16": 4,
+    "natural-128": 4,
+    "natural-398": 4
+  },
+  "actual_corpus_counts": {
+    "natural-16": 4,
+    "natural-128": 4,
+    "natural-398": 4
+  },
+  "observed_max_request_in_flight": 1,
+  "reference_matches": 12,
+  "strict_reference_pass": true,
+  "worker_errors": [],
+  "performance_qualified": false,
+  "correctness_qualified": false,
+  "failure_policy": "stop refill on transport/protocol failure; retain numerical observations; no retry"
+}

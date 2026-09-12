@@ -1,0 +1,46 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/http-token-source/crates/riley-cuda)
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/http-token-source/crates/riley-core)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+error: failed to run custom build command for `riley-cuda v0.1.0 (/tmp/riley-opt-260912/http-token-source/crates/riley-cuda)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/riley-opt-260912/http-token-target/release/build/riley-cuda-9eadd31f0372f4a4/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES
+  cargo:rustc-env=RILEY_CUDA_COMPILED_ARCHITECTURES=89
+  cargo:rerun-if-env-changed=CUDAToolkit_ROOT
+  cargo:rerun-if-env-changed=CUDA_HOME
+  cargo:rerun-if-env-changed=CUDA_PATH
+  cargo:rerun-if-env-changed=NVCC
+  cargo:rerun-if-env-changed=CUDACXX
+  cargo:rerun-if-env-changed=CMAKE
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/CMakeLists.txt
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/include/riley_cuda.h
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/ffi_internal.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/attention_online.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/attention_online.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/attention_cublaslt.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/attention_reference.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/batch_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/decode_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/fixed37_gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/fixed37_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/fixed37_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/fixed37_reduction.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/graph.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/graph_resources.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/host_runtime.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/memory.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/smoke_fill.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/src/version.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels/tests/abi_layout.c
+  cargo:warning=riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+  cargo:warning=riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+
+  --- stderr
+  CMake Error: The current CMakeCache.txt directory /tmp/riley-opt-260912/http-token-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeCache.txt is different than the directory /tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+  CMake Error: The source "/tmp/riley-opt-260912/http-token-source/kernels/CMakeLists.txt" does not match the source "/tmp/riley-opt-260912/batch7-source/kernels/CMakeLists.txt" used to generate cache.  Re-run cmake with a different source directory.
+  error: riley-cuda native build failed: could not configure the native CUDA library: "/data/cmake-3.31.12/bin/cmake" "-S" "/tmp/riley-opt-260912/http-token-source/crates/riley-cuda/../../kernels" "-B" "/tmp/riley-opt-260912/http-token-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build" "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_INSTALL_PREFIX=/tmp/riley-opt-260912/http-token-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-install" "-DCMAKE_CUDA_ARCHITECTURES=89" "-DCUDAToolkit_ROOT=/data/riley-g04-cuda13" "-DCMAKE_CUDA_COMPILER=/data/riley-g04-cuda13/bin/nvcc" "-DRILEY_CUDA_ENABLE_TEST_FAULT_INJECTION=OFF" "-DRILEY_CUDA_ENABLE_NVML_PROBE=OFF" exited with exit status: 1

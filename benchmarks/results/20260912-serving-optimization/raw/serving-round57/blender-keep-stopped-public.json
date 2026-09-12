@@ -1,0 +1,26 @@
+{
+  "user_requested_keep_stopped": true,
+  "processes": [
+    {
+      "pid": 2778255,
+      "start": "88743410",
+      "port": 9876
+    },
+    {
+      "pid": 2778413,
+      "start": "88743463",
+      "port": 9911
+    },
+    {
+      "pid": 2778536,
+      "start": "88743519",
+      "port": 9887
+    }
+  ],
+  "running": false,
+  "ports_closed": true,
+  "restoration_scheduled": false,
+  "watchdogs": [],
+  "note": "Round45 restored before instruction took effect. Exact restored successors then received SIGTERM. Initial immediate port check raced socket teardown; fresh process/port verification passed.",
+  "verified_at": "2026-09-12T23:05:37.190156+00:00"
+}

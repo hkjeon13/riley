@@ -1,0 +1,485 @@
+{
+  "scope": "Attention component only; variants0 rectangular,1/2/3 persistent64/128/256,4 direct mapped; capacity512 if total<=512 otherwise1024; four reversed pairs,10 warmups,100 graph replays.",
+  "cases": [
+    {
+      "pattern": 0,
+      "owners": 1,
+      "tokens": 128,
+      "tiles": 16,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 13.435679499999999,
+        "1": 13.935520499999999,
+        "2": 14.00336,
+        "3": 14.489281,
+        "4": 15.0271995
+      },
+      "mapped_change_vs_rectangular_pct": 11.845474581319104,
+      "mapped_change_vs_compact128_pct": 7.311384553421463
+    },
+    {
+      "pattern": 0,
+      "owners": 4,
+      "tokens": 131,
+      "tiles": 19,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 26.393600499999998,
+        "1": 28.388319,
+        "2": 28.395519,
+        "3": 28.4006395,
+        "4": 27.4835195
+      },
+      "mapped_change_vs_rectangular_pct": 4.129482068958357,
+      "mapped_change_vs_compact128_pct": -3.211772603980223
+    },
+    {
+      "pattern": 0,
+      "owners": 8,
+      "tokens": 135,
+      "tiles": 23,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 28.84624,
+        "1": 28.8168,
+        "2": 28.887681,
+        "3": 29.336159000000002,
+        "4": 28.058397999999997
+      },
+      "mapped_change_vs_rectangular_pct": -2.7311774428833924,
+      "mapped_change_vs_compact128_pct": -2.870715029011861
+    },
+    {
+      "pattern": 0,
+      "owners": 16,
+      "tokens": 143,
+      "tiles": 31,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 33.42848,
+        "1": 29.4088,
+        "2": 29.822081,
+        "3": 30.822400000000002,
+        "4": 28.53088
+      },
+      "mapped_change_vs_rectangular_pct": -14.650980241997246,
+      "mapped_change_vs_compact128_pct": -4.329681084294556
+    },
+    {
+      "pattern": 0,
+      "owners": 32,
+      "tokens": 159,
+      "tiles": 47,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 41.661438000000004,
+        "1": 31.9078395,
+        "2": 32.5017605,
+        "3": 33.1827205,
+        "4": 29.854720999999998
+      },
+      "mapped_change_vs_rectangular_pct": -28.339677089398606,
+      "mapped_change_vs_compact128_pct": -8.144295752840847
+    },
+    {
+      "pattern": 1,
+      "owners": 1,
+      "tokens": 128,
+      "tiles": 16,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 13.465599999999998,
+        "1": 13.9631995,
+        "2": 14.0072005,
+        "3": 14.48416,
+        "4": 15.022079
+      },
+      "mapped_change_vs_rectangular_pct": 11.558927934885933,
+      "mapped_change_vs_compact128_pct": 7.245405675459571
+    },
+    {
+      "pattern": 1,
+      "owners": 4,
+      "tokens": 512,
+      "tiles": 64,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 59.6884805,
+        "1": 59.110401499999995,
+        "2": 59.0531215,
+        "3": 59.284000500000005,
+        "4": 57.9379195
+      },
+      "mapped_change_vs_rectangular_pct": -2.932828889822381,
+      "mapped_change_vs_compact128_pct": -1.8884725678726455
+    },
+    {
+      "pattern": 1,
+      "owners": 8,
+      "tokens": 516,
+      "tiles": 68,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 61.44928,
+        "1": 60.124159000000006,
+        "2": 60.3852785,
+        "3": 61.131521000000006,
+        "4": 61.710081
+      },
+      "mapped_change_vs_rectangular_pct": 0.42441668966666235,
+      "mapped_change_vs_compact128_pct": 2.1939163533045702
+    },
+    {
+      "pattern": 1,
+      "owners": 16,
+      "tokens": 524,
+      "tiles": 76,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 62.689918500000005,
+        "1": 65.68383800000001,
+        "2": 63.503361,
+        "3": 65.7510415,
+        "4": 65.7151985
+      },
+      "mapped_change_vs_rectangular_pct": 4.825783909736603,
+      "mapped_change_vs_compact128_pct": 3.483024307957505
+    },
+    {
+      "pattern": 1,
+      "owners": 32,
+      "tokens": 540,
+      "tiles": 92,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 78.1721615,
+        "1": 71.49055849999999,
+        "2": 71.23968099999999,
+        "3": 71.79776,
+        "4": 70.90176
+      },
+      "mapped_change_vs_rectangular_pct": -9.300499513500093,
+      "mapped_change_vs_compact128_pct": -0.4743437860144195
+    },
+    {
+      "pattern": 2,
+      "owners": 1,
+      "tokens": 1,
+      "tiles": 1,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 2.92528,
+        "1": 3.10976,
+        "2": 3.40096,
+        "3": 3.7888,
+        "4": 4.62336
+      },
+      "mapped_change_vs_rectangular_pct": 58.04846031832851,
+      "mapped_change_vs_compact128_pct": 35.94279262325932
+    },
+    {
+      "pattern": 2,
+      "owners": 4,
+      "tokens": 4,
+      "tiles": 4,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 25.845758500000002,
+        "1": 28.252161,
+        "2": 28.129601,
+        "3": 28.2094405,
+        "4": 27.2384005
+      },
+      "mapped_change_vs_rectangular_pct": 5.388280634131903,
+      "mapped_change_vs_compact128_pct": -3.168194600413987
+    },
+    {
+      "pattern": 2,
+      "owners": 8,
+      "tokens": 8,
+      "tiles": 8,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 27.769760499999997,
+        "1": 28.799999999999997,
+        "2": 28.573279499999998,
+        "3": 28.957440499999997,
+        "4": 27.5593605
+      },
+      "mapped_change_vs_rectangular_pct": -0.757658676962647,
+      "mapped_change_vs_compact128_pct": -3.548486620165525
+    },
+    {
+      "pattern": 2,
+      "owners": 16,
+      "tokens": 16,
+      "tiles": 16,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 31.558880000000002,
+        "1": 29.7732805,
+        "2": 29.864962,
+        "3": 30.2899185,
+        "4": 27.9961615
+      },
+      "mapped_change_vs_rectangular_pct": -11.28911577343683,
+      "mapped_change_vs_compact128_pct": -6.257501683745648
+    },
+    {
+      "pattern": 2,
+      "owners": 32,
+      "tokens": 32,
+      "tiles": 32,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 39.706717999999995,
+        "1": 32.704481,
+        "2": 32.059520500000005,
+        "3": 33.0444795,
+        "4": 28.912640500000002
+      },
+      "mapped_change_vs_rectangular_pct": -27.18451195084921,
+      "mapped_change_vs_compact128_pct": -9.815742565457274
+    },
+    {
+      "pattern": 3,
+      "owners": 1,
+      "tokens": 1,
+      "tiles": 1,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 2.92352,
+        "1": 3.09632,
+        "2": 3.39968,
+        "3": 3.7632000000000003,
+        "4": 4.632960000000001
+      },
+      "mapped_change_vs_rectangular_pct": 58.47197898423821,
+      "mapped_change_vs_compact128_pct": 36.276355421686766
+    },
+    {
+      "pattern": 3,
+      "owners": 4,
+      "tokens": 72,
+      "tiles": 44,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 44.426079,
+        "1": 44.5132805,
+        "2": 44.86656,
+        "3": 45.259039,
+        "4": 44.8803215
+      },
+      "mapped_change_vs_rectangular_pct": 1.0224681318376172,
+      "mapped_change_vs_compact128_pct": 0.030672064004910737
+    },
+    {
+      "pattern": 3,
+      "owners": 8,
+      "tokens": 144,
+      "tiles": 88,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 63.81056,
+        "1": 73.1135975,
+        "2": 65.489918,
+        "3": 65.34671800000001,
+        "4": 62.7353595
+      },
+      "mapped_change_vs_rectangular_pct": -1.6849883467563997,
+      "mapped_change_vs_compact128_pct": -4.206080239709575
+    },
+    {
+      "pattern": 3,
+      "owners": 16,
+      "tokens": 288,
+      "tiles": 176,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 95.4248005,
+        "1": 142.679039,
+        "2": 128.5500795,
+        "3": 101.0392,
+        "4": 93.8086435
+      },
+      "mapped_change_vs_rectangular_pct": -1.693644620194934,
+      "mapped_change_vs_compact128_pct": -27.025604445464392
+    },
+    {
+      "pattern": 3,
+      "owners": 32,
+      "tokens": 576,
+      "tiles": 352,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 169.1801685,
+        "1": 264.63232400000004,
+        "2": 215.153275,
+        "3": 183.50192249999998,
+        "4": 158.064636
+      },
+      "mapped_change_vs_rectangular_pct": -6.570233732803022,
+      "mapped_change_vs_compact128_pct": -26.53393911851911
+    },
+    {
+      "pattern": 4,
+      "owners": 1,
+      "tokens": 398,
+      "tiles": 50,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 42.455042000000006,
+        "1": 43.328798500000005,
+        "2": 44.446722,
+        "3": 44.7008,
+        "4": 44.5656015
+      },
+      "mapped_change_vs_rectangular_pct": 4.971281149598195,
+      "mapped_change_vs_compact128_pct": 0.2674651687474272
+    },
+    {
+      "pattern": 4,
+      "owners": 4,
+      "tokens": 401,
+      "tiles": 53,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 43.1660785,
+        "1": 44.1190395,
+        "2": 44.1361615,
+        "3": 45.771520499999994,
+        "4": 45.7267205
+      },
+      "mapped_change_vs_rectangular_pct": 5.93207001650613,
+      "mapped_change_vs_compact128_pct": 3.603754712561491
+    },
+    {
+      "pattern": 4,
+      "owners": 8,
+      "tokens": 405,
+      "tiles": 57,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 43.0529595,
+        "1": 44.506239,
+        "2": 43.873283,
+        "3": 44.8952005,
+        "4": 45.3683185
+      },
+      "mapped_change_vs_rectangular_pct": 5.37793226502814,
+      "mapped_change_vs_compact128_pct": 3.407621672624783
+    },
+    {
+      "pattern": 4,
+      "owners": 16,
+      "tokens": 413,
+      "tiles": 65,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 46.4895995,
+        "1": 48.803838999999996,
+        "2": 48.4750405,
+        "3": 48.8908785,
+        "4": 48.010239
+      },
+      "mapped_change_vs_rectangular_pct": 3.270924069801895,
+      "mapped_change_vs_compact128_pct": -0.9588470586218478
+    },
+    {
+      "pattern": 4,
+      "owners": 32,
+      "tokens": 429,
+      "tiles": 81,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 57.27808,
+        "1": 52.07424,
+        "2": 53.9833605,
+        "3": 53.82576,
+        "4": 52.7616005
+      },
+      "mapped_change_vs_rectangular_pct": -7.885179635909589,
+      "mapped_change_vs_compact128_pct": -2.2632159033523003
+    },
+    {
+      "pattern": 5,
+      "owners": 1,
+      "tokens": 31,
+      "tiles": 31,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 10.2924805,
+        "1": 8.91872,
+        "2": 8.82688,
+        "3": 8.92928,
+        "4": 9.43104
+      },
+      "mapped_change_vs_rectangular_pct": -8.369610221753643,
+      "mapped_change_vs_compact128_pct": 6.844547563805103
+    },
+    {
+      "pattern": 5,
+      "owners": 4,
+      "tokens": 124,
+      "tiles": 124,
+      "reference": "V48 four-owner launch geometry",
+      "median_us": {
+        "0": 56.023517999999996,
+        "1": 75.543522,
+        "2": 62.883840500000005,
+        "3": 64.040321,
+        "4": 59.279358
+      },
+      "mapped_change_vs_rectangular_pct": 5.811559352627604,
+      "mapped_change_vs_compact128_pct": -5.731969407943527
+    },
+    {
+      "pattern": 5,
+      "owners": 8,
+      "tokens": 248,
+      "tiles": 248,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 85.5398405,
+        "1": 133.4118425,
+        "2": 111.4675175,
+        "3": 93.0247955,
+        "4": 87.2396815
+      },
+      "mapped_change_vs_rectangular_pct": 1.987192155215678,
+      "mapped_change_vs_compact128_pct": -21.735332896419802
+    },
+    {
+      "pattern": 5,
+      "owners": 16,
+      "tokens": 496,
+      "tiles": 496,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 150.864639,
+        "1": 273.720322,
+        "2": 226.2380755,
+        "3": 188.34433,
+        "4": 154.895363
+      },
+      "mapped_change_vs_rectangular_pct": 2.6717486792912304,
+      "mapped_change_vs_compact128_pct": -31.534352624918792
+    },
+    {
+      "pattern": 5,
+      "owners": 32,
+      "tokens": 992,
+      "tiles": 992,
+      "reference": "hypothetical rectangular32 launch geometry; not V48 serving",
+      "median_us": {
+        "0": 294.13887050000005,
+        "1": 546.5395205,
+        "2": 462.493286,
+        "3": 390.4972835,
+        "4": 290.451828
+      },
+      "mapped_change_vs_rectangular_pct": -1.2535039975276163,
+      "mapped_change_vs_compact128_pct": -37.19869308546028
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "condition_id": "g04-smol-gui-retained-512mib-v1",
+  "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
+  "canonical_preflight_pass": false,
+  "idle_memory_limit_mib": 512,
+  "canonical_idle_memory_limit_mib": 256,
+  "reason": "User elected to retain desktop GUI; Blender stopped, no CUDA compute processes allowed between lanes",
+  "scope": "diagnostic SmolLM2 c1/p128/o32, not canonical headless performance qualification",
+  "candidate_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4"
+}

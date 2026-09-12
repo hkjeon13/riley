@@ -1,0 +1,33 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "scope": "five changed source files only; excludes model loader, credentials, environment files and checkpoints",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "491c65b09d4c265b0404f08b84694d99a2dab674b1f89635078971ac38534992",
+      "current_sha256": "7a6c331f9d23975499b5d0215b957b1b2aab3ec25eb902ac6ecd71ea82ec1184"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "ddf9f63dd4f50edfa2d0a849db6333b84cc2b458af308b0984f554a314735451",
+      "current_sha256": "c5b52f518ccea6bd936d5bfbd7372b49312571d878af1fceb275c732c6e6d587"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "8a65c8f2167b142b3c583ebf88804f36d658b837c58c84c6dbc470be2d28ff88",
+      "current_sha256": "6d5481b74a8ad43267ac7512434995b13ac5073565eb79bc9acf3d7ab227486b"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "49863a82f1b2e04f9d0dd5b76e1e9361a8ca380898122700ad6c510769292fc2",
+      "current_sha256": "68d2f023113b9e1b615335425c43e7c5eb1384ff311b8cb96f2f3266fc4aac4a"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "77f7ce71760c40dc926a40d68fd5b3dee01f9b2ea99d8aed9e974472744687d9",
+      "current_sha256": "44ba75c43b2838054a4180ccaf92a0e744bd17047a09f7982cfde7df5a57f65d"
+    }
+  ],
+  "remote_write_status": "not performed: auto-review rejection",
+  "gpu_tests": "not run"
+}

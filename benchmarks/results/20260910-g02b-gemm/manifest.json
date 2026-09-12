@@ -1,0 +1,55 @@
+{
+  "scope": "G02B strict canonical cold graph bridge; actual SmolLM2 rejected, graph support pending",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "initial_gpu_model": {
+    "passed": 1,
+    "failed": 1,
+    "exit_code": 101,
+    "reason": "actual SmolLM2 policy not strict"
+  },
+  "final_gpu": {
+    "passed": 5,
+    "exit_code": 0,
+    "borrowed_fixture": 1,
+    "legacy_c05_21": 2,
+    "canonical_graph_model": 1,
+    "smollm2_rejection_continuation": 1,
+    "smollm2_gemm_graph_verified": false
+  },
+  "cpu": {
+    "cuda_lib": 83,
+    "graph_contracts": 32,
+    "runtime_lib": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "new_warnings": [
+      "too_many_lines: audit_c07_gemms"
+    ],
+    "baseline_warnings_remain": true
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "source_files": 37,
+  "artifacts": {
+    "README.md": "b4545c6194d70dae8103bd5d9e0a8fcc58ad17bcb885df994cca915241a6a7d3",
+    "clippy.jsonl": "a720cd9eb6e653135a399e846496664b5094e7c2162c85c0315c043cca9c782a",
+    "clippy.log": "da8c098ff264625ad52e77c5f142039bcb23956bb8401a59b2487dc4fbc1510d",
+    "cuda-cpu.log": "d1ff2d9fa0088ab47cc236a7399165a7cf09b7e6519d627e5d7d785f9eeb01b9",
+    "gpu-gemm.log": "9f9eeba2514c1fc0455cd36cd7c5dc06cae4fd6798ea79c7eaaf0025b868ee03",
+    "gpu-model-initial-policy-rejection.log": "69906e3369d6baec0d047990eb6ed6d2947dad46f3ff06fa476e49fd537039e2",
+    "gpu-model.log": "d129484f9f64641d8117ce195a8fe59d8d29704c03f8a8846203c30e7115504f",
+    "graph-cpu.log": "6608aaf3d28c63c0981595be72419729367038070a15289259f0cf787fbbd54a",
+    "model-preservation.json": "009cd67b64f74b09b513af8ad064671c672b3dbb5451123da09a319bff222971",
+    "remote-source-verification.json": "decb76ee6fff767399a22d0bfcdf831a8c61b205422347dd21d956f25416f378",
+    "runtime-boundaries.log": "d8234f63e2bad859c4ba8672869103abf8422a451361bf1d5b997f7044b47b3a",
+    "runtime-cpu.log": "ac2b4788b9f6c5a60616f3d16036c537c39dc445af6de32fb412d12e293abd1b",
+    "runtime-identities.json": "9130f8d55b810f6144d4de9c7cfe0c562f10a472b8347eab41b98043225800c7",
+    "source-hashes.json": "a9920652d8f3cc4b5fe306b772551255d41241c5ff7090d40f5f8565c4842e63",
+    "source-overlay.tar.gz": "3ce5446d252e9eb14637dcf45519adeef3e7c17c217c38b67370dad6731cd7c1"
+  }
+}

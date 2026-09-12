@@ -1,0 +1,56 @@
+   Compiling proc-macro2 v1.0.107
+    Checking typenum v1.20.1
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.228
+    Checking tinyvec_macros v0.1.1
+   Compiling serde_json v1.0.145
+   Compiling serde v1.0.228
+    Checking riley-core v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-core)
+    Checking cfg-if v1.0.4
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking ryu v1.0.23
+    Checking cpufeatures v0.3.0
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+    Checking tinyvec v1.12.0
+    Checking riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+    Checking unicode-normalization v0.1.25
+    Checking hybrid-array v0.4.14
+   Compiling syn v2.0.119
+    Checking crypto-common v0.2.2
+    Checking block-buffer v0.12.1
+    Checking riley-tensor v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-tensor)
+    Checking digest v0.11.3
+    Checking sha2 v0.11.0
+   Compiling serde_derive v1.0.228
+    Checking riley-model v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-model)
+    Checking riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.59s

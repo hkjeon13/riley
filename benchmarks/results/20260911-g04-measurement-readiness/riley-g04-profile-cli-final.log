@@ -1,0 +1,14 @@
+
+running 9 tests
+test tests::canonical_token_resize_truncates_or_repeats_exact_u32_ids ... ok
+test tests::decode_fast_path_binds_legacy_and_grouped_ragged_attention_launches ... ok
+test tests::graph_profile_binds_single_row_and_native_host_identity ... ok
+test tests::latency_math_requires_a_real_decode_interval ... ok
+test tests::parser_binds_candidate_to_fused_and_preserves_explicit_metadata ... ok
+test tests::parser_binds_decode_candidates_to_independent_flags ... ok
+test tests::parser_binds_iteration_completion_candidate_independently_from_fusion ... ok
+test tests::parser_rejects_swapped_roles_duplicates_and_non_greedy_metadata ... ok
+test tests::timestamp_and_measurement_serialization_match_closed_schema_shapes ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

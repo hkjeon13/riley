@@ -1,0 +1,72 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.89s
+     Running tests/graph_c05_22_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_22_gpu-8ae0f96a9a0c8490)
+
+running 3 tests
+test owned_canonical_rms_norm_gemm_bf16_graph_cold_capture_replays_byte_exact_against_eager ... ok
+test owned_canonical_rms_norm_gemm_bf16_graph_recovers_exact_preflight_geometry_and_abort ... ok
+test owned_canonical_rms_norm_gemm_bf16_graph_rejects_foreign_context_and_recovers ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/graph_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_gpu-c48d8cdb75122bfa)
+
+running 40 tests
+test bare_foreign_context_close_is_deferred_until_abort ... ok
+test captured_graph_close_releases_stream_and_buffer_for_reuse ... ok
+test cross_thread_context_controls_are_rejected_while_capturing ... ok
+test drop_abort_restores_stream_for_eager_work ... ok
+test explicit_abort_restores_stream_for_eager_work ... ok
+test fixed_buffer_fill_capture_abort_releases_stream_and_buffer_for_reuse ... ok
+test fixed_buffer_fill_graph_replays_exactly_and_releases_every_lease ... ok
+test foreign_context_resource_drops_and_closes_survive_abort ... ok
+test owned_bf16_argmax_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_argmax_graph_replays_edge_fixture_byte_exact_against_eager ... ok
+test owned_bf16_gated_multiply_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_gated_multiply_graph_replays_fixed_inputs_byte_exact_against_eager ... ok
+test owned_bf16_residual_add_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_residual_add_graph_replays_fixed_inputs_byte_exact_against_eager ... ok
+test owned_bf16_row_gather_argmax_d2h_graph_preserves_device_index_oob_raw_result_bytes ... ok
+test owned_bf16_row_gather_argmax_d2h_graph_replays_raw_result_bytes_exactly_against_eager ... ok
+test owned_bf16_row_gather_argmax_d2h_graph_requires_exact_pinned_results_and_recovers_every_resource ... ok
+test owned_bf16_row_gather_argmax_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_row_gather_argmax_graph_replays_unique_permutation_byte_exact_against_eager ... ok
+test owned_bf16_row_gather_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_row_gather_graph_replays_unique_permutation_byte_exact_against_eager ... ok
+test owned_bf16_silu_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_bf16_silu_graph_replays_fixed_input_byte_exact_against_eager ... ok
+test owned_canonical_bf16_rms_norm_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_canonical_bf16_rms_norm_graph_replays_fixed_inputs_byte_exact_against_eager ... ok
+test owned_fill_capture_preflight_error_returns_untouched_resources ... ok
+test owned_fixed_fill_exec_moves_replays_and_returns_resources ... ok
+test owned_h2d_graph_preflight_errors_return_untouched_three_resource_bundles ... ok
+test owned_h2d_graph_replays_fresh_exact_payloads_and_recovers_every_resource ... ok
+test owned_indexed_rope_bf16_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_indexed_rope_bf16_graph_preserves_device_position_oob_nan_bytes ... ok
+test owned_indexed_rope_bf16_graph_replays_byte_exact_against_eager ... ok
+test owned_zero_enqueue_end_drop_recovers_and_releases_cold_resources ... ok
+test pending_copy_blocks_capture_until_consumed ... ok
+test pending_fills_block_capture_until_both_complete ... ok
+test repeated_abort_releases_stream_and_context_leases ... ok
+test same_context_resource_drops_and_closes_are_deferred_until_abort ... ok
+test same_thread_capture_blocks_context_and_foreign_stream_cuda_work ... ok
+test zero_element_pending_fill_blocks_capture_until_consumed ... ok
+test zero_enqueue_fill_end_rejects_before_native_end_and_abort_restores_reuse ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/graph_parent_attention_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_parent_attention_gpu-7a7a22e0e1e8bdad)
+
+running 4 tests
+test packed_parent_layer_generic_replay_and_single_lease_close ... ok
+test packed_parent_layer_shared_gqa_replay_and_single_lease_close ... ok
+test parent_layer_generic_replay_and_isolation ... ok
+test parent_layer_shared_gqa_replay_and_isolation ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

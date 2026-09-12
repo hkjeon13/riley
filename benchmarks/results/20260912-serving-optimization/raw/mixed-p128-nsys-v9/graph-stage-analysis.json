@@ -1,0 +1,1738 @@
+{
+  "diagnostic_not_exclusive": true,
+  "segmentation": "graph H2D packet start to final graph activity before next packet; no concurrent owner submissions",
+  "stages": {
+    "prefill": {
+      "count": 48,
+      "span_ns": {
+        "sum_ms": 193.141045,
+        "median_us": 4052.912
+      },
+      "kernel_ns": {
+        "sum_ms": 182.412067,
+        "median_us": 3841.6605
+      },
+      "gemv_ns": {
+        "sum_ms": 3.048239,
+        "median_us": 63.537
+      },
+      "copies_ns": {
+        "sum_ms": 0.382279,
+        "median_us": 7.8885
+      }
+    },
+    "decode": {
+      "count": 140,
+      "span_ns": {
+        "sum_ms": 279.027418,
+        "median_us": 2131.169
+      },
+      "kernel_ns": {
+        "sum_ms": 259.555751,
+        "median_us": 2000.015
+      },
+      "gemv_ns": {
+        "sum_ms": 204.238996,
+        "median_us": 1580.487
+      },
+      "copies_ns": {
+        "sum_ms": 0.230817,
+        "median_us": 1.248
+      }
+    }
+  },
+  "rows": [
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4170178,
+      "kernel_ns": 3847451,
+      "gemv_ns": 63777,
+      "copies_ns": 8384,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 1058545,
+      "kernel_ns": 854925,
+      "gemv_ns": 502888,
+      "copies_ns": 7489,
+      "kernel_count": 248
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4089216,
+      "kernel_ns": 3844573,
+      "gemv_ns": 62977,
+      "copies_ns": 8128,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1282868,
+      "kernel_ns": 1048688,
+      "gemv_ns": 643209,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4112480,
+      "kernel_ns": 3843932,
+      "gemv_ns": 63681,
+      "copies_ns": 7840,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1621465,
+      "kernel_ns": 1390102,
+      "gemv_ns": 982001,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4094368,
+      "kernel_ns": 3845789,
+      "gemv_ns": 64065,
+      "copies_ns": 8256,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1565336,
+      "kernel_ns": 1390454,
+      "gemv_ns": 980240,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4063327,
+      "kernel_ns": 3843804,
+      "gemv_ns": 63937,
+      "copies_ns": 8192,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2254115,
+      "kernel_ns": 2047648,
+      "gemv_ns": 1635194,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4055360,
+      "kernel_ns": 3845948,
+      "gemv_ns": 63617,
+      "copies_ns": 8192,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2197891,
+      "kernel_ns": 2046177,
+      "gemv_ns": 1631514,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4048096,
+      "kernel_ns": 3840317,
+      "gemv_ns": 64417,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2192195,
+      "kernel_ns": 2049249,
+      "gemv_ns": 1632728,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4066463,
+      "kernel_ns": 3844796,
+      "gemv_ns": 63873,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2199555,
+      "kernel_ns": 2051361,
+      "gemv_ns": 1631673,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2126209,
+      "kernel_ns": 1989120,
+      "gemv_ns": 1648248,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4065632,
+      "kernel_ns": 3841949,
+      "gemv_ns": 62913,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2200290,
+      "kernel_ns": 2053984,
+      "gemv_ns": 1636472,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4057280,
+      "kernel_ns": 3846427,
+      "gemv_ns": 63009,
+      "copies_ns": 8320,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2201571,
+      "kernel_ns": 2059777,
+      "gemv_ns": 1632792,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2116097,
+      "kernel_ns": 1987840,
+      "gemv_ns": 1637113,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2124417,
+      "kernel_ns": 1992287,
+      "gemv_ns": 1640600,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2131233,
+      "kernel_ns": 1996799,
+      "gemv_ns": 1644025,
+      "copies_ns": 1408,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2123489,
+      "kernel_ns": 1991775,
+      "gemv_ns": 1639771,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2114465,
+      "kernel_ns": 1988064,
+      "gemv_ns": 1641052,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4062207,
+      "kernel_ns": 3845597,
+      "gemv_ns": 63265,
+      "copies_ns": 7840,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2199266,
+      "kernel_ns": 2059072,
+      "gemv_ns": 1631867,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4051008,
+      "kernel_ns": 3839292,
+      "gemv_ns": 63585,
+      "copies_ns": 8224,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2207331,
+      "kernel_ns": 2068737,
+      "gemv_ns": 1637116,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2123201,
+      "kernel_ns": 1993727,
+      "gemv_ns": 1640859,
+      "copies_ns": 1408,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2131105,
+      "kernel_ns": 2003231,
+      "gemv_ns": 1640730,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2139810,
+      "kernel_ns": 2011840,
+      "gemv_ns": 1640695,
+      "copies_ns": 1312,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4065920,
+      "kernel_ns": 3846589,
+      "gemv_ns": 63713,
+      "copies_ns": 7840,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2246627,
+      "kernel_ns": 2106785,
+      "gemv_ns": 1633274,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2150146,
+      "kernel_ns": 2020928,
+      "gemv_ns": 1640794,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2155426,
+      "kernel_ns": 2024096,
+      "gemv_ns": 1642652,
+      "copies_ns": 1312,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2157314,
+      "kernel_ns": 2023583,
+      "gemv_ns": 1641751,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2146370,
+      "kernel_ns": 2019072,
+      "gemv_ns": 1643227,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4056223,
+      "kernel_ns": 3842299,
+      "gemv_ns": 63521,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2244227,
+      "kernel_ns": 2104927,
+      "gemv_ns": 1633208,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4055167,
+      "kernel_ns": 3849341,
+      "gemv_ns": 64161,
+      "copies_ns": 8256,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2241795,
+      "kernel_ns": 2106881,
+      "gemv_ns": 1632349,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2150658,
+      "kernel_ns": 2017183,
+      "gemv_ns": 1641082,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4059264,
+      "kernel_ns": 3849116,
+      "gemv_ns": 63937,
+      "copies_ns": 8225,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2251523,
+      "kernel_ns": 2111457,
+      "gemv_ns": 1631867,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2156290,
+      "kernel_ns": 2024448,
+      "gemv_ns": 1644441,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4062143,
+      "kernel_ns": 3844349,
+      "gemv_ns": 63873,
+      "copies_ns": 8224,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2260356,
+      "kernel_ns": 2118977,
+      "gemv_ns": 1633817,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2163554,
+      "kernel_ns": 2034624,
+      "gemv_ns": 1646652,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2164802,
+      "kernel_ns": 2030367,
+      "gemv_ns": 1640763,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2164866,
+      "kernel_ns": 2033566,
+      "gemv_ns": 1645272,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2154561,
+      "kernel_ns": 2023264,
+      "gemv_ns": 1640920,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4062368,
+      "kernel_ns": 3845242,
+      "gemv_ns": 63297,
+      "copies_ns": 8288,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2266852,
+      "kernel_ns": 2122370,
+      "gemv_ns": 1636023,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2146529,
+      "kernel_ns": 2016863,
+      "gemv_ns": 1641561,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4063776,
+      "kernel_ns": 3846108,
+      "gemv_ns": 63585,
+      "copies_ns": 8225,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2244868,
+      "kernel_ns": 2105153,
+      "gemv_ns": 1633143,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4050176,
+      "kernel_ns": 3839933,
+      "gemv_ns": 63969,
+      "copies_ns": 8288,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2240547,
+      "kernel_ns": 2100257,
+      "gemv_ns": 1630682,
+      "copies_ns": 1344,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4055039,
+      "kernel_ns": 3845499,
+      "gemv_ns": 63617,
+      "copies_ns": 8288,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2240483,
+      "kernel_ns": 2107457,
+      "gemv_ns": 1635354,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2146914,
+      "kernel_ns": 2014848,
+      "gemv_ns": 1642265,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4050880,
+      "kernel_ns": 3841372,
+      "gemv_ns": 63553,
+      "copies_ns": 8161,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2253220,
+      "kernel_ns": 2111361,
+      "gemv_ns": 1634776,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2156226,
+      "kernel_ns": 2028129,
+      "gemv_ns": 1642202,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2158818,
+      "kernel_ns": 2026528,
+      "gemv_ns": 1640089,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2163138,
+      "kernel_ns": 2030464,
+      "gemv_ns": 1643001,
+      "copies_ns": 1344,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2277540,
+      "kernel_ns": 2031392,
+      "gemv_ns": 1642841,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2179522,
+      "kernel_ns": 2024864,
+      "gemv_ns": 1643192,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4105856,
+      "kernel_ns": 3845373,
+      "gemv_ns": 63585,
+      "copies_ns": 7808,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2250532,
+      "kernel_ns": 2104001,
+      "gemv_ns": 1631160,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4078336,
+      "kernel_ns": 3847804,
+      "gemv_ns": 63553,
+      "copies_ns": 7873,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2250179,
+      "kernel_ns": 2108416,
+      "gemv_ns": 1632343,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2158946,
+      "kernel_ns": 2015520,
+      "gemv_ns": 1640635,
+      "copies_ns": 1312,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4076928,
+      "kernel_ns": 3844285,
+      "gemv_ns": 64097,
+      "copies_ns": 8000,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2254820,
+      "kernel_ns": 2102689,
+      "gemv_ns": 1631448,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4059200,
+      "kernel_ns": 3845212,
+      "gemv_ns": 63553,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2245155,
+      "kernel_ns": 2105472,
+      "gemv_ns": 1631867,
+      "copies_ns": 1312,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2156194,
+      "kernel_ns": 2022176,
+      "gemv_ns": 1642458,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2157058,
+      "kernel_ns": 2024000,
+      "gemv_ns": 1641275,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2155809,
+      "kernel_ns": 2026078,
+      "gemv_ns": 1640474,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2163522,
+      "kernel_ns": 2028352,
+      "gemv_ns": 1642621,
+      "copies_ns": 1344,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2150338,
+      "kernel_ns": 2021344,
+      "gemv_ns": 1639739,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4065280,
+      "kernel_ns": 3844540,
+      "gemv_ns": 63809,
+      "copies_ns": 7872,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2254179,
+      "kernel_ns": 2115009,
+      "gemv_ns": 1632570,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4054816,
+      "kernel_ns": 3845660,
+      "gemv_ns": 63841,
+      "copies_ns": 7904,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2262787,
+      "kernel_ns": 2120290,
+      "gemv_ns": 1632506,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2147586,
+      "kernel_ns": 2016094,
+      "gemv_ns": 1640952,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4019455,
+      "kernel_ns": 3804028,
+      "gemv_ns": 63809,
+      "copies_ns": 7904,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2164962,
+      "kernel_ns": 2023359,
+      "gemv_ns": 1569626,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3942014,
+      "kernel_ns": 3736824,
+      "gemv_ns": 62944,
+      "copies_ns": 7713,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2159841,
+      "kernel_ns": 2024640,
+      "gemv_ns": 1570263,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2074401,
+      "kernel_ns": 1942138,
+      "gemv_ns": 1581589,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2073729,
+      "kernel_ns": 1943167,
+      "gemv_ns": 1579417,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2073024,
+      "kernel_ns": 1946142,
+      "gemv_ns": 1579513,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2080257,
+      "kernel_ns": 1947295,
+      "gemv_ns": 1579768,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2070913,
+      "kernel_ns": 1940831,
+      "gemv_ns": 1577211,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3943518,
+      "kernel_ns": 3731227,
+      "gemv_ns": 63489,
+      "copies_ns": 7712,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2170818,
+      "kernel_ns": 2032892,
+      "gemv_ns": 1570419,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3944413,
+      "kernel_ns": 3736058,
+      "gemv_ns": 63425,
+      "copies_ns": 7616,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2176194,
+      "kernel_ns": 2037568,
+      "gemv_ns": 1569560,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2065473,
+      "kernel_ns": 1935741,
+      "gemv_ns": 1578744,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3949374,
+      "kernel_ns": 3734106,
+      "gemv_ns": 63457,
+      "copies_ns": 7777,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2168418,
+      "kernel_ns": 2026400,
+      "gemv_ns": 1573560,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3945246,
+      "kernel_ns": 3733915,
+      "gemv_ns": 63329,
+      "copies_ns": 7968,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2165026,
+      "kernel_ns": 2024351,
+      "gemv_ns": 1569946,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2081504,
+      "kernel_ns": 1940509,
+      "gemv_ns": 1580152,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2072897,
+      "kernel_ns": 1941950,
+      "gemv_ns": 1578329,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2072161,
+      "kernel_ns": 1944797,
+      "gemv_ns": 1578330,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2077089,
+      "kernel_ns": 1944542,
+      "gemv_ns": 1577976,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2075616,
+      "kernel_ns": 1947358,
+      "gemv_ns": 1583287,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3966239,
+      "kernel_ns": 3734938,
+      "gemv_ns": 64289,
+      "copies_ns": 7648,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2183298,
+      "kernel_ns": 2034910,
+      "gemv_ns": 1569747,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3949149,
+      "kernel_ns": 3734842,
+      "gemv_ns": 62945,
+      "copies_ns": 7648,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2178498,
+      "kernel_ns": 2035456,
+      "gemv_ns": 1568791,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2066689,
+      "kernel_ns": 1936510,
+      "gemv_ns": 1580024,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3947006,
+      "kernel_ns": 3730650,
+      "gemv_ns": 63105,
+      "copies_ns": 7680,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2168098,
+      "kernel_ns": 2024959,
+      "gemv_ns": 1571801,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3949918,
+      "kernel_ns": 3734554,
+      "gemv_ns": 63297,
+      "copies_ns": 7680,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2162690,
+      "kernel_ns": 2025568,
+      "gemv_ns": 1570008,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2073377,
+      "kernel_ns": 1941310,
+      "gemv_ns": 1580534,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2074112,
+      "kernel_ns": 1942654,
+      "gemv_ns": 1578776,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2081025,
+      "kernel_ns": 1947455,
+      "gemv_ns": 1580823,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2071105,
+      "kernel_ns": 1944126,
+      "gemv_ns": 1576857,
+      "copies_ns": 1344,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2072480,
+      "kernel_ns": 1942652,
+      "gemv_ns": 1578423,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3949918,
+      "kernel_ns": 3739033,
+      "gemv_ns": 63329,
+      "copies_ns": 8128,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2176386,
+      "kernel_ns": 2035232,
+      "gemv_ns": 1570041,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3940574,
+      "kernel_ns": 3735193,
+      "gemv_ns": 63169,
+      "copies_ns": 7904,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2176066,
+      "kernel_ns": 2039776,
+      "gemv_ns": 1571931,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2064672,
+      "kernel_ns": 1937951,
+      "gemv_ns": 1580696,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3938878,
+      "kernel_ns": 3729883,
+      "gemv_ns": 63041,
+      "copies_ns": 8096,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2167490,
+      "kernel_ns": 2025280,
+      "gemv_ns": 1572666,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3933630,
+      "kernel_ns": 3730779,
+      "gemv_ns": 63137,
+      "copies_ns": 8160,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2165634,
+      "kernel_ns": 2024575,
+      "gemv_ns": 1568921,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2080353,
+      "kernel_ns": 1939551,
+      "gemv_ns": 1578554,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2082400,
+      "kernel_ns": 1948380,
+      "gemv_ns": 1583899,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2076161,
+      "kernel_ns": 1947199,
+      "gemv_ns": 1580026,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2081440,
+      "kernel_ns": 1949405,
+      "gemv_ns": 1581978,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2083521,
+      "kernel_ns": 1944638,
+      "gemv_ns": 1580440,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3966174,
+      "kernel_ns": 3735899,
+      "gemv_ns": 63201,
+      "copies_ns": 7648,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2179171,
+      "kernel_ns": 2036161,
+      "gemv_ns": 1571192,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3967486,
+      "kernel_ns": 3737722,
+      "gemv_ns": 63137,
+      "copies_ns": 7745,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2179330,
+      "kernel_ns": 2038048,
+      "gemv_ns": 1570104,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2065696,
+      "kernel_ns": 1939423,
+      "gemv_ns": 1581722,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3962174,
+      "kernel_ns": 3736411,
+      "gemv_ns": 62977,
+      "copies_ns": 8032,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2172034,
+      "kernel_ns": 2025760,
+      "gemv_ns": 1572538,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3951966,
+      "kernel_ns": 3732987,
+      "gemv_ns": 63201,
+      "copies_ns": 7712,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2177634,
+      "kernel_ns": 2028765,
+      "gemv_ns": 1572855,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2086880,
+      "kernel_ns": 1941374,
+      "gemv_ns": 1580026,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2087297,
+      "kernel_ns": 1944413,
+      "gemv_ns": 1580759,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2083809,
+      "kernel_ns": 1947902,
+      "gemv_ns": 1580788,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2076129,
+      "kernel_ns": 1946942,
+      "gemv_ns": 1579003,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2074304,
+      "kernel_ns": 1942461,
+      "gemv_ns": 1578872,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 3996767,
+      "kernel_ns": 3736474,
+      "gemv_ns": 63137,
+      "copies_ns": 7744,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2184802,
+      "kernel_ns": 2033471,
+      "gemv_ns": 1569532,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "prefill",
+      "packet_bytes": 600,
+      "span_ns": 4020159,
+      "kernel_ns": 3733947,
+      "gemv_ns": 63041,
+      "copies_ns": 7776,
+      "kernel_count": 398
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2198402,
+      "kernel_ns": 2040319,
+      "gemv_ns": 1571225,
+      "copies_ns": 1312,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2078721,
+      "kernel_ns": 1936093,
+      "gemv_ns": 1579034,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2070240,
+      "kernel_ns": 1935229,
+      "gemv_ns": 1579256,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2063488,
+      "kernel_ns": 1935069,
+      "gemv_ns": 1580089,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2062720,
+      "kernel_ns": 1934269,
+      "gemv_ns": 1580248,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2062432,
+      "kernel_ns": 1935614,
+      "gemv_ns": 1578712,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2075329,
+      "kernel_ns": 1942399,
+      "gemv_ns": 1581751,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2069697,
+      "kernel_ns": 1942079,
+      "gemv_ns": 1580666,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2077217,
+      "kernel_ns": 1942910,
+      "gemv_ns": 1581335,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2075073,
+      "kernel_ns": 1941276,
+      "gemv_ns": 1579223,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 2064577,
+      "kernel_ns": 1940158,
+      "gemv_ns": 1578808,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1469079,
+      "kernel_ns": 1313651,
+      "gemv_ns": 957516,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1442294,
+      "kernel_ns": 1313139,
+      "gemv_ns": 957676,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1438358,
+      "kernel_ns": 1311380,
+      "gemv_ns": 957454,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1438486,
+      "kernel_ns": 1311059,
+      "gemv_ns": 957491,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1438262,
+      "kernel_ns": 1314036,
+      "gemv_ns": 957870,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1438134,
+      "kernel_ns": 1315186,
+      "gemv_ns": 954988,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1446359,
+      "kernel_ns": 1318578,
+      "gemv_ns": 958253,
+      "copies_ns": 1216,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1446487,
+      "kernel_ns": 1317556,
+      "gemv_ns": 955600,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1446519,
+      "kernel_ns": 1320467,
+      "gemv_ns": 957903,
+      "copies_ns": 1248,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1447383,
+      "kernel_ns": 1319188,
+      "gemv_ns": 957069,
+      "copies_ns": 1184,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 1792,
+      "span_ns": 1142546,
+      "kernel_ns": 986959,
+      "gemv_ns": 631851,
+      "copies_ns": 1280,
+      "kernel_count": 261
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 1009424,
+      "kernel_ns": 845132,
+      "gemv_ns": 500069,
+      "copies_ns": 7200,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 972719,
+      "kernel_ns": 845100,
+      "gemv_ns": 501991,
+      "copies_ns": 7040,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 972655,
+      "kernel_ns": 843948,
+      "gemv_ns": 501672,
+      "copies_ns": 6720,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 992400,
+      "kernel_ns": 848012,
+      "gemv_ns": 501929,
+      "copies_ns": 6720,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 984944,
+      "kernel_ns": 852396,
+      "gemv_ns": 502694,
+      "copies_ns": 6720,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 980527,
+      "kernel_ns": 852910,
+      "gemv_ns": 502313,
+      "copies_ns": 6816,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 984495,
+      "kernel_ns": 854028,
+      "gemv_ns": 502788,
+      "copies_ns": 6720,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 979952,
+      "kernel_ns": 854254,
+      "gemv_ns": 502024,
+      "copies_ns": 6688,
+      "kernel_count": 248
+    },
+    {
+      "stage": "decode",
+      "packet_bytes": 600,
+      "span_ns": 982864,
+      "kernel_ns": 853228,
+      "gemv_ns": 501448,
+      "copies_ns": 6720,
+      "kernel_count": 248
+    }
+  ]
+}

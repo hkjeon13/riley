@@ -1,0 +1,25 @@
+{
+  "check_id": "fixed-07",
+  "kind": "completion",
+  "completed": true,
+  "sampler": "gpu-greedy",
+  "spec": {
+    "shape": "o1",
+    "streaming": true,
+    "raw": true
+  },
+  "server_request_id": "cmpl-0000000000000008",
+  "request": {
+    "path": "/tmp/riley-opt-260912/fusion-history-http-correctness-v1/gpu-greedy/fixed-07-request.json",
+    "sha256": "7f0ac12e018a6712f861ef7a4e1d824186bdb1b36e1fdd2fca45d4fbe4321a81"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/fusion-history-http-correctness-v1/gpu-greedy/fixed-07-response.json",
+    "sha256": "7862eb6da47ee96e7845322fbc3406ac908e96663dfc9193605a9690ed209232"
+  },
+  "blank_generated_token_events": 0,
+  "started_ns": 843618130263703,
+  "finished_ns": 843618135609880,
+  "published_ids_match_reference": true,
+  "performance_claim": false
+}

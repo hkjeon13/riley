@@ -1,0 +1,109 @@
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(6): error: identifier "uint32_t" is undefined
+  __attribute__((global)) void gemm_prefill_shape_vector(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,uint32_t rows,const uint32_t* live_rows=nullptr){
+                                                                                                                        ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(6): error: identifier "uint32_t" is undefined
+  __attribute__((global)) void gemm_prefill_shape_vector(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,uint32_t rows,const uint32_t* live_rows=nullptr){
+                                                                                                                                            ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(7): error: identifier "uint32_t" is undefined
+   if(live_rows){uint32_t live=*live_rows;if(!live||live>rows)return;rows=live;}
+                 ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(16): error: identifier "uint32_t" is undefined
+    uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t)):0;
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(16): error: identifier "uint32_t" is undefined
+    uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t)):0;
+                                                 ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(17): error: identifier "uint32_t" is undefined
+    uint32_t a1=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t)):0;
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(17): error: identifier "uint32_t" is undefined
+    uint32_t a1=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t)):0;
+                                                      ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(18): error: identifier "uint32_t" is undefined
+    uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t+8)):0;
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(18): error: identifier "uint32_t" is undefined
+    uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t+8)):0;
+                                                 ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(19): error: identifier "uint32_t" is undefined
+    uint32_t a3=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t+8)):0;
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(19): error: identifier "uint32_t" is undefined
+    uint32_t a3=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t+8)):0;
+                                                      ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(20): error: identifier "uint32_t" is undefined
+    uint32_t b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t)),bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(20): error: identifier "uint32_t" is undefined
+    uint32_t b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t)),bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));
+                                       ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(20): error: identifier "uint32_t" is undefined
+    uint32_t b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t)),bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));
+                                                                                                       ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_projection.cuh(34): error: identifier "uint32_t" is undefined
+  cudaError_t launch_prefill_shape(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,uint32_t rows){
+                                                                                                                      ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(7): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,const uint32_t* shape=nullptr){
+         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(7): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,const uint32_t* shape=nullptr){
+                         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(7): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,const uint32_t* shape=nullptr){
+                                        ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(7): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,const uint32_t* shape=nullptr){
+                                                            ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(8): error: identifier "uint32_t" is undefined
+   if(shape){uint32_t live=shape[2];if(!live||live>rows)return;rows=live;start=shape[4];}
+             ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(9): error: identifier "uint32_t" is undefined
+   const uint32_t row=blockIdx.y;if(row>=rows)return;
+         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(11): error: identifier "uint32_t" is undefined
+   const uint32_t pos=start+row;int head=i/32,dim=i%32;
+         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(19): error: identifier "uint32_t" is undefined
+    uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
+    ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(26): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,uint32_t context){
+         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(26): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,uint32_t context){
+                         ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(26): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,uint32_t context){
+                                        ^
+
+/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/src/prefill_shape_rope_kv.cuh(26): error: identifier "uint32_t" is undefined
+   const uint32_t* pages,uint32_t start,uint32_t rows,uint32_t context){
+                                                      ^
+
+27 errors detected in the compilation of "/tmp/riley-opt-260912/prefill-shapes-source-v11/kernels/tests/prefill_shape_graph_replay.cu".

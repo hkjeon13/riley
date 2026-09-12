@@ -1,0 +1,1430 @@
+{
+  "schema_version": "riley.decode-operator-summary.v1",
+  "performance_claim_eligible": false,
+  "log_sha256": "c95e74216f150a4bd329699826ef6d6768cb5da8e2410d43446e012172b1dd58",
+  "captures": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 1,
+      "phase": "prefill",
+      "operator": "attention",
+      "layer_mask": 1073741823,
+      "interval_count": 30,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "2d148ef8cb76ee2fb23e1515063108d53c20cbc34ab125ab63cafd65fa3635b2",
+      "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": true
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 2,
+      "phase": "decode",
+      "operator": "attention",
+      "layer_mask": 1073741823,
+      "interval_count": 30,
+      "expected_event_records": 60,
+      "recorded_event_records": 60,
+      "source_sha256": "2d148ef8cb76ee2fb23e1515063108d53c20cbc34ab125ab63cafd65fa3635b2",
+      "tool_sha256": "eec3de607508ca1fbda4ddc9860040df7a5380cdb77c159df9e2d2318c337052",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78",
+      "projection_events_compiled": true
+    }
+  ],
+  "external_event_inventories": [
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    },
+    {
+      "schema": "riley.decode-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "event_record_nodes": 60,
+      "event_wait_nodes": 0
+    }
+  ],
+  "whole_graph": {
+    "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+    "performance_claim_eligible": false,
+    "classification": {
+      "source": "position",
+      "prefill_tokens": 128
+    },
+    "graph_inventories": [
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 1,
+        "inventory_status": 0,
+        "nodes": 403,
+        "kernel_nodes": 397,
+        "memcpy_nodes": 6,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 1152
+      },
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 2,
+        "inventory_status": 0,
+        "nodes": 342,
+        "kernel_nodes": 277,
+        "memcpy_nodes": 5,
+        "other_nodes": 60,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 0
+      }
+    ],
+    "groups": {
+      "prefill": {
+        "replays": 3,
+        "successful_replays": 3,
+        "capture_ids": [
+          1
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 3465,
+            "sum": 10364
+          },
+          "host_staging_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 2076,
+            "sum": 6320
+          },
+          "host_launch_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 15796,
+            "sum": 46994
+          },
+          "host_wait_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13693431,
+            "sum": 41082586
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13706463.814,
+            "sum": 41120223.999
+          }
+        }
+      },
+      "decode": {
+        "replays": 93,
+        "successful_replays": 93,
+        "capture_ids": [
+          2
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 414,
+            "sum": 44839
+          },
+          "host_staging_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1521,
+            "sum": 146648
+          },
+          "host_launch_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 64575,
+            "sum": 6110919
+          },
+          "host_wait_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 2058337,
+            "sum": 189586421
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 2117952.108,
+            "sum": 195456895.46899998
+          }
+        }
+      }
+    },
+    "failed_replays": 0,
+    "read_records": 96,
+    "projection_groups": [],
+    "unmeasured": [
+      "per_kernel_cuda_time",
+      "Rust_metadata_pack",
+      "request_latency_without_instrumentation"
+    ]
+  },
+  "operator_groups": [
+    {
+      "operator": "attention",
+      "replays": 93,
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 1366016.0139999997,
+        "sum": 125780384.67399997
+      },
+      "layers": [
+        {
+          "layer": 0,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4216832.026000003
+          }
+        },
+        {
+          "layer": 1,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4192256.0200000033
+          }
+        },
+        {
+          "layer": 2,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4209664.024000004
+          }
+        },
+        {
+          "layer": 3,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4195328.023000004
+          }
+        },
+        {
+          "layer": 4,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4208640.023000004
+          }
+        },
+        {
+          "layer": 5,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4204544.024000004
+          }
+        },
+        {
+          "layer": 6,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 46080.001,
+            "sum": 4194304.026000004
+          }
+        },
+        {
+          "layer": 7,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4207616.025000004
+          }
+        },
+        {
+          "layer": 8,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4201472.024000004
+          }
+        },
+        {
+          "layer": 9,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4193280.0240000035
+          }
+        },
+        {
+          "layer": 10,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4210688.025000004
+          }
+        },
+        {
+          "layer": 11,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4202496.023000004
+          }
+        },
+        {
+          "layer": 12,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4208640.024000004
+          }
+        },
+        {
+          "layer": 13,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4204544.023000004
+          }
+        },
+        {
+          "layer": 14,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4198400.022000004
+          }
+        },
+        {
+          "layer": 15,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 46080.001,
+            "sum": 4209664.026000004
+          }
+        },
+        {
+          "layer": 16,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4209664.024000004
+          }
+        },
+        {
+          "layer": 17,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4200448.022000004
+          }
+        },
+        {
+          "layer": 18,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4207616.026000004
+          }
+        },
+        {
+          "layer": 19,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 46080.001,
+            "sum": 4215808.026000004
+          }
+        },
+        {
+          "layer": 20,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 46080.001,
+            "sum": 4205568.020000003
+          }
+        },
+        {
+          "layer": 21,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 46080.001,
+            "sum": 4184064.0290000043
+          }
+        },
+        {
+          "layer": 22,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 45056.0,
+            "sum": 4173824.0210000034
+          }
+        },
+        {
+          "layer": 23,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4162560.0200000037
+          }
+        },
+        {
+          "layer": 24,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4169728.021000004
+          }
+        },
+        {
+          "layer": 25,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4169728.0200000037
+          }
+        },
+        {
+          "layer": 26,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4165632.021000004
+          }
+        },
+        {
+          "layer": 27,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4162560.020000004
+          }
+        },
+        {
+          "layer": 28,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4165632.020000004
+          }
+        },
+        {
+          "layer": 29,
+          "cuda_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 4129184.002000002
+          }
+        }
+      ],
+      "positions": [
+        {
+          "position": 128,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1595392.014000001,
+            "sum": 4786176.042000003
+          }
+        },
+        {
+          "position": 129,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1251327.9699999997,
+            "sum": 3759103.909999999
+          }
+        },
+        {
+          "position": 130,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1254399.9699999997,
+            "sum": 3764223.909999999
+          }
+        },
+        {
+          "position": 131,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1255423.9699999997,
+            "sum": 3764223.909999999
+          }
+        },
+        {
+          "position": 132,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1255423.9699999997,
+            "sum": 3767295.9109999994
+          }
+        },
+        {
+          "position": 133,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1258495.971,
+            "sum": 3772415.9119999995
+          }
+        },
+        {
+          "position": 134,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1256447.9699999997,
+            "sum": 3769343.909999999
+          }
+        },
+        {
+          "position": 135,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1252351.9699999997,
+            "sum": 3760511.908999999
+          }
+        },
+        {
+          "position": 136,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1292288.0,
+            "sum": 3880959.999
+          }
+        },
+        {
+          "position": 137,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1308672.0,
+            "sum": 3918848.0
+          }
+        },
+        {
+          "position": 138,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1308672.0,
+            "sum": 3919872.0
+          }
+        },
+        {
+          "position": 139,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1309696.0,
+            "sum": 3927040.0
+          }
+        },
+        {
+          "position": 140,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1310720.0,
+            "sum": 3923968.0
+          }
+        },
+        {
+          "position": 141,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1310720.0,
+            "sum": 3931136.0
+          }
+        },
+        {
+          "position": 142,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1309696.0,
+            "sum": 3932160.0
+          }
+        },
+        {
+          "position": 143,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1310720.0,
+            "sum": 3923968.0
+          }
+        },
+        {
+          "position": 144,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1366016.0139999997,
+            "sum": 4098048.0419999994
+          }
+        },
+        {
+          "position": 145,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1382400.0289999999,
+            "sum": 4146176.085
+          }
+        },
+        {
+          "position": 146,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1380544.027,
+            "sum": 4143296.0829999996
+          }
+        },
+        {
+          "position": 147,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1382400.0289999999,
+            "sum": 4146176.0869999994
+          }
+        },
+        {
+          "position": 148,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1382400.028,
+            "sum": 4146176.084
+          }
+        },
+        {
+          "position": 149,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1385472.03,
+            "sum": 4156416.09
+          }
+        },
+        {
+          "position": 150,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1381632.027,
+            "sum": 4148480.085
+          }
+        },
+        {
+          "position": 151,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1381376.0269999998,
+            "sum": 4142336.079
+          }
+        },
+        {
+          "position": 152,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1422336.03,
+            "sum": 4268032.09
+          }
+        },
+        {
+          "position": 153,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1437696.0299999998,
+            "sum": 4313088.09
+          }
+        },
+        {
+          "position": 154,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1435648.0299999998,
+            "sum": 4308992.09
+          }
+        },
+        {
+          "position": 155,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1436672.0299999998,
+            "sum": 4311040.09
+          }
+        },
+        {
+          "position": 156,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1435776.0269999998,
+            "sum": 4309120.086999999
+          }
+        },
+        {
+          "position": 157,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1443840.0299999998,
+            "sum": 4327648.089
+          }
+        },
+        {
+          "position": 158,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1436672.0299999998,
+            "sum": 4314112.09
+          }
+        }
+      ]
+    }
+  ],
+  "replay_totals": [
+    {
+      "capture_id": 2,
+      "replay_id": 98,
+      "position": 128,
+      "operator": "attention",
+      "cuda_sum_ns": 1592320.014000001
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 99,
+      "position": 129,
+      "operator": "attention",
+      "cuda_sum_ns": 1251327.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 100,
+      "position": 130,
+      "operator": "attention",
+      "cuda_sum_ns": 1254399.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 101,
+      "position": 131,
+      "operator": "attention",
+      "cuda_sum_ns": 1256447.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 102,
+      "position": 132,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 103,
+      "position": 133,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 104,
+      "position": 134,
+      "operator": "attention",
+      "cuda_sum_ns": 1256447.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 105,
+      "position": 135,
+      "operator": "attention",
+      "cuda_sum_ns": 1255807.9689999996
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 106,
+      "position": 136,
+      "operator": "attention",
+      "cuda_sum_ns": 1297408.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 107,
+      "position": 137,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 108,
+      "position": 138,
+      "operator": "attention",
+      "cuda_sum_ns": 1300480.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 109,
+      "position": 139,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 110,
+      "position": 140,
+      "operator": "attention",
+      "cuda_sum_ns": 1301504.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 111,
+      "position": 141,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 112,
+      "position": 142,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 113,
+      "position": 143,
+      "operator": "attention",
+      "cuda_sum_ns": 1300480.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 114,
+      "position": 144,
+      "operator": "attention",
+      "cuda_sum_ns": 1364992.013
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 115,
+      "position": 145,
+      "operator": "attention",
+      "cuda_sum_ns": 1384448.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 116,
+      "position": 146,
+      "operator": "attention",
+      "cuda_sum_ns": 1382400.0289999999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 117,
+      "position": 147,
+      "operator": "attention",
+      "cuda_sum_ns": 1382400.0289999999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 118,
+      "position": 148,
+      "operator": "attention",
+      "cuda_sum_ns": 1382400.028
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 119,
+      "position": 149,
+      "operator": "attention",
+      "cuda_sum_ns": 1385472.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 120,
+      "position": 150,
+      "operator": "attention",
+      "cuda_sum_ns": 1385472.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 121,
+      "position": 151,
+      "operator": "attention",
+      "cuda_sum_ns": 1379584.025
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 122,
+      "position": 152,
+      "operator": "attention",
+      "cuda_sum_ns": 1421312.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 123,
+      "position": 153,
+      "operator": "attention",
+      "cuda_sum_ns": 1437696.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 124,
+      "position": 154,
+      "operator": "attention",
+      "cuda_sum_ns": 1435648.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 125,
+      "position": 155,
+      "operator": "attention",
+      "cuda_sum_ns": 1439744.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 126,
+      "position": 156,
+      "operator": "attention",
+      "cuda_sum_ns": 1437696.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 127,
+      "position": 157,
+      "operator": "attention",
+      "cuda_sum_ns": 1443840.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 128,
+      "position": 158,
+      "operator": "attention",
+      "cuda_sum_ns": 1436672.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 130,
+      "position": 128,
+      "operator": "attention",
+      "cuda_sum_ns": 1598464.014000001
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 131,
+      "position": 129,
+      "operator": "attention",
+      "cuda_sum_ns": 1251327.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 132,
+      "position": 130,
+      "operator": "attention",
+      "cuda_sum_ns": 1254399.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 133,
+      "position": 131,
+      "operator": "attention",
+      "cuda_sum_ns": 1252351.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 134,
+      "position": 132,
+      "operator": "attention",
+      "cuda_sum_ns": 1256447.9709999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 135,
+      "position": 133,
+      "operator": "attention",
+      "cuda_sum_ns": 1258495.971
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 136,
+      "position": 134,
+      "operator": "attention",
+      "cuda_sum_ns": 1257471.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 137,
+      "position": 135,
+      "operator": "attention",
+      "cuda_sum_ns": 1252351.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 138,
+      "position": 136,
+      "operator": "attention",
+      "cuda_sum_ns": 1291263.999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 139,
+      "position": 137,
+      "operator": "attention",
+      "cuda_sum_ns": 1308672.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 140,
+      "position": 138,
+      "operator": "attention",
+      "cuda_sum_ns": 1308672.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 141,
+      "position": 139,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 142,
+      "position": 140,
+      "operator": "attention",
+      "cuda_sum_ns": 1311744.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 143,
+      "position": 141,
+      "operator": "attention",
+      "cuda_sum_ns": 1310720.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 144,
+      "position": 142,
+      "operator": "attention",
+      "cuda_sum_ns": 1309696.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 145,
+      "position": 143,
+      "operator": "attention",
+      "cuda_sum_ns": 1310720.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 146,
+      "position": 144,
+      "operator": "attention",
+      "cuda_sum_ns": 1367040.015
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 147,
+      "position": 145,
+      "operator": "attention",
+      "cuda_sum_ns": 1382400.0289999999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 148,
+      "position": 146,
+      "operator": "attention",
+      "cuda_sum_ns": 1380352.027
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 149,
+      "position": 147,
+      "operator": "attention",
+      "cuda_sum_ns": 1381376.0289999999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 150,
+      "position": 148,
+      "operator": "attention",
+      "cuda_sum_ns": 1383424.029
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 151,
+      "position": 149,
+      "operator": "attention",
+      "cuda_sum_ns": 1385472.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 152,
+      "position": 150,
+      "operator": "attention",
+      "cuda_sum_ns": 1381632.027
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 153,
+      "position": 151,
+      "operator": "attention",
+      "cuda_sum_ns": 1381376.027
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 154,
+      "position": 152,
+      "operator": "attention",
+      "cuda_sum_ns": 1424384.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 155,
+      "position": 153,
+      "operator": "attention",
+      "cuda_sum_ns": 1436672.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 156,
+      "position": 154,
+      "operator": "attention",
+      "cuda_sum_ns": 1438720.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 157,
+      "position": 155,
+      "operator": "attention",
+      "cuda_sum_ns": 1434624.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 158,
+      "position": 156,
+      "operator": "attention",
+      "cuda_sum_ns": 1435648.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 159,
+      "position": 157,
+      "operator": "attention",
+      "cuda_sum_ns": 1443840.031
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 160,
+      "position": 158,
+      "operator": "attention",
+      "cuda_sum_ns": 1436672.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 162,
+      "position": 128,
+      "operator": "attention",
+      "cuda_sum_ns": 1595392.014000001
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 163,
+      "position": 129,
+      "operator": "attention",
+      "cuda_sum_ns": 1256447.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 164,
+      "position": 130,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 165,
+      "position": 131,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 166,
+      "position": 132,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 167,
+      "position": 133,
+      "operator": "attention",
+      "cuda_sum_ns": 1258495.971
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 168,
+      "position": 134,
+      "operator": "attention",
+      "cuda_sum_ns": 1255423.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 169,
+      "position": 135,
+      "operator": "attention",
+      "cuda_sum_ns": 1252351.9699999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 170,
+      "position": 136,
+      "operator": "attention",
+      "cuda_sum_ns": 1292288.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 171,
+      "position": 137,
+      "operator": "attention",
+      "cuda_sum_ns": 1300480.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 172,
+      "position": 138,
+      "operator": "attention",
+      "cuda_sum_ns": 1310720.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 173,
+      "position": 139,
+      "operator": "attention",
+      "cuda_sum_ns": 1307648.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 174,
+      "position": 140,
+      "operator": "attention",
+      "cuda_sum_ns": 1310720.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 175,
+      "position": 141,
+      "operator": "attention",
+      "cuda_sum_ns": 1310720.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 176,
+      "position": 142,
+      "operator": "attention",
+      "cuda_sum_ns": 1312768.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 177,
+      "position": 143,
+      "operator": "attention",
+      "cuda_sum_ns": 1312768.0
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 178,
+      "position": 144,
+      "operator": "attention",
+      "cuda_sum_ns": 1366016.0139999997
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 179,
+      "position": 145,
+      "operator": "attention",
+      "cuda_sum_ns": 1379328.026
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 180,
+      "position": 146,
+      "operator": "attention",
+      "cuda_sum_ns": 1380544.027
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 181,
+      "position": 147,
+      "operator": "attention",
+      "cuda_sum_ns": 1382400.0289999999
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 182,
+      "position": 148,
+      "operator": "attention",
+      "cuda_sum_ns": 1380352.027
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 183,
+      "position": 149,
+      "operator": "attention",
+      "cuda_sum_ns": 1385472.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 184,
+      "position": 150,
+      "operator": "attention",
+      "cuda_sum_ns": 1381376.028
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 185,
+      "position": 151,
+      "operator": "attention",
+      "cuda_sum_ns": 1381376.0269999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 186,
+      "position": 152,
+      "operator": "attention",
+      "cuda_sum_ns": 1422336.03
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 187,
+      "position": 153,
+      "operator": "attention",
+      "cuda_sum_ns": 1438720.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 188,
+      "position": 154,
+      "operator": "attention",
+      "cuda_sum_ns": 1434624.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 189,
+      "position": 155,
+      "operator": "attention",
+      "cuda_sum_ns": 1436672.0299999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 190,
+      "position": 156,
+      "operator": "attention",
+      "cuda_sum_ns": 1435776.0269999998
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 191,
+      "position": 157,
+      "operator": "attention",
+      "cuda_sum_ns": 1439968.028
+    },
+    {
+      "capture_id": 2,
+      "replay_id": 192,
+      "position": 158,
+      "operator": "attention",
+      "cuda_sum_ns": 1440768.0299999998
+    }
+  ],
+  "interpretation": [
+    "CUDA spans include the perturbation from external event nodes; these are not serving performance results.",
+    "Sum is formed per replay before taking its median; failed or missing intervals produce a null replay sum.",
+    "Host wait includes GPU execution and is not added to GPU operator or whole-graph spans.",
+    "Only one family is selected per process. Unselected families and initial norm/embedding/argmax/transfers are unmeasured.",
+    "Position 127 is the batched prefill replay; captured handle IDs bind all decode operator results.",
+    "Different captures/logs require matching binary, workload, GPU and environment receipts for comparison."
+  ],
+  "whole_graph_perturbation": {
+    "baseline_log_sha256": "1ed0e269e3281b4039c9cd4a48900e93334a8b0b5b016a199a4de5567e1d99e4",
+    "groups": [
+      {
+        "phase": "prefill",
+        "off_median_ns": 13656096.458,
+        "selected_median_ns": 13706463.814,
+        "ratio": 1.0036882689101463
+      },
+      {
+        "phase": "decode",
+        "off_median_ns": 1986304.045,
+        "selected_median_ns": 2117952.108,
+        "ratio": 1.066277901075311
+      }
+    ],
+    "matched_runtime_provenance_verified": false,
+    "performance_claim_eligible": false
+  }
+}

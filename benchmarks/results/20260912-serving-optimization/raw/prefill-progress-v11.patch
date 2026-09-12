@@ -1,0 +1,195 @@
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/mod.rs b/crates/riley-runtime/src/llama/multi_descriptor/mod.rs
+index 716a631..b356a2a 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/mod.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/mod.rs
+@@ -4,6 +4,8 @@
+ //! authoritative scheduler/owner adapter; packet bytes never establish live
+ //! ownership or quiescence. GPU dispatch wiring is separate; no performance claim.
+ 
++pub mod shape_progress;
++
+ use std::collections::BTreeSet;
+ use std::fmt;
+ 
+@@ -273,28 +275,17 @@ pub fn validate_expectations(e: &SubmissionExpectation) -> Result<()> {
+             "input_tokens",
+             "wrong count or vocabulary bound",
+         )?;
+-        let target = row
+-            .committed_length
+-            .checked_add(input_count as u32)
+-            .ok_or_else(|| overflow("target_length"))?;
+-        check(
+-            row.target_length == target && target <= 160,
+-            "target_length",
+-            "target differs from committed prefix plus inputs",
+-        )?;
+-        let pos = target.checked_sub(1).ok_or_else(|| overflow("position"))?;
+-        match e.stage {
+-            Stage::Prefill128 => check(
+-                row.committed_length == 0 && target == 128 && row.generated_index == 0,
+-                "prefill",
+-                "requires a fresh complete P128 prompt",
+-            )?,
+-            Stage::Decode => check(
+-                (128..160).contains(&pos) && row.generated_index == pos - 127,
+-                "decode",
+-                "independent decode position or generated index differs",
+-            )?,
+-        }
++        // The v2 wire remains deliberately bounded; the logical request-progress
++        // calculation is shared with the variable-shape path being integrated.
++        let progress = shape_progress::Progress {
++            prompt_tokens: 128, output_limit: row.max_output_tokens, context_tokens: 160,
++            committed_tokens: row.committed_length, input_tokens: input_count as u32,
++            generated_index: row.generated_index,
++            stage: if e.stage==Stage::Prefill128 { shape_progress::InputStage::Prefill } else { shape_progress::InputStage::Decode },
++        }.validate()?;
++        let target=progress.target_tokens;
++        check(row.target_length==target,"target_length","target differs from committed prefix plus inputs")?;
++        let pos=progress.last_position;
+         let live = target.div_ceil(16) as usize;
+         check(
+             row.physical_ids.len() == live && row.valid_tokens.len() == live && live <= 10,
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/shape_progress.rs b/crates/riley-runtime/src/llama/multi_descriptor/shape_progress.rs
+new file mode 100644
+index 0000000..e0358a6
+--- /dev/null
++++ b/crates/riley-runtime/src/llama/multi_descriptor/shape_progress.rs
+@@ -0,0 +1,89 @@
++//! Request progress checked before packing. This is not GPU admission or ownership proof.
++use super::{check, overflow, Result};
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum InputStage { Prefill, Decode }
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Progress {
++    pub prompt_tokens: u32,
++    pub output_limit: u32,
++    pub context_tokens: u32,
++    pub committed_tokens: u32,
++    pub input_tokens: u32,
++    /// Index of the output that this step would publish, zero-based.
++    pub generated_index: u32,
++    pub stage: InputStage,
++}
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct ValidatedProgress {
++    pub target_tokens: u32,
++    pub last_position: u32,
++    pub live_pages: u32,
++    pub last_page_tokens: u16,
++    /// None for an unfinished prompt: no token/logits may be published yet.
++    pub logits_input_row: Option<u32>,
++}
++impl Progress {
++    pub fn validate(self) -> Result<ValidatedProgress> {
++        check(self.prompt_tokens>0 && self.output_limit>0 && self.context_tokens>0 && self.context_tokens<=4096,
++            "request_shape", "empty or unsupported request geometry")?;
++        let last_target=self.prompt_tokens.checked_add(self.output_limit-1).ok_or_else(||overflow("request_shape"))?;
++        check(last_target<=self.context_tokens,"request_shape","requested generation exceeds context")?;
++        check(self.input_tokens>0 && self.input_tokens<=1024,"input_count","empty or unsupported input chunk")?;
++        check(self.generated_index<self.output_limit,"generation_bound","output limit exhausted")?;
++        let target=self.committed_tokens.checked_add(self.input_tokens).ok_or_else(||overflow("target_length"))?;
++        check(target<=self.context_tokens,"target_length","context exceeded")?;
++        let publish=match self.stage {
++            InputStage::Prefill=>{
++                check(self.generated_index==0 && self.committed_tokens<self.prompt_tokens && target<=self.prompt_tokens,
++                    "prefill", "prefill must extend only the unfinished prompt")?;
++                target==self.prompt_tokens
++            },
++            InputStage::Decode=>{
++                let committed=self.prompt_tokens.checked_add(self.generated_index).and_then(|v|v.checked_sub(1)).ok_or_else(||overflow("decode"))?;
++                check(self.generated_index>0 && self.input_tokens==1 && self.committed_tokens==committed,
++                    "decode", "decode position does not match published output count")?;
++                true
++            }
++        };
++        Ok(ValidatedProgress { target_tokens:target,last_position:target-1,live_pages:target.div_ceil(16),
++            last_page_tokens:((target-1)%16+1) as u16,logits_input_row:publish.then_some(self.input_tokens-1) })
++    }
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn chunked_requests_publish_only_after_complete_prompt_then_exact_output_budget() {
++        for prompt in [1,16,17,127,128,129,255,256,257,398,1024] {
++            for limit in [1,32,64,128] {
++                let mut committed=0;
++                while committed<prompt {
++                    let count=(prompt-committed).min(73);
++                    let v=Progress{prompt_tokens:prompt,output_limit:limit,context_tokens:prompt+limit-1,
++                        committed_tokens:committed,input_tokens:count,generated_index:0,stage:InputStage::Prefill}.validate().unwrap();
++                    committed+=count;
++                    assert_eq!(v.logits_input_row.is_some(),committed==prompt);
++                    assert_eq!(v.live_pages,(committed+15)/16);
++                    assert_eq!(v.last_page_tokens,((committed-1)%16+1) as u16);
++                }
++                for generated in 1..limit {
++                    let x=Progress{prompt_tokens:prompt,output_limit:limit,context_tokens:prompt+limit-1,
++                        committed_tokens:committed,input_tokens:1,generated_index:generated,stage:InputStage::Decode};
++                    let v=x.validate().unwrap();assert_eq!(v.logits_input_row,Some(0));committed+=1;
++                    assert!(Progress{generated_index:generated+1,..x}.validate().is_err());
++                }
++                assert_eq!(committed,prompt+limit-1);
++            }
++        }
++    }
++    #[test]
++    fn rejects_cross_stage_overlap_overflow_and_context_exhaustion() {
++        let x=Progress{prompt_tokens:129,output_limit:32,context_tokens:160,committed_tokens:128,input_tokens:1,generated_index:0,stage:InputStage::Prefill};
++        assert_eq!(x.validate().unwrap().logits_input_row,Some(0));
++        for bad in [Progress{input_tokens:2,..x},Progress{generated_index:1,..x},Progress{stage:InputStage::Decode,..x},
++            Progress{context_tokens:159,..x},Progress{prompt_tokens:u32::MAX,..x},Progress{committed_tokens:u32::MAX,..x},Progress{input_tokens:0,..x}] {
++            assert!(bad.validate().is_err(),"{bad:?}");
++        }
++    }
++}
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index 0a8593a..be93388 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -5,6 +5,7 @@ use crate::{RequestId, Scheduler};
+ pub struct AuthorizedExecutionRow {
+     pub(crate) request_id: RequestId,
+     pub(crate) committed_length: usize,
++    pub(crate) prompt_tokens: usize,
+     pub(crate) generated_index: usize,
+     pub(crate) max_output_tokens: usize,
+     pub(crate) table: OwnedBlockTable,
+@@ -13,6 +14,7 @@ impl AuthorizedExecutionRow {
+     pub fn request_id(&self) -> RequestId {
+         self.request_id
+     }
++    pub fn prompt_tokens(&self) -> usize { self.prompt_tokens }
+     pub fn committed_length(&self) -> usize {
+         self.committed_length
+     }
+@@ -99,6 +101,14 @@ impl AuthorizedExecution<'_> {
+             if work.request_id() != row.request_id {
+                 return Err(bad());
+             }
++            let progress=crate::descriptor::shape_progress::Progress {
++                prompt_tokens:to32(row.prompt_tokens)?, output_limit:to32(row.max_output_tokens)?, context_tokens:160,
++                committed_tokens:to32(row.committed_length)?, input_tokens:to32(work.input_tokens().len())?, generated_index:to32(row.generated_index)?,
++                stage:if stage==Stage::Prefill128 { crate::descriptor::shape_progress::InputStage::Prefill } else { crate::descriptor::shape_progress::InputStage::Decode },
++            }.validate()?;
++            // v2 has no prompt-length field: keep it restricted until the new wire
++            // and native executor carry this scheduler-owned value end to end.
++            if row.prompt_tokens!=128 || progress.target_tokens!=to32(work.target_logical_length())? || progress.logits_input_row.is_none() { return Err(bad()); }
+             rows.push(ReservationExpectation {
+                 sequence_tag: row.request_id.get(),
+                 cookie: *cookie,
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index f59a7d5..f0dcba5 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -3229,6 +3229,7 @@ impl Scheduler {
+             rows.push(crate::AuthorizedExecutionRow {
+                 request_id: item.request_id,
+                 committed_length: sequence.logical_length() as usize,
++                prompt_tokens: record.descriptor.prompt_token_ids.len(),
+                 generated_index: record.generated_token_ids.len(),
+                 max_output_tokens: record.descriptor.max_new_tokens,
+                 table: OwnedBlockTable::copy_from_v1(item.request_id, live)?,

@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "source_commit": "9737c7f98fd1220d4c3fccfceee60a52466b3344",
+  "argv": [
+    "cargo",
+    "test",
+    "--release",
+    "-p",
+    "riley-cuda",
+    "--features",
+    "cuda",
+    "--test",
+    "strided_gemm_gpu",
+    "--",
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1"
+  ],
+  "log_sha256": "1cb5f38cc60cf0831c20c8218500ba212e8e17c7310f5bff9ff2d98decb7012e",
+  "cases": 20,
+  "gpu_tests_executed": true,
+  "performance_measured": false
+}

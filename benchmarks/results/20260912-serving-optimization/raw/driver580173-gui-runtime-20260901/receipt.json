@@ -1,0 +1,98 @@
+{
+  "completed": true,
+  "host_packages_modified": false,
+  "host_restart_performed": false,
+  "runtime_only": true,
+  "snapshot": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/",
+  "packages": [
+    {
+      "package": "libnvidia-cfg1-580",
+      "version": "580.173.02-0ubuntu0.22.04.1",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/pool/restricted/n/nvidia-graphics-drivers-580/libnvidia-cfg1-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/libnvidia-cfg1-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "sha256": "4bbd5322e3d529dd9f3ec82a927c1b67517e60b9d790a5f7e26008cfb6db35d2",
+      "size": 164094
+    },
+    {
+      "package": "libnvidia-extra-580",
+      "version": "580.173.02-0ubuntu0.22.04.1",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/pool/restricted/n/nvidia-graphics-drivers-580/libnvidia-extra-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/libnvidia-extra-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "sha256": "76414affd2b374a27c89853cf2937af58d2b2a54579b7cfb91a2efe0ba2beeef",
+      "size": 79510
+    },
+    {
+      "package": "libnvidia-gl-580",
+      "version": "580.173.02-0ubuntu0.22.04.1",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/pool/restricted/n/nvidia-graphics-drivers-580/libnvidia-gl-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/libnvidia-gl-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "sha256": "103fc80e00b3259c7c3fa4b94989705ff80e4eb02741021df15888173d18004e",
+      "size": 173459288
+    }
+  ],
+  "signed_compute_receipt": {
+    "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+    "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+  },
+  "helpers": {
+    "/tmp/riley-opt-260912/prepare_gui_driver_runtime.py": "2c039f6cfcb32d0204f988a11c3450b6367b16d0ea95d04bcff83d277d86c230",
+    "/tmp/riley-opt-260912/prepare_driver_runtime.py": "0ad3e8dc9765ae8ee6e7249d98b9be4c66563c51be3e7a7e08399b8bc1cfdc6c"
+  },
+  "library_path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+  "files": {
+    "usr/bin/nvidia-ngx-updater": "81fd1a7d74f86eb306dcdb5e2da163c2050e5b53145dc69d29ce60195d7cecc8",
+    "usr/bin/nvidia-pcc": "5c28c56f0b8bb85415db1c52e72e10283946c93ce14de56d7782728dc00bb525",
+    "usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.580.173.02": "3b3f89a28f0d382e76dc2caf4282fe084d71d10d5cb979a52dcd48c53265a4f9",
+    "usr/lib/x86_64-linux-gnu/libGLESv1_CM_nvidia.so.580.173.02": "9ca1ab802cf9da5d935c454d9da007ceebdb7045f9921ee9fc319a681355b7f3",
+    "usr/lib/x86_64-linux-gnu/libGLESv2_nvidia.so.580.173.02": "5345ce9ccc994c907e911bbd24a2266a302494183b75f831c6649c949e889b2f",
+    "usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02": "7e9ea3c9494f5a4c84e59ed0e1c9836e4b250345dc0ec37fafde7449f5bdb291",
+    "usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02": "0bcdfdfb4873050f861e294d99c9fca26cf4b0b59305147131d11aad20d61981",
+    "usr/lib/x86_64-linux-gnu/libnvidia-api.so.1": "4a199f9b259a1098ab9c01d31c67f882a2531a0fbb9c3595ad3d016c7d131d8c",
+    "usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.580.173.02": "a274489a2837b6234d20a77054a65fd30aabe470ba111f710b5ab5692c68c93f",
+    "usr/lib/x86_64-linux-gnu/libnvidia-egl-gbm.so.1.1.3": "9ce36a720acb09df7ae11b892c6880f014979f6443adc38211a586b435af66d6",
+    "usr/lib/x86_64-linux-gnu/libnvidia-egl-xcb.so.1.0.5": "d2a599b51e013604ae92231286835b4f59c01bc0f691fea2907dad5a14057e7b",
+    "usr/lib/x86_64-linux-gnu/libnvidia-egl-xlib.so.1.0.5": "af29afc4ed6210e07d23badb3a204114d1230cd0a7efb7ea23c7d5ecc07794ad",
+    "usr/lib/x86_64-linux-gnu/libnvidia-eglcore.so.580.173.02": "efa71b356af62131a1c796a5bfe478a0cf04397769e839c1487d0b18307a1bb9",
+    "usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02": "cb4e22f2b0668cb1a79aaefdb344f10c2ff0c61a85054df15f4102d8ba518a4e",
+    "usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02": "6b9b16e656b79bf758157b3bdd7edced1431ba8d4242b613acc733f1dcf8f5c0",
+    "usr/lib/x86_64-linux-gnu/libnvidia-glvkspirv.so.580.173.02": "5a07524acc4a41f6fe5214d82ee76b1cd896a5bda1ea1fe36857146fb6d9ee3a",
+    "usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02": "57d031b477d37f182a2c3d3ff0845b42c0e903b5cc1f00ee8a2f057ea75cf89e",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ngx.so.580.173.02": "6bc8e069b85bcf62a203d0c61a85acb0a6e80a9992e668d327491ebfa6f140f5",
+    "usr/lib/x86_64-linux-gnu/libnvidia-present.so.580.173.02": "d48ea7a32e64d3eef294e73c886232f15d0e3beb2f449e5c271bd18a6383afbc",
+    "usr/lib/x86_64-linux-gnu/libnvidia-rtcore.so.580.173.02": "14eafb195b5d9e09ca2dd31fba9c4dbe6950fada8ec08ed6eb0debd11056e087",
+    "usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02": "3aaa689dbd242f4cf9532ae95bedf76affa8562ca759400955659371c8639625",
+    "usr/lib/x86_64-linux-gnu/libnvidia-vksc-core.so.580.173.02": "0f32a9460394e2cd29fa3b063166a45c249948c1634590edf4f7cd9540441288",
+    "usr/lib/x86_64-linux-gnu/libnvoptix.so.580.173.02": "ff3c3f7269060d284339754dbdaf27ca88225466d165be820ca8e3c0ede0d4aa",
+    "usr/lib/x86_64-linux-gnu/nvidia/wine/_nvngx.dll": "f84aaa7c7bf95f8892023414549090f264a1cc7a53039e0b8dd0e9f801158f61",
+    "usr/lib/x86_64-linux-gnu/nvidia/wine/nvngx.dll": "52a68acc4e477eeff598b5ca01f26215dc5aa487c8f150b02c27ad099c11de0b",
+    "usr/lib/x86_64-linux-gnu/nvidia/xorg/libglxserver_nvidia.so.580.173.02": "f375b757a48eb80187784e07ca20f33da6daac940f53f3195f0a5c5d44c5c1ec",
+    "usr/share/doc/libnvidia-cfg1-580/changelog.Debian.gz": "160c83ce45411972e3733267b0a72029e64eb9aac3ba970b53b7700b59d87a16",
+    "usr/share/doc/libnvidia-cfg1-580/copyright": "d088d505751b1a2246744d16bdb5846d0df1a804700ab8d09330b6e79165edef",
+    "usr/share/doc/libnvidia-extra-580/changelog.Debian.gz": "160c83ce45411972e3733267b0a72029e64eb9aac3ba970b53b7700b59d87a16",
+    "usr/share/doc/libnvidia-extra-580/copyright": "d088d505751b1a2246744d16bdb5846d0df1a804700ab8d09330b6e79165edef",
+    "usr/share/doc/libnvidia-gl-580/changelog.Debian.gz": "160c83ce45411972e3733267b0a72029e64eb9aac3ba970b53b7700b59d87a16",
+    "usr/share/doc/libnvidia-gl-580/copyright": "d088d505751b1a2246744d16bdb5846d0df1a804700ab8d09330b6e79165edef",
+    "usr/share/egl/egl_external_platform.d/15_nvidia_gbm.json": "be0e01a28300d80ea9a326718d4bdc45eb1ec5d80482a8f6e69e9e1594a5f196",
+    "usr/share/egl/egl_external_platform.d/20_nvidia_xcb.json": "ecc36936f90778da0466af3ac7fb4e81d3ac8f389bb87d2ea770d30ed188f97f",
+    "usr/share/egl/egl_external_platform.d/20_nvidia_xlib.json": "16610f65ca65d97fd79ef6d2b583544925ca0a44dffb2e442ca545eb46a1575f",
+    "usr/share/glvnd/egl_vendor.d/10_nvidia.json": "9e6f14afaa7523370ad96e6675d3357441ee3985e60405cb3e0ced30b2ddaf76",
+    "usr/share/lintian/overrides/libnvidia-gl-580": "f93a487a9287b4868ae14fa063273192b1da03b2582bd822e770b37d2980325b",
+    "usr/share/nvidia/nvoptix.bin": "d5eacd24c18bda32f0b40d82c6fb2597c6b8fc72294b16a71c22ce164b9c26a2",
+    "usr/share/vulkan/icd.d/nvidia_icd.json": "7bdb6f27d35b66fc848df6f94b8773bba30ea3a7f06f114100d14154a235a34b",
+    "usr/share/vulkan/implicit_layer.d/nvidia_layers.json": "583209468bff24026e102c73c9ccae27b4ad0992fba8a26450cef93fc7c6055e",
+    "usr/share/vulkansc/icd.d/nvidia_icd_vksc.json": "f8180cd3e1b1dd949f95508e0534aeeae52b26055aefcc2e8c4c6141315d6b7a"
+  },
+  "symlinks": {
+    "usr/lib/x86_64-linux-gnu/gbm/nvidia-drm_gbm.so": "../libnvidia-allocator.so.1",
+    "usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.0": "libEGL_nvidia.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libGLESv1_CM_nvidia.so.1": "libGLESv1_CM_nvidia.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libGLESv2_nvidia.so.2": "libGLESv2_nvidia.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0": "libGLX_nvidia.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-allocator.so": "libnvidia-allocator.so.1",
+    "usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1": "libnvidia-allocator.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-cfg.so": "libnvidia-cfg.so.1",
+    "usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1": "libnvidia-cfg.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvoptix.so.1": "libnvoptix.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/nvidia/xorg/libglxserver_nvidia.so": "libglxserver_nvidia.so.580.173.02"
+  }
+}

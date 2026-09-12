@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/python",
+    "/tmp/riley-g04-vllm-profile-260911/vllm_lane.py",
+    "--matrix",
+    "/tmp/riley-g04-vllm-profile-source-260911/benchmarks/matrix.yaml",
+    "--prompts",
+    "/tmp/riley-g04-vllm-profile-260911/prompts.jsonl",
+    "--result-dir",
+    "/tmp/riley-opt-260912/batch5-engine/pair-01-vllm/vllm",
+    "--run-index",
+    "1",
+    "--run-id",
+    "g04-vllm-1",
+    "--warm-state",
+    "warm",
+    "--concurrency",
+    "1",
+    "--prompt-tokens",
+    "128",
+    "--output-tokens",
+    "32"
+  ],
+  "env": {
+    "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "DO_NOT_TRACK": "1"
+  },
+  "cwd": "/tmp/riley-opt-260912/batch5-source",
+  "pid": 3875313,
+  "fresh_process": true
+}

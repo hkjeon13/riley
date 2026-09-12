@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/diagnose_vllm_concurrency_output.py", line 115, in <module>
+    main()
+  File "/tmp/riley-opt-260912/diagnose_vllm_concurrency_output.py", line 43, in main
+    'gpu_before': load.shared.gpu_snapshot(binding)})
+  File "/tmp/riley-opt-260912/run_serving_optimization.py", line 108, in gpu_snapshot
+    row = subprocess.check_output([
+  File "/usr/lib/python3.10/subprocess.py", line 421, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['nvidia-smi', '-i', '0', '--query-gpu=uuid,temperature.gpu,memory.used', '--format=csv,noheader,nounits']' returned non-zero exit status 18.

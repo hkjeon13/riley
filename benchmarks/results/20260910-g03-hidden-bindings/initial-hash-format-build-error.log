@@ -1,0 +1,37 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+error[E0277]: the trait bound `Array<u8, UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B0>, B0>, B0>, B0>>: LowerHex` is not satisfied
+   --> crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs:339:92
+    |
+339 | ...point={checkpoint_env} layers={} bytes={} sha256={digest:x} tokens={predictions:?}", candidate.owner.forward.plan.layers().len(), evid...
+    |                                                     ^^^^^^^^^^ the trait `LowerHex` is not implemented for `Array<u8, UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B0>, B0>, B0>, B0>>`
+    |
+    = help: the following other types implement trait `LowerHex`:
+              &T
+              &mut T
+              Saturating<T>
+              Wrapping<T>
+              i128
+              i16
+              i32
+              i64
+            and 12 others
+note: required by a bound in `core::fmt::rt::Argument::<'_>::new_lower_hex`
+   --> /rustc/4d91de4e48198da2e33413efdcd9cd2cc0c46688/library/core/src/fmt/rt.rs:129:5
+    = note: this error originates in the macro `$crate::format_args_nl` which comes from the expansion of the macro `println` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `riley-runtime` (lib test) due to 1 previous error

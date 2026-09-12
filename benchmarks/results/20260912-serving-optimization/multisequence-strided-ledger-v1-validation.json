@@ -1,0 +1,22 @@
+{
+  "schema": "riley.multisequence-aggregate-lease-check.v1",
+  "status": "passed",
+  "scope": "aggregate reservation and subsequent standalone GEMM execution; not full decode",
+  "logs": [
+    {
+      "path": "raw/multisequence-strided-ledger-v1.log",
+      "source_commit": "fd223c97cc82c5df0178d74a2d355e2f9482925b",
+      "sha256": "7208ab1501a8f225163298a99f28d995e18730188d7844b67d48258eea042837",
+      "tests_passed": 3
+    },
+    {
+      "path": "raw/multisequence-strided-rust-ledger-v1.log",
+      "source_commit": "617bbd5497e43ee934dee24384f1d85e2d35cb78",
+      "sha256": "3ffe505b0e786fb10d698e7217ed55c3194314787f5bd395e711fe73b3ae31ff",
+      "tests_passed": 1
+    }
+  ],
+  "cpu_tests": 86,
+  "binder_status": "compiled but not yet exercised through aggregate decode recording",
+  "serving_benchmark_performed": false
+}

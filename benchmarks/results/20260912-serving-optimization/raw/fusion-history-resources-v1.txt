@@ -1,0 +1,402 @@
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi11EEEvP13__nv_bfloat16mm:
+  REG:80 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi10EEEvP13__nv_bfloat16mm:
+  REG:64 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi9EEEvP13__nv_bfloat16mm:
+  REG:56 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi8EEEvP13__nv_bfloat16mm:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi7EEEvP13__nv_bfloat16mm:
+  REG:31 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi6EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi5EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi4EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi3EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi2EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi1EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9828hf_persistent_softmax_kernelILi0EEEvP13__nv_bfloat16mm:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi8EEEvP13__nv_bfloat16m:
+  REG:30 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi7EEEvP13__nv_bfloat16m:
+  REG:28 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi6EEEvP13__nv_bfloat16m:
+  REG:29 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi5EEEvP13__nv_bfloat16m:
+  REG:31 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi4EEEvP13__nv_bfloat16m:
+  REG:29 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9825hf_regular_softmax_kernelILi3EEEvP13__nv_bfloat16m:
+  REG:25 STACK:0 SHARED:128 LOCAL:0 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9824scale_causal_mask_kernelEP13__nv_bfloat16mfm:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__0b167c74_21_attention_cublaslt_cu_8916ea9816repeat_kv_kernelEPK13__nv_bfloat16PS0_mmmmm:
+  REG:30 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea021bound_kv_write_kernelEPK13__nv_bfloat16S2_PS0_S3_PKjmm:
+  REG:21 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea017row_gather_kernelI13__nv_bfloat16EEvPKT_PKjPS2_mmm:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea017row_gather_kernelIfEEvPKT_PKjPS1_mmm:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea019indexed_rope_kernelI13__nv_bfloat16EEvPKT_PKfS6_PKjPS2_mmmmm:
+  REG:32 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:432 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea019indexed_rope_kernelIfEEvPKT_PKfS5_PKjPS1_mmmmm:
+  REG:32 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:432 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea046fixed37_ragged_paged_attention_two_pass_kernelEPK13__nv_bfloat16S2_S2_PS0_NS_11DeviceBatchEmmmfm:
+  REG:39 STACK:0 SHARED:16 LOCAL:0 CONSTANT[0]:496 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea043ragged_paged_attention_gqa_shared_kv_kernelEPK13__nv_bfloat16S2_S2_PS0_NS_11DeviceBatchEmmf:
+  REG:39 STACK:0 SHARED:4096 LOCAL:0 CONSTANT[0]:476 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea043ragged_paged_attention_grouped_heads_kernelEPK13__nv_bfloat16S2_S2_PS0_NS_11DeviceBatchEmmf:
+  REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:476 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea029ragged_paged_attention_kernelEPK13__nv_bfloat16S2_S2_PS0_NS_11DeviceBatchEmmf:
+  REG:23 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:476 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea034ragged_paged_kv_cache_write_kernelEPK13__nv_bfloat16S2_PS0_S3_NS_11DeviceBatchEmmm:
+  REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:480 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN52_GLOBAL__N__e9fa05a9_19_batch_primitives_cu_95c97ea018bf16_argmax_kernelEPK13__nv_bfloat16P25RileyCudaBf16ArgmaxResultmm:
+  REG:22 STACK:0 SHARED:96 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN48_GLOBAL__N__55a66344_15_fixed37_gemm_cu_2ce5c32e19fixed37_gemm_kernelEPK13__nv_bfloat16S2_PS0_mmmmm:
+  REG:40 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:416 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN54_GLOBAL__N__3d7ff65d_21_fixed37_primitives_cu_182e91c532fixed37_residual_rms_norm_kernelI13__nv_bfloat16EEvPKT_S4_S4_PS2_S5_mmfm:
+  REG:35 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:424 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__3d7ff65d_21_fixed37_primitives_cu_182e91c532fixed37_residual_rms_norm_kernelIfEEvPKT_S3_S3_PS1_S4_mmfm:
+  REG:34 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:424 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__3d7ff65d_21_fixed37_primitives_cu_182e91c523fixed37_rms_norm_kernelI13__nv_bfloat16EEvPKT_S4_PS2_mmfm:
+  REG:35 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__3d7ff65d_21_fixed37_primitives_cu_182e91c523fixed37_rms_norm_kernelIfEEvPKT_S3_PS1_mmfm:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN54_GLOBAL__N__3d7ff65d_21_fixed37_primitives_cu_182e91c526fixed37_log_softmax_kernelEPK13__nv_bfloat16Pfmm:
+  REG:40 STACK:0 SHARED:16 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:24 CONSTANT[4]:8
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f11rope_kernelI13__nv_bfloat16EEvPKT_PKfS6_PS2_mmmmm:
+  REG:26 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:424 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f11rope_kernelIfEEvPKT_PKfS5_PS1_mmmmm:
+  REG:26 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:424 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f21gated_multiply_kernelIfEEvPKT_S3_PS1_m:
+  REG:14 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f11silu_kernelIfEEvPKT_PS1_m:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f24residual_rms_norm_kernelI13__nv_bfloat16EEvPKT_S4_S4_PS2_S5_mmf:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:412 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f24residual_rms_norm_kernelIfEEvPKT_S3_S3_PS1_S4_mmf:
+  REG:22 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:412 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f19residual_add_kernelIfEEvPKT_S3_PS1_m:
+  REG:14 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f15rms_norm_kernelIfEEvPKT_S3_PS1_mmf:
+  REG:22 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:396 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f16embedding_kernelIfEEvPKT_PKjPS1_PK29RileyCudaEmbeddingErrorReportmm:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f16embedding_kernelI13__nv_bfloat16EEvPKT_PKjPS2_PK29RileyCudaEmbeddingErrorReportmm:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f15rms_norm_kernelI13__nv_bfloat16EEvPKT_S4_PS2_mmf:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:396 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f19residual_add_kernelI13__nv_bfloat16EEvPKT_S4_PS2_m:
+  REG:12 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f21gated_multiply_kernelI13__nv_bfloat16EEvPKT_S4_PS2_m:
+  REG:12 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f11silu_kernelI13__nv_bfloat16EEvPKT_PS2_m:
+  REG:18 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f36hugging_face_smollm2_rms_norm_kernelILb1EEEvPK13__nv_bfloat16S3_S3_PS1_S4_m:
+  REG:27 STACK:0 SHARED:64 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f36hugging_face_smollm2_rms_norm_kernelILb0EEEvPK13__nv_bfloat16S3_S3_PS1_S4_m:
+  REG:24 STACK:0 SHARED:64 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f23cast_f32_to_bf16_kernelEPKfP13__nv_bfloat16m:
+  REG:10 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f23cast_bf16_to_f32_kernelEPK13__nv_bfloat16Pfm:
+  REG:10 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f30rope_table_cos_in_place_kernelEPfm:
+  REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:368 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f21rope_table_sin_kernelEPKfPfm:
+  REG:24 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f28row_bias_add_in_place_kernelEP13__nv_bfloat16PKS0_mm:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f24finalize_embedding_errorEPKjmP29RileyCudaEmbeddingErrorReport:
+  REG:10 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f25validate_embedding_tokensEPKjmmP29RileyCudaEmbeddingErrorReport:
+  REG:10 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN46_GLOBAL__N__1745989b_13_primitives_cu_c80f5d9f21reset_embedding_errorEP29RileyCudaEmbeddingErrorReport:
+  REG:10 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:360 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _Z16gemm_prefill_m16ILi576ELi1536ELi320ELi2EEvPK13__nv_bfloat16S2_PS0_PKj:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z16gemm_prefill_m16ILi1536ELi576ELi0ELi4EEvPK13__nv_bfloat16S2_PS0_PKj:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z16gemm_prefill_m16ILi576ELi576ELi128ELi2EEvPK13__nv_bfloat16S2_PS0_PKj:
+  REG:34 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z16gemm_prefill_m16ILi192ELi576ELi192ELi1EEvPK13__nv_bfloat16S2_PS0_PKj:
+  REG:40 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z16gemm_prefill_m16ILi576ELi576ELi192ELi2EEvPK13__nv_bfloat16S2_PS0_PKj:
+  REG:40 STACK:0 SHARED:0 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:384 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z30compiled_packed_decode_rope_kvPK13__nv_bfloat16S1_S1_PS_S2_S2_PKfS4_PKj:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:424 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z22compiled_kv_write_rowsPK13__nv_bfloat16S1_PS_S2_PKjj:
+  REG:14 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:396 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z17gemv_prefill_rowsPK13__nv_bfloat16S1_PS_iiiPKj:
+  REG:40 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z20compiled_swiglu_rowsPK13__nv_bfloat16S1_PS_:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z18compiled_rope_rowsPK13__nv_bfloat16S1_PS_S2_PKfS4_PKjj:
+  REG:20 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:412 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z18compiled_norm_rowsPK13__nv_bfloat16PKvS1_PvPS_i:
+  REG:22 STACK:0 SHARED:32 LOCAL:0 CONSTANT[0]:396 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z17compiled_kv_writePK13__nv_bfloat16S1_PS_S2_PKj:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z12gemv_prefillPK13__nv_bfloat16S1_PS_iiiPKj:
+  REG:38 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:400 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z15compiled_swigluPK13__nv_bfloat16S1_PS_:
+  REG:16 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:376 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z13compiled_ropePK13__nv_bfloat16S1_PS_S2_PKfS4_PKj:
+  REG:15 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z13compiled_normPK13__nv_bfloat16PKvS1_PvPS_i:
+  REG:20 STACK:0 SHARED:32 LOCAL:0 CONSTANT[0]:396 TEXTURE:0 SURFACE:0 SAMPLER:0
+
+Fatbin ptx code:
+================
+arch = sm_89
+code version = [9,3]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = 
+
+Fatbin elf code:
+================
+arch = sm_89
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _Z28attention_packed_decode_ropePK13__nv_bfloat16S1_S1_PS_S2_S2_S2_PKfS4_PKj:
+  REG:56 STACK:0 SHARED:1280 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:432 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z32attention_packed_decode_two_warpPK13__nv_bfloat16S1_S1_PS_PKj:
+  REG:55 STACK:0 SHARED:1024 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z23attention_packed_decodePK13__nv_bfloat16S1_S1_PS_PKj:
+  REG:56 STACK:0 SHARED:768 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:392 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _Z9attentionPK13__nv_bfloat16S1_S1_PS_iiPKiPKj:
+  REG:93 STACK:0 SHARED:2304 LOCAL:0 CONSTANT[2]:8 CONSTANT[0]:408 TEXTURE:0 SURFACE:0 SAMPLER:0

@@ -1,0 +1,225 @@
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+index 1e1b94a..3fe5765 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+@@ -79,23 +79,6 @@ pub const RESULT_BYTES:usize=128+49152*2;
+ /// This cannot prove quiescence or perform scheduler settlement on its own.
+ // A reduction permits vectorized scanning while checking every inactive byte.
+ fn all_zero(bytes:&[u8])->bool {bytes.iter().fold(0u8,|bits,&value|bits|value)==0}
+-// Independent accumulators shorten the maximum dependency chain. All lanes
+-// reject nonfinite values; final ties still choose the lowest vocabulary ID.
+-fn finite_argmax(logits:&[u8])->Result<u32>{
+- let mut maxima=[f32::NEG_INFINITY;8];let mut indices=[0u32;8];
+- let mut chunks=logits.chunks_exact(16);
+- for (block,chunk) in chunks.by_ref().enumerate(){
+-  let mut nonfinite=false;
+-  for lane in 0..8 {let bits=u16::from_le_bytes([chunk[2*lane],chunk[2*lane+1]]);nonfinite|=bits&0x7f80==0x7f80;let value=f32::from_bits(u32::from(bits)<<16);
+-   if value>maxima[lane]{maxima[lane]=value;indices[lane]=(block*8+lane)as u32;}}
+-  check(!nonfinite,"logits","nonfinite logit")?;
+- }
+- let mut maximum=f32::NEG_INFINITY;let mut token=0;
+- for lane in 0..8 {if maxima[lane]>maximum || (maxima[lane]==maximum && indices[lane]<token){maximum=maxima[lane];token=indices[lane];}}
+- let base=logits.len()/16*8;
+- for (i,word) in chunks.remainder().chunks_exact(2).enumerate(){let value=f32::from_bits(u32::from(u16::from_le_bytes([word[0],word[1]]))<<16);check(value.is_finite(),"logits","nonfinite logit")?;if value>maximum{maximum=value;token=(base+i)as u32;}}
+- Ok(token)
+-}
+ pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
+     validate(e)?;
+     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
+@@ -110,7 +93,9 @@ fn validate_result_row<'a>(bytes:&'a[u8],e:&Expectation,index:usize)->Result<(Op
+     check(bytes[..128]==expected,"result_identity","completion differs from outstanding expectation")?;
+     let logits=&bytes[128..];
+     if !published {check(all_zero(logits) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
+-    let host_token=finite_argmax(logits)?;
++    let mut maximum=f32::NEG_INFINITY;let mut host_token=0;
++    for (i,word) in logits.chunks_exact(2).enumerate(){let v=f32::from_bits(u32::from(u16::from_le_bytes([word[0],word[1]]))<<16);
++        check(v.is_finite(),"logits","nonfinite logit")?;if v>maximum {maximum=v;host_token=i as u32;}}
+     check(token==host_token,"argmax","token differs from published logits")?;
+     Ok((Some(token),logits))
+ }
+@@ -208,19 +193,3 @@ mod tests {
+     }
+ 
+ }
+-
+-#[cfg(test)]
+-mod lane_argmax_tests {
+- use super::*;
+- #[test]
+- fn independent_lanes_match_scalar_and_reject_nonfinite(){
+-  for size in [1,7,8,9,16,257,49152] {for seed in 0..8 {
+-   let words:Vec<u16>=(0..size).map(|i|match (i+seed)%13 {0=>0,1=>0x8000,_=>((i*139+seed*73)%0x7f80)as u16 | if i%2==0{0x8000}else{0}}).collect();let mut bytes:Vec<_>=words.iter().flat_map(|x|x.to_le_bytes()).collect();
+-   let mut maximum=f32::NEG_INFINITY;let mut expected=0;
+-   for(i,&word)in words.iter().enumerate(){let value=f32::from_bits(u32::from(word)<<16);if value>maximum{maximum=value;expected=i as u32;}}
+-   assert_eq!(finite_argmax(&bytes).unwrap(),expected);
+-   for bad in [0x7f80u16,0xff80,0x7fc0,0xff81] {for at in [0,size/2,size-1]{let old=[bytes[at*2],bytes[at*2+1]];bytes[at*2..at*2+2].copy_from_slice(&bad.to_le_bytes());assert!(finite_argmax(&bytes).is_err());bytes[at*2..at*2+2].copy_from_slice(&old);}}
+-  }}
+-  for winner in 0..32 {let mut values=vec![0xbf80u16;32];values[winner]=0;values[(winner+8).min(31)]=0x8000;let bytes:Vec<_>=values.iter().flat_map(|x|x.to_le_bytes()).collect();assert_eq!(finite_argmax(&bytes).unwrap(),winner as u32);}
+- }
+-}
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index c3ce149..e6dcf0a 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -52,12 +52,15 @@ impl<G: VariableGraph> VariableSession<G> {
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
+         wire::encode_into(&mut self.input,&e)?;
+         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
++        let host_native=std::time::Instant::now();
+         if self.graph.replay_transfer(&self.input).and_then(|()|self.graph.read_transfer(&mut self.output)).is_err() {
+             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
+         }
++        eprintln!("HOST_NATIVE us={}",host_native.elapsed().as_micros());
++        let host_validate=std::time::Instant::now();
+         let e=self.retained.as_ref().unwrap();
+         match if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
+-            Ok(result)=>{self.completed=true;Ok(result)},
++            Ok(result)=>{eprintln!("HOST_VALIDATE rows={} us={}",e.rows.len(),host_validate.elapsed().as_micros());self.completed=true;Ok(result)},
+             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
+         }
+     }
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 2169afe..52ff8fa 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -647,7 +647,6 @@ thread_local! {
+ #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+ enum DownloadedLlamaOutput {
+     Logits(Vec<u8>),
+-    ValidatedLogits { logits:Vec<u8>, argmax:[u32;8] },
+     GreedyTokens(Vec<u32>),
+ }
+ 
+@@ -674,7 +673,7 @@ impl DownloadedLlamaIteration {
+     #[must_use]
+     pub fn logits_bf16_native(&self) -> &[u8] {
+         match &self.output {
+-            DownloadedLlamaOutput::Logits(logits) | DownloadedLlamaOutput::ValidatedLogits{logits,..} => logits,
++            DownloadedLlamaOutput::Logits(logits) => logits,
+             DownloadedLlamaOutput::GreedyTokens(_) => &[],
+         }
+     }
+@@ -683,7 +682,7 @@ impl DownloadedLlamaIteration {
+     #[must_use]
+     pub fn greedy_token_ids(&self) -> &[u32] {
+         match &self.output {
+-            DownloadedLlamaOutput::Logits(_) | DownloadedLlamaOutput::ValidatedLogits{..} => &[],
++            DownloadedLlamaOutput::Logits(_) => &[],
+             DownloadedLlamaOutput::GreedyTokens(token_ids) => token_ids,
+         }
+     }
+@@ -771,14 +770,6 @@ impl DownloadedLlamaIteration {
+         )
+     }
+ 
+-    /// Raw argmax independently checked against every finite logit by V3
+-    /// completion validation. Sampling constraints must still be applied.
+-    #[must_use]
+-    pub fn validated_argmax_for_slot(&self,slot:OutputSlot)->Option<u32>{
+-        let index=slot.get()as usize;if index>=self.output_count{return None;}
+-        match &self.output {DownloadedLlamaOutput::ValidatedLogits{argmax,..}=>argmax.get(index).copied(),_=>None}
+-    }
+-
+     /// Returns one device-selected greedy token for a dense output slot.
+     ///
+     /// # Errors
+@@ -2143,8 +2134,6 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
+         IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
+     let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+     let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+-    if prepared.output_count>8{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
+-    let mut argmax=[0u32;8];
+     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+         catalog_digest:identity.catalog_digest,max_active_rows:8,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+@@ -2154,19 +2143,7 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
+     // Allocate before admission so allocation failure cannot follow GPU mutation.
+     let rows=executor.execute_rows(expectation).map_err(|e|fail(e,None))?;
+     if rows.iter().filter(|r|r.token.is_some()).count()!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
+-    for row in rows {if let Some(token)=row.token {argmax[row.output_slot as usize]=token;let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
++    for row in rows {if row.token.is_some(){let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
+     Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
+-        output:DownloadedLlamaOutput::ValidatedLogits{logits,argmax},commit_outputs:prepared.commit_outputs})
+-}
+-
+-#[cfg(test)]
+-mod validated_argmax_routing_tests {
+- use super::*;
+- #[test]
+- fn validated_logits_keep_distinct_dense_argmax_and_full_rows(){
+-  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0]},commit_outputs:vec![]};
+-  assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),Some(3));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(1)),Some(1));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(2)),None);
+-  assert_eq!(d.logits_for_slot(OutputSlot::new(1)).unwrap().len(),8);assert!(d.greedy_token_ids().is_empty());
+-  d.output=DownloadedLlamaOutput::Logits(vec![0;16]);assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),None);
+- }
++        output:DownloadedLlamaOutput::Logits(logits),commit_outputs:prepared.commit_outputs})
+ }
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 46e8a30..9d51e30 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2783,11 +2783,6 @@ mod cuda_backend {
+                         })?,
+                         Some(0.0),
+                     )
+-                } else if let Some(token)=super::reuse_validated_argmax(
+-                    downloaded.validated_argmax_for_slot(slot),downloaded.vocabulary_size(),self.addressable_tokens,
+-                    request.state.masked_finish_token_ids(),request.state.history_token_ids(),request.state.request().sampling_params) {
+-                    request.state.sampling_rng().map_err(|source|internal(format!("sampling RNG failed: {source}")))?;
+-                    (token,Some(0.0))
+                 } else {
+                     let logits = downloaded
+                         .logits_for_slot(slot)
+@@ -3364,8 +3359,10 @@ mod cuda_backend {
+                 if let Some(graph)=self.variable_graph.as_mut() {
+                     let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
+                         .map_err(|e|internal(format!("V3 authority failed: {e}")))?;
++                    let host_execute=std::time::Instant::now();
+                     let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,graph)
+                         .map_err(|e|internal(format!("V3 iteration failed: {}",e.error())))?;
++                    eprintln!("HOST_EXECUTE us={}",host_execute.elapsed().as_micros());
+                     (downloaded,riley_scheduler::IterationTiming::default(),None)
+                 } else if let Some(graph) = self.multi_graph.as_mut() {
+                     let authority = self
+@@ -3450,7 +3447,9 @@ mod cuda_backend {
+                         }
+                     }
+                 };
++            let host_sample=std::time::Instant::now();
+             let sampling = self.sample_iteration(&plan, &downloaded, selection);
++            eprintln!("HOST_SAMPLE rows={} us={}",plan.output_slots().len(),host_sample.elapsed().as_micros());
+             if gpu_greedy {
+                 if let Err(source) =
+                     downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
+@@ -4414,31 +4413,3 @@ mod tests {
+         assert_eq!(visible_utf8_prefix(&incomplete), "ok");
+     }
+ }
+-
+-#[cfg(any(feature="cuda",test))]
+-fn reuse_validated_argmax(candidate:Option<u32>,vocabulary:usize,addressable:usize,masked:&[u32],history:&[u32],params:riley_runtime::sampling::SamplingParams)->Option<u32>{
+- let token=candidate?;
+- if params.temperature!=0.0 || params.repetition_penalty!=1.0 || params.validate(vocabulary).is_err()
+-  || addressable>vocabulary || token as usize>=addressable
+-  || masked.iter().any(|&id|id as usize>=vocabulary || id==token)
+-  || history.iter().any(|&id|id as usize>=vocabulary){return None;}
+- Some(token)
+-}
+-
+-#[cfg(test)]
+-mod validated_argmax_tests {
+- use super::*;
+- #[test]
+- fn reuse_requires_eligible_validated_candidate(){
+-  let p=riley_runtime::sampling::SamplingParams{temperature:0.0,..Default::default()};
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[7],&[1,1],p),Some(3));
+-  assert_eq!(reuse_validated_argmax(None,8,8,&[],&[],p),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[3],&[],p),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,3,&[],&[],p),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[8],&[],p),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[8],p),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{temperature:0.5,..p}),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{repetition_penalty:1.1,..p}),None);
+-  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{top_k:Some(0),..p}),None);
+- }
+-}

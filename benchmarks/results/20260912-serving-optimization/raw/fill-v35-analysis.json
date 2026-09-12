@@ -1,0 +1,75 @@
+{
+  "scope": "Instrumented nonexclusive V33 natural serving, budget/chunk512, 384 requests each at client4,8 with active capacity min(client,8). Not matched vLLM performance or sustained stability qualification. Middle80 excludes first/last10percent of iterations. Batch occupancy is request-row occupancy, not GPU occupancy. Execution includes transfer and validation.",
+  "results": {
+    "4": {
+      "active_capacity": 4,
+      "sections": {
+        "all": {
+          "iterations": 7616,
+          "decode_iterations": 7232,
+          "prefill_iterations": 384,
+          "decode_row_histogram": {
+            "1": 64,
+            "2": 3,
+            "3": 442,
+            "4": 6723
+          },
+          "mean_decode_rows": 3.911504424778761,
+          "full_decode_fraction": 0.9296183628318584,
+          "prefill_execution_time_fraction": 0.1411358917663548,
+          "decode_median_execution_us": 1294.0
+        },
+        "middle80": {
+          "iterations": 6093,
+          "decode_iterations": 5783,
+          "prefill_iterations": 310,
+          "decode_row_histogram": {
+            "4": 5473,
+            "3": 310
+          },
+          "mean_decode_rows": 3.9463946048763616,
+          "full_decode_fraction": 0.9463946048763617,
+          "prefill_execution_time_fraction": 0.14196558338171872,
+          "decode_median_execution_us": 1294
+        }
+      }
+    },
+    "8": {
+      "active_capacity": 8,
+      "sections": {
+        "all": {
+          "iterations": 4036,
+          "decode_iterations": 3652,
+          "prefill_iterations": 384,
+          "decode_row_histogram": {
+            "1": 32,
+            "2": 32,
+            "3": 5,
+            "4": 4,
+            "5": 29,
+            "6": 3,
+            "7": 378,
+            "8": 3169
+          },
+          "mean_decode_rows": 7.745892661555312,
+          "full_decode_fraction": 0.8677437020810514,
+          "prefill_execution_time_fraction": 0.22803568083074371,
+          "decode_median_execution_us": 1433.0
+        },
+        "middle80": {
+          "iterations": 3229,
+          "decode_iterations": 2916,
+          "prefill_iterations": 313,
+          "decode_row_histogram": {
+            "8": 2604,
+            "7": 312
+          },
+          "mean_decode_rows": 7.893004115226337,
+          "full_decode_fraction": 0.8930041152263375,
+          "prefill_execution_time_fraction": 0.23131737017854972,
+          "decode_median_execution_us": 1434.0
+        }
+      }
+    }
+  }
+}

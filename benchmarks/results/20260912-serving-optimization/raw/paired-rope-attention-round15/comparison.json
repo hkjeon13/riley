@@ -1,0 +1,97 @@
+{
+  "paired_combined_intervals": [
+    {
+      "order": "AB",
+      "baseline_combined_median_ns": 360448.0,
+      "candidate_combined_median_ns": 422400.0,
+      "candidate_over_baseline": 1.171875
+    },
+    {
+      "order": "BA",
+      "baseline_combined_median_ns": 359936.0,
+      "candidate_combined_median_ns": 422912.0,
+      "candidate_over_baseline": 1.1749644381223328
+    }
+  ],
+  "whole_graph_drift_and_perturbation": [
+    {
+      "lane": "baseline",
+      "phase": "prefill",
+      "off_before_median_ns": 4611040.115499999,
+      "off_after_median_ns": 4617295.9805,
+      "off_after_over_before": 1.0013567145033007,
+      "selected_median_ns": [
+        4602256.0594999995,
+        4618128.061000001
+      ],
+      "selected_over_off_before": [
+        0.9980949946693215,
+        1.0015371684744565
+      ],
+      "selected_over_off_after": [
+        0.996742699392996,
+        1.000180209478343
+      ]
+    },
+    {
+      "lane": "baseline",
+      "phase": "decode",
+      "off_before_median_ns": 943215.996,
+      "off_after_median_ns": 943296.015,
+      "off_after_over_before": 1.0000848363474955,
+      "selected_median_ns": [
+        1070864.0219999999,
+        1074832.0219999999
+      ],
+      "selected_over_off_before": [
+        1.1353327621046831,
+        1.1395396458055826
+      ],
+      "selected_over_off_after": [
+        1.1352364527904848,
+        1.1394429796250118
+      ]
+    },
+    {
+      "lane": "candidate",
+      "phase": "prefill",
+      "off_before_median_ns": 4611135.96,
+      "off_after_median_ns": 4619264.126,
+      "off_after_over_before": 1.0017627252960029,
+      "selected_median_ns": [
+        4609823.9425,
+        4616591.93
+      ],
+      "selected_over_off_before": [
+        0.9997154676176584,
+        1.0011832160333871
+      ],
+      "selected_over_off_after": [
+        0.997956344724506,
+        0.9994215104555377
+      ]
+    },
+    {
+      "lane": "candidate",
+      "phase": "decode",
+      "off_before_median_ns": 1003232.002,
+      "off_after_median_ns": 1009632.051,
+      "off_after_over_before": 1.0063794306673244,
+      "selected_median_ns": [
+        1126623.988,
+        1135071.993
+      ],
+      "selected_over_off_before": [
+        1.122994467634616,
+        1.1314152566277487
+      ],
+      "selected_over_off_after": [
+        1.1158758152379613,
+        1.124243224921155
+      ]
+    }
+  ],
+  "scope": "Combined region is timed directly, then layers are summed per replay. Event perturbation remains; two pairs are diagnostic evidence only.",
+  "performance_claim_eligible": false,
+  "candidate_acceptance": null
+}

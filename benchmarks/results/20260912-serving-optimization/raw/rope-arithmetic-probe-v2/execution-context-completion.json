@@ -1,0 +1,58 @@
+{
+  "complete": true,
+  "blender_unchanged": true,
+  "before": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "native_uuid_matches_binding": true,
+  "gpu_query": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02",
+  "runtime_receipt": {
+    "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+    "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+  },
+  "receipt": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe-v2/receipt.json",
+    "sha256": "a03fc250e7c6c9809e0f6a7547323d881d3a88187f14521b260296c7c532601d"
+  },
+  "nvdisasm": {
+    "path": "/data/riley-g04-cuda13/bin/nvdisasm",
+    "sha256": "5842e6adf9e232c9503a804915f158a576473e542577c070da3be49390474140"
+  },
+  "path": "/data/riley-g04-cuda13/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+  "performance_claim": false
+}

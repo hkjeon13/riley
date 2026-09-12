@@ -1,0 +1,35 @@
+{
+  "stage": "G03 attention chain remote verification",
+  "cuda_build_passed": true,
+  "gpu_tests_passed": 22,
+  "gpu_tests_failed": 0,
+  "model_parity_all_match": true,
+  "replay_counts": {
+    "G03_ATTENTION_CHAIN": 640,
+    "G03_QKV_KV": 640,
+    "G03_QKV_ROPE": 640,
+    "G03_NORM_QKV": 640,
+    "G03_LAYER_TAIL": 640,
+    "G03_NORM_MLP": 640,
+    "G03_MLP": 640
+  },
+  "full_decode_qualified": false,
+  "performance_measurement_started": false,
+  "files": {
+    "README.md": "7486ba86306cc788b54eb1c861147eab4bc581d5d42bd8d389a672942619e00b",
+    "authorized-transfer.json": "b7e0b5ca7f244b4458e0bad82d7a33fb3db6bcd003dab56cc156dc77aa73cb1a",
+    "build.log": "bfae580629294d9cb869313069c982b5c142b099f24d1f7de4c454d29cfb4bd3",
+    "gpu-aggregate.log": "ccafbbf12e7552272b8b5a9ad47faaa02b790b57b95ee6f044b9bc45013a7dfb",
+    "gpu-attention-native.log": "8374966c0634cafb22ab05913e80892bc01244b729933f2c5db43a850f19a572",
+    "gpu-model.log": "524ce0619c7fc0084647b9b5dee692f896e3b567d844a64e0ffac329589b7fc6",
+    "gpu-qkv-native.log": "daa073bacd634610c3c34cc7468460792a9be03493ddb6e2ac4d9e33e07166bb",
+    "gpu-swiglu.log": "0a3f626585997cac199b27837e31b22abcecca039c61a45850f21d74bbadc4c3",
+    "gpu-tail-native.log": "3cb07fcaa17790bce44a7a0aab5a96e78daca583f4090d525cebf535cbdc0bb0",
+    "local-checks.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-parity.json": "a53fee69547a144978e98eee40538810213c29c23a244e5df6fadd00b33deebd",
+    "model-preservation.json": "b3a4299929af2f0d7ba3e525f3cee0af85043e27e95d6b263f15e2a5614a6314",
+    "remote-before.txt": "5c2fe47b0b5027babf35964f65fbc75796aec198fd6068e7e5d01d5a7feafa72",
+    "remote-hashes.txt": "a87cc8f879c3166347477355f352d9c06157bf4f3207dac9c6432be146b7d06e",
+    "runtime-identities.txt": "7cd7da59846cf7844b09c42c8b8aaf304aa3a25010c55a8d959aadafc989ed00"
+  }
+}

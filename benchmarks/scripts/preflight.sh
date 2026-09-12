@@ -21,6 +21,20 @@ expected_physical_cpu_cores='16'
 expected_logical_cpu_threads='24'
 expected_mem_total_kib='65610936'
 expected_ram_bytes='67185598464'
+# Keep the original environment reproducible. The September host snapshot
+# reports one fewer OS-visible page; it gets a distinct, exact identity.
+case "${RILEY_PREFLIGHT_ENVIRONMENT_ID:-rtx4090-ubuntu22-driver580-v1}" in
+  rtx4090-ubuntu22-driver580-v1) ;;
+  rtx4090-ubuntu22-driver580-20260911-v2)
+    expected_environment_id='rtx4090-ubuntu22-driver580-20260911-v2'
+    expected_mem_total_kib='65610932'
+    expected_ram_bytes='67185594368'
+    ;;
+  *)
+    echo "preflight: unsupported environment ID" >&2
+    exit 2
+    ;;
+esac
 minimum_staging_available_bytes=21474836480
 cpu_governor_root="${RILEY_CPU_GOVERNOR_ROOT:-/sys/devices/system/cpu/cpufreq}"
 host_root="${RILEY_HOST_ROOT:-}"

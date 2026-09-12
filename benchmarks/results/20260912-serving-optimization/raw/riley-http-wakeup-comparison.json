@@ -1,0 +1,65 @@
+{
+  "scope": "CPU loopback transport only; no GPU/vLLM serving claim",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "toolchain": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+  "source_sha256": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+  "baseline_source_sha256": "edb3dd1ba691a4f3a86516b112f2d84f24331e3a3c29adf8b1d33ab903f34ba0",
+  "baseline_log": "/tmp/riley-http-wakeup-baseline.log",
+  "candidate_log": "/tmp/riley-http-wakeup-candidate-final.log",
+  "baseline": {
+    "healthz": {
+      "concurrency": 1,
+      "connections_per_request": 1,
+      "diagnostic": "loopback_transport_timing_v1",
+      "mean_us": 13951.307479999996,
+      "p50_us": 14960.916,
+      "p95_us": 15128.042,
+      "p99_us": 15259.25,
+      "samples": 200,
+      "warmup": 20,
+      "workload": "healthz"
+    },
+    "completion_sse": {
+      "concurrency": 1,
+      "connections_per_request": 1,
+      "diagnostic": "loopback_transport_timing_v1",
+      "mean_us": 13839.990849999995,
+      "p50_us": 14452.082999999999,
+      "p95_us": 15158.625,
+      "p99_us": 15248.791,
+      "samples": 200,
+      "warmup": 20,
+      "workload": "completion_sse"
+    }
+  },
+  "candidate": {
+    "healthz": {
+      "concurrency": 1,
+      "connections_per_request": 1,
+      "diagnostic": "loopback_transport_timing_v1",
+      "mean_us": 122.15061499999997,
+      "p50_us": 113.917,
+      "p95_us": 184.958,
+      "p99_us": 195.0,
+      "samples": 200,
+      "warmup": 20,
+      "workload": "healthz"
+    },
+    "completion_sse": {
+      "concurrency": 1,
+      "connections_per_request": 1,
+      "diagnostic": "loopback_transport_timing_v1",
+      "mean_us": 71.31876499999998,
+      "p50_us": 67.333,
+      "p95_us": 94.625,
+      "p99_us": 124.375,
+      "samples": 200,
+      "warmup": 20,
+      "workload": "completion_sse"
+    }
+  },
+  "mean_latency_reduction_percent": {
+    "healthz": 99.12445041315941,
+    "completion_sse": 99.48469066365026
+  }
+}

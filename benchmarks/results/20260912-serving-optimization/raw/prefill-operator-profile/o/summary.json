@@ -1,0 +1,528 @@
+{
+  "schema_version": "riley.prefill-operator-summary.v1",
+  "performance_claim_eligible": false,
+  "log_sha256": "e9a97f10c1f7393b87b783390ee8f9dd6717bdb3ea12476b94aab4041b43ad07",
+  "captures": [
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 1,
+      "phase": "prefill",
+      "operator": "o",
+      "layer_mask": 1073741823,
+      "interval_count": 30,
+      "expected_event_records": 60,
+      "recorded_event_records": 60,
+      "source_sha256": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+      "tool_sha256": "462e9696921f95f58b2edbd773f23b88e905f11289cadc3be7dcaeff1136ea10",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78"
+    },
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "capture",
+      "capture_id": 2,
+      "phase": "decode",
+      "operator": "o",
+      "layer_mask": 1073741823,
+      "interval_count": 30,
+      "expected_event_records": 0,
+      "recorded_event_records": 0,
+      "source_sha256": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+      "tool_sha256": "462e9696921f95f58b2edbd773f23b88e905f11289cadc3be7dcaeff1136ea10",
+      "historical_tool_sha256": "9f0f3a526ed1a47c3e6a37e33111a21356ac5b2d58294ff797ec0a40a5091b78"
+    }
+  ],
+  "external_event_inventories": [
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "event_record_nodes": 60,
+      "event_wait_nodes": 0
+    },
+    {
+      "schema": "riley.prefill-operator-diagnostic.v1",
+      "kind": "inventory",
+      "capture_id": 2,
+      "inventory_status": 0,
+      "event_record_nodes": 0,
+      "event_wait_nodes": 0
+    }
+  ],
+  "whole_graph": {
+    "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+    "performance_claim_eligible": false,
+    "classification": {
+      "source": "position",
+      "prefill_tokens": 128
+    },
+    "graph_inventories": [
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 1,
+        "inventory_status": 0,
+        "nodes": 463,
+        "kernel_nodes": 397,
+        "memcpy_nodes": 6,
+        "other_nodes": 60,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 1152
+      },
+      {
+        "schema": "riley.owned-graph-diagnostic.v1",
+        "kind": "graph",
+        "capture_id": 2,
+        "inventory_status": 0,
+        "nodes": 282,
+        "kernel_nodes": 277,
+        "memcpy_nodes": 5,
+        "other_nodes": 0,
+        "memcpy_params_status": 0,
+        "memcpy_unknown_nodes": 0,
+        "memcpy_bytes_complete": true,
+        "h2d_bytes": 604,
+        "d2h_bytes": 98344,
+        "d2d_bytes": 0
+      }
+    ],
+    "groups": {
+      "prefill": {
+        "replays": 3,
+        "successful_replays": 3,
+        "capture_ids": [
+          1
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 3860,
+            "sum": 10515
+          },
+          "host_staging_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1976,
+            "sum": 7896
+          },
+          "host_launch_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 100997,
+            "sum": 332580
+          },
+          "host_wait_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13717562,
+            "sum": 41140425
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 13824671.745,
+            "sum": 41463616.371
+          }
+        }
+      },
+      "decode": {
+        "replays": 93,
+        "successful_replays": 93,
+        "capture_ids": [
+          2
+        ],
+        "metrics": {
+          "event_setup_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 376,
+            "sum": 41324
+          },
+          "host_staging_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1475,
+            "sum": 140642
+          },
+          "host_launch_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 4869,
+            "sum": 497296
+          },
+          "host_wait_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1104868,
+            "sum": 102170527
+          },
+          "cuda_graph_span_ns": {
+            "measured_count": 93,
+            "unmeasured_count": 0,
+            "median": 1107455.969,
+            "sum": 102434400.19899999
+          }
+        }
+      }
+    },
+    "failed_replays": 0,
+    "read_records": 96,
+    "projection_groups": [],
+    "unmeasured": [
+      "per_kernel_cuda_time",
+      "Rust_metadata_pack",
+      "request_latency_without_instrumentation"
+    ]
+  },
+  "operator_groups": [
+    {
+      "operator": "o",
+      "replays": 3,
+      "sum_across_selected_layers_ns": {
+        "measured_count": 3,
+        "unmeasured_count": 0,
+        "median": 1274879.983,
+        "sum": 3823615.943
+      },
+      "layers": [
+        {
+          "layer": 0,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 1,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 126975.99800000002
+          }
+        },
+        {
+          "layer": 2,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 129023.99900000001
+          }
+        },
+        {
+          "layer": 3,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 130048.0
+          }
+        },
+        {
+          "layer": 4,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.998
+          }
+        },
+        {
+          "layer": 5,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 129024.0
+          }
+        },
+        {
+          "layer": 6,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 127999.99900000001
+          }
+        },
+        {
+          "layer": 7,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 126975.998
+          }
+        },
+        {
+          "layer": 8,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 9,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 130048.0
+          }
+        },
+        {
+          "layer": 10,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 127999.99900000001
+          }
+        },
+        {
+          "layer": 11,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.998
+          }
+        },
+        {
+          "layer": 12,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 124927.997
+          }
+        },
+        {
+          "layer": 13,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.998
+          }
+        },
+        {
+          "layer": 14,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 44032.0,
+            "sum": 130047.99900000001
+          }
+        },
+        {
+          "layer": 15,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 127999.99900000001
+          }
+        },
+        {
+          "layer": 16,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 17,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.998
+          }
+        },
+        {
+          "layer": 18,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 19,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 129023.99900000001
+          }
+        },
+        {
+          "layer": 20,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 126975.99800000002
+          }
+        },
+        {
+          "layer": 21,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.99800000002
+          }
+        },
+        {
+          "layer": 22,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 23,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 24,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 25,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 126975.99800000002
+          }
+        },
+        {
+          "layer": 26,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 43008.0,
+            "sum": 129023.99900000001
+          }
+        },
+        {
+          "layer": 27,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 127999.99800000002
+          }
+        },
+        {
+          "layer": 28,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 125951.997
+          }
+        },
+        {
+          "layer": 29,
+          "cuda_span_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 41983.999,
+            "sum": 124927.997
+          }
+        }
+      ],
+      "positions": [
+        {
+          "position": 127,
+          "cuda_sum_ns": {
+            "measured_count": 3,
+            "unmeasured_count": 0,
+            "median": 1274879.983,
+            "sum": 3823615.943
+          }
+        }
+      ]
+    }
+  ],
+  "replay_totals": [
+    {
+      "capture_id": 1,
+      "replay_id": 97,
+      "position": 127,
+      "operator": "o",
+      "cuda_sum_ns": 1270783.978
+    },
+    {
+      "capture_id": 1,
+      "replay_id": 129,
+      "position": 127,
+      "operator": "o",
+      "cuda_sum_ns": 1274879.983
+    },
+    {
+      "capture_id": 1,
+      "replay_id": 161,
+      "position": 127,
+      "operator": "o",
+      "cuda_sum_ns": 1277951.9819999998
+    }
+  ],
+  "interpretation": [
+    "CUDA spans include the perturbation from external event nodes; these are not serving performance results.",
+    "Sum is formed per replay before taking its median; failed or missing intervals produce a null replay sum.",
+    "Host wait includes GPU execution and is not added to GPU operator or whole-graph spans.",
+    "Only one prefill family is selected per process. Unselected families, norms, embedding, rotary/KV, SwiGLU, head, argmax and transfers are unmeasured.",
+    "Position 127 is the batched prefill replay; captured handle IDs bind all prefill operator results.",
+    "Different captures/logs require matching binary, workload, GPU and environment receipts for comparison."
+  ],
+  "whole_graph_perturbation": {
+    "baseline_log_sha256": "e6329c7531652c09f92c081cde317cbbe660978777919af36fb1f1e3002787bc",
+    "groups": [
+      {
+        "phase": "prefill",
+        "off_median_ns": 13676287.651,
+        "selected_median_ns": 13824671.745,
+        "ratio": 1.0108497347954764
+      },
+      {
+        "phase": "decode",
+        "off_median_ns": 1106976.032,
+        "selected_median_ns": 1107455.969,
+        "ratio": 1.0004335568125473
+      }
+    ],
+    "matched_runtime_provenance_verified": false,
+    "performance_claim_eligible": false
+  }
+}

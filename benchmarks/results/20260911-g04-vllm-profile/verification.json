@@ -1,0 +1,45 @@
+{
+  "status": "correctness-qualified",
+  "scope": "SmolLM2-135M c1/p128/o32 Hello repeated 128 times; SM89/CUDA13.0/cuBLASLt13.1.1; vLLM0.27.1 compiled FlashAttention2",
+  "source_commit": "59f02242a2993b698d5f1c6b970b96bad66fb0a4",
+  "binaries": {
+    "riley": {
+      "path": "/tmp/riley-g04-vllm-profile-target/release/riley",
+      "sha256": "4753c83893f9e69de6b70e9083e5c9903e006cb8c17cab5a2880ee364266f8ae"
+    },
+    "riley-profile": {
+      "path": "/tmp/riley-g04-vllm-profile-target/release/riley-profile",
+      "sha256": "bcc0230a559e8bf4069f9da89927b5fd8a5706413dde08c5dc456c9c86a13c43"
+    }
+  },
+  "native_prefill_and_decode": true,
+  "external_kv_or_context_input": false,
+  "tensor_comparisons": 19080,
+  "unequal_tensor_elements": 0,
+  "generated_tokens_exact": 32,
+  "new_profile_replays": 491,
+  "requests": 4,
+  "cancelled_prefill_tokens": 23,
+  "cancelled_generated_tokens": 23,
+  "existing_profile_regression_passed": true,
+  "http_cpu_gpu_streaming_disconnect_reuse_passed": true,
+  "tests": {
+    "cuda_cpu": 84,
+    "runtime_cpu": 260,
+    "server_cli": 22,
+    "profile_cli": 10,
+    "profile_checkers": 25,
+    "cuda_owned_profiles": 2
+  },
+  "old_riley_eager_bitwise_equivalence_claim": false,
+  "performance_trials": 0,
+  "evidence_sha256": {
+    "clean-cpu-final.log": "9692908a6665fc2f650c1fe04ffe74add67eaf95bee0febd1350f9a53f7a61ea",
+    "clean-gpu-test.log": "be5b0640f59d9c71a5af3ae59472e91e73b46998e1fae8c73b08f90fe9f3d75b",
+    "clean-cli-test.log": "cccc33eaec688e467ab0d8abd642587b0dc8890916ee47a1a2a154175962e168",
+    "clean-profile-cli-test.log": "aea1344e6d29996579bc2c6240a109bde4ff1f0a96f2e96eff165b9e40b07b11",
+    "clean-profile-checker-test.log": "cc88e61dfbe86eb3b08f408b751820f7c8aa71afb4ae9ac988f6bf84a4f24764",
+    "native-all-final-validation.json": "d76f6120eeed3bab5f0e34c42100e7200f28f22f8a81e9a7a386786de0bd0f65",
+    "http-validation.json": "15018604eade52dd0ae3fae910546cc73d5e0cc25f1863ea757f738f6b0c7966"
+  }
+}

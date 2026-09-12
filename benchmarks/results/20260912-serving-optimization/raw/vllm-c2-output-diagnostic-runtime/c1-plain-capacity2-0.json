@@ -1,0 +1,23 @@
+{
+  "phase": "c1-plain-capacity2",
+  "offered_concurrency": 1,
+  "request": {
+    "model": "g04-smol",
+    "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+    "max_tokens": 32,
+    "temperature": 0,
+    "top_p": 1,
+    "stream": false
+  },
+  "status": 200,
+  "raw_response": "{\"id\":\"cmpl-b21afaf53f385732\",\"object\":\"text_completion\",\"created\":1789174170,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\", I'm a little bit of a few years ago,\\n\\nThe first thing I want to say is that I'm going to show you a few of\",\"logprobs\":null,\"finish_reason\":\"length\",\"stop_reason\":null,\"token_ids\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"routed_experts\":null}],\"service_tier\":null,\"system_fingerprint\":\"vllm-0.27.1-c74a8f09\",\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32,\"prompt_tokens_details\":null},\"kv_transfer_params\":null,\"ec_transfer_params\":null,\"metrics\":null}",
+  "text_exact": true,
+  "finish_reason": "length",
+  "usage": {
+    "prompt_tokens": 128,
+    "total_tokens": 160,
+    "completion_tokens": 32,
+    "prompt_tokens_details": null
+  },
+  "token_ids_exact": null
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "riley.batch8-http-token-observation-local-validation.v1",
+  "completed": true,
+  "cpu_tests_passed": 5,
+  "gpu_tests_executed_now": false,
+  "remote_actions": false,
+  "performance_claim": false,
+  "files": {
+    "batch8_http_token_observation_check.py": "a77b0f9bd41513bbc6d594ba180bb3b0161a8c2f68c171fb798967a0f2cd5803",
+    "test_batch8_http_token_observation_check.py": "6a161392c474fcdcb464e2dd7f6eac21ab7314c9982bf7ece95626ee52d41823",
+    "http_token_observation_check_v3.py": "5ce121cf81e9251592f972d8105e0dd636bf9af4c237ca2e1d4555d4477804f0",
+    "qualify_batch8.py": "ec00a9beabffa94a9d80b69b9eeda8a28cd7ad889202018b385ea7b1761b0790",
+    "batch8_fusion_probe.py": "c025519755c4ce73bf61d2aa80a3fc36ec6ae745843fb0995058c312a8b74904"
+  },
+  "checks": [
+    "run_sampler identical to frozenV3 except source/target paths",
+    "baseline validator isolated and immutable",
+    "Batch8 model validator path/identity adaptation",
+    "actual archived qualification/schema/four HTTP file pins and tamper rejection",
+    "complete sampler and injected failure cleanup using CPU loopback"
+  ],
+  "fresh_actual_http_receipt_required": true,
+  "output_directory": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness"
+}

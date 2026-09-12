@@ -1,0 +1,16 @@
+/tmp/riley-opt-260912/shared_projection_v16.cu(46): warning #940-D: missing return statement at end of non-void function "primitive_main"
+  int primitive_main(){check<576,576,192,false>();check<192,576,192,false>();check<576,576,128,false>();check<1536,576,0,true>();check<576,1536,320,true>();attention();}
+                                                                                                                                                                        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/shared_projection_v16.cu(46): warning #940-D: missing return statement at end of non-void function "primitive_main"
+  int primitive_main(){check<576,576,192,false>();check<192,576,192,false>();check<576,576,128,false>();check<1536,576,0,true>();check<576,1536,320,true>();attention();}
+                                                                                                                                                                        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/shared_projection_v16.cu: In function ‘int primitive_main()’:
+/tmp/riley-opt-260912/shared_projection_v16.cu:46:200: warning: no return statement in function returning non-void [-Wreturn-type]
+   46 | int main(){check<576,576,192,false>();check<192,576,192,false>();check<576,576,128,false>();check<1536,576,0,true>();check<576,1536,320,true>();attention();}
+      |                                                                                                                                                                                                        ^

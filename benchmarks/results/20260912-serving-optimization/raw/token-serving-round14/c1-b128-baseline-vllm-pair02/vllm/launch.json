@@ -1,0 +1,73 @@
+{
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+    "serve",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--tokenizer",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "19433",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "1",
+    "--max-num-batched-tokens",
+    "128",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ],
+  "environment": {
+    "HOME": "/home/psyche",
+    "PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+    "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "DO_NOT_TRACK": "1",
+    "CUDA_VISIBLE_DEVICES": "0"
+  },
+  "cwd": "/tmp/riley-opt-260912",
+  "fresh_process": true,
+  "lane": "vllm",
+  "setting": {
+    "id": "c1-b128",
+    "offered_concurrency": 1,
+    "vllm_token_budget": 128
+  },
+  "condition": {
+    "scope": "private driver runtime; GUI retained but authorized Blender sessions paused",
+    "canonical_headless": false,
+    "idle_memory_limit_mib": 512,
+    "start_temperature_limit_c": 48,
+    "foreign_cuda_compute_allowed": false,
+    "riley_active_capacity": 1,
+    "riley_waiting_capacity": 64,
+    "riley_http_workers": 8
+  },
+  "start_gpu": {
+    "timestamp_ns": 836060787718796,
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "driver_version": "580.173.02",
+    "temperature_c": 48,
+    "memory_used_mib": 305,
+    "utilization_percent": 0,
+    "compute_processes": []
+  }
+}

@@ -1,0 +1,12 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912/prefill-shapes-source-v11');p=r/'kernels/src/prefill_shape_projection.cuh';s=p.read_text().replace('// Internal primitive for a future variable-prefill owner. Not wired into serving.','// Internal projection primitive used by the variable-prefill owner.').replace('template<int N,int K,int Interval,int Warps>\n__global__','template<int N,int K,int Interval,int Warps,bool Tiled=false>\n__global__').replace('#pragma unroll 1','#pragma unroll 4');a='uint32_t b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t)),bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));';b='''uint32_t b,bb;
+  if constexpr(Tiled){const auto* tile=w+((base/8)*(K/16)+depth/16)*128;b=*reinterpret_cast<const uint32_t*>(tile+lane*2);bb=*reinterpret_cast<const uint32_t*>(tile+64+lane*2);}
+  else {b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t));bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));}''';assert a in s;s=s.replace(a,b);p.write_text(s)
+p=r/'kernels/src/prefill_shape_model.cuh';s=p.read_text()
+for n,k,i,warps,inp,out,part in [(1536,576,0,4,1,8,6),(1536,576,0,4,1,9,7),(576,1536,320,2,11,4,8)]:
+ a=f'else gemm_prefill_shape_vector<{n},{k},{i},{warps}><<<dim3({n//(8*warps)},(capacity+15)/16),{32*warps},0,stream>>>(b({inp}),w(base+{part}),b({out}),capacity,shape+2);'
+ b=a.replace('else gemm','else if(tiled)gemm').replace(f'{i},{warps}>',f'{i},{warps},true>')+'\n  '+a
+ assert a in s;s=s.replace(a,b)
+p.write_text(s)
+p=r/'kernels/src/graph_resources.cu';s=p.read_text().replace('if(row_capacity==1&&weight_count==363)for(size_t l=0;','if(weight_count==363)for(size_t l=0;').replace('weight_count==363&&row_capacity==1','weight_count==363');needle='void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;';assert needle in s;s=s.replace(needle,needle+'\n const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];\n if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];')
+a=s.index('extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(');s=s[:a]+s[a:].replace('enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,','enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,prefill_weights,');p.write_text(s)

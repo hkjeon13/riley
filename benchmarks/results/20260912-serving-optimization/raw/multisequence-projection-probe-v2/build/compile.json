@@ -1,0 +1,228 @@
+{
+  "schema_version": "riley.multisequence-projection-compile.v2",
+  "manifest": {
+    "path": "/tmp/riley-opt-260912/multisequence-projection-probe-v2/fixtures.json",
+    "sha256": "74b10e5c774f3242c6eee9beebb0432fda3176913a95008b9a61e7a5031aae3b"
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/multisequence_projection_probe_v2.py",
+    "sha256": "be721d7beb08b66113553d3d97fc8bf4592ef35c533017473d9e453d5d973c5f"
+  },
+  "native_source": {
+    "path": "/tmp/riley-opt-260912/multisequence_projection_probe_v2.cpp",
+    "sha256": "962e3e8ff6cc58249254c75e62599b65e44521ebd4932cb546197738551ae3e9"
+  },
+  "cxx": {
+    "path": "/usr/bin/x86_64-linux-gnu-g++-11",
+    "sha256": "2360901d864cf10bfd6296e261cb2c14053552a80377761ab07146ec9ec9a2c0"
+  },
+  "nvcc": {
+    "path": "/data/riley-g04-cuda13/bin/nvcc",
+    "sha256": "0d3511aa5fe86ae6565618aeebbdd2a7e4fe8affa1980787071199e1cdae07dc"
+  },
+  "cxx_version": "x86_64-linux-gnu-g++-11 (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "nvcc_version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "native_build_info": "riley-cuda-native abi=1 nvcc=13.3.73",
+  "link": {
+    "archive": {
+      "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/libriley_cuda_native.a",
+      "sha256": "fd80e3f8c89bf0d176c1bb66028dac3882a941faaa6f026363eaefd09b0c6c92"
+    },
+    "installed_archive": {
+      "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-install/lib/libriley_cuda_native.a",
+      "sha256": "fd80e3f8c89bf0d176c1bb66028dac3882a941faaa6f026363eaefd09b0c6c92"
+    },
+    "objects": [
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/attention_cublaslt.cu.o",
+        "sha256": "f6e46e8f0d7ccc233795dfeecd9b137da95036bdf6583c8a17594df1202044f2"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/attention_online.cu.o",
+        "sha256": "f9e864a2d395140f16edb1ec445907cdbd73b923997bd694889298013d71018c"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/attention_reference.cu.o",
+        "sha256": "32bacdc5d75775c4c24b58c510b8a17b705eb95ba157811d7e4dd477ee2ad09c"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/batch_primitives.cu.o",
+        "sha256": "54d835df82cba6073fabac304d12b9904b2747773508bf137f2e75bcbd06e4a8"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/decode_attention.cu.o",
+        "sha256": "8f8f4c77f9a840738b2171dd72eb07ed47c2c160bae0d5e51b87621125e090c8"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/fixed37_attention.cu.o",
+        "sha256": "6225ec067fcfe479e6c3cae498c75a7e6807e24d48626775e8689ae03e1cdfc3"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/fixed37_gemm.cu.o",
+        "sha256": "c98aca48c1b66612735d44e766dd21f738873ee6247cabafb8c085b4ec66909b"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/fixed37_primitives.cu.o",
+        "sha256": "8a44ae57391959435bbe89befe8a8517eeb3a548c6ada9d55f13e69154822c22"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/gemm.cu.o",
+        "sha256": "f379a6ee71f2851a0c54152ed7be71ed7d577d6066ec2616270fbcbfa2bb1e3f"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/graph.cu.o",
+        "sha256": "fc503c9531f7d19bf6ebd81c07c0de4013d151c981d8f12ca66c038c547cda74"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o",
+        "sha256": "1986653e96b5a595355a20643383f30b24532d91bef1d964b0494a7f334b323b"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o",
+        "sha256": "0de3b7cd7b3441f68edfb47de019c469c8aaf9215882c2e2e1576bc516de111e"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/graph_resources.cu.o",
+        "sha256": "162140b83ce29a0271da8e0a93c02c20cf055aa5af7503759f76607144afc0dd"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/host_runtime.cu.o",
+        "sha256": "55df3f6cea5e9ed2961e96f736a8ae9b93d50bf60ee6e438b8ff9a3145974c24"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/memory.cu.o",
+        "sha256": "12def9a39c1951b6d4e6bb3a0593d1e5ed501d05d3b65354e469b379d6dbae8a"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/primitives.cu.o",
+        "sha256": "a1f35f4fe88ebcca28b617adb41810ce2d90b241eb2ac718f0c93f3dd6ca0973"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/smoke_fill.cu.o",
+        "sha256": "0476092a82c261a6c0c190de1958f3190f56d10d7c3f3b2b8d1005ee67a010e6"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/src/version.cu.o",
+        "sha256": "dfbefca1f6b51c0675a80cb4e6839d380938af918faddbd95572be83bcd98645"
+      }
+    ],
+    "native_build_info_source": {
+      "path": "/tmp/riley-opt-260912/batch8-source/kernels/src/version.cu",
+      "sha256": "6b4f20e427a6c897eb9f60e5fc208c8f7a53339d7d61a6b7faac1d531db40160"
+    },
+    "libraries": {
+      "cudart": {
+        "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+        "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+      },
+      "driver": {
+        "path": "/usr/lib/x86_64-linux-gnu/libcuda.so.580.178.04",
+        "sha256": "dcdf334aeb177c95b3385b797c9b871d03a287895713c6d107f79096b0985aa9"
+      },
+      "cublaslt": {
+        "path": "/data/riley-g04-cuda13/lib/libcublasLt.so.13",
+        "sha256": "1489aeb75d55ee55782798343ac66f57771d561cc1fe1e0491568deefa0e6515"
+      }
+    },
+    "artifacts": [
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-install/lib/libriley_cuda_native.a",
+        "sha256": "fd80e3f8c89bf0d176c1bb66028dac3882a941faaa6f026363eaefd09b0c6c92"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cudart-Release.path",
+        "sha256": "428dc93381518530fd5dff41b84130221ce5a96ec8f45f9051d7ee1cbcd8a070"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-driver-Release.path",
+        "sha256": "fa72e78453311a1579e4e6b10870f93b895bfdb98eb6eae9223f67c1e8cbb1f2"
+      },
+      {
+        "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cublaslt-Release.path",
+        "sha256": "3d4c5b6c268da00fbe66801b7ae8f248f3a83f2a895033ed4f3fa779d5631e8c"
+      }
+    ],
+    "production_options": {
+      "flags": [
+        "-forward-unknown-to-host-compiler",
+        "-I/tmp/riley-opt-260912/batch8-source/kernels/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include/cccl",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+        "-Xcompiler=-fPIC",
+        "--objdir-as-tempdir",
+        "-Xcompiler=-fno-exceptions"
+      ],
+      "cmake_artifacts": [
+        {
+          "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeCache.txt",
+          "sha256": "b71e7f29af8bbde75a6ef73ca6d5b6d34b31536104d583990f46403a84524276"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/flags.make",
+          "sha256": "c37468255e463520d168d54e48e8869753342d1477b9d47ff1d4b0e2bd9398fd"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/build.make",
+          "sha256": "5d67978c389d49b3379c7e268f9240505bd2d448de7eed48e929bbcf8caacf01"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cudart-Release.path",
+          "sha256": "428dc93381518530fd5dff41b84130221ce5a96ec8f45f9051d7ee1cbcd8a070"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/includes_CUDA.rsp",
+          "sha256": "3ad51165483c37a0b877d1c86bf84366db5270e27a1d268e91acef23746259ba"
+        }
+      ],
+      "production_compile_rule": "/data/riley-g04-cuda13/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o -MF CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o.d -x cu -c /tmp/riley-opt-260912/batch8-source/kernels/src/graph_numerics_precise.cu -o CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o",
+      "original_compile_cwd": "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build",
+      "response_files_expanded": true,
+      "omitted_dependency_only_flags": [
+        "-MD",
+        "-MT",
+        "-MF"
+      ],
+      "runtime_library_link": "/data/riley-g04-cuda13/lib/libcudart.so"
+    },
+    "ar": {
+      "path": "/usr/bin/x86_64-linux-gnu-ar",
+      "sha256": "5b394f8752fde1776992d405d76034d5017b24b9b922bedaeeaff8cc344ef044"
+    },
+    "archive_previously_qualified_hash_available": false
+  },
+  "argv": [
+    "/usr/bin/x86_64-linux-gnu-g++-11",
+    "-std=c++17",
+    "-O2",
+    "-I/tmp/riley-opt-260912/batch8-source/kernels/include",
+    "-I/data/riley-g04-cuda13/include",
+    "/tmp/riley-opt-260912/multisequence_projection_probe_v2.cpp",
+    "/tmp/riley-opt-260912/batch8-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/libriley_cuda_native.a",
+    "/data/riley-g04-cuda13/lib/libcublasLt.so.13",
+    "/data/riley-g04-cuda13/lib/libcudart.so.13",
+    "/usr/lib/x86_64-linux-gnu/libcuda.so.580.178.04",
+    "-pthread",
+    "-ldl",
+    "-o",
+    "/tmp/riley-opt-260912/multisequence-projection-probe-v2/build/multisequence_projection_probe"
+  ],
+  "cwd": "/tmp/riley-opt-260912/multisequence-projection-probe-v2/build",
+  "binary": {
+    "path": "/tmp/riley-opt-260912/multisequence-projection-probe-v2/build/multisequence_projection_probe",
+    "sha256": "0da9b1a7351e2bb6358709ae367c74bae4308c95cfc7b0b515c2a86dacf32f6d"
+  },
+  "log": {
+    "path": "/tmp/riley-opt-260912/multisequence-projection-probe-v2/build/build.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "environment_sha256": "df658e79f05db5ffa2c492541a4f4d9b663a98d982d1ca7ada42ae06abc523e3",
+  "production_source_recompiled": false,
+  "gpu_tests_executed": false,
+  "performance_measured": false
+}

@@ -137,6 +137,12 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     // symbols; the release environment must provide cudart.
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=cuda");
+    // CUDA 13 emits C++ guarded static registration in its host stubs. Rust's
+    // final linker does not add the C++ runtime as nvcc would. The native
+    // Linux build uses the host GNU C++ ABI, including these guard symbols.
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    }
     // The probe links the toolkit-selected NVML development library (the
     // toolkit stub is valid at build time). GPU execution must resolve the
     // driver's real versioned NVML library supplied by the host.
@@ -191,6 +197,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/fixed37_reduction.cuh"),
         kernels_dir.join("src/gemm.cu"),
         kernels_dir.join("src/graph.cu"),
+        kernels_dir.join("src/graph_resources.cu"),
         kernels_dir.join("src/host_runtime.cu"),
         kernels_dir.join("src/memory.cu"),
         kernels_dir.join("src/primitives.cu"),

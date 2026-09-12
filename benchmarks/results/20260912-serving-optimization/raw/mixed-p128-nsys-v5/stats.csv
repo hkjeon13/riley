@@ -1,0 +1,30 @@
+Generating SQLite file /tmp/riley-opt-260912/mixed-p128-nsys-v5/c4.sqlite from /tmp/riley-opt-260912/mixed-p128-nsys-v5/c4.nsys-rep
+Processing [/tmp/riley-opt-260912/mixed-p128-nsys-v5/c4.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+43.2,229962822,33022,6963.9,5184.0,2176,64864,4280.0,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)"
+10.6,56267588,6900,8154.7,7744.0,6624,12064,1144.6,"attention_packed_multisequence_rope(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *)"
+10.1,53887927,1440,37422.2,36960.0,36416,39584,858.1,"attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, const int *, const unsigned int *)"
+8.3,44362251,1440,30807.1,30703.5,29920,33120,460.9,"void gemm_prefill_m16_vector<(int)576, (int)1536, (int)320, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+7.5,39702805,2880,13785.7,13760.0,13312,14912,219.8,"void gemm_prefill_m16_vector<(int)1536, (int)576, (int)0, (int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+5.0,26510221,2880,9204.9,9184.0,8736,9920,170.7,"void gemm_prefill_m16<(int)192, (int)576, (int)192, (int)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+4.8,25312393,16958,1492.7,1408.0,1312,2144,185.0,"compiled_norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int)"
+3.4,17974859,1440,12482.5,12480.0,11872,13664,321.2,"void gemm_prefill_m16_vector<(int)576, (int)576, (int)192, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+3.3,17713787,1440,12301.2,12288.0,11616,13536,352.7,"void gemm_prefill_m16_vector<(int)576, (int)576, (int)128, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+1.5,7725278,6900,1119.6,1120.0,1056,1600,29.5,"riley_multisequence_precise::swiglu_rows(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+0.6,3177465,420,7565.4,7552.0,6016,8576,237.0,"attention_packed_decode_rope(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *)"
+0.4,2179002,1440,1513.2,1504.0,1471,1600,35.9,"compiled_swiglu_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *)"
+0.3,1824857,1440,1267.3,1248.0,1216,1440,33.7,"compiled_kv_write_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int)"
+0.3,1732504,1440,1203.1,1184.0,1152,1280,31.2,"compiled_rope_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)"
+0.2,1161982,854,1360.6,1344.0,1312,1760,59.8,"compiled_norm(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int)"
+0.2,862272,230,3749.0,3744.0,2784,3968,209.5,"riley_cuda_internal::<unnamed>::multi_completion(const unsigned int *, const unsigned int *, const unsigned short *, unsigned int *, unsigned int, unsigned int)"
+0.1,574559,292,1967.7,1888.0,1760,2400,140.0,"<unnamed>::partitioned_argmax(const unsigned short *, unsigned long long *)"
+0.1,441726,230,1920.5,1920.0,1728,2112,75.9,"riley_cuda_internal::<unnamed>::multi_embedding(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *)"
+0.1,428319,420,1019.8,1024.0,992,1088,20.7,"compiled_swiglu(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *)"
+0.0,261983,292,897.2,896.0,864,960,23.2,"<unnamed>::finish_partitioned_argmax(unsigned long long *, unsigned int)"
+0.0,112160,62,1809.0,1808.0,1632,2112,103.8,"void <unnamed>::embedding_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, const RileyCudaEmbeddingErrorReport *, unsigned long, unsigned long)"
+0.0,77504,62,1250.1,1312.0,928,1408,153.7,"<unnamed>::validate_embedding_tokens(const unsigned int *, unsigned long, unsigned long, RileyCudaEmbeddingErrorReport *)"
+0.0,71871,62,1159.2,1184.0,896,1280,70.1,"<unnamed>::finalize_embedding_error(const unsigned int *, unsigned long, RileyCudaEmbeddingErrorReport *)"
+0.0,57760,62,931.6,960.0,736,1088,94.0,<unnamed>::reset_embedding_error(RileyCudaEmbeddingErrorReport *)
+0.0,3520,2,1760.0,1760.0,1344,2176,588.3,"<unnamed>::rope_table_sin_kernel(const float *, float *, unsigned long)"
+0.0,3136,2,1568.0,1568.0,1312,1824,362.0,"<unnamed>::rope_table_cos_in_place_kernel(float *, unsigned long)"
+

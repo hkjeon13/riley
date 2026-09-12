@@ -1,0 +1,1486 @@
+commit c63a395cdbaea050b8281aa58bfb0f9ac681bb14
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 07:33:40 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 07:33:40 2026 +0900
+
+    Execute mixed prefill and decode owners in versioned V7 serving graphs
+
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index 4dc8aa1..6c182cd 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -220,6 +220,10 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/packed_prefill_attention_v48.cuh"),
+         kernels_dir.join("src/packed_prefill_rope_v48.cuh"),
+         kernels_dir.join("src/packed_prefill_model_v48.cuh"),
++        kernels_dir.join("src/mixed_attention_v49.cuh"),
++        kernels_dir.join("src/mixed_rope_v49.cuh"),
++        kernels_dir.join("src/mixed_model_v49.cuh"),
++
+ 
+         kernels_dir.join("src/prefill_shape_projection.cuh"),
+         kernels_dir.join("src/prefill_shape_attention.cuh"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 7c5cc53..d7f0bab 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11252,9 +11252,11 @@ unsafe extern "C" {
+     fn riley_cuda_graph_resources_record_v4_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ fn riley_cuda_graph_resources_record_v5_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ fn riley_cuda_graph_resources_record_v6_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
++fn riley_cuda_graph_resources_record_v7_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_graph_resources_record_v4_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ fn riley_cuda_graph_resources_record_v5_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ fn riley_cuda_graph_resources_record_v6_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
++fn riley_cuda_graph_resources_record_v7_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ }
+ impl GraphResourcesHandle {
+     pub(super) fn record_v3_prefill(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+@@ -11297,6 +11299,14 @@ pub(super) fn record_v6_shared(&mut self,devices:&[&DeviceBufferHandle],workspac
+         let status=unsafe{riley_cuda_graph_resources_record_v6_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V6 packed",&error)
+     }
++pub(super) fn record_v7_shared(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
++        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V7 mixed","parent count mismatch"));}
++        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
++        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
++        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
++        let status=unsafe{riley_cuda_graph_resources_record_v7_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        status_result(status,"record V7 mixed",&error)
++    }
+     pub(super) fn record_v4_shared_greedy(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+         if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V4 shared","parent count mismatch"));}
+         let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+@@ -11321,4 +11331,12 @@ pub(super) fn record_v6_shared_greedy(&mut self,devices:&[&DeviceBufferHandle],w
+         let status=unsafe{riley_cuda_graph_resources_record_v6_shared_greedy(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V6 packed",&error)
+     }
++pub(super) fn record_v7_shared_greedy(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
++        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V7 mixed","parent count mismatch"));}
++        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
++        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
++        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
++        let status=unsafe{riley_cuda_graph_resources_record_v7_shared_greedy(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        status_result(status,"record V7 mixed",&error)
++    }
+ }
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index 7699f08..2fc307c 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1260,6 +1260,19 @@ pub fn record_v6_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,we
+         }
+         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V6 packed"))}
+     }
++pub fn record_v7_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
++        #[cfg(feature="cuda")]{
++            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
++            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
++            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
++            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
++            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
++            self.native.record_v7_shared(&devices,workspace,&weights,head,shared_head,staging,capacity,physical)
++        }
++        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V7 mixed"))}
++    }
+     pub fn record_v4_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
+         #[cfg(feature="cuda")]{
+             let bad=||crate::CudaError::invalid_argument("record V4 shared","parent index out of range");
+@@ -1299,4 +1312,17 @@ pub fn record_v6_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<us
+         }
+         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V6 packed"))}
+     }
++pub fn record_v7_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
++        #[cfg(feature="cuda")]{
++            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
++            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
++            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
++            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
++            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
++            self.native.record_v7_shared_greedy(&devices,workspace,&weights,head,shared_head,staging,capacity,physical)
++        }
++        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V7 mixed"))}
++    }
+ }
+diff --git a/crates/riley-runtime/src/llama/executor/config.rs b/crates/riley-runtime/src/llama/executor/config.rs
+index 303d8d6..1442581 100644
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -135,6 +135,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
+     variable_graph: bool,
+     variable_graph_rows: usize,
+     packed_prefill: bool,
++    mixed_execution: bool,
+     shape_policy: LlamaBatchShapePolicy,
+     shape_buckets: LlamaBatchShapeBuckets,
+ }
+@@ -158,6 +159,7 @@ impl PreparedLlamaBatchExecutorConfig {
+             variable_graph: false,
+             variable_graph_rows: 8,
+             packed_prefill: false,
++            mixed_execution: false,
+             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
+             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
+         }
+@@ -167,17 +169,19 @@ impl PreparedLlamaBatchExecutorConfig {
+     #[must_use]
+     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
+         self.variable_graph = false;
+-        self.packed_prefill = false;
++        self.packed_prefill = false;self.mixed_execution=false;
+         self.vllm_smol_p128_graph = true;
+         self.shared_rows_graph = false;
+         self
+     }
+     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
+     #[must_use]
+-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
++    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
+     pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
+     pub const fn with_packed_prefill(self)->Self {let mut s=self.with_variable_graph32();s.packed_prefill=true;s}
++    pub const fn with_mixed_execution(self)->Self {let mut s=self.with_packed_prefill();s.mixed_execution=true;s}
++    pub const fn mixed_execution(self)->bool {self.mixed_execution}
+     pub const fn packed_prefill(self)->bool {self.packed_prefill}
+     pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
+     pub const fn variable_graph(self)->bool {self.variable_graph}
+@@ -185,7 +189,7 @@ impl PreparedLlamaBatchExecutorConfig {
+     #[must_use]
+     pub const fn with_shared_rows_graph(mut self) -> Self {
+         self.variable_graph = false;
+-        self.packed_prefill = false;
++        self.packed_prefill = false;self.mixed_execution=false;
+         self.vllm_smol_p128_graph = true;self.shared_rows_graph = true;self
+     }
+     #[must_use]
+@@ -458,6 +462,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
+         variable_graph: config.variable_graph,
+         variable_graph_rows: config.variable_graph_rows,
+         packed_prefill: config.packed_prefill,
++        mixed_execution: config.mixed_execution,
+         shape_policy: config.shape_policy,
+         shape_buckets: config.shape_buckets,
+     }
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index a89482d..5b263fd 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2105,6 +2105,10 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/packed_prefill_attention_v48.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/packed_prefill_rope_v48.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/packed_prefill_model_v48.cuh").as_slice(),
++            include_bytes!("../../../../kernels/src/mixed_attention_v49.cuh").as_slice(),
++            include_bytes!("../../../../kernels/src/mixed_rope_v49.cuh").as_slice(),
++            include_bytes!("../../../../kernels/src/mixed_model_v49.cuh").as_slice(),
++
+ 
+             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh").as_slice(),
+@@ -2170,8 +2174,8 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
+         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
+             pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
+-        if scratch.packed_prefill && scratch.compact {graph.record_v6_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill {graph.record_v6_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+-        (if scratch.packed_prefill {crate::llama::variable_session::BorrowedVariableSession::new_shared_packed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
++        if scratch.mixed_execution && scratch.compact {graph.record_v7_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.mixed_execution {graph.record_v7_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill && scratch.compact {graph.record_v6_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill {graph.record_v6_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
++        (if scratch.mixed_execution {crate::llama::variable_session::BorrowedVariableSession::new_shared_mixed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.packed_prefill {crate::llama::variable_session::BorrowedVariableSession::new_shared_packed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
+             .map_err(|_|rejected("V3 session identity rejected"))
+     }
+ }
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+index 13db613..a403103 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+@@ -37,16 +37,24 @@ pub struct Expectation<const ROWS:usize=8> {
+     pub block_ownership:Vec<BlockOwnership>,
+     /// Explicit V6 capability, bound to the retained native graph by the session.
+     pub packed_prefill:bool,
++    pub mixed_execution:bool,
+ }
+-fn result_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {if e.packed_prefill{0x36524d52}else{Layout::<ROWS>::RESULT_MAGIC}}
++fn result_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {if e.mixed_execution{0x37524d52}else if e.packed_prefill{0x36524d52}else{Layout::<ROWS>::RESULT_MAGIC}}
+ fn compact_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {result_magic(e)^0x8000_0000}
++pub const MIXED_REQUEST_BYTES:usize=Layout::<32>::REQUEST_BYTES+4096;
++pub fn request_bytes<const ROWS:usize>(e:&Expectation<ROWS>)->usize{if e.mixed_execution{MIXED_REQUEST_BYTES}else{Layout::<ROWS>::REQUEST_BYTES}}
++fn stage_number(stage:InputStage)->u32{if stage==InputStage::Prefill{0}else{1}}
++fn packet_stage<const ROWS:usize>(e:&Expectation<ROWS>)->u32{if e.mixed_execution && e.rows.iter().any(|r|r.progress.stage==InputStage::Prefill) && e.rows.iter().any(|r|r.progress.stage==InputStage::Decode){2}else{stage_number(e.stage)}}
+ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
+     check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
+     check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
+     check(e.replay_id==e.last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
+     check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
++    check(!e.mixed_execution || (e.packed_prefill&&ROWS==32),"capacity","mixed execution requires packed32 capability")?;
+     check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
+-    check(e.stage!=InputStage::Prefill || e.rows.len()<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
++    let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
++    check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;
++    check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
+     let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
+     check(e.stage!=InputStage::Prefill || total<=1024,"tokens","packed token capacity exceeded")?;
+     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
+@@ -54,12 +62,12 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
+     for x in &e.block_ownership {
+         check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count && ownership.insert(x.physical_id,x.sequence_tag).is_none(),"ownership","invalid or duplicate ledger entry")?;
+     }
+-    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || e.stage==InputStage::Decode).count();
++    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage==InputStage::Decode).count();
+     let (mut tags,mut cookies,mut slots,mut used)=(BTreeSet::new(),BTreeSet::new(),BTreeSet::new(),BTreeSet::new());
+     for row in &e.rows {
+         check(row.sequence_tag!=0 && tags.insert(row.sequence_tag) && row.cookie!=0 && cookies.insert(row.cookie),"row_identity","duplicate or zero request identity")?;
+         check(row.output_slot<e.rows.len() as u32 && slots.insert(row.output_slot),"slot","slots not unique and dense")?;
+-        check(row.progress.stage==e.stage,"stage","row stage differs")?;
++        check(e.mixed_execution || row.progress.stage==e.stage,"stage","row stage differs")?;
+         let v=row.progress.validate()?;
+         if e.packed_prefill {check(((row.output_slot as usize)<published)==v.logits_input_row.is_some(),"slot","published slots must precede internal partial slots")?;}
+         check(row.input_tokens.len()==row.progress.input_tokens as usize && row.input_tokens.iter().all(|&t|t<49152),"tokens","invalid token count or vocabulary")?;
+@@ -76,31 +84,38 @@ fn u32_at(p:&mut [u8],at:usize,v:u32){p[at..at+4].copy_from_slice(&v.to_le_bytes
+ fn u64_at(p:&mut [u8],at:usize,v:u64){p[at..at+8].copy_from_slice(&v.to_le_bytes());}
+ /// Caller can reuse a retained buffer. Reject before mutating it on invalid authority.
+ pub fn encode_into<const ROWS:usize>(packet:&mut [u8],e:&Expectation<ROWS>)->Result<()> {
+-    check(packet.len()==Layout::<ROWS>::REQUEST_BYTES,"bytes","exact versioned request extent required")?;
++    check(packet.len()==request_bytes(e),"bytes","exact versioned request extent required")?;
+     validate(e)?;packet.fill(0);
+-    for (at,v) in [(0,if e.packed_prefill{0x36444d52}else{Layout::<ROWS>::MAGIC}),(4,if e.packed_prefill{6}else{Layout::<ROWS>::VERSION}),(8,Layout::<ROWS>::REQUEST_BYTES as u32),(12,ROW_BYTES as u32),
+-        (16,if e.stage==InputStage::Prefill{0}else{1}),(20,e.rows.len() as u32),(24,e.max_active_rows),(28,e.physical_block_count),(32,e.mode as u32)] {u32_at(packet,at,v);}
++    for (at,v) in [(0,if e.mixed_execution{0x37444d52}else if e.packed_prefill{0x36444d52}else{Layout::<ROWS>::MAGIC}),(4,if e.mixed_execution{7}else if e.packed_prefill{6}else{Layout::<ROWS>::VERSION}),(8,request_bytes(e) as u32),(12,ROW_BYTES as u32),
++        (16,packet_stage(e)),(20,e.rows.len() as u32),(24,e.max_active_rows),(28,e.physical_block_count),(32,e.mode as u32)] {u32_at(packet,at,v);}
+     u64_at(packet,40,e.owner_generation);u64_at(packet,48,e.replay_id);u64_at(packet,56,e.iteration_id);packet[64..96].copy_from_slice(&e.catalog_digest);
+-    let mut token_offset=0usize;
++    let mut token_offset=0usize;let mut tile_offset=0usize;
+     for (i,row) in e.rows.iter().enumerate() {
+         let b=HEADER_BYTES+i*ROW_BYTES;let p=row.progress;let v=p.validate()?;
+         for (at,value) in [(0,row.input_tokens[0]),(4,v.last_position),(8,p.input_tokens),(12,v.live_pages),
+             (16,p.committed_tokens),(20,v.target_tokens),(24,p.generated_index),(28,p.output_limit),
+             (32,p.prompt_tokens),(36,p.context_tokens),(40,row.output_slot),(44,v.logits_input_row.unwrap_or(u32::MAX))] {u32_at(packet,b+at,value);}
+         u64_at(packet,b+48,row.sequence_tag);u64_at(packet,b+56,row.cookie);
++        if e.mixed_execution {u32_at(packet,b+72,stage_number(p.stage));}
+         if e.stage==InputStage::Prefill {
++            if e.mixed_execution {
++                u32_at(packet,b+68,tile_offset as u32);
++                let tiles=if p.input_tokens<32{p.input_tokens}else{p.input_tokens.div_ceil(8)};
++                for local in 0..tiles {u32_at(packet,Layout::<32>::REQUEST_BYTES+tile_offset*4,((i as u32)<<16)|local);tile_offset+=1;}
++            }
+             if e.packed_prefill {u32_at(packet,b+64,token_offset as u32);}
+             for &t in &row.input_tokens {u32_at(packet,Layout::<ROWS>::TOKENS_OFFSET+token_offset*4,t);token_offset+=1;}
+         }
+         for (j,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate(){u32_at(packet,b+128+j*4,id);packet[b+1152+j*2..b+1154+j*2].copy_from_slice(&valid.to_le_bytes());}
+     }
+     if e.packed_prefill && e.stage==InputStage::Prefill {u32_at(packet,36,token_offset as u32);}
++    if e.mixed_execution {u32_at(packet,96,tile_offset as u32);}
+     Ok(())
+ }
+ /// Canonical comparison binds every byte, including padding, to live authority.
+ /// Scratch is caller-owned to avoid a replay-time allocation.
+ pub fn validate_packet<const ROWS:usize>(packet:&[u8],scratch:&mut [u8],e:&Expectation<ROWS>)->Result<()> {
+-    check(packet.len()==Layout::<ROWS>::REQUEST_BYTES,"bytes","exact versioned request extent required")?;
++    check(packet.len()==request_bytes(e),"bytes","exact versioned request extent required")?;
+     encode_into(scratch,e)?;check(packet==scratch,"packet","versioned bytes differ from live expectation")
+ }
+ pub const RESULT_BYTES:usize=128+49152*2;
+@@ -148,7 +163,7 @@ fn validate_result_row<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>,i
+ fn result_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,token:u32)->Result<()>{result_row_identity_into(out,e,0,token)}
+ fn result_row_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,index:usize,token:u32)->Result<()>{
+     let row=&e.rows[index];let p=row.progress;let v=p.validate()?;out.fill(0);
+-    for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,if e.stage==InputStage::Prefill{0}else{1}),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,result_magic(e))]{u32_at(out,at,x);}
++    for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,stage_number(p.stage)),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,result_magic(e))]{u32_at(out,at,x);}
+     for(at,x)in[(16,e.owner_generation),(24,e.replay_id),(32,e.iteration_id),(40,row.sequence_tag),(48,row.cookie)]{u64_at(out,at,x);}
+     out[80..112].copy_from_slice(&e.catalog_digest);Ok(())
+ }
+@@ -224,7 +239,7 @@ mod tests {
+     #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
+     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
+     fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
+-        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false};
++        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false,mixed_execution:false};
+         for i in 0..active {
+             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};
+             let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*(if ROWS==32{128}else{256})+p).collect();
+@@ -269,6 +284,31 @@ mod tests {
+         let mut e=fixture_rows::<16>(InputStage::Prefill,1);e.packed_prefill=true;assert!(validate(&e).is_err());
+         let mut e=packed_fixture(4,256);e.rows[1].physical_ids[0]=e.rows[0].physical_ids[0];assert!(validate(&e).is_err());
+     }
++
++    fn mixed_fixture(prefills:u32,decodes:u32,chunk:u32)->Expectation<32>{
++        let mut e=packed_fixture(prefills,chunk);e.mixed_execution=true;e.stage=if prefills>0{InputStage::Prefill}else{InputStage::Decode};
++        let decode=fixture_rows::<32>(InputStage::Decode,decodes);
++        for mut row in decode.rows{row.sequence_tag+=u64::from(prefills);row.cookie+=u64::from(prefills);for p in &mut row.physical_ids{*p+=prefills*128;}e.rows.push(row);}
++        e.block_ownership=e.rows.iter().flat_map(|r|r.physical_ids.iter().map(move |&physical_id|BlockOwnership{physical_id,sequence_tag:r.sequence_tag})).collect();
++        let mut published=0;let mut partial=e.rows.iter().filter(|r|r.progress.validate().unwrap().logits_input_row.is_some()).count() as u32;
++        for row in &mut e.rows{row.output_slot=if row.progress.validate().unwrap().logits_input_row.is_some(){let n=published;published+=1;n}else{let n=partial;partial+=1;n};}e
++    }
++    #[test] fn mixed_v7_stage_tiles_and_result_identity(){
++        for (prefills,decodes,chunk) in [(0,32,1),(1,31,128),(4,28,249),(4,0,256),(2,3,31)] {
++            let e=mixed_fixture(prefills,decodes,chunk);let mut p=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut p,&e).unwrap();
++            let get=|at|u32::from_le_bytes(p[at..at+4].try_into().unwrap());assert_eq!(get(0),0x37444d52);assert_eq!(get(4),7);assert_eq!(get(16),if prefills==0{1}else if decodes==0{0}else{2});
++            let mut tile=0;for (owner,row) in e.rows.iter().enumerate(){let b=128+owner*ROW_BYTES;assert_eq!(get(b+72),stage_number(row.progress.stage));if prefills>0{assert_eq!(get(b+68),tile);let n=row.progress.input_tokens;for local in 0..if n<32{n}else{n.div_ceil(8)}{assert_eq!(get(Layout::<32>::REQUEST_BYTES+tile as usize*4),((owner as u32)<<16)|local);tile+=1;}}}
++            assert_eq!(get(96),tile);let mut scratch=vec![0;p.len()];for at in 0..p.len(){p[at]^=0x80;assert!(validate_packet(&p,&mut scratch,&e).is_err(),"byte{at}");p[at]^=0x80;}
++            let bytes=compact_fixture(&e);assert_eq!(validate_compact_result(&bytes,&e).unwrap().len(),(prefills+decodes)as usize);
++            let mut wrong=e.clone();wrong.mixed_execution=false;assert!(validate_compact_result(&bytes,&wrong).is_err());
++            if let Some(dir)=std::env::var_os("RILEY_V49_WIRE_FIXTURES"){let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();std::fs::write(dir.join(format!("v7-{prefills}-{decodes}-{chunk}.bin")),p).unwrap();}
++        }
++    }
++    #[test] fn mixed_v7_over_budget_and_stage_fail_before_write(){
++        let e=mixed_fixture(4,28,250);let mut p=vec![0xa5;MIXED_REQUEST_BYTES];assert!(encode_into(&mut p,&e).is_err());assert!(p.iter().all(|&x|x==0xa5));
++        let mut e=mixed_fixture(1,3,128);e.stage=InputStage::Decode;assert!(validate(&e).is_err());e.stage=InputStage::Prefill;e.packed_prefill=false;assert!(validate(&e).is_err());
++        let e=mixed_fixture(1,3,128);assert!(encode_into(&mut vec![0;Layout::<32>::REQUEST_BYTES],&e).is_err());
++    }
+     fn maximum_prefill16()->Expectation<16> {
+         let mut e=fixture_rows::<16>(InputStage::Prefill,1);
+         e.rows[0].progress=Progress{prompt_tokens:2048,output_limit:128,context_tokens:4096,committed_tokens:0,input_tokens:1024,generated_index:0,stage:InputStage::Prefill};
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index 3b6d61b..9b5c9a7 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -6,7 +6,7 @@ static GENERATION: AtomicU64 = AtomicU64::new(1);
+ #[derive(Clone, Copy)]
+ pub struct VariableSessionIdentity {
+     pub generation:u64, pub last_accepted_replay:u64, pub catalog_digest:[u8;32],
+-    pub physical_block_count:u32, pub context_tokens:u32, pub packed_prefill:bool,
++    pub physical_block_count:u32, pub context_tokens:u32, pub packed_prefill:bool, pub mixed_execution:bool,
+ }
+ /// Owns the prepared reservation; no mutable native handle escapes while active.
+ /// A result remains outstanding until scheduler commit is explicitly confirmed.
+@@ -22,7 +22,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
+         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
+         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
+-        Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false},
++        Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
+             compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+     }
+     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
+@@ -31,6 +31,8 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+         if ROWS!=32{return Err(bad("packed requires32 rows"));}
+         let mut s=if compact{Self::new_shared_compact(graph,digest,physical,context)?}else{Self::new_shared(graph,digest,physical,context)?};s.identity.packed_prefill=true;Ok(s)
+     }
++    pub(crate) fn new_shared_mixed(graph:G,digest:[u8;32],physical:u32,context:u32,compact:bool)->Result<Self>{let mut s=Self::new_shared_packed(graph,digest,physical,context,compact)?;s.identity.mixed_execution=true;s.input.resize(wire::MIXED_REQUEST_BYTES,0);Ok(s)}
++    pub fn supports_mixed_execution(&self)->bool{self.identity.mixed_execution}
+     pub fn supports_packed_prefill(&self)->bool{self.identity.packed_prefill}
+     pub fn supports_compact_greedy(&self)->bool{self.compact}
+     pub fn issue(&mut self)->Result<(VariableSessionIdentity,u64,u64)>{let(i,r,c)=self.issue_rows(1)?;Ok((i,r,c[0]))}
+@@ -53,7 +55,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+     pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
+         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
+         let i=self.identity;
+-        if e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
++        if e.mixed_execution!=i.mixed_execution || e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
+             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
+             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
+@@ -91,6 +93,7 @@ pub struct VariableGraphBuffers {
+     pub(crate) wire_rows:usize,
+     pub(crate) compact:bool,
+     pub(crate) packed_prefill:bool,
++    pub(crate) mixed_execution:bool,
+ }
+ impl VariableGraphBuffers {
+     pub fn prepare(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self> {Self::prepare_base(context,capacity,true)}
+@@ -106,7 +109,7 @@ impl VariableGraphBuffers {
+         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
+         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
+         Ok(Self{devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
+-            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false})
++            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,mixed_execution:false})
+     }
+     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
+     pub fn prepare_shared16(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<16>(context,capacity)}
+@@ -164,25 +167,27 @@ impl<const ROWS:usize> OwnedVariableSession<ROWS> {
+ impl super::PreparedLlamaBatchExecutor {
+     /// Moves the loaded model and every graph parent into an owned session.
+     /// The native reservation is destroyed before model/stream/scratch release.
+-    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session::<8>(context,capacity,false,false,false)}
+-    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session::<8>(context,capacity,true,false,false)}
+-    pub fn into_owned_variable_shared_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true,false,false)}
+-    pub fn into_owned_variable_shared16_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,false,false)}
+-    pub fn into_owned_variable_shared_greedy_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true,true,false)}
+-    pub fn into_owned_variable_shared16_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,true,false)}
+-    pub fn into_owned_variable_packed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true)}
+-    fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
++    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session::<8>(context,capacity,false,false,false,false)}
++    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session::<8>(context,capacity,true,false,false,false)}
++    pub fn into_owned_variable_shared_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true,false,false,false)}
++    pub fn into_owned_variable_shared16_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,false,false,false)}
++    pub fn into_owned_variable_shared_greedy_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true,true,false,false)}
++    pub fn into_owned_variable_shared16_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,true,false,false)}
++    pub fn into_owned_variable_packed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,false)}
++    pub fn into_owned_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,true)}
++    fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+-        if (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
++        if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
+         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
+-        parents.scratch.compact=compact;parents.scratch.packed_prefill=packed;
++        parents.scratch.compact=compact;parents.scratch.packed_prefill=packed;parents.scratch.mixed_execution=mixed;
++        if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}
+         let mut identity=None;
+         let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
+             let session=p.executor.prepare_variable_session_rows::<ROWS>(&mut p.stream,&mut p.scratch)?;
+             let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
+         })?;
+         let i=identity.expect("successful recording provides identity");
+-        (if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
++        (if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
+             .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})
+     }
+ }
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index 1f099d9..a660cb1 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -155,6 +155,7 @@ pub(crate) struct VariableOwnerGeometry {
+     pub physical_block_count: u32,
+     pub context_tokens: u32,
+     pub packed_prefill: bool,
++    pub mixed_execution: bool,
+ }
+ impl AuthorizedExecution<'_> {
+     #[allow(dead_code)]
+@@ -169,7 +170,7 @@ impl AuthorizedExecution<'_> {
+         let decode = self.plan.decode_items();
+         if owner.physical_block_count as usize != self.physical_block_count()
+             || cookies.len()!=self.rows.len() || prefill.len()+decode.len()!=self.rows.len()
+-            || (!prefill.is_empty() && !decode.is_empty()) { return Err(bad()); }
++            || (!owner.mixed_execution && !prefill.is_empty() && !decode.is_empty()) { return Err(bad()); }
+         let stage = if prefill.is_empty() { InputStage::Decode } else { InputStage::Prefill };
+         let to32 = |v:usize| u32::try_from(v).map_err(|_| bad());
+         let mut rows = Vec::with_capacity(self.rows.len());
+@@ -179,7 +180,7 @@ impl AuthorizedExecution<'_> {
+             let progress = Progress {
+                 prompt_tokens:to32(row.prompt_tokens)?, output_limit:to32(row.max_output_tokens)?,
+                 context_tokens:owner.context_tokens, committed_tokens:to32(row.committed_length)?,
+-                input_tokens:to32(work.input_tokens().len())?, generated_index:to32(row.generated_index)?, stage,
++                input_tokens:to32(work.input_tokens().len())?, generated_index:to32(row.generated_index)?, stage:if work.kind()==crate::WorkKind::Prefill{InputStage::Prefill}else{InputStage::Decode},
+             };
+             let checked = progress.validate()?;
+             if checked.target_tokens != to32(work.target_logical_length())?
+@@ -191,7 +192,7 @@ impl AuthorizedExecution<'_> {
+                 input_tokens:work.input_tokens().to_vec(), physical_ids:row.table.physical_block_ids().to_vec(),
+                 valid_tokens:row.table.valid_tokens().to_vec() });
+         }
+-        let e = Expectation { packed_prefill:owner.packed_prefill, owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
++        let e = Expectation { mixed_execution:owner.mixed_execution, packed_prefill:owner.packed_prefill, owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
+             replay_id:replay, iteration_id:self.plan.iteration_id().get(), catalog_digest:owner.catalog_digest,
+             physical_block_count:owner.physical_block_count, max_active_rows:owner.max_active_rows,
+             stage, mode, rows, block_ownership:self.block_owners.iter().map(|(id,tag)| BlockOwnership {
+@@ -216,7 +217,7 @@ mod tests {
+             max_promised_kv_blocks:256,metrics_window_samples:16,
+         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::VariablePrefillDecodeN).unwrap();
+         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
+-        let mut owner=super::VariableOwnerGeometry{packed_prefill:false,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
++        let mut owner=super::VariableOwnerGeometry{mixed_execution:false,packed_prefill:false,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
+         let mut last=None;
+         loop {
+@@ -266,7 +267,7 @@ mod tests {
+             max_promised_kv_blocks:256,metrics_window_samples:16,
+         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::PackedPrefillDecode32).unwrap();
+         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
+-        let mut owner=super::VariableOwnerGeometry{packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
++        let mut owner=super::VariableOwnerGeometry{mixed_execution:false,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
+         let mut last=None;let mut prefill_width=0;
+         loop {
+@@ -304,6 +305,56 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn mixed_policy_budget_stage_partial_retry_and_cancel() {
++        use crate::{IterationResult,IterationOutput,ExecutionAbort,ExecutionShapePolicy};
++        use crate::descriptor::{shape_progress::InputStage,variable_wire};
++        for cancel_last in [false,true] {
++        let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig {
++            max_waiting_requests:8,max_waiting_prompt_tokens:4096,max_active_sequences:4,
++            max_sequence_tokens:1024,iteration_token_budget:256,max_prefill_chunk_tokens:128,
++            aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,
++            max_promised_kv_blocks:256,metrics_window_samples:16,
++        },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::MixedPrefillDecode32).unwrap();
++        let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
++        let mut owner=super::VariableOwnerGeometry{mixed_execution:true,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
++        let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
++        let mut last=None;let mut prefill_width=0;let mut saw_mixed=false;
++        loop {
++            now+=2;
++            let Some(plan)=scheduler.plan_iteration(now).unwrap().into_parts().0 else {break};
++            let prefill=!plan.prefill_items().is_empty();
++            saw_mixed|=!plan.prefill_items().is_empty()&&!plan.decode_items().is_empty();
++            if prefill {prefill_width=prefill_width.max(plan.prefill_items().len());assert!(plan.prefill_items().len()<=4);assert!(plan.total_tokens()<=256);}
++            widest=widest.max(plan.decode_items().len());
++            let signature:Vec<_>=plan.prefill_items().iter().chain(plan.decode_items()).map(|w|(w.request_id(),w.input_tokens().to_vec(),w.target_logical_length())).collect();
++            if !retried {
++                scheduler.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,now+1).unwrap();
++                last=Some(signature);retried=true;continue;
++            }
++            if let Some(expected)=last.take(){assert_eq!(signature,expected);}
++            replay+=1;
++            let authority=scheduler.authorize_execution(&plan).unwrap();
++            let cookies:Vec<_>=(0..plan.batch_size()).map(|i|replay*8+i as u64+1).collect();
++            let expectation=authority.variable_descriptor_expectation_rows::<32>(&owner,replay,&cookies,ResultMode::FullLogits).unwrap();
++            assert_eq!(expectation.stage,if prefill{InputStage::Prefill}else{InputStage::Decode});
++            let mut bytes=vec![0;variable_wire::MIXED_REQUEST_BYTES];variable_wire::encode_into(&mut bytes,&expectation).unwrap();
++            variable_wire::validate_packet(&bytes,&mut vec![0;bytes.len()],&expectation).unwrap();
++            partial |= prefill && plan.output_slots().len()<plan.prefill_items().len();
++            let outputs=plan.output_slots().iter().map(|&slot|IterationOutput::new(slot,23,false)).collect();
++            drop(authority);
++            let result=IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
++            assert!(scheduler.complete_iteration(&result,now+1).unwrap().settlement_failures().is_empty());
++            owner.last_accepted_replay=replay;
++            if cancel_last && replay==1 {scheduler.cancel(ids[3],now+1).unwrap();}
++            assert!(replay<256);
++        }
++        assert!(partial && retried && widest>=3 && prefill_width>=3 && saw_mixed);
++        for (i,id) in ids.into_iter().enumerate() {assert_eq!(scheduler.request_state(id),Some(if cancel_last && i==3 {crate::RequestState::Cancelled}else{crate::RequestState::Finished}));}
++        scheduler.close(now+2,None).unwrap();
++        }
++    }
++
+     #[test]
+     fn variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler() {
+         use crate::{IterationResult, IterationOutput};
+@@ -316,7 +367,7 @@ mod tests {
+                 max_promised_kv_blocks:64, metrics_window_samples:16,
+             }, riley_runtime::paged_kv::KvLayout::checked(30,64,3,64).unwrap()).unwrap();
+             let id=scheduler.submit(RequestDescriptor::new(vec![17;prompt],limit),0).unwrap().request_id();
+-            let mut owner=super::VariableOwnerGeometry { packed_prefill:false, generation:1,last_accepted_replay:0,catalog_digest:[7;32],
++            let mut owner=super::VariableOwnerGeometry { mixed_execution:false, packed_prefill:false, generation:1,last_accepted_replay:0,catalog_digest:[7;32],
+                 max_active_rows:1,physical_block_count:64,context_tokens:1024 };
+             let (mut committed,mut generated,mut replay)=(0,0,0u64);
+             while generated<limit {
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index 1a74a03..b9a9bbe 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -37,6 +37,8 @@ pub enum ExecutionShapePolicy {
+     VariablePrefillDecode32,
+     /// Up to four ready prefill owners share a token-packed V6 graph.
+     PackedPrefillDecode32,
++    /// Ready decode owners and up to four prefill owners share one token budget.
++    MixedPrefillDecode32,
+ }
+ 
+ /// All host-memory, work, and KV promises enforced by one scheduler.
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 8549b12..ac41a25 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -2177,7 +2177,7 @@ fn execute_variable_graph_impl<G:riley_runtime::llama::variable_session::Variabl
+     if prepared.output_count>ROWS || ROWS>32{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
+     let mut argmax=[0u32;32];
+     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+-    let owner=crate::authority::VariableOwnerGeometry {packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
++    let owner=crate::authority::VariableOwnerGeometry {mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+         catalog_digest:identity.catalog_digest,max_active_rows:ROWS as u32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+     let expectation=match authority.variable_descriptor_expectation_rows::<ROWS>(&owner,replay,&cookies,if compact_greedy{crate::descriptor::ResultMode::Greedy}else{crate::descriptor::ResultMode::FullLogits}) {
+         Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index 2ec9b0b..b7e4643 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1582,7 +1582,20 @@ impl Scheduler {
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
++        if self.execution_shape_policy==ExecutionShapePolicy::MixedPrefillDecode32 {
++            let mut budget=self.config.iteration_token_budget;
++            for item in decode.iter().take(32) {
++                if budget==0 {break;}
++                selected.push(Candidate{request_id:item.request_id,kind:WorkKind::Decode,token_count:1});budget-=1;
++            }
++            for item in prefill.iter().take(4) {
++                if budget==0 || selected.len()==32 {break;}
++                let token_count=item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(budget);
++                selected.push(Candidate{request_id:item.request_id,kind:WorkKind::Prefill,token_count});budget-=token_count;
++            }
++            return Ok((selected,false));
++        }
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
+             // Alternate classes immediately when both are ready. Neither aging
+             // nor decode subtraction changes the independently bounded prefill chunk.
+             // A NotDispatched abort retains the previous class so a retry cannot
+@@ -1611,7 +1624,7 @@ impl Scheduler {
+                 // Admission capacity is independent of the eight-row V3 wire.
+                 // Ready timestamps already rotate committed decode work and roll
+                 // back on NotDispatched, preserving fairness across batches.
+-                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32=>32,_=>self.config.max_active_sequences};
++                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32=>32,_=>self.config.max_active_sequences};
+                 for item in decode.into_iter().take(limit) {
+                     selected.push(Candidate {
+                         request_id: item.request_id,
+@@ -1686,7 +1699,7 @@ impl Scheduler {
+     }
+ 
+     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
+             self.last_dispatched_shape = Some(if inflight.prefill_count > 0 {
+                 WorkKind::Prefill
+             } else {
+@@ -2107,7 +2120,7 @@ impl Scheduler {
+             }
+         }
+         for output in result.outputs() {
+-            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32)
++            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32)
+                 && output.token_id() >= 49_152
+             {
+                 return Err(SchedulerError::InvalidIterationResult {
+@@ -2671,7 +2684,7 @@ fn validate_descriptor(
+     policy: ExecutionShapePolicy,
+     descriptor: &RequestDescriptor,
+ ) -> SchedulerResult<usize> {
+-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32)
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32)
+         && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
+         return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
+     }
+@@ -2733,7 +2746,7 @@ fn validate_execution_shape_config(
+     if policy == ExecutionShapePolicy::General {
+         return Ok(());
+     }
+-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
+         for (valid,field,reason) in [
+             (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
+             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
+diff --git a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+index 6dfc807..47a3c4b 100644
+--- a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
++++ b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+@@ -113,3 +113,43 @@ fn loaded_v6_compact32()->Result<(),Box<dyn std::error::Error>>{run_packed_profi
+ #[test]
+ #[ignore="requires GPU; V6 mixed published and partial prefill"]
+ fn loaded_v6_partial()->Result<(),Box<dyn std::error::Error>>{run_packed_profile(4,3,128,1024,256,true)}
++
++fn run_mixed_profile(active:usize,request_count:usize,physical:usize,capacity:u32,chunk:usize,compact:bool)->Result<(),Box<dyn std::error::Error>>{
++const ROWS:usize=32;
++let root=PathBuf::from(std::env::var_os("RILEY_V3_MODEL_FIXTURE").ok_or("fixture missing")?);let model=LoadedModel::load(PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?).as_path(),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
++let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let mut requests=vec![];for _ in 0..count{let n=read32(&mut f)?;let mut tokens=vec![];for _ in 0..n{tokens.push(read32(&mut f)?);}requests.push(tokens);}
++let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
++let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,physical as usize)?,PreparedLlamaForwardConfig::default());
++let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=executor.into_owned_variable_mixed_session(&context,capacity,compact)?;assert_eq!(session.supports_compact_greedy(),compact);
++let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:capacity as usize,max_prefill_chunk_tokens:chunk,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,riley_scheduler::ExecutionShapePolicy::MixedPrefillDecode32)?;
++let request_set=if ROWS==32 && request_count==32{vec![requests.iter().max_by_key(|p|p.len()).unwrap().clone()]}else{requests.clone()};
++let mut refs=std::collections::BTreeMap::new();for prompt in request_set.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
++let(mut iteration,mut widest,mut checked)=(0u64,0usize,0usize);let mut mixed_iterations=0;let mut prefill_width=0;let mut peak_active=0;let mut workspace=Vec::with_capacity(ROWS);let workspace_pointer=workspace.as_ptr();
++loop {
++ iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};peak_active=peak_active.max(scheduler.metrics_snapshot()?.gauges.active_sequences);mixed_iterations+=usize::from(!plan.prefill_items().is_empty()&&!plan.decode_items().is_empty());prefill_width=prefill_width.max(plan.prefill_items().len());assert!(plan.prefill_items().len()<=4);assert!(plan.total_tokens()<=capacity as usize);widest=widest.max(plan.decode_items().len());assert!(plan.decode_items().len()<=ROWS);
++ let slots:std::collections::BTreeMap<_,_>=plan.prefill_items().iter().chain(plan.decode_items()).filter_map(|w|w.output_slot().map(|slot|(slot.get(),w.request_id()))).collect();
++ let authority=scheduler.authorize_execution(&plan)?;let greedy=compact && iteration%3!=0;let mut downloaded=if greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(&authority,&mut session,&mut workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session)}.unwrap();if greedy{assert_eq!(workspace.capacity(),0);}
++ assert!(session.issue_rows(1).is_err());assert!(session.confirm_scheduler_commit(plan.iteration_id().get()+1).is_err());
++ let mut samples=vec![];
++ for slot in 0..downloaded.output_count(){let id=slots[&(slot as u32)];let(reference,generated,_)=refs.get_mut(&id).unwrap();let logits=&reference[*generated*98304..(*generated+1)*98304];if !greedy{assert_eq!(&downloaded.logits_bf16_native()[slot*98304..(slot+1)*98304],logits,"request {:?} generated {}",id,*generated);}else{assert!(downloaded.logits_bf16_native().is_empty());}
++ let token=logits.chunks_exact(2).enumerate().map(|(i,b)|(i,f32::from_bits((u16::from_le_bytes([b[0],b[1]])as u32)<<16))).max_by(|a,b|a.1.total_cmp(&b.1).then_with(||b.0.cmp(&a.0))).unwrap().0 as u32;
++ if greedy{assert_eq!(downloaded.greedy_token_ids()[slot],token,"compact request {:?} generated {}",id,*generated);}
++ samples.push(SampledIterationToken::new(token,false));*generated+=1;checked+=1;
++ }
++ if greedy{downloaded.restore_greedy_token_workspace(&mut workspace).unwrap();assert_eq!(workspace.as_ptr(),workspace_pointer);}
++ drop(authority);let result=downloaded.into_result(&samples,IterationTiming::new(0,0)).unwrap();assert!(scheduler.complete_iteration(&result,iteration*2+1)?.settlement_failures().is_empty());session.confirm_scheduler_commit(plan.iteration_id().get()).unwrap();
++}
++assert!(mixed_iterations>0,"mixed iteration not exercised");assert!(prefill_width>=2,"packed execution was not exercised");assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(ROWS),"widest={} expected={}",widest,request_count.min(ROWS));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
++scheduler.submit(RequestDescriptor::new(vec![17;chunk+1],4),iteration*2+1)?;
++let plan=scheduler.plan_iteration(iteration*2+2)?.into_parts().0.unwrap();let authority=scheduler.authorize_execution(&plan)?;
++let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph_mode(&authority,&mut session,compact).unwrap();assert_eq!(downloaded.output_count(),0);drop(authority);drop(downloaded);assert!(session.issue_rows(2).is_err());
++session.close()?;assert!(scheduler.abort_iteration(plan.iteration_id(),riley_scheduler::ExecutionAbort::DeviceQuiescedMutationUnknown,iteration*2+3)?.settlement_failures().is_empty());scheduler.close(iteration*2+4,None)?;stream.close()?;assert!(context.allocation_stats()?.is_zero());eprintln!("LOADED_MIXED rows_max={} logits_checked={} iterations={} pending_close_abort=true allocation_zero=true",widest,checked,iteration-1);Ok(())}
++#[test]
++#[ignore="requires GPU; V7 mixed full-logit execution"]
++fn loaded_v7_full32()->Result<(),Box<dyn std::error::Error>>{run_mixed_profile(32,32,2048,1024,512,false)}
++#[test]
++#[ignore="requires GPU; V7 mixed alternating compact and full"]
++fn loaded_v7_compact32()->Result<(),Box<dyn std::error::Error>>{run_mixed_profile(32,32,2048,1024,512,true)}
++#[test]
++#[ignore="requires GPU; V7 mixed partial output and active decode"]
++fn loaded_v7_partial()->Result<(),Box<dyn std::error::Error>>{run_mixed_profile(4,3,128,1024,256,true)}
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index f4f0d62..05274af 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2230,7 +2230,7 @@ mod cuda_backend {
+                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
+                 )));
+             }
+-            let shape_policy = if config.executor.packed_prefill() {riley_scheduler::ExecutionShapePolicy::PackedPrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
++            let shape_policy = if config.executor.mixed_execution() {riley_scheduler::ExecutionShapePolicy::MixedPrefillDecode32} else if config.executor.packed_prefill() {riley_scheduler::ExecutionShapePolicy::PackedPrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
+                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16
+             } else if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
+                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN
+@@ -2571,7 +2571,7 @@ mod cuda_backend {
+                 && resources.executor.config().vllm_smol_p128_batched_prefill()
+                 && resources.scheduler.config().max_active_sequences > 1;
+             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
+-                let graph=if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
++                let graph=if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
+                 (None,None,None,Some(graph))
+             } else if use_multi {
+@@ -2596,7 +2596,7 @@ mod cuda_backend {
+                 !use_graph,
+                 !use_graph,
+                 decode_graph.as_ref().map_or(
+-                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(g))=>if g.supports_packed_prefill(){"variable-smol-v6"}else{"variable-smol-v5"},Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
++                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(g))=>if g.supports_mixed_execution(){"variable-smol-v7"}else if g.supports_packed_prefill(){"variable-smol-v6"}else{"variable-smol-v5"},Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
+                         "vllm-smol-p128-multi-v1"
+                     } else {
+                         "existing"
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index a957fb4..13bcae7 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -46,7 +46,7 @@ serve options:
+   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+-  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6
++  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7
+   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+@@ -92,6 +92,7 @@ struct ServeOptions {
+     variable_graph16: bool,
+     variable_graph32: bool,
+     packed_prefill: bool,
++    mixed_execution: bool,
+     max_weight_bytes: u64,
+     shutdown_on_stdin: bool,
+     c02_runtime_config: Option<C02RuntimeConfigOptions>,
+@@ -369,16 +370,17 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+             "--graph-numerics" => {
+                 let value = next_value(&mut arguments, "--graph-numerics")?;
+                 let enabled = match value.to_str() {
+-                    Some("existing") => (false, false, false, false, false, false),
+-                    Some("vllm-smol-p128-v1") => (true, false, false, false, false, false),
+-                    Some("shared-smol-p128-v1") => (true, true, false, false, false, false),
+-                    Some("variable-smol-v3") => (false, false, true, false, false, false),
+-                    Some("variable-smol-v4") => (false, false, true, true, false, false),
+-                    Some("variable-smol-v5") => (false, false, true, false, true, false),
+-                    Some("variable-smol-v6") => (false, false, true, false, true, true),
++                    Some("existing") => (false, false, false, false, false, false, false),
++                    Some("vllm-smol-p128-v1") => (true, false, false, false, false, false, false),
++                    Some("shared-smol-p128-v1") => (true, true, false, false, false, false, false),
++                    Some("variable-smol-v3") => (false, false, true, false, false, false, false),
++                    Some("variable-smol-v4") => (false, false, true, true, false, false, false),
++                    Some("variable-smol-v5") => (false, false, true, false, true, false, false),
++                    Some("variable-smol-v6") => (false, false, true, false, true, true, false),
++                    Some("variable-smol-v7") => (false, false, true, false, true, true, true),
+                     _ => {
+                         return Err(
+-                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3, variable-smol-v4, variable-smol-v5 or variable-smol-v6".to_owned()
++                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3, variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7".to_owned()
+                         );
+                     }
+                 };
+@@ -510,7 +512,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     )?;
+     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
+ 
+-    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill) = graph_numerics.unwrap_or((false, false, false, false, false, false));
++    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution) = graph_numerics.unwrap_or((false, false, false, false, false, false, false));
+     if (vllm_smol_p128_graph || variable_graph)
+         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
+     {
+@@ -546,6 +548,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         variable_graph16,
+         variable_graph32,
+         packed_prefill,
++        mixed_execution,
+         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+         shutdown_on_stdin,
+         c02_runtime_config,
+@@ -932,7 +935,7 @@ fn run_serve(
+     if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
+         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
+         || (options.sampling_backend!=SamplingBackendMode::Cpu && !options.variable_graph16 && !options.variable_graph32)) {
+-        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4, variable-smol-v5 or variable-smol-v6".to_owned());
++        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7".to_owned());
+     }
+     if options.vllm_smol_p128_graph
+         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
+@@ -1072,7 +1075,7 @@ fn run_serve(
+             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+         }
+     };
+-    let executor = if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
++    let executor = if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+         executor.with_variable_graph16()
+     } else if options.variable_graph {
+         executor.with_variable_graph()
+@@ -2941,6 +2944,11 @@ mod tests {
+         values.iter().map(OsString::from)
+     }
+ 
++    #[test]
++    fn mixed_v7_profile_preserves_aggregate_budget(){
++        let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v7","--execution-graph-policy","require","--max-active-sequences","32","--batch-token-budget","1024","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
++        let super::CliCommand::Serve(options)=result else{panic!("serve")};assert!(options.variable_graph&&options.variable_graph32&&options.packed_prefill&&options.mixed_execution&&!options.variable_graph16);assert_eq!(options.prefill_chunk_tokens,512);
++    }
+     #[test]
+     fn packed_v6_profile_preserves_aggregate_budget(){
+         let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v6","--execution-graph-policy","require","--max-active-sequences","32","--batch-token-budget","1024","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
+@@ -3901,6 +3909,7 @@ mod tests {
+                 variable_graph16: false,
+                 variable_graph32: false,
+                 packed_prefill: false,
++                mixed_execution: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4293,6 +4302,7 @@ mod tests {
+                 variable_graph16: false,
+                 variable_graph32: false,
+                 packed_prefill: false,
++                mixed_execution: false,
+                 max_weight_bytes: 4096,
+                 shutdown_on_stdin: true,
+                 c02_runtime_config: None,
+@@ -4452,6 +4462,7 @@ mod tests {
+                 variable_graph16: false,
+                 variable_graph32: false,
+                 packed_prefill: false,
++                mixed_execution: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4578,6 +4589,7 @@ mod tests {
+                 variable_graph16: false,
+                 variable_graph32: false,
+                 packed_prefill: false,
++                mixed_execution: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 2b6c0cb..178aa7d 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2760,6 +2760,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_v6_shared(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_v7_shared(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
++    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
++    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ RileyCudaStatus riley_cuda_graph_resources_record_v5_shared_greedy(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+@@ -2768,6 +2772,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_v6_shared_greedy(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_v7_shared_greedy(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
++    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
++    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ 
+ RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+diff --git a/kernels/src/compact_shared_result.cuh b/kernels/src/compact_shared_result.cuh
+index e350c6b..e6e8518 100644
+--- a/kernels/src/compact_shared_result.cuh
++++ b/kernels/src/compact_shared_result.cuh
+@@ -65,7 +65,7 @@ __global__ void parts(const uint32_t* metadata,const __nv_bfloat16* logits,Greed
+  }
+  finish_partial(best,id,bad,partial+row*24+part,values,tokens,invalid);
+ }
+-template<uint32_t Rows,bool Packed=false>
++template<uint32_t Rows,bool Packed=false,bool Mixed=false>
+ __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint32_t* status,uint32_t* output){
+  const uint32_t row=blockIdx.x,tid=threadIdx.x,active=m[5];uint32_t* result=output+row*32;
+  if(active<1||active>Rows||row>=active){if(tid<32)result[tid]=0;return;}
+@@ -79,19 +79,19 @@ __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint
+   result[3]=published?(combined.invalid||combined.token==UINT32_MAX):0;
+   for(int i=0;i<6;++i)result[4+i]=m[10+i];
+   for(int i=0;i<4;++i)result[10+i]=shape[12+i];
+-  result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
++  result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=Mixed?shape[18]:m[4];
+   for(int i=0;i<8;++i)result[20+i]=m[16+i];
+   result[28]=shape[1];result[29]=shape[10];result[30]=m[8];
+-  result[31]=(Packed?0x36524d52U:(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U)))^0x80000000U;
++  result[31]=(Mixed?0x37524d52U:Packed?0x36524d52U:(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U)))^0x80000000U;
+  }
+ }
+-template<uint32_t Rows,bool Packed=false>
++template<uint32_t Rows,bool Packed=false,bool Mixed=false>
+ inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const void* logits,const uint32_t* status,void* partial,void* output){
+  static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
+  if(!metadata||!logits||!status||!partial||!output)return cudaErrorInvalidValue;
+  parts<Rows><<<Rows*24,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const __nv_bfloat16*>(logits),static_cast<GreedyPartial*>(partial));
+  auto e=cudaGetLastError();if(e!=cudaSuccess)return e;
+- finish<Rows,Packed><<<Rows,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const GreedyPartial*>(partial),status,static_cast<uint32_t*>(output));
++ finish<Rows,Packed,Mixed><<<Rows,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const GreedyPartial*>(partial),status,static_cast<uint32_t*>(output));
+  return cudaGetLastError();
+ }
+ }
+diff --git a/kernels/src/decode_shared32_result.cuh b/kernels/src/decode_shared32_result.cuh
+index cd40604..6eea1b2 100644
+--- a/kernels/src/decode_shared32_result.cuh
++++ b/kernels/src/decode_shared32_result.cuh
+@@ -21,7 +21,7 @@ __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint3
+  result[0]=*status;result[1]=published;result[2]=published?tokens[0]:0;result[3]=errors[0];
+  for(int i=0;i<6;++i)result[4+i]=m[10+i];
+  for(int i=0;i<4;++i)result[10+i]=shape[12+i];
+- result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
++ result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=Magic==0x37524d52?shape[18]:m[4];
+  for(int i=0;i<8;++i)result[20+i]=m[16+i];
+  result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=Magic;
+  }
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 79f229f..d2876fe 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2412,7 +2412,9 @@ cudaError_t enqueue_compiled_v4_result_header(cudaStream_t,const void*,void*,con
+ cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v6_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
++cudaError_t enqueue_compiled_v7_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v5_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v6_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v7_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v5_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
+ }
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index 04c097d..d936434 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -368,3 +368,13 @@ cudaError_t enqueue_compiled_v6_shared_result(cudaStream_t s,const void* m,const
+  return riley_shared32_result::enqueue<0x36524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+ }
+ }
++
++#include "mixed_model_v49.cuh"
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_v7_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
++ return enqueue_mixed_model_v7<32>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
++}
++cudaError_t enqueue_compiled_v7_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
++ return riley_shared32_result::enqueue<0x37524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
++}
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 04e0d92..a7337d2 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -60,6 +60,7 @@ struct RileyCudaGraphResources {
+   bool v3_shared=false;
+   uint32_t variable_rows=8;
+   bool packed_prefill=false;
++  bool mixed_execution=false;
+   uint32_t v3_prefill_capacity=0,v3_prefill_physical=0,v3_prefill_context=0;
+ #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+   uint32_t test_replay_fault = 0;
+@@ -355,25 +356,25 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   r->completion_visible = false;
+   r->last_compact = false;
+   r->last_catalog = 0;
+-  if (r->exec == nullptr || source == nullptr || bytes != (r->v3_prefill_capacity?(128+r->variable_rows*1664+4096):r->transfer_bytes))
++  if (r->exec == nullptr || source == nullptr || bytes != (r->v3_prefill_capacity?(128+r->variable_rows*1664+4096+(r->mixed_execution?4096:0)):r->transfer_bytes))
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "fresh source must cover exact transfer size");
+   if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
+     return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   if(r->v3_prefill_capacity){
+-    if(!(r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    if(!(r->mixed_execution?valid_v7_shape_packet(source,bytes,r->v3_prefill_physical,32):r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
+-    if((!r->v3_shared&&value(20)!=1)||(r->packed_prefill&&value(16)==0?value(36):value(136))>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
++    if((!r->v3_shared&&value(20)!=1)||(r->packed_prefill&&value(16)!=1?value(36):value(136))>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
+       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     for(uint32_t row=0;row<value(20);++row)if(value(164+row*1664)>r->v3_prefill_context)return reject(error,"V3 row context exceeds retained tables",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   }
+   auto selected_exec = r->exec;
+-  if(r->v3_prefill_capacity){uint32_t stage;std::memcpy(&stage,source+16,4);if(stage==0){if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");selected_exec=r->prefill_exec;}}
++  if(r->v3_prefill_capacity){uint32_t stage;std::memcpy(&stage,source+16,4);if(stage!=1){if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");selected_exec=r->prefill_exec;}}
+   if(r->compact_ready){
+     uint32_t mode,stage;std::memcpy(&mode,source+32,4);std::memcpy(&stage,source+16,4);
+     if(mode==0){
+-      if(stage>1||!r->compact_exec[stage])return reject(error,"compact stage capture missing");
+-      selected_exec=r->compact_exec[stage];r->last_compact=true;
++      if(stage>(r->mixed_execution?2u:1u)||!r->compact_exec[stage==1?1:0])return reject(error,"compact stage capture missing");
++      selected_exec=r->compact_exec[stage==1?1:0];r->last_compact=true;
+     }
+   }
+   if(r->decode_capacity!=0){
+@@ -1213,7 +1214,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+  return status;
+ }
+ 
+-template<uint32_t Rows,bool Compact=false,bool Packed=false>
++template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false>
+ static RileyCudaStatus record_variable_shared(
+  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+@@ -1221,7 +1222,8 @@ static RileyCudaStatus record_variable_shared(
+  static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
+  static_assert(!Compact||Rows==16||Rows==32,"compact capture currently requires sixteen rows");
+  static_assert(!Packed||Rows==32,"V6 requires32 rows");
+- constexpr uint64_t request_bytes=128+Rows*1664+4096;
++ static_assert(!Mixed||(Packed&&Rows==32),"mixed V7 requires packed32");
++ constexpr uint64_t request_bytes=128+Rows*1664+4096+(Mixed?4096:0);
+  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
+     r->graph||r->exec||r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
+@@ -1264,20 +1266,20 @@ static RileyCudaStatus record_variable_shared(
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+    if(compact){
+-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact decode validation");
++    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact decode validation");
+     if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+     return result;
+    }
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Packed?enqueue_compiled_v6_shared_result:Rows==8?enqueue_compiled_v3_shared_result:(Rows==16?enqueue_compiled_v4_shared_result:enqueue_compiled_v5_shared_result))(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Mixed?enqueue_compiled_v7_shared_result:Packed?enqueue_compiled_v6_shared_result:Rows==8?enqueue_compiled_v3_shared_result:(Rows==16?enqueue_compiled_v4_shared_result:enqueue_compiled_v5_shared_result))(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
+    return result;
+   }
+   if constexpr(Packed){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v6_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V6 packed head");
+    if(compact){
+-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 compact completion");
+-   }else if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v6_shared_result(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 full completion");
++    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 compact completion");
++   }else if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Mixed?enqueue_compiled_v7_shared_result:enqueue_compiled_v6_shared_result)(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 full completion");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,compact?Rows*128:transfer,cudaMemcpyDeviceToHost);
+    return result;
+   }
+@@ -1285,7 +1287,7 @@ static RileyCudaStatus record_variable_shared(
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:(Rows==16?enqueue_compiled_v4_prefill_model:enqueue_compiled_v5_prefill_model))(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(compact){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact prefill validation");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact prefill validation");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+    return result;
+   }
+@@ -1307,7 +1309,7 @@ static RileyCudaStatus record_variable_shared(
+   }
+   if(status==RILEY_CUDA_STATUS_SUCCESS)status=record_shape(1);
+  }
+- if(status==RILEY_CUDA_STATUS_SUCCESS){r->packed_prefill=Packed;r->compact_ready=Compact;r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
++ if(status==RILEY_CUDA_STATUS_SUCCESS){r->mixed_execution=Mixed;r->packed_prefill=Packed;r->compact_ready=Compact;r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
+  return status;
+ }
+ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+@@ -1355,3 +1357,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v6_shared_greedy(
+  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+  return record_variable_shared<32,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+ }
++
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_shared(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<32,false,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
++
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_shared_greedy(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<32,true,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
+diff --git a/kernels/src/mixed_attention_v49.cuh b/kernels/src/mixed_attention_v49.cuh
+new file mode 100644
+index 0000000..f86d867
+--- /dev/null
++++ b/kernels/src/mixed_attention_v49.cuh
+@@ -0,0 +1,202 @@
++#pragma once
++#include "prefill_shape_attention.cuh"
++// Experimental only: exact ordered arithmetic against the independent row oracle.
++namespace riley_mixed_attention {
++using riley_prefill_shape::pair;
++using riley_prefill_shape::mma;
++using riley_prefill_shape::cache_index;
++using riley_prefill_shape::exponential;
++// Exceptional nonfinite V reuses the original per-query arithmetic and causal mask.
++__device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const uint32_t* blocks,int row,int qh,float (*scores)[128],__nv_bfloat16 (*probs)[128],float (*exponentials)[128]){
++ int lane=threadIdx.x%32,warp=0,group=lane/4,t=lane%4;
++ int kvh=qh/3,count=n-rows+row+1;
++ int qb=(row*9+qh)*64;
++ if(n<rows || n>4096){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
++ uint32_t query[4],query_hi[4];
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){query[depth]=pair(q[qb+depth*16+2*t],q[qb+depth*16+2*t+1]);query_hi[depth]=pair(q[qb+depth*16+2*t+8],q[qb+depth*16+2*t+9]);}
++ float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);
++  for(int token=begin;token<end;token+=8){
++   float d[4]={};
++   uint32_t key[4],key_hi[4];bool valid=token+group<end;
++   int kb=valid?cache_index(token+group,kvh,0,blocks):0;
++   #pragma unroll
++   for(int depth=0;depth<4;++depth){key[depth]=valid?pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
++   #pragma unroll
++   for(int depth=0;depth<4;++depth)mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
++   if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[warp][token-begin+2*t+j]=d[j]*.125F;}
++  }
++  __syncwarp();
++  float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[warp][i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++  for(int i=lane;i<128;i+=32){
++   float p=i<end-begin?exponential(scores[warp][i],mx):0.;
++   exponentials[warp][i]=p;probs[warp][i]=__float2bfloat16_rn(p);
++  }
++  __syncwarp();
++  float local_den=den*alpha;
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
++    if(i<end-begin)local_den+=exponentials[warp][i];}
++  den=local_den;
++  maximum=mx;
++  __syncwarp();
++  #pragma unroll
++  for(int block=0;block<8;++block)for(int j=0;j<4;++j)accum[block][j]*=alpha;
++  for(int token=begin;token<end;token+=16){
++   int pi=token-begin;
++   uint32_t a=pair(probs[warp][pi+2*t],probs[warp][pi+2*t+1]);
++   uint32_t aa=pair(probs[warp][pi+2*t+8],probs[warp][pi+2*t+9]);
++   // A K16 tile is aligned to one KV page; reuse its base and probabilities.
++   int page_base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
++   #pragma unroll
++   for(int block=0;block<8;++block){
++    int dim=block*8+group;
++    auto val=[&](int pos){return pos<end?v[page_base+(pos-token)*(blocks?64:192)+dim]:zero;};
++    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
++    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
++    mma(accum[block],a,a,aa,aa,b,bb);
++   }
++  }
++  __syncwarp();
++ }
++ den+=__shfl_xor_sync(0xffffffff,den,2);
++ den+=__shfl_xor_sync(0xffffffff,den,1);
++ float inverse=1.0F/den;
++ if(group==0)for(int block=0;block<8;++block)for(int j=0;j<2;++j)
++  out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
++}
++
++template<int TileRows>
++__device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,const uint32_t* live_rows,uint32_t query_block){
++ static_assert(TileRows==8||TileRows==16,"query tile");
++ if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
++ if(dynamic_n)n=*dynamic_n+1;
++ __shared__ float scores[16][128];
++ __shared__ float exps[16][128];
++ __shared__ __nv_bfloat16 probs[16][128];
++ // A small prefill has insufficient queries to amortize the larger tile state.
++ if(rows<32){
++  if(query_block<static_cast<uint32_t>(rows))single_query(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
++  return;
++ }
++ const int first=query_block*TileRows;
++ if(first>=rows)return;
++ const int lane=threadIdx.x,group=lane/4,t=lane%4,qh=blockIdx.y,kvh=qh/3;
++ const int qr[2]={first+group,first+group+8};
++ const bool valid[2]={qr[0]<rows,TileRows==16&&qr[1]<rows};
++ const int count[2]={n-rows+qr[0]+1,n-rows+qr[1]+1};
++ if(n<rows||n>4096){
++  for(int h=0;h<2;++h)if(valid[h])for(int d=t;d<64;d+=4)out[(qr[h]*9+qh)*64+d]=__float2bfloat16_rn(CUDART_NAN_F);
++  return;
++ }
++
++ uint32_t query[2][4],query_hi[2][4];
++ #pragma unroll
++ for(int h=0;h<2;++h){
++  const int base=(qr[h]*9+qh)*64;
++  #pragma unroll
++  for(int depth=0;depth<4;++depth){
++   query[h][depth]=valid[h]?pair(q[base+depth*16+2*t],q[base+depth*16+2*t+1]):0;
++   query_hi[h][depth]=valid[h]?pair(q[base+depth*16+2*t+8],q[base+depth*16+2*t+9]):0;
++  }
++ }
++ float maximum[2]={-CUDART_INF_F,-CUDART_INF_F},den[2]={};
++ float accum[8][4]={};
++ const int last_count=n-rows+min(first+TileRows,rows);
++ for(int tile=(last_count-1)/128;tile>=0;--tile){
++  const int begin=tile*128,end=min(begin+128,last_count);
++  for(int token=begin;token<end;token+=8){
++   float d[4]={};uint32_t key[4],key_hi[4];
++   const bool key_valid=token+group<end;
++   const int kb=key_valid?cache_index(token+group,kvh,0,blocks):0;
++   #pragma unroll
++   for(int depth=0;depth<4;++depth){
++    key[depth]=key_valid?pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;
++    key_hi[depth]=key_valid?pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;
++   }
++   #pragma unroll
++   for(int depth=0;depth<4;++depth)mma(d,query[0][depth],query[1][depth],query_hi[0][depth],query_hi[1][depth],key[depth],key_hi[depth]);
++   #pragma unroll
++   for(int h=0;h<2;++h)for(int z=0;z<2;++z)if(token+2*t+z<end)scores[group+h*8][token-begin+2*t+z]=d[h*2+z]*.125F;
++  }
++  __syncwarp();
++  float alpha[2];
++  #pragma unroll
++  for(int h=0;h<2;++h){
++   const int own_end=valid[h]?min(end,count[h]):begin;
++   const bool active=own_end>begin;
++   float mx=maximum[h];
++   for(int i=t;i<own_end-begin;i+=4)mx=fmaxf(mx,scores[group+h*8][i]);
++   mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,2,4));
++   mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,1,4));
++   alpha[h]=active?exp2f((maximum[h]-mx)*1.4426950408889634F):1.F;
++   for(int i=t;i<128;i+=4){
++    float p=i<own_end-begin?exponential(scores[group+h*8][i],mx):0.F;
++    exps[group+h*8][i]=p;probs[group+h*8][i]=__float2bfloat16_rn(p);
++   }
++   maximum[h]=mx;
++  }
++  __syncwarp();
++  #pragma unroll
++  for(int h=0;h<2;++h){
++   const int own_end=valid[h]?min(end,count[h]):begin;
++   float local=den[h]*alpha[h];
++   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<own_end-begin)local+=exps[group+h*8][i];}
++   den[h]=local;
++  }
++  #pragma unroll
++  for(int b=0;b<8;++b)for(int j=0;j<4;++j)accum[b][j]*=alpha[j/2];
++  for(int token=begin;token<end;token+=16){
++   const int pi=token-begin;
++   uint32_t a[2],aa[2];
++   #pragma unroll
++   for(int h=0;h<2;++h){a[h]=pair(probs[group+h*8][pi+2*t],probs[group+h*8][pi+2*t+1]);aa[h]=pair(probs[group+h*8][pi+2*t+8],probs[group+h*8][pi+2*t+9]);}
++   const int base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
++   bool nonfinite_value=false;
++   #pragma unroll
++   for(int b=0;b<8;++b){
++    const int dim=b*8+group;
++    auto val=[&](int pos){return pos<end?v[base+(pos-token)*(blocks?64:192)+dim]:__float2bfloat16_rn(0.F);};
++    uint32_t vb=pair(val(token+2*t),val(token+2*t+1)),vhi=pair(val(token+2*t+8),val(token+2*t+9));
++    nonfinite_value=nonfinite_value||((vb&0x7f80U)==0x7f80U)||((vb&0x7f800000U)==0x7f800000U)||((vhi&0x7f80U)==0x7f80U)||((vhi&0x7f800000U)==0x7f800000U);
++    float next[4];
++    #pragma unroll
++    for(int j=0;j<4;++j)next[j]=accum[b][j];
++    mma(next,a[0],a[1],aa[0],aa[1],vb,vhi);
++    #pragma unroll
++    for(int j=0;j<4;++j)if(valid[j/2]&&token<count[j/2])accum[b][j]=next[j];
++   }
++   if(__any_sync(0xffffffff,nonfinite_value)){
++    __syncwarp();
++    for(int row=first;row<min(first+TileRows,rows);++row){
++     single_query(q,k,v,out,rows,n,blocks,row,qh,scores,probs,exps);
++     __syncwarp();
++    }
++    return;
++   }
++  }
++  __syncwarp();
++ }
++ #pragma unroll
++ for(int h=0;h<2;++h){
++  den[h]+=__shfl_xor_sync(0xffffffff,den[h],2,4);
++  den[h]+=__shfl_xor_sync(0xffffffff,den[h],1,4);
++  const float inverse=1.F/den[h];
++  if(valid[h])for(int b=0;b<8;++b)for(int z=0;z<2;++z)out[(qr[h]*9+qh)*64+b*8+2*t+z]=__float2bfloat16_rn(accum[b][h*2+z]*inverse);
++ }
++}
++__global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta){
++ const uint32_t active=meta[5],total=meta[9],tiles=meta[24],tile=blockIdx.x;
++ if(!active||active>32||!total||total>capacity||!tiles||tiles>total||tile>=tiles)return;
++ const uint32_t entry=meta[32+32*416+1024+tile],owner=entry>>16,local=entry&0xffffU;
++ if(owner>=active)return;const uint32_t* shape=meta+32+owner*416;const uint32_t count=shape[2],offset=shape[16],nt=count<32?count:(count+7)/8;
++ if(!count||offset>total||count>total-offset||local>=nt)return;
++ attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
++}
++
++}
+diff --git a/kernels/src/mixed_model_v49.cuh b/kernels/src/mixed_model_v49.cuh
+new file mode 100644
+index 0000000..c9e9f64
+--- /dev/null
++++ b/kernels/src/mixed_model_v49.cuh
+@@ -0,0 +1,66 @@
++#include "mixed_attention_v49.cuh"
++#include "mixed_rope_v49.cuh"
++#pragma once
++#include "prefill_shape_projection.cuh"
++#include "prefill_shape_rope_kv.cuh"
++#include "prefill_shape_attention.cuh"
++#include "prefill_shape_pointwise.cuh"
++#include "decode_tiled.cuh"
++// Borrowed 30-layer SmolLM2 BF16 prefill sequence. Caller must validate V7 packet,
++// all allocation extents/aliases and hold the resource ledger until completion.
++// This enqueues work; it does not authorize scheduler settlement or serving output.
++__global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* selected,const uint32_t* meta,uint32_t capacity,const uint32_t* status,uint32_t* publish){
++ uint32_t owner=blockIdx.x,active=meta[5],total=meta[9];bool ready=false;uint32_t at=0;
++ if(active>=1&&active<=32&&owner<active&&total>0&&total<=capacity){const auto* shape=meta+32+owner*416;uint32_t n=shape[2],offset=shape[16],row=shape[11];ready=*status==0&&n>0&&offset<=total&&n<=total-offset&&row<n;at=offset+row;}
++ if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
++ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
++}
++template<uint32_t WireRows=8>
++inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
++ const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
++ uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
++ static_assert(WireRows==8||WireRows==16||WireRows==32,"wire capacity");
++ if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
++ for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
++ for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
++ auto b=[&](int i){return static_cast<__nv_bfloat16*>(scratch[i]);};
++ auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
++ const auto* meta=static_cast<const uint32_t*>(metadata);
++ auto shape=meta+7; // shape[2] is total packed token count, not one owner count.
++ auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
++ auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+(128+WireRows*1664));
++ auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
++ riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,nullptr);
++ for(int layer=0;layer<30;++layer){int base=3+9*layer;
++  if(layer==0)riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,shape,capacity);
++  if(capacity==1)enqueue_decode_projection<576,576,192>(stream,b(1),w(base+1),b(2),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<576,576,192,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(1),w(base+1),b(2),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<192,576,192>(stream,b(1),w(base+2),b(5),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+2),b(5),capacity,shape+2);
++  if(capacity==1)enqueue_decode_projection<192,576,192>(stream,b(1),w(base+3),b(6),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<192,576,192,1><<<dim3(24,(capacity+15)/16),32,0,stream>>>(b(1),w(base+3),b(6),capacity,shape+2);
++  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
++  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
++  mixed_rope_kv_v7<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),meta,capacity);
++  riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
++  if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
++  else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
++  riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
++  if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
++  else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
++  if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
++  else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
++  riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
++  if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<576,1536,320,2,true><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
++  else gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
++  riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,shape,capacity);
++ }
++ mixed_select_hidden_v7<<<32,256,0,stream>>>(b(1),static_cast<__nv_bfloat16*>(selected),meta,capacity,status,publish);
++ return cudaGetLastError();
++}
+diff --git a/kernels/src/mixed_rope_v49.cuh b/kernels/src/mixed_rope_v49.cuh
+new file mode 100644
+index 0000000..9d20a06
+--- /dev/null
++++ b/kernels/src/mixed_rope_v49.cuh
+@@ -0,0 +1,27 @@
++// Internal variable-prefill primitive, not a serving entry point.
++// Caller retains all parents and validates a unique logical-to-physical page map,
++// its full extent, and allocation sizes before enqueue; no host publication here.
++#pragma once
++#include <cuda_runtime.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++__global__ void mixed_rope_kv_v7(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,
++ __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,
++ const uint32_t* meta,uint32_t capacity){
++ const uint32_t row=blockIdx.y,active=meta[5],total=meta[9];if(!active||active>32||!total||total>capacity||row>=total)return;
++ uint32_t owner=0;for(;owner<active;++owner){const auto* s=meta+32+owner*416;if(row>=s[16]&&row-s[16]<s[2])break;}if(owner==active)return;
++ const auto* shape=meta+32+owner*416;const auto* pages=shape+32;const uint32_t pos=shape[4]+row-shape[16];
++ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;
++ int head=i/32,dim=i%32;
++ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++ const __nv_bfloat16* src=head<9?q+row*576:k+row*192;
++ int base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
++ const __nv_bfloat16 first=__float2bfloat16_rn(a*c-b*s),second=__float2bfloat16_rn(b*c+a*s);
++ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++ else{
++  uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
++  keys[destination]=first;keys[destination+32]=second;
++  values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
++ }
++}
+\ No newline at end of file
+diff --git a/kernels/src/prefill_shape_packet.hpp b/kernels/src/prefill_shape_packet.hpp
+index c534682..03ddeae 100644
+--- a/kernels/src/prefill_shape_packet.hpp
++++ b/kernels/src/prefill_shape_packet.hpp
+@@ -48,3 +48,41 @@ inline bool valid_v4_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physi
+ inline bool valid_v5_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32>(p,bytes,physical,capacity);}
+ 
+ inline bool valid_v6_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32,true>(p,bytes,physical,capacity);}
++
++// V7 mixed stages retain the V6 token slab and append1024 canonical tile entries.
++inline bool valid_v7_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
++ constexpr uint32_t header=128,stride=1664,tokens=53376,map=57472,extent=61568;
++ if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||capacity==16||capacity==32))return false;
++ auto u32=[&](uint32_t at){uint32_t v;std::memcpy(&v,p+at,4);return v;};
++ auto u64=[&](uint32_t at){uint64_t v;std::memcpy(&v,p+at,8);return v;};
++ auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
++ auto zero=[&](uint32_t a,uint32_t b){for(;a<b;++a)if(p[a])return false;return true;};
++ uint32_t stage=u32(16),active=u32(20);
++ if(u32(0)!=0x37444d52||u32(4)!=7||u32(8)!=extent||u32(12)!=stride||stage>2||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(100,128))return false;
++ if(stage==1?(u32(36)||u32(96)):(!u32(36)||u32(36)>1024||!u32(96)||u32(96)>1024))return false;
++ bool used[4096]{};uint32_t slots=0,input=0,tiles=0,prefills=0,decodes=0,published=0;
++ for(uint32_t row=0;row<active;++row){
++  uint32_t b=header+row*stride,count=u32(b+8),live=u32(b+12),committed=u32(b+16),target=u32(b+20),generated=u32(b+24),limit=u32(b+28),prompt=u32(b+32),context=u32(b+36),slot=u32(b+40),logit=u32(b+44),kind=u32(b+72);
++  if(!count||count>1024||!prompt||!limit||!context||context>4096||uint64_t(prompt)+limit-1>context||generated>=limit||uint64_t(committed)+count!=target||!target||target>context||u32(b+4)!=target-1||u32(b)>=49152||live!=(target+15)/16||slot>=active||(slots&(1U<<slot))||!u64(b+48)||!u64(b+56)||kind>1||!zero(b+76,b+128))return false;
++  slots|=1U<<slot;
++  if(kind==0){++prefills;if(generated||committed>=prompt||target>prompt||logit!=(target==prompt?count-1:UINT32_MAX))return false;}
++  else {++decodes;if(count!=1||!generated||uint64_t(prompt)+generated-1!=committed||logit!=0)return false;}
++  published+=logit!=UINT32_MAX;
++  if(stage!=1){
++   if(u32(b+64)!=input||count>1024-input||u32(tokens+input*4)!=u32(b))return false;input+=count;
++   uint32_t nt=count<32?count:(count+7)/8;
++   if(u32(b+68)!=tiles||nt>1024-tiles)return false;
++   for(uint32_t local=0;local<nt;++local)if(u32(map+(tiles+local)*4)!=((row<<16)|local))return false;
++   tiles+=nt;
++  }else if(u32(b+64)||u32(b+68))return false;
++  for(uint32_t prior=0;prior<row;++prior)if(u64(b+48)==u64(header+prior*stride+48)||u64(b+56)==u64(header+prior*stride+56))return false;
++  for(uint32_t i=0;i<256;++i){uint32_t id=u32(b+128+i*4);uint16_t valid=u16(b+1152+i*2);
++   if(i>=live){if(id||valid)return false;continue;}
++   if(id>=physical||used[id]||valid!=(i+1<live?16:(target-1)%16+1))return false;used[id]=true;
++  }
++ }
++ if(prefills>4||(stage==0&&decodes)||(stage==1&&prefills)||(stage==2&&(!prefills||!decodes))||u32(36)!=input||u32(96)!=tiles||!zero(header+active*stride,tokens))return false;
++ for(uint32_t row=0;row<active;++row){uint32_t b=header+row*stride;if((u32(b+40)<published)!=(u32(b+44)!=UINT32_MAX))return false;}
++ for(uint32_t i=0;i<1024;++i){uint32_t t=u32(tokens+i*4);if(i<input){if(t>=49152)return false;}else if(t)return false;if(i>=tiles&&u32(map+i*4))return false;}
++ return true;
++}
+diff --git a/kernels/tests/mixed_wire_v49_test.cpp b/kernels/tests/mixed_wire_v49_test.cpp
+new file mode 100644
+index 0000000..2a810b2
+--- /dev/null
++++ b/kernels/tests/mixed_wire_v49_test.cpp
+@@ -0,0 +1,32 @@
++#include "prefill_shape_packet.hpp"
++#include <cassert>
++#include <fstream>
++#include <iterator>
++#include <vector>
++#include <iostream>
++int main(int argc,char**argv){
++ assert(argc==6);unsigned accepted=0,rejected=0;
++ for(int arg=1;arg<argc;++arg){
++  std::ifstream f(argv[arg],std::ios::binary);std::vector<uint8_t>p((std::istreambuf_iterator<char>(f)),{});
++  auto valid=[](const std::vector<uint8_t>&q){return valid_v7_shape_packet(q.data(),q.size(),4096,32);};
++  auto get=[&](unsigned at){uint32_t v;std::memcpy(&v,p.data()+at,4);return v;};
++  auto set=[](std::vector<uint8_t>&q,unsigned at,uint32_t v){std::memcpy(q.data()+at,&v,4);};
++  assert(valid(p));++accepted;assert(!valid_v6_shape_packet(p.data(),p.size(),4096,32));++rejected;
++  for(unsigned at:{0,4,8,12,24,28,36,96,128+68,128+72,57472}){auto q=p;q.at(at)^=0x80;assert(!valid(q));++rejected;}
++  const unsigned active=get(20),tokens=53376;
++  for(unsigned row=0;row<active;++row){
++   unsigned b=128+row*1664;
++   for(unsigned value:{1U,1024U,UINT32_MAX}){auto q=p;set(q,b+64,get(b+64)+value);assert(!valid(q));++rejected;}
++   if(get(16)!=1){auto q=p;set(q,tokens+get(b+64)*4,(get(b)+1)%49152);assert(!valid(q));++rejected;}
++  }
++  if(active>1){auto q=p;set(q,128+1664+128,get(256));assert(!valid(q));++rejected;}
++  {auto q=p;set(q,20,33);assert(!valid(q));++rejected;}
++  {auto q=p;set(q,tokens,49152);assert(!valid(q));++rejected;}
++  {auto q=p;q.pop_back();assert(!valid(q));++rejected;}
++  {auto q=p;q.push_back(0);assert(!valid(q));++rejected;}
++  // Exhaustive single-byte fuzzing checks parser memory safety. Semantic
++  // differences to retained identities are separately rejected in Rust.
++  for(size_t at=0;at<p.size();++at){p[at]^=0xff;(void)valid(p);p[at]^=0xff;}
++ }
++ std::cout<<"accepted="<<accepted<<" rejected="<<rejected<<" exhaustive_byte_mutations="<<5*61568<<"\n";
++}

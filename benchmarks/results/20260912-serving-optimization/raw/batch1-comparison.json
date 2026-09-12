@@ -1,0 +1,125 @@
+{
+  "schema_version": "riley.optimization-batch-comparison.v1",
+  "scope": "SmolLM2-135M BF16 c1 P128 O32 GUI retained",
+  "goal_complete": false,
+  "modes": {
+    "http": {
+      "paired_processes_per_campaign": 10,
+      "measured_requests_per_lane": 150,
+      "metrics": {
+        "e2e_ms": {
+          "baseline_riley": 512.9183365,
+          "baseline_vllm": 35.438448,
+          "candidate_riley": 543.0505025,
+          "candidate_vllm": 35.388410500000006,
+          "candidate_change_pct": 5.874651743903869,
+          "candidate_vs_vllm_ratio": 15.345433570688344,
+          "tails": {
+            "p95": {
+              "baseline": 513.997162,
+              "candidate": 543.349222
+            },
+            "p99": {
+              "baseline": 514.111036,
+              "candidate": 543.9895
+            }
+          }
+        },
+        "first_text_event_ms": {
+          "baseline_riley": 441.42465649999997,
+          "baseline_vllm": 7.2929145,
+          "candidate_riley": 476.328354,
+          "candidate_vllm": 7.348675,
+          "candidate_change_pct": 7.90705661454143,
+          "candidate_vs_vllm_ratio": 64.81826370059909,
+          "tails": {
+            "p95": {
+              "baseline": 442.285408,
+              "candidate": 476.823763
+            },
+            "p99": {
+              "baseline": 442.607632,
+              "candidate": 477.36722
+            }
+          }
+        }
+      },
+      "output_tokens_per_second": {
+        "boundary": "output_tokens_per_wall_second",
+        "baseline_riley": 62.375869266849115,
+        "baseline_vllm": 883.7312622241839,
+        "candidate_riley": 58.93669490081997,
+        "candidate_vllm": 880.6704558858501,
+        "candidate_change_pct": -5.513629559719757
+      }
+    },
+    "engine": {
+      "paired_processes_per_campaign": 10,
+      "measured_requests_per_lane": 150,
+      "metrics": {
+        "e2e_ms": {
+          "baseline_riley": 507.5870875,
+          "baseline_vllm": 35.87214555591345,
+          "candidate_riley": 533.352429,
+          "candidate_vllm": 35.90824652928859,
+          "candidate_change_pct": 5.076043527210494,
+          "candidate_vs_vllm_ratio": 14.853201716908417,
+          "tails": {
+            "p95": {
+              "baseline": 507.868371,
+              "candidate": 533.638921
+            },
+            "p99": {
+              "baseline": 507.977503,
+              "candidate": 533.69143
+            }
+          }
+        },
+        "ttft_ms": {
+          "baseline_riley": 435.85941049999997,
+          "baseline_vllm": 7.067615515552461,
+          "candidate_riley": 466.6819675,
+          "candidate_vllm": 7.020657998509705,
+          "candidate_change_pct": 7.071674089734947,
+          "candidate_vs_vllm_ratio": 66.47268213307981,
+          "tails": {
+            "p95": {
+              "baseline": 436.143864,
+              "candidate": 466.950056
+            },
+            "p99": {
+              "baseline": 436.274169,
+              "candidate": 466.968838
+            }
+          }
+        },
+        "tpot_ms": {
+          "baseline_riley": 2.313698,
+          "baseline_vllm": 0.9317029504135492,
+          "candidate_riley": 2.1517184193548387,
+          "candidate_vllm": 0.9216269677234512,
+          "candidate_change_pct": -7.0008955639483395,
+          "candidate_vs_vllm_ratio": 2.3346955923717023,
+          "tails": {
+            "p95": {
+              "baseline": 2.3154017741935484,
+              "candidate": 2.153412548387097
+            },
+            "p99": {
+              "baseline": 2.316131129032258,
+              "candidate": 2.153477064516129
+            }
+          }
+        }
+      },
+      "output_tokens_per_second": {
+        "boundary": "output_tokens_per_request_service_second",
+        "baseline_riley": 63.0400199982906,
+        "baseline_vllm": 864.7767832944756,
+        "candidate_riley": 59.99464076123345,
+        "candidate_vllm": 872.0750290303555,
+        "candidate_change_pct": -4.83086654658379
+      }
+    }
+  }
+}

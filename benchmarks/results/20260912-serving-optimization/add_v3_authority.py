@@ -1,0 +1,110 @@
+from pathlib import Path
+p=Path('/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-scheduler/src/authority.rs')
+s=p.read_text()
+insert='''
+/// Geometry/identity supplied only by the retained V3 execution adapter.
+/// This is not a catalog authorization or a GPU completion receipt.
+#[allow(dead_code)]
+pub(crate) struct VariableOwnerGeometry {
+    pub generation: u64,
+    pub last_accepted_replay: u64,
+    pub catalog_digest: [u8;32],
+    pub max_active_rows: u32,
+    pub physical_block_count: u32,
+    pub context_tokens: u32,
+}
+impl AuthorizedExecution<'_> {
+    #[allow(dead_code)]
+    pub(crate) fn variable_descriptor_expectation(
+        &self, owner: &VariableOwnerGeometry, replay: u64, cookies: &[u64],
+        mode: crate::descriptor::ResultMode,
+    ) -> crate::descriptor::Result<crate::descriptor::variable_wire::Expectation> {
+        use crate::descriptor::{Error, BlockOwnership, shape_progress::{Progress, InputStage}, variable_wire::{self, Row, Expectation}};
+        let bad = || Error { field: "scheduler V3 authority", reason: "incompatible live reservation or owner geometry" };
+        let prefill = self.plan.prefill_items();
+        let decode = self.plan.decode_items();
+        if owner.physical_block_count as usize != self.physical_block_count()
+            || cookies.len()!=self.rows.len() || prefill.len()+decode.len()!=self.rows.len()
+            || (!prefill.is_empty() && !decode.is_empty()) { return Err(bad()); }
+        let stage = if prefill.is_empty() { InputStage::Decode } else { InputStage::Prefill };
+        let to32 = |v:usize| u32::try_from(v).map_err(|_| bad());
+        let mut rows = Vec::with_capacity(self.rows.len());
+        for ((work,row),cookie) in prefill.iter().chain(decode).zip(&self.rows).zip(cookies) {
+            if work.request_id()!=row.request_id { return Err(bad()); }
+            let progress = Progress {
+                prompt_tokens:to32(row.prompt_tokens)?, output_limit:to32(row.max_output_tokens)?,
+                context_tokens:owner.context_tokens, committed_tokens:to32(row.committed_length)?,
+                input_tokens:to32(work.input_tokens().len())?, generated_index:to32(row.generated_index)?, stage,
+            };
+            let checked = progress.validate()?;
+            if checked.target_tokens != to32(work.target_logical_length())?
+                || checked.logits_input_row.is_some()!=work.output_slot().is_some() { return Err(bad()); }
+            // V3 retains a dense row slot even when partial prefill publishes no output.
+            // Such a slot must never be converted to an IterationOutput.
+            let output_slot = work.output_slot().map(|s|s.get()).unwrap_or(0);
+            rows.push(Row { sequence_tag:row.request_id.get(), cookie:*cookie, output_slot, progress,
+                input_tokens:work.input_tokens().to_vec(), physical_ids:row.table.physical_block_ids().to_vec(),
+                valid_tokens:row.table.valid_tokens().to_vec() });
+        }
+        let e = Expectation { owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
+            replay_id:replay, iteration_id:self.plan.iteration_id().get(), catalog_digest:owner.catalog_digest,
+            physical_block_count:owner.physical_block_count, max_active_rows:owner.max_active_rows,
+            stage, mode, rows, block_ownership:self.block_owners.iter().map(|(id,tag)| BlockOwnership {
+                physical_id:*id, sequence_tag:tag.get() }).collect() };
+        variable_wire::validate(&e)?;
+        Ok(e)
+    }
+}
+
+'''
+s=s.replace('#[cfg(test)]\nmod tests {',insert+'#[cfg(test)]\nmod tests {',1)
+test='''
+    #[test]
+    fn variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler() {
+        use crate::{IterationResult, IterationOutput};
+        use crate::descriptor::{shape_progress::InputStage, variable_wire};
+        for (prompt,limit) in [(16,32),(128,64),(398,128)] {
+            let mut scheduler = Scheduler::new(SchedulerConfig {
+                max_waiting_requests:8, max_waiting_prompt_tokens:4096, max_active_sequences:1,
+                max_sequence_tokens:1024, iteration_token_budget:73, max_prefill_chunk_tokens:73,
+                aging_threshold_ns:1, overload_policy:OverloadPolicy::Wait, admission_timeout_ns:None,
+                max_promised_kv_blocks:64, metrics_window_samples:16,
+            }, riley_runtime::paged_kv::KvLayout::checked(30,64,3,64).unwrap()).unwrap();
+            let id=scheduler.submit(RequestDescriptor::new(vec![17;prompt],limit),0).unwrap().request_id();
+            let mut owner=super::VariableOwnerGeometry { generation:1,last_accepted_replay:0,catalog_digest:[7;32],
+                max_active_rows:1,physical_block_count:64,context_tokens:1024 };
+            let (mut committed,mut generated,mut replay)=(0,0,0u64);
+            while generated<limit {
+                replay+=1;
+                let plan=scheduler.plan_iteration(replay*2).unwrap().into_parts().0.unwrap();
+                let a=scheduler.authorize_execution(&plan).unwrap();
+                let e=a.variable_descriptor_expectation(&owner,replay,&[replay],ResultMode::FullLogits).unwrap();
+                assert_eq!(e.rows[0].sequence_tag,id.get());
+                let p=e.rows[0].progress;
+                assert_eq!((p.prompt_tokens,p.committed_tokens,p.generated_index),(prompt as u32,committed,generated as u32));
+                assert_eq!(p.stage,if committed<prompt as u32 {InputStage::Prefill}else{InputStage::Decode});
+                let v=p.validate().unwrap();
+                let mut packet=vec![0;variable_wire::REQUEST_BYTES];
+                variable_wire::encode_into(&mut packet,&e).unwrap();
+                variable_wire::validate_packet(&packet,&mut vec![0;variable_wire::REQUEST_BYTES],&e).unwrap();
+                assert!(a.variable_descriptor_expectation(&owner,replay+1,&[replay],ResultMode::FullLogits).is_err());
+                assert!(a.variable_descriptor_expectation(&owner,replay,&[],ResultMode::FullLogits).is_err());
+                let mut foreign=e.clone(); foreign.block_ownership.clear();
+                assert!(variable_wire::encode_into(&mut packet,&foreign).is_err());
+                let outputs=plan.prefill_items().iter().chain(plan.decode_items()).filter_map(|w|w.output_slot())
+                    .map(|slot|IterationOutput::new(slot,23,false)).collect();
+                drop(a);
+                let result=IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
+                let updates=scheduler.complete_iteration(&result,replay*2+1).unwrap();
+                assert!(updates.settlement_failures().is_empty());
+                committed=v.target_tokens;
+                if v.logits_input_row.is_some() {generated+=1;}
+                owner.last_accepted_replay=replay;
+            }
+            assert_eq!(committed,(prompt+limit-1) as u32);
+            scheduler.close(replay*2+2,None).unwrap();
+        }
+    }
+'''
+s=s.replace('mod tests {','mod tests {\n'+test,1)
+p.write_text(s)

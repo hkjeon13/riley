@@ -1,0 +1,103 @@
+commit a0536a5a3d7aebf721b7a41d9bd39897c60ddde5
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 08:17:00 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 08:17:00 2026 +0900
+
+    Fuse prefill gate up projections and SwiGLU for mixed serving
+
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index 815bc52..ff71b2d 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -224,6 +224,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/mixed_attention_v49.cuh"),
+         kernels_dir.join("src/mixed_rope_v49.cuh"),
+         kernels_dir.join("src/mixed_model_v49.cuh"),
++        kernels_dir.join("src/prefill_fused_gate_v51.cuh"),
+ 
+ 
+         kernels_dir.join("src/prefill_shape_projection.cuh"),
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 43ff8ee..2990bb0 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2109,6 +2109,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/mixed_attention_v49.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/mixed_rope_v49.cuh").as_slice(),
+             include_bytes!("../../../../kernels/src/mixed_model_v49.cuh").as_slice(),
++            include_bytes!("../../../../kernels/src/prefill_fused_gate_v51.cuh").as_slice(),
+ 
+ 
+             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
+diff --git a/kernels/src/mixed_model_v49.cuh b/kernels/src/mixed_model_v49.cuh
+index c9e9f64..74ad391 100644
+--- a/kernels/src/mixed_model_v49.cuh
++++ b/kernels/src/mixed_model_v49.cuh
+@@ -2,6 +2,7 @@
+ #include "mixed_rope_v49.cuh"
+ #pragma once
+ #include "prefill_shape_projection.cuh"
++#include "prefill_fused_gate_v51.cuh"
+ #include "prefill_shape_rope_kv.cuh"
+ #include "prefill_shape_attention.cuh"
+ #include "prefill_shape_pointwise.cuh"
+@@ -46,6 +47,9 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
+   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
+   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
++  if(capacity>1&&tiled){
++   riley_prefill51::gate_up<4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),w(base+7),b(11),capacity,shape+2);
++  }else{
+   if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
+   else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
+   else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
+@@ -55,6 +59,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
+   else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
++  }
+   if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
+   else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
+   else if(tiled)gemm_prefill_shape_vector<576,1536,320,2,true><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+diff --git a/kernels/src/prefill_fused_gate_v51.cuh b/kernels/src/prefill_fused_gate_v51.cuh
+new file mode 100644
+index 0000000..631d897
+--- /dev/null
++++ b/kernels/src/prefill_fused_gate_v51.cuh
+@@ -0,0 +1,35 @@
++#pragma once
++#include "prefill_shape_projection.cuh"
++namespace riley_prefill51 {
++__device__ __forceinline__ void mma(float* d,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uint32_t b,uint32_t bb){
++ asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};": "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]):"r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b),"r"(bb));
++}
++template<int Warps>
++__global__ void gate_up(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,uint32_t capacity,const uint32_t* live_rows){
++ constexpr int Tiles=1;
++ uint32_t rows=*live_rows;if(!rows||rows>capacity||blockIdx.y*16*Tiles>=rows)return;
++ const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
++ const int first=blockIdx.y*16*Tiles+g,base=(blockIdx.x*Warps+warp)*8;
++ float gd[Tiles][4]={},ud[Tiles][4]={};
++ #pragma unroll 4
++ for(int depth=0;depth<576;depth+=16){
++  int at=((base/8)*36+depth/16)*128+lane*2;
++  uint32_t gb=*reinterpret_cast<const uint32_t*>(gate+at),gbb=*reinterpret_cast<const uint32_t*>(gate+at+64);
++  uint32_t ub=*reinterpret_cast<const uint32_t*>(up+at),ubb=*reinterpret_cast<const uint32_t*>(up+at+64);
++  #pragma unroll
++  for(int tile=0;tile<Tiles;++tile){
++   int row=first+tile*16,next=row+8;
++   uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t):0;
++   uint32_t a1=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t):0;
++   uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+row*576+depth+2*t+8):0;
++   uint32_t a3=next<rows?*reinterpret_cast<const uint32_t*>(x+next*576+depth+2*t+8):0;
++   mma(gd[tile],a0,a1,a2,a3,gb,gbb);mma(ud[tile],a0,a1,a2,a3,ub,ubb);
++  }
++ }
++ #pragma unroll
++ for(int tile=0;tile<Tiles;++tile)for(int j=0;j<4;++j){
++  int row=first+tile*16+(j>=2?8:0),col=base+2*t+j%2;
++  if(row<rows){float gval=__bfloat162float(__float2bfloat16_rn(gd[tile][j]));float uval=__bfloat162float(__float2bfloat16_rn(ud[tile][j]));out[row*1536+col]=__float2bfloat16_rn((gval/(1.F+expf(-gval)))*uval);}
++ }
++}
++}

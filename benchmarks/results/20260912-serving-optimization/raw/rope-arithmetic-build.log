@@ -1,0 +1,211 @@
+{
+  "schema_version": "riley.rope-arithmetic-build.v1",
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/fixtures.json",
+    "sha256": "8f943cc563089aa811e73ae81b12ee6d2cc8065d820cd392654ea7cf45d40b52"
+  },
+  "compiler": {
+    "path": "/data/riley-g04-cuda13/bin/nvcc",
+    "sha256": "0d3511aa5fe86ae6565618aeebbdd2a7e4fe8affa1980787071199e1cdae07dc"
+  },
+  "compiler_version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "production_flags": {
+    "oracle_precise": {
+      "flags": [
+        "-forward-unknown-to-host-compiler",
+        "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include/cccl",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+        "-Xcompiler=-fPIC",
+        "--objdir-as-tempdir",
+        "-Xcompiler=-fno-exceptions"
+      ],
+      "cmake_artifacts": [
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeCache.txt",
+          "sha256": "83c86248b57597e33f40a6bf48f858f81182ee0b2942e2570aaa955588ec918e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/flags.make",
+          "sha256": "c37468255e463520d168d54e48e8869753342d1477b9d47ff1d4b0e2bd9398fd"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/build.make",
+          "sha256": "274226277d3971d3083de05fd267f61cec034bc3afce1d4babfe9711b142089e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cudart-Release.path",
+          "sha256": "428dc93381518530fd5dff41b84130221ce5a96ec8f45f9051d7ee1cbcd8a070"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/includes_CUDA.rsp",
+          "sha256": "b732de958d15f6b5cc515c5afc6d2c0327fab781083b05b47e9f5a62a67bce2f"
+        }
+      ],
+      "production_compile_rule": "/data/riley-g04-cuda13/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o -MF CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o.d -x cu -c /tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics_precise.cu -o CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o",
+      "original_compile_cwd": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build",
+      "response_files_expanded": true,
+      "omitted_dependency_only_flags": [
+        "-MD",
+        "-MT",
+        "-MF"
+      ],
+      "runtime_library_link": "/data/riley-g04-cuda13/lib/libcudart.so"
+    },
+    "candidates_fast_math": {
+      "flags": [
+        "-forward-unknown-to-host-compiler",
+        "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include",
+        "-isystem",
+        "/data/riley-g04-cuda13/include/cccl",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++17",
+        "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+        "-Xcompiler=-fPIC",
+        "--objdir-as-tempdir",
+        "-Xcompiler=-fno-exceptions",
+        "--use_fast_math"
+      ],
+      "cmake_artifacts": [
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeCache.txt",
+          "sha256": "83c86248b57597e33f40a6bf48f858f81182ee0b2942e2570aaa955588ec918e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/flags.make",
+          "sha256": "c37468255e463520d168d54e48e8869753342d1477b9d47ff1d4b0e2bd9398fd"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/build.make",
+          "sha256": "274226277d3971d3083de05fd267f61cec034bc3afce1d4babfe9711b142089e"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/riley-cuda-cudart-Release.path",
+          "sha256": "428dc93381518530fd5dff41b84130221ce5a96ec8f45f9051d7ee1cbcd8a070"
+        },
+        {
+          "path": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build/CMakeFiles/riley_cuda_native.dir/includes_CUDA.rsp",
+          "sha256": "b732de958d15f6b5cc515c5afc6d2c0327fab781083b05b47e9f5a62a67bce2f"
+        }
+      ],
+      "production_compile_rule": "/data/riley-g04-cuda13/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) --use_fast_math -MD -MT CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o -MF CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o.d -x cu -c /tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics.cu -o CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o",
+      "original_compile_cwd": "/tmp/riley-opt-260912/batch7-target/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build",
+      "response_files_expanded": true,
+      "omitted_dependency_only_flags": [
+        "-MD",
+        "-MT",
+        "-MF"
+      ],
+      "runtime_library_link": "/data/riley-g04-cuda13/lib/libcudart.so"
+    }
+  },
+  "runtime_library": {
+    "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+    "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+  },
+  "runtime_library_link": "/data/riley-g04-cuda13/lib/libcudart.so",
+  "commands": [
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-forward-unknown-to-host-compiler",
+      "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include/cccl",
+      "-O3",
+      "-DNDEBUG",
+      "-std=c++17",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-Xcompiler=-fPIC",
+      "--objdir-as-tempdir",
+      "-Xcompiler=-fno-exceptions",
+      "-x",
+      "cu",
+      "-c",
+      "/tmp/riley-opt-260912/batch7-source/kernels/src/graph_numerics_precise.cu",
+      "-o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/precise.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-forward-unknown-to-host-compiler",
+      "-I/tmp/riley-opt-260912/batch7-source/kernels/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include",
+      "-isystem",
+      "/data/riley-g04-cuda13/include/cccl",
+      "-O3",
+      "-DNDEBUG",
+      "-std=c++17",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-Xcompiler=-fPIC",
+      "--objdir-as-tempdir",
+      "-Xcompiler=-fno-exceptions",
+      "--use_fast_math",
+      "-x",
+      "cu",
+      "-c",
+      "/tmp/riley-opt-260912/rope_arithmetic_candidates.cu",
+      "-o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/candidates.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "-std=c++17",
+      "-O2",
+      "--generate-code=arch=compute_89,code=[compute_89,sm_89]",
+      "-c",
+      "/tmp/riley-opt-260912/rope_arithmetic_probe.cu",
+      "-o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/host.o"
+    ],
+    [
+      "/data/riley-g04-cuda13/bin/nvcc",
+      "--cudart=shared",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/precise.o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/candidates.o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/host.o",
+      "-L/data/riley-g04-cuda13/lib",
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "/data/riley-g04-cuda13/lib",
+      "-o",
+      "/tmp/riley-opt-260912/rope-arithmetic-probe/build/rope_arithmetic_probe"
+    ]
+  ],
+  "artifacts": {
+    "precise.o": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/build/precise.o",
+      "sha256": "b648e791c7bcfc92cf70dccb89cbb96a680b56372224b0f1bb87c9035a628b2e"
+    },
+    "candidates.o": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/build/candidates.o",
+      "sha256": "6df0b0d890b78accef6288199a2c62ee775f3b9510433eda48c744fd17e5017c"
+    },
+    "host.o": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/build/host.o",
+      "sha256": "4615529859a035e44ebf202ec421d98a06a82cf8769d1947db942761c630e0c5"
+    },
+    "rope_arithmetic_probe": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/build/rope_arithmetic_probe",
+      "sha256": "edef9533eed4f64e266db6be3b1f77d65e6ff17981b2ef2a19079d5dd96f520a"
+    },
+    "compile.log": {
+      "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/build/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "gpu_tests_executed": false,
+  "performance_claim_eligible": false
+}

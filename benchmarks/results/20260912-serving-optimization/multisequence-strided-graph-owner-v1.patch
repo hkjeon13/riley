@@ -1,0 +1,607 @@
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 5bb0202..7fe7f6c 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -1752,6 +1752,18 @@ unsafe extern "C" {
+         out_graph_error: *mut RawGraphErrorInfo,
+         error: *mut ErrorInfo,
+     ) -> i32;
++    fn riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
++        stream: *mut RawStream,
++        plan: *mut RawGemmPlan,
++        input: *mut RawDeviceBuffer,
++        weight: *mut RawDeviceBuffer,
++        output: *mut RawDeviceBuffer,
++        workspace: *mut RawDeviceBuffer,
++        mode: u32,
++        out_capture: *mut *mut RawGraphCapture,
++        out_graph_error: *mut RawGraphErrorInfo,
++        error: *mut ErrorInfo,
++    ) -> i32;
+     fn riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
+         capture: *mut RawGraphCapture,
+         out_graph_error: *mut RawGraphErrorInfo,
+@@ -4848,6 +4860,91 @@ impl StreamHandle {
+             "native canonical cuBLASLt GEMM capture returned success without a valid owned capture handle",
+         ))
+     }
++    pub(super) fn begin_graph_strided_m1_gemm_bf16_capture(
++        &mut self,
++        plan: &GemmPlanHandle,
++        input: &DeviceBufferHandle,
++        weight: &DeviceBufferHandle,
++        output: &DeviceBufferHandle,
++        workspace: Option<&DeviceBufferHandle>,
++        mode: u32,
++    ) -> CudaResult<GraphCaptureHandle> {
++        const OPERATION: &str = "begin CUDA Graph canonical BF16 cuBLASLt GEMM capture";
++        let mut capture = ptr::null_mut::<RawGraphCapture>();
++        let mut graph_error = RawGraphErrorInfo::new();
++        let mut error = ErrorInfo::new();
++        // SAFETY: the borrowed owner retains the plan, stream, exact I/O and
++        // optional workspace parent through close or known abort. Native
++        // validates null workspace against the selected algorithm requirement.
++        let status = unsafe {
++            riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
++                self.as_ptr(),
++                plan.as_ptr(),
++                input.as_ptr(),
++                weight.as_ptr(),
++                output.as_ptr(),
++                workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr),
++                mode,
++                &mut capture,
++                &mut graph_error,
++                &mut error,
++            )
++        };
++        let decoded = decode_graph_failure_info(&graph_error);
++        let pointer = NonNull::new(capture);
++
++        if status == STATUS_SUCCESS {
++            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
++                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
++                    return Ok(GraphCaptureHandle {
++                        pointer: Some(pointer),
++                    });
++                }
++            }
++        }
++
++        let cleanup = pointer.map(|pointer| {
++            let mut owner = GraphCaptureHandle {
++                pointer: Some(pointer),
++            };
++            owner.abort()
++        });
++        let metadata_error = decoded.err();
++        let native_error = if status == STATUS_SUCCESS {
++            None
++        } else {
++            Some(
++                status_result(status, OPERATION, &error)
++                    .expect_err("a non-success native status must decode as an error"),
++            )
++        };
++        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
++            return Err(CudaError::new(
++                CudaErrorKind::Internal,
++                CudaErrorDomain::Internal,
++                CudaErrorStage::Close,
++                cleanup_error.native_code(),
++                OPERATION,
++                format!(
++                    "native canonical cuBLASLt GEMM capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
++                ),
++            ));
++        }
++        if let Some(metadata_error) = metadata_error {
++            return Err(metadata_error);
++        }
++        if let Some(native_error) = native_error {
++            return Err(native_error);
++        }
++        Err(CudaError::new(
++            CudaErrorKind::Internal,
++            CudaErrorDomain::Internal,
++            CudaErrorStage::Prepare,
++            0,
++            OPERATION,
++            "native canonical cuBLASLt GEMM capture returned success without a valid owned capture handle",
++        ))
++    }
+ 
+     #[allow(clippy::too_many_arguments)]
+     pub(super) fn begin_graph_canonical_rms_norm_gemm_bf16_capture(
+diff --git a/crates/riley-cuda/src/gemm.rs b/crates/riley-cuda/src/gemm.rs
+index 14fc438..1d37d48 100644
+--- a/crates/riley-cuda/src/gemm.rs
++++ b/crates/riley-cuda/src/gemm.rs
+@@ -2023,3 +2023,104 @@ impl fmt::Debug for CudaPreparedStridedGemm {
+             .finish_non_exhaustive()
+     }
+ }
++
++impl CudaPreparedStridedGemm {
++    #[cfg(feature = "cuda")]
++    pub(crate) fn validate_strided_graph_capture(
++        &self,
++        stream: &CudaStream,
++        input: &CudaDeviceBuffer,
++        weight: &CudaDeviceBuffer,
++        output: &CudaDeviceBuffer,
++        workspace: Option<&CudaDeviceBuffer>,
++        operation: &'static str,
++    ) -> CudaResult<()> {
++        if self.poisoned {
++            return Err(CudaError::invalid_state(operation, "GEMM plan is poisoned"));
++        }
++        if !selected_graph_topology_supported(
++            self.algorithm.split_k,
++            self.algorithm.reduction_scheme,
++        ) {
++            return Err(CudaError::new(
++                CudaErrorKind::NotSupported,
++                CudaErrorDomain::Rust,
++                CudaErrorStage::Validation,
++                0,
++                operation,
++                "selected graph requires effective no-split topology",
++            ));
++        }
++        if self.algorithm.backend_id != NATIVE_CUBLASLT_BACKEND_ID
++            || !self.algorithm.deterministic
++            || self.algorithm.dimensions() != (1, self.config.m1.n, self.config.m1.k)
++        {
++            return Err(CudaError::invalid_state(
++                operation,
++                "selected GEMM metadata mismatch",
++            ));
++        }
++        ensure_same_context(&self.context, &stream.context, operation)?;
++        let buffers = [
++            (Some(input), self.config.input_bytes, false),
++            (Some(weight), self.config.weight_bytes, false),
++            (Some(output), self.config.output_bytes, false),
++            (workspace, self.algorithm.workspace_bytes, true),
++        ];
++        for (index, (buffer, required, parent)) in buffers.iter().enumerate() {
++            let Some(buffer) = buffer else {
++                if *required != 0 {
++                    return Err(CudaError::out_of_range(
++                        operation,
++                        "required workspace missing",
++                    ));
++                }
++                continue;
++            };
++            ensure_same_context(&self.context, buffer.context_owner(), operation)?;
++            buffer.ensure_idle_for_operation(operation)?;
++            if if *parent {
++                buffer.byte_len() < *required
++            } else {
++                buffer.byte_len() != *required
++            } {
++                return Err(CudaError::out_of_range(
++                    operation,
++                    "selected GEMM buffer size mismatch",
++                ));
++            }
++            for (other, _, _) in &buffers[..index] {
++                if other.is_some_and(|other| {
++                    buffer
++                        .native_handle()
++                        .same_allocation(other.native_handle())
++                }) {
++                    return Err(CudaError::invalid_argument(
++                        operation,
++                        "selected GEMM allocations must be distinct",
++                    ));
++                }
++            }
++        }
++        Ok(())
++    }
++    #[cfg(feature = "cuda")]
++    pub(crate) fn begin_strided_graph_capture_native(
++        &self,
++        stream: &mut CudaStream,
++        input: &CudaDeviceBuffer,
++        weight: &CudaDeviceBuffer,
++        output: &CudaDeviceBuffer,
++        workspace: Option<&CudaDeviceBuffer>,
++        mode: u32,
++    ) -> CudaResult<ffi::GraphCaptureHandle> {
++        stream.native.begin_graph_strided_m1_gemm_bf16_capture(
++            &self.native,
++            input.native_handle(),
++            weight.native_handle(),
++            output.native_handle(),
++            workspace.map(CudaDeviceBuffer::native_handle),
++            mode,
++        )
++    }
++}
+diff --git a/crates/riley-cuda/src/graph.rs b/crates/riley-cuda/src/graph.rs
+index 9c5ff0e..e9e8684 100644
+--- a/crates/riley-cuda/src/graph.rs
++++ b/crates/riley-cuda/src/graph.rs
+@@ -4,6 +4,8 @@
+ //! keeping graph end, instantiate, and replay behind a later resource-lifetime
+ //! slice. CPU vocabulary/lifecycle validation still fails closed.
+ 
++mod borrowed_strided_gemm;
++pub use borrowed_strided_gemm::{BorrowedStridedGemmGraph, BorrowedStridedGemmResources};
+ mod borrowed_h2d;
+ pub use borrowed_h2d::{BorrowedH2DGraph, BorrowedH2DResources};
+ mod borrowed_output;
+diff --git a/crates/riley-cuda/src/graph/borrowed_strided_gemm.rs b/crates/riley-cuda/src/graph/borrowed_strided_gemm.rs
+new file mode 100644
+index 0000000..16d60a3
+--- /dev/null
++++ b/crates/riley-cuda/src/graph/borrowed_strided_gemm.rs
+@@ -0,0 +1,132 @@
++//! Qualified M1 strided GEMM graph with an optional actual workspace parent.
++use crate::{CudaDeviceBuffer, CudaError, CudaPreparedStridedGemm, CudaResult, CudaStream};
++
++/// Prepared plan, exact I/O and optional workspace parent borrowed through close.
++pub struct BorrowedStridedGemmResources<'a> {
++    /// Capture and replay stream.
++    pub stream: &'a mut CudaStream,
++    /// Existing canonical plan; never reselected during capture.
++    pub plan: &'a mut CudaPreparedStridedGemm,
++    /// BF16 input.
++    pub input: &'a mut CudaDeviceBuffer,
++    /// Physical BF16 weight allocation.
++    pub weight: &'a mut CudaDeviceBuffer,
++    /// BF16 output.
++    pub output: &'a mut CudaDeviceBuffer,
++    /// Actual workspace parent, absent when no workspace is allocated.
++    pub workspace: Option<&'a mut CudaDeviceBuffer>,
++}
++
++/// Cold standalone GEMM graph; does not admit an aggregate decode graph.
++pub struct BorrowedStridedGemmGraph<'a> {
++    #[cfg(feature = "cuda")]
++    native: crate::ffi::GraphExecHandle,
++    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
++    resources: BorrowedStridedGemmResources<'a>,
++    terminal: bool,
++}
++#[cfg(feature = "cuda")]
++struct CaptureGuard {
++    native: crate::ffi::GraphCaptureHandle,
++    active: bool,
++}
++
++#[cfg(feature = "cuda")]
++impl Drop for CaptureGuard {
++    fn drop(&mut self) {
++        if self.active && self.native.abort_with_transition().resource_release_known {
++            super::finish_deferred_capture_contexts();
++        }
++    }
++}
++
++impl<'a> BorrowedStridedGemmGraph<'a> {
++    /// Captures the selected selected no-split plan without replacement resources.
++    /// # Errors
++    /// Rejects unsupported policy, size, context, alias, lease or CUDA failures.
++    pub fn prepare(resources: BorrowedStridedGemmResources<'a>) -> CudaResult<Self> {
++        #[cfg(feature = "cuda")]
++        {
++            resources.plan.validate_strided_graph_capture(
++                resources.stream,
++                resources.input,
++                resources.weight,
++                resources.output,
++                resources.workspace.as_deref(),
++                "BorrowedStridedGemmGraph::prepare",
++            )?;
++            let native = resources.plan.begin_strided_graph_capture_native(
++                resources.stream,
++                resources.input,
++                resources.weight,
++                resources.output,
++                resources.workspace.as_deref(),
++                super::CudaGraphCaptureMode::ThreadLocal as u32,
++            )?;
++            super::begin_deferred_capture_contexts();
++            let mut capture = CaptureGuard {
++                native,
++                active: true,
++            };
++            capture.native.enqueue_canonical_gemm_bf16()?;
++            let transition = capture.native.end();
++            capture.active = !transition.owner_consumed;
++            if transition.resource_release_known {
++                super::finish_deferred_capture_contexts();
++            }
++            let mut graph = transition.result?;
++            let native = graph.instantiate()?;
++            Ok(Self {
++                native,
++                resources,
++                terminal: false,
++            })
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = resources;
++            Err(CudaError::unavailable("BorrowedStridedGemmGraph::prepare"))
++        }
++    }
++    /// Replays once and waits for known completion.
++    ///
++    /// # Errors
++    /// Any CUDA failure permanently prevents further replay.
++    pub fn replay(&mut self) -> CudaResult<()> {
++        const OP: &str = "BorrowedStridedGemmGraph::replay";
++        if self.terminal {
++            return Err(CudaError::invalid_state(OP, "graph is terminal"));
++        }
++        self.terminal = true;
++        #[cfg(feature = "cuda")]
++        {
++            self.native
++                .launch(&mut self.resources.stream.native)?
++                .complete()?;
++            self.terminal = false;
++            Ok(())
++        }
++        #[cfg(not(feature = "cuda"))]
++        Err(CudaError::unavailable(OP))
++    }
++
++    /// Releases graph leases before returning access to the executor allocations.
++    ///
++    /// # Errors
++    /// Rejects terminal state and propagates native destruction failures.
++    pub fn close(mut self) -> CudaResult<()> {
++        const OP: &str = "BorrowedStridedGemmGraph::close";
++        if self.terminal {
++            return Err(CudaError::invalid_state(OP, "graph is terminal"));
++        }
++        #[cfg(feature = "cuda")]
++        {
++            self.native.close()
++        }
++        #[cfg(not(feature = "cuda"))]
++        {
++            let _ = &mut self;
++            Err(CudaError::unavailable(OP))
++        }
++    }
++}
+diff --git a/crates/riley-cuda/src/lib.rs b/crates/riley-cuda/src/lib.rs
+index d1a8b9d..63a7219 100644
+--- a/crates/riley-cuda/src/lib.rs
++++ b/crates/riley-cuda/src/lib.rs
+@@ -68,10 +68,10 @@ pub use graph::{
+     BorrowedGemmResources, BorrowedH2DGraph, BorrowedH2DResources, BorrowedNormGraph,
+     BorrowedNormResources, BorrowedOutputGraph, BorrowedOutputResources, BorrowedPointwiseGraph,
+     BorrowedPointwiseResources, BorrowedRopeGraph, BorrowedRopeResources,
+-    BorrowedSelectedGemmGraph, BorrowedSelectedGemmResources, CapturedGraph,
+-    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
+-    CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage,
+-    EmbeddingGraphGeometry, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
++    BorrowedSelectedGemmGraph, BorrowedSelectedGemmResources, BorrowedStridedGemmGraph,
++    BorrowedStridedGemmResources, CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode,
++    CudaGraphCaptureOperation, CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState,
++    CudaGraphStage, EmbeddingGraphGeometry, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
+     NormGraphProfile, OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16EmbeddingStatusD2HGraph,
+     OwnedCapturedBf16RowGatherArgmaxD2HGraph, OwnedCapturedBf16RowGatherArgmaxGraph,
+     OwnedCapturedBf16RowGatherGraph, OwnedCapturedCanonicalGemmBf16Graph,
+diff --git a/crates/riley-cuda/tests/strided_gemm_gpu.rs b/crates/riley-cuda/tests/strided_gemm_gpu.rs
+index 71cf1b3..2d45252 100644
+--- a/crates/riley-cuda/tests/strided_gemm_gpu.rs
++++ b/crates/riley-cuda/tests/strided_gemm_gpu.rs
+@@ -81,6 +81,30 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
+                     };
+                     plan.execute(&mut params, &mut stream)?;
+                 }
++                y.upload_from_slice(
++                    0,
++                    &vec![0x5a; config.output_bytes() as usize],
++                    &mut staging,
++                    &mut stream,
++                )?;
++                let mut graph = riley_cuda::BorrowedStridedGemmGraph::prepare(
++                    riley_cuda::BorrowedStridedGemmResources {
++                        stream: &mut stream,
++                        plan: &mut plan,
++                        input: &mut x,
++                        weight: &mut w,
++                        output: &mut y,
++                        workspace: None,
++                    },
++                )?;
++                for _ in 0..3 {
++                    graph.replay()?;
++                }
++                if padded {
++                    graph.close()?;
++                } else {
++                    drop(graph);
++                }
+                 let mut output = vec![0; config.output_bytes() as usize];
+                 y.download_to_slice(0, &mut output, &mut staging, &mut stream)?;
+                 for row in 0..batch as usize {
+@@ -111,7 +135,7 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
+     }
+     assert_eq!(checked, 20);
+     println!(
+-        "STRIDED_RUST_OWNER cases=20 exact_impulse_outputs=true padding_preserved=true invalid_span_reuse=true"
++        "STRIDED_RUST_OWNER cases=20 exact_impulse_outputs=true padding_preserved=true invalid_span_reuse=true strided_graph_replays=60 explicit_and_drop_close=true"
+     );
+     Ok(())
+ }
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 71c6144..8ee6c89 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -1595,6 +1595,15 @@ RileyCudaStatus riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
+     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+     RileyCudaGraphErrorInfo* out_graph_error,
+     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
++
++/* Explicit strided-M1 graph admission; retains the full batch allocations. */
++RileyCudaStatus riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
++    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
++    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
++    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
++    RileyCudaGraphErrorInfo* out_graph_error,
++    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+ // Enqueues the one capture-only cublasLtMatmul node for a capture created by
+ // riley_cuda_graph_capture_begin_canonical_gemm_bf16. A failed submission is
+ // terminal and abort-only; ordinary graph end and close APIs perform recovery.
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 5bd90f4..30878ba 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -283,7 +283,7 @@ struct RileyCudaCanonicalGemmBf16GraphState {
+         plan_lease_held(false),
+         input_lease_held(false),
+         weight_lease_held(false),
+-        workspace_lease_held(false), selected_no_split(false) {}
++        workspace_lease_held(false), selected_no_split(false), strided_m1(false) {}
+ 
+   RileyCudaGemmPlan* plan;
+   RileyCudaDeviceBuffer* input;
+@@ -300,6 +300,7 @@ struct RileyCudaCanonicalGemmBf16GraphState {
+   bool workspace_lease_held;
+   // Additive contract: preserve policy, require effective no-split, optional workspace parent.
+   bool selected_no_split;
++  bool strided_m1;
+ };
+ 
+ // C05-22 combines generic canonical RMSNorm with a canonical cuBLASLt GEMM.
+@@ -1072,7 +1073,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+     RileyCudaCanonicalGemmBf16GraphState* out_state,
+-    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split = false) noexcept;
++    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split = false, bool strided_m1 = false) noexcept;
+ RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
+     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
+     const char* operation) noexcept;
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 58d7d0b..15e26f2 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1074,9 +1074,9 @@ bool anchored_config_is_compatible(const RileyCudaGemmConfig& anchor,
+ namespace riley_cuda_internal {
+ namespace {
+ 
+-bool canonical_gemm_bf16_plan_is_ready(
+-    const RileyCudaGemmPlan* plan) noexcept {
+-  if (plan == nullptr || plan->owner == nullptr || plan->batch_count != 1 || !plan->algorithm_ready ||
++bool gemm_bf16_plan_is_ready(
++    const RileyCudaGemmPlan* plan, bool strided_m1) noexcept {
++  if (plan == nullptr || plan->owner == nullptr || (strided_m1 ? (plan->batch_count != 2 && plan->batch_count != 4) : plan->batch_count != 1) || !plan->algorithm_ready ||
+       plan->handle == nullptr || plan->operation == nullptr ||
+       plan->weight_layout == nullptr || plan->input_layout == nullptr ||
+       plan->output_layout == nullptr || plan->preference == nullptr ||
+@@ -1114,10 +1114,14 @@ bool canonical_gemm_bf16_plan_is_ready(
+   return true;
+ }
+ 
++bool canonical_gemm_bf16_plan_is_ready(const RileyCudaGemmPlan* plan) noexcept {
++  return gemm_bf16_plan_is_ready(plan, false);
++}
++
+ bool canonical_gemm_bf16_state_metadata_is_valid(
+     const RileyCudaGemmPlan* plan,
+     const RileyCudaCanonicalGemmBf16GraphState& state) noexcept {
+-  return canonical_gemm_bf16_plan_is_ready(plan) && state.plan == plan &&
++  return gemm_bf16_plan_is_ready(plan, state.strided_m1) && state.plan == plan &&
+          (state.selected_no_split || plan->config.flags == 0) &&
+          state.input_byte_len == plan->input_bytes &&
+          state.weight_byte_len == plan->weight_bytes &&
+@@ -1134,7 +1138,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+     RileyCudaCanonicalGemmBf16GraphState* out_state,
+-    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split) noexcept {
++    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split, bool strided_m1) noexcept {
+   if (out_state == nullptr) {
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+@@ -1147,7 +1151,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+                             "canonical GEMM graph plan, stream, or fixed allocation is null");
+   }
+-  if (!canonical_gemm_bf16_plan_is_ready(plan) ||
++  if (!gemm_bf16_plan_is_ready(plan, strided_m1) || (strided_m1 && !selected_no_split) ||
+       (!selected_no_split && plan->config.flags != 0) ||
+       !same_context(plan->owner, stream->owner) ||
+       plan->owner->restoration_failed.load(std::memory_order_acquire)) {
+@@ -1204,6 +1208,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
+     }
+   }
+   out_state->selected_no_split = selected_no_split;
++  out_state->strided_m1 = strided_m1;
+   out_state->plan = plan;
+   out_state->input = input;
+   out_state->weight = weight;
+@@ -1224,7 +1229,7 @@ bool aggregate_gemm_plan_matches_context(
+ RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
+     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
+     const char* operation) noexcept {
+-  if (!canonical_gemm_bf16_plan_is_ready(plan) ||
++  if (!(canonical_gemm_bf16_plan_is_ready(plan) || gemm_bf16_plan_is_ready(plan, true)) ||
+       !try_acquire_exclusive_use(plan->active_uses)) {
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
+@@ -1235,7 +1240,7 @@ RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
+ 
+ bool release_canonical_gemm_bf16_graph_plan_lease(
+     RileyCudaGemmPlan* plan) noexcept {
+-  return canonical_gemm_bf16_plan_is_ready(plan) &&
++  return (canonical_gemm_bf16_plan_is_ready(plan) || gemm_bf16_plan_is_ready(plan, true)) &&
+          release_exclusive_use(plan->active_uses);
+ }
+ 
+diff --git a/kernels/src/graph.cu b/kernels/src/graph.cu
+index 10270be..6219fac 100644
+--- a/kernels/src/graph.cu
++++ b/kernels/src/graph.cu
+@@ -10042,7 +10042,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
+     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+     RileyCudaGraphErrorInfo* out_graph_error,
+-    RileyCudaErrorInfo* error, bool selected_no_split = false) noexcept {
++    RileyCudaErrorInfo* error, bool selected_no_split = false, bool strided_m1 = false) noexcept {
+   using riley_cuda_internal::clear_error;
+ 
+   clear_error(error);
+@@ -10080,7 +10080,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
+   RileyCudaStatus status =
+       riley_cuda_internal::preflight_canonical_gemm_bf16_graph_state(
+           plan, stream, input, weight, output, workspace, &graph_state,
+-          error, kBeginCanonicalGemmBf16Operation, selected_no_split);
++          error, kBeginCanonicalGemmBf16Operation, selected_no_split, strided_m1);
+   if (status != RILEY_CUDA_STATUS_SUCCESS) {
+     return status;
+   }
+@@ -11527,6 +11527,19 @@ riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
+       out_graph_error, error, true);
+ }
+ 
++extern "C" RileyCudaStatus
++riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
++    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
++    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
++    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
++    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
++    RileyCudaGraphErrorInfo* out_graph_error,
++    RileyCudaErrorInfo* error) noexcept {
++  return capture_begin_canonical_gemm_bf16_impl(
++      stream, plan, input, weight, output, workspace, mode, out_capture,
++      out_graph_error, error, true, true);
++}
++
+ extern "C" RileyCudaStatus
+ riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16(
+     RileyCudaStream* stream, RileyCudaGemmPlan* gemm_plan,

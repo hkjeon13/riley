@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use riley_model::{
-    CheckpointProvenance, LlamaConfig, LoadLimits, LoadedWeights, ModelError, WeightBinding,
-    WeightSlot,
+    CheckpointProvenance, LEGACY_PROVENANCE_FILENAME, LlamaConfig, LoadLimits, LoadedWeights,
+    ModelError, PROVENANCE_FILENAME, WeightBinding, WeightSlot,
 };
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -43,6 +43,59 @@ impl Drop for TempCheckpoint {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.root).expect("remove isolated checkpoint directory");
     }
+}
+
+#[test]
+fn legacy_manifest_is_used_only_when_riley_manifest_is_absent() {
+    let checkpoint = TempCheckpoint::new("legacy-manifest");
+    write_single_checkpoint(checkpoint.root(), &canonical_tensors(true, false));
+    let current_path = checkpoint.root().join(PROVENANCE_FILENAME);
+    let legacy_path = checkpoint.root().join(LEGACY_PROVENANCE_FILENAME);
+    let legacy = fs::read_to_string(&current_path)
+        .unwrap()
+        .replace("riley-checkpoint-v1", "rustinfer-checkpoint-v1");
+    fs::write(&legacy_path, legacy).unwrap();
+    fs::remove_file(current_path).unwrap();
+
+    let provenance = CheckpointProvenance::load(checkpoint.root(), LoadLimits::default()).unwrap();
+    assert_eq!(provenance.manifest_filename(), LEGACY_PROVENANCE_FILENAME);
+}
+
+#[test]
+fn riley_manifest_takes_precedence_over_legacy_manifest() {
+    let checkpoint = TempCheckpoint::new("current-manifest-priority");
+    write_single_checkpoint(checkpoint.root(), &canonical_tensors(true, false));
+    fs::write(
+        checkpoint.root().join(LEGACY_PROVENANCE_FILENAME),
+        b"not valid JSON",
+    )
+    .unwrap();
+
+    let provenance = CheckpointProvenance::load(checkpoint.root(), LoadLimits::default()).unwrap();
+    assert_eq!(provenance.manifest_filename(), PROVENANCE_FILENAME);
+}
+
+#[test]
+fn invalid_riley_manifest_does_not_fall_back_to_legacy_manifest() {
+    let checkpoint = TempCheckpoint::new("invalid-current-no-fallback");
+    write_single_checkpoint(checkpoint.root(), &canonical_tensors(true, false));
+    let current_path = checkpoint.root().join(PROVENANCE_FILENAME);
+    let current = fs::read_to_string(&current_path).unwrap();
+    let legacy = current.replace("riley-checkpoint-v1", "rustinfer-checkpoint-v1");
+    fs::write(checkpoint.root().join(LEGACY_PROVENANCE_FILENAME), legacy).unwrap();
+    fs::write(
+        &current_path,
+        current.replace("riley-checkpoint-v1", "invalid-checkpoint-v1"),
+    )
+    .unwrap();
+
+    let error = CheckpointProvenance::load(checkpoint.root(), LoadLimits::default()).unwrap_err();
+    assert!(error.to_string().contains(PROVENANCE_FILENAME));
+    assert!(
+        error
+            .to_string()
+            .contains("format must be riley-checkpoint-v1")
+    );
 }
 
 #[test]

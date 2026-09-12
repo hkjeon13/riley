@@ -1,0 +1,126 @@
+{
+  "scope": "single-active C1 serving screen, two reversed orders, not model-quality or high-concurrency/stability qualification",
+  "medians": {
+    "fixed": {
+      "baseline": {
+        "throughput": 981.1111787777559,
+        "ttft_ms": 4.40869425,
+        "tpot_ms": 0.8273349673913044,
+        "e2e_p95_ms": 30.4441705,
+        "e2e_p99_ms": 30.645008
+      },
+      "new": {
+        "throughput": 184.47527518346442,
+        "ttft_ms": 5.57252525,
+        "tpot_ms": 5.384305476811594,
+        "e2e_p95_ms": 174.5394585,
+        "e2e_p99_ms": 174.881201
+      },
+      "vllm": {
+        "throughput": 798.7788417723929,
+        "ttft_ms": 7.4644695,
+        "tpot_ms": 0.8859238972884526,
+        "e2e_p95_ms": 36.0563895,
+        "e2e_p99_ms": 45.3590325
+      }
+    },
+    "natural": {
+      "new": {
+        "throughput": 131.54215796837676,
+        "ttft_ms": 5.609090999999999,
+        "tpot_ms": 5.6405893253968244,
+        "e2e_p95_ms": 1211.261766,
+        "e2e_p99_ms": 1212.7650119999998
+      },
+      "vllm": {
+        "throughput": 840.3641199228041,
+        "ttft_ms": 8.098254,
+        "tpot_ms": 1.0161602579314684,
+        "e2e_p95_ms": 156.69539600000002,
+        "e2e_p99_ms": 166.676558
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "fixed": {
+      "baseline": {
+        "throughput": -81.19731186701193,
+        "ttft_ms": 26.39854192655797,
+        "tpot_ms": 550.801149356592,
+        "e2e_p95_ms": 473.3099494367895,
+        "e2e_p99_ms": 470.6678262247476
+      },
+      "vllm": {
+        "throughput": -76.90533780612712,
+        "ttft_ms": -25.345997461708425,
+        "tpot_ms": 507.76162526954505,
+        "e2e_p95_ms": 384.0735883996372,
+        "e2e_p99_ms": 285.548790089383
+      }
+    },
+    "natural": {
+      "vllm": {
+        "throughput": -84.34700448890415,
+        "ttft_ms": -30.737032945620147,
+        "tpot_ms": 455.08855826333996,
+        "e2e_p95_ms": 673.0040555882063,
+        "e2e_p99_ms": 627.6158246560383
+      }
+    }
+  },
+  "requests": 1200,
+  "reference_observations": [
+    {
+      "case": "fixed-p0-baseline",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p0-vllm",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-baseline",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-vllm",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p0-vllm",
+      "reference_matches": 80,
+      "requests": 120
+    },
+    {
+      "case": "natural-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p1-vllm",
+      "reference_matches": 80,
+      "requests": 120
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "V3 regresses throughput/TPOT; profile decode before expanding concurrency"
+}

@@ -1,0 +1,6 @@
+========= COMPUTE-SANITIZER
+full_model_prefill prompt=16 hidden_exact=true full_kv_exact=true
+full_model_prefill prompt=128 hidden_exact=true full_kv_exact=true
+full_model_prefill prompt=398 hidden_exact=true full_kv_exact=true
+full_model_prefill cases=3 replays=12 compared_bytes=70782336
+========= ERROR SUMMARY: 0 errors

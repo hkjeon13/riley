@@ -1,0 +1,78 @@
+{
+  "schema_version": "riley.rope-arithmetic-run.v1",
+  "complete": true,
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/fixtures.json",
+    "sha256": "8f943cc563089aa811e73ae81b12ee6d2cc8065d820cd392654ea7cf45d40b52"
+  },
+  "compile_receipt": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/compile.json",
+    "sha256": "8b2d2c73557df5e0fc220df417910a29ff9647b8eb05c18c7e7e45361388b8a1"
+  },
+  "command": [
+    "/tmp/riley-opt-260912/rope-arithmetic-probe/build/rope_arithmetic_probe",
+    "--cases",
+    "/tmp/riley-opt-260912/rope-arithmetic-probe/cases.tsv",
+    "--device",
+    "0"
+  ],
+  "library_directories": [
+    "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "/data/riley-g04-cuda13/lib"
+  ],
+  "explicit_driver_library": {
+    "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+    "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+  },
+  "raw": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/run/native.jsonl",
+    "sha256": "4ac563a9166288b5b48ed8681c28ad8d7093f9cc0f52fba3fd3f2ad83cd40b5a"
+  },
+  "stderr": {
+    "path": "/tmp/riley-opt-260912/rope-arithmetic-probe/run/stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "device": {
+    "schema": "riley.rope-arithmetic-native.v1",
+    "kind": "device",
+    "ordinal": 0,
+    "name": "NVIDIA GeForce RTX 4090",
+    "uuid_hex": "9087e4256acab722b8c9cc0423b39fb0",
+    "compute_major": 8,
+    "compute_minor": 9,
+    "driver_version": 13000,
+    "runtime_version": 13000
+  },
+  "summary": {
+    "schema": "riley.rope-arithmetic-native.v1",
+    "kind": "summary",
+    "complete": true,
+    "cases": 436,
+    "candidate_mismatch_cases": [
+      30,
+      31
+    ],
+    "candidate_mismatch_words": [
+      67,
+      75
+    ],
+    "candidate_equal": [
+      false,
+      false
+    ],
+    "device_allocations_created": 5668,
+    "device_allocations_freed": 5668,
+    "live_device_allocations": 0,
+    "live_device_bytes": 0,
+    "cleanup_errors": 0,
+    "all_allocations_freed": true,
+    "stream_destroyed": true,
+    "fusion_qualified": false,
+    "performance_measured": false,
+    "performance_claim_eligible": false,
+    "error": ""
+  },
+  "gpu_tests_executed": true,
+  "fusion_qualified": false,
+  "performance_claim_eligible": false
+}

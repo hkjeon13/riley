@@ -4,6 +4,38 @@
 //! keeping graph end, instantiate, and replay behind a later resource-lifetime
 //! slice. CPU vocabulary/lifecycle validation still fails closed.
 
+mod borrowed_h2d;
+pub use borrowed_h2d::{BorrowedH2DGraph, BorrowedH2DResources};
+mod borrowed_output;
+pub use borrowed_output::{BorrowedOutputGraph, BorrowedOutputResources};
+mod borrowed_argmax;
+pub use borrowed_argmax::{BorrowedArgmaxGraph, BorrowedArgmaxResources};
+mod borrowed_selected_gemm;
+pub use borrowed_selected_gemm::{BorrowedSelectedGemmGraph, BorrowedSelectedGemmResources};
+mod borrowed_gemm;
+pub use borrowed_gemm::{BorrowedGemmGraph, BorrowedGemmResources};
+mod borrowed_embedding;
+pub use borrowed_embedding::{
+    BorrowedEmbeddingGraph, BorrowedEmbeddingResources, EmbeddingGraphGeometry,
+};
+
+mod borrowed_pointwise;
+pub use borrowed_pointwise::{
+    BorrowedPointwiseGraph, BorrowedPointwiseResources, PointwiseGraphOperation,
+};
+
+mod borrowed_rope;
+pub use borrowed_rope::{BorrowedRopeGraph, BorrowedRopeResources, RopeGraphGeometry};
+
+mod borrowed_norm;
+pub use borrowed_norm::{BorrowedNormGraph, BorrowedNormResources, NormGraphProfile};
+mod parent_attention;
+pub use parent_attention::{
+    AttentionParentLayer, PackedAttentionMetadataLayout, PackedParentAttentionResources,
+    PackedParentKvWriteGraph, PackedParentKvWriteResources, ParentAttentionGraph,
+    ParentAttentionResources,
+};
+
 use std::marker::PhantomData;
 #[cfg(any(feature = "cuda", test))]
 use std::mem::{align_of, offset_of, size_of};

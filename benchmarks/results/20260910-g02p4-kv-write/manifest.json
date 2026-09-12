@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-10",
+  "scope": "G02P4 packed parent KV write and cold actual-executor audit; full graph pending",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "gpu": {
+    "passed": 15,
+    "exit_code": 0,
+    "new_fixture": 1,
+    "native_rejection": 1,
+    "actual_models": 2,
+    "C05_18": 3,
+    "C05_19": 4,
+    "parent_attention": 4
+  },
+  "cpu": {
+    "cuda_lib": 81,
+    "graph_contracts": 32,
+    "runtime_lib": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "baseline_warnings_remain": true
+  },
+  "abi_fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "README.md": "f2c5ae644b2d004b1b2b075ba930fdf48d5c7f7b65d80eed63ac91a6db2f03a2",
+    "clippy.jsonl": "6a8ee3376ffd5c1ec2fd004f27c3002e994a78d9e855dec6a4f076e664ea3b73",
+    "clippy.log": "b28b3a3dbdef5da3253fee79fa9c3c659ef3673f0fab2528ebe3e7398ad76f66",
+    "cpu.log": "02584e690a092dd4a9f774aa85520934e9fdbe8a40aa85f306f3c9d5fe95c2f3",
+    "gpu-model.log": "a780186a01a2fabec3701b0be4c8dc9bb439455c65b622daea1d99c4643e9a00",
+    "gpu-native.log": "d4bcf31dd11ba7171081b7f805aef1d50cd2795c4014d5b8edeaa1dade8c4cf5",
+    "gpu-negative.log": "ceab47a12ef7312d33b1f4cd0e9feeeeb6feeaa17c7091884db923d6fc08f73c",
+    "gpu-regression.log": "afb859d15f6955a3f7255accee84b2338bf0f982121f12dd052a03f07ea56c6d",
+    "model-preservation.json": "37d3dc67453dbf16a4702404e274511dc860ff5ec59135d585849e245106b28b",
+    "remote-source-verification.json": "7330b313a9cd4604e8d49eaf5e13c2bcf59269eb84cb583ed5740ae9863bddf2",
+    "runtime-cpu.log": "49f0d1bf51f80300c924c0f8264b2e00c013c3b88fc67b4d009bdf9b7d97f049",
+    "runtime-identities.json": "8cf7ff8cbd7033a539a55818622c4903740b36c384d42ba44874556b67c9f594",
+    "source-hashes.json": "54cc742ca4d692321ee907a6ad9445a30467494b1c75764dbb476e3593e35305",
+    "source-overlay.tar.gz": "2f90483a7806327321cd740cdf47d1e5b511c8e6e85b0a004aea7275dfd23669"
+  }
+}

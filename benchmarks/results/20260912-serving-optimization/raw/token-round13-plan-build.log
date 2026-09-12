@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/make_token_campaign_plan.py", line 142, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan.py", line 91, in main
+    pins[str(p)]=sha(p);nested_pins(read(p),pins)
+                        ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan.py", line 42, in nested_pins
+    else:nested_pins(item,pins)
+         ~~~~~~~~~~~^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/make_token_campaign_plan.py", line 34, in nested_pins
+    p=Path(value['path']);assert p.is_absolute() and sha(p)==value['sha256'];pins[str(p)]=value['sha256']
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

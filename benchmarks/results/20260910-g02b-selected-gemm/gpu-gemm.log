@@ -1,0 +1,56 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1524:8
+     |
+1524 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-cuda` (lib) generated 1 warning
+warning: constant `MAX_WORKSPACE_BYTES` is never used
+  --> crates/riley-cuda/tests/graph_selected_gemm_gpu.rs:15:7
+   |
+15 | const MAX_WORKSPACE_BYTES: u64 = 8 * 1024 * 1024;
+   |       ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+
+running 2 tests
+test owned_canonical_gemm_bf16_graph_cold_capture_replays_byte_exact_against_eager ... warning: `riley-cuda` (test "graph_selected_gemm_gpu") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.08s
+     Running tests/graph_c05_21_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_21_gpu-94d22bd7afea89d2)
+ok
+test owned_canonical_gemm_bf16_graph_recovers_preflight_and_abort_resources ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+
+running 3 tests
+test owned_canonical_rms_norm_gemm_bf16_graph_cold_capture_replays_byte_exact_against_eager ...      Running tests/graph_c05_22_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_22_gpu-8ae0f96a9a0c8490)
+ok
+test owned_canonical_rms_norm_gemm_bf16_graph_recovers_exact_preflight_geometry_and_abort ... ok
+test owned_canonical_rms_norm_gemm_bf16_graph_rejects_foreign_context_and_recovers ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/graph_gemm_borrowed_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_gemm_borrowed_gpu-469cf10693268540)
+
+running 1 test
+test borrowed_gemm_replay_reject_and_drop_preserve_resources ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+
+
+running 1 test
+test selected_gemm_preserves_policy_optional_workspace_and_lifetimes ...      Running tests/graph_selected_gemm_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_selected_gemm_gpu-6fd9722b355ff4b8)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+

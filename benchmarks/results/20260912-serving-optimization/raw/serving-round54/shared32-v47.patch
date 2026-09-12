@@ -1,0 +1,1156 @@
+commit ead5c09f9cb7bd3d62ad39902e65801582ab6479
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 05:55:04 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 05:55:04 2026 +0900
+
+    Add versioned thirty-two-row decode serving with shared projection weights
+
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index 6763ddf..0b59cf5 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -206,6 +206,11 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/decode_shared_model.cuh"),
+         kernels_dir.join("src/decode_shared_result.cuh"),
+         kernels_dir.join("src/decode_shared16.cuh"),
++        kernels_dir.join("src/decode_shared32.cuh"),
++        kernels_dir.join("src/decode_shared32_attention.cuh"),
++        kernels_dir.join("src/decode_shared32_model.cuh"),
++        kernels_dir.join("src/decode_shared32_result.cuh"),
++
+         kernels_dir.join("src/decode_shared16_attention.cuh"),
+         kernels_dir.join("src/decode_shared16_model.cuh"),
+         kernels_dir.join("src/decode_shared16_result.cuh"),
+diff --git a/crates/riley-cuda/src/ffi.rs b/crates/riley-cuda/src/ffi.rs
+index 686e187..c73434f 100644
+--- a/crates/riley-cuda/src/ffi.rs
++++ b/crates/riley-cuda/src/ffi.rs
+@@ -11250,7 +11250,9 @@ unsafe extern "C" {
+     fn riley_cuda_graph_resources_record_v3_prefill(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_graph_resources_record_v3_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_graph_resources_record_v4_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
++fn riley_cuda_graph_resources_record_v5_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+     fn riley_cuda_graph_resources_record_v4_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
++fn riley_cuda_graph_resources_record_v5_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+ }
+ impl GraphResourcesHandle {
+     pub(super) fn record_v3_prefill(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+@@ -11277,6 +11279,14 @@ impl GraphResourcesHandle {
+         let status=unsafe{riley_cuda_graph_resources_record_v4_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V4 shared",&error)
+     }
++pub(super) fn record_v5_shared(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
++        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V4 shared","parent count mismatch"));}
++        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
++        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
++        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
++        let status=unsafe{riley_cuda_graph_resources_record_v5_shared(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        status_result(status,"record V4 shared",&error)
++    }
+     pub(super) fn record_v4_shared_greedy(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+         if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V4 shared","parent count mismatch"));}
+         let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+@@ -11285,4 +11295,12 @@ impl GraphResourcesHandle {
+         let status=unsafe{riley_cuda_graph_resources_record_v4_shared_greedy(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+         status_result(status,"record V4 shared",&error)
+     }
++pub(super) fn record_v5_shared_greedy(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
++        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V4 shared","parent count mismatch"));}
++        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
++        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
++        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
++        let status=unsafe{riley_cuda_graph_resources_record_v5_shared_greedy(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
++        status_result(status,"record V4 shared",&error)
++    }
+ }
+diff --git a/crates/riley-cuda/src/graph_resources.rs b/crates/riley-cuda/src/graph_resources.rs
+index ebca33f..1cc4b03 100644
+--- a/crates/riley-cuda/src/graph_resources.rs
++++ b/crates/riley-cuda/src/graph_resources.rs
+@@ -1234,6 +1234,19 @@ impl BorrowedGraphResourceReservation<'_> {
+         }
+         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V4 shared"))}
+     }
++pub fn record_v5_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
++        #[cfg(feature="cuda")]{
++            let bad=||crate::CudaError::invalid_argument("record V4 shared","parent index out of range");
++            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
++            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
++            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
++            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
++            self.native.record_v5_shared(&devices,workspace,&weights,head,shared_head,staging,capacity,physical)
++        }
++        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V4 shared"))}
++    }
+     pub fn record_v4_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
+         #[cfg(feature="cuda")]{
+             let bad=||crate::CudaError::invalid_argument("record V4 shared","parent index out of range");
+@@ -1247,4 +1260,17 @@ impl BorrowedGraphResourceReservation<'_> {
+         }
+         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V4 shared"))}
+     }
++pub fn record_v5_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
++        #[cfg(feature="cuda")]{
++            let bad=||crate::CudaError::invalid_argument("record V4 shared","parent index out of range");
++            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
++            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
++            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
++            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
++            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
++            self.native.record_v5_shared_greedy(&devices,workspace,&weights,head,shared_head,staging,capacity,physical)
++        }
++        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V4 shared"))}
++    }
+ }
+diff --git a/crates/riley-runtime/src/llama/executor/config.rs b/crates/riley-runtime/src/llama/executor/config.rs
+index 1bb8aeb..90bece6 100644
+--- a/crates/riley-runtime/src/llama/executor/config.rs
++++ b/crates/riley-runtime/src/llama/executor/config.rs
+@@ -173,6 +173,7 @@ impl PreparedLlamaBatchExecutorConfig {
+     #[must_use]
+     pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
++    pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
+     pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
+     pub const fn variable_graph(self)->bool {self.variable_graph}
+     /// Opt-in arithmetic-changing QKV/gate-up/head graph; bounded P128 geometry.
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index a900d53..5481d0a 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2060,8 +2060,8 @@ impl PreparedLlamaBatchExecutor {
+         scratch:&'a mut crate::llama::variable_session::VariableGraphBuffers,
+     )->LlamaBatchExecutorResult<crate::llama::variable_session::BorrowedVariableSession<'a,ROWS>> {
+         use sha2::{Digest,Sha256};
+-        if !matches!(ROWS,8|16) || scratch.wire_rows!=ROWS || (ROWS==16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
+-        if scratch.compact && (ROWS!=16 || scratch.shared_head.is_none()){return Err(rejected("compact requires shared sixteen-row buffers"));}
++        if !matches!(ROWS,8|16|32) || scratch.wire_rows!=ROWS || (ROWS>=16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
++        if scratch.compact && (!matches!(ROWS,16|32) || scratch.shared_head.is_none()){return Err(rejected("compact requires shared sixteen-row buffers"));}
+         let context=self.maximum_position_count()?.min(4096);
+         let physical=self.owner.layout.physical_block_count();
+         let f=&mut self.owner.forward;
+@@ -2089,6 +2089,11 @@ include_bytes!("../../../../kernels/src/decode_shared_attention.cuh").as_slice()
+ include_bytes!("../../../../kernels/src/decode_shared_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared_result.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
++
+ include_bytes!("../../../../kernels/src/decode_shared16_attention.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared16_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared16_result.cuh").as_slice(),
+@@ -2161,7 +2166,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
+         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
+             pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
+-        if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
++        if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+         (if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
+             .map_err(|_|rejected("V3 session identity rejected"))
+     }
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+index e8eaa6d..d0a6a00 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+@@ -11,9 +11,9 @@ pub const MAGIC:u32=0x33444d52;
+ /// Compile-time capacities. Public operations reject unsupported ROWS before writing.
+ pub struct Layout<const ROWS:usize>;
+ impl<const ROWS:usize> Layout<ROWS> {
+-    pub const VERSION:u32=if ROWS==8 {3} else {4};
+-    pub const MAGIC:u32=if ROWS==8 {0x33444d52} else {0x34444d52};
+-    pub const RESULT_MAGIC:u32=if ROWS==8 {0x33524d52} else {0x34524d52};
++    pub const VERSION:u32=if ROWS==8 {3} else if ROWS==16 {4} else {5};
++    pub const MAGIC:u32=if ROWS==8 {0x33444d52} else if ROWS==16 {0x34444d52} else {0x35444d52};
++    pub const RESULT_MAGIC:u32=if ROWS==8 {0x33524d52} else if ROWS==16 {0x34524d52} else {0x35524d52};
+     pub const TOKENS_OFFSET:usize=HEADER_BYTES+ROWS*ROW_BYTES;
+     pub const REQUEST_BYTES:usize=Self::TOKENS_OFFSET+1024*4;
+     pub const BATCH_RESULT_BYTES:usize=ROWS*RESULT_BYTES;
+@@ -37,10 +37,10 @@ pub struct Expectation<const ROWS:usize=8> {
+     pub block_ownership:Vec<BlockOwnership>,
+ }
+ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
+-    check(matches!(ROWS,8|16),"capacity","unsupported wire capacity")?;
++    check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
+     check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
+     check(e.replay_id==e.last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
+-    check(matches!(e.max_active_rows,1|2|4|8|16) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
++    check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
+     check(e.stage!=InputStage::Prefill || e.rows.len()==1,"stage","prefill must describe one request")?;
+     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
+     let mut ownership=BTreeMap::new();
+@@ -207,12 +207,13 @@ mod tests {
+     }
+     #[test] fn compact_eight_identity_status_and_publication(){compact_contract::<8>();}
+     #[test] fn compact_sixteen_identity_status_and_publication(){compact_contract::<16>();}
++    #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
+     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
+     fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
+         let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![]};
+         for i in 0..active {
+             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};
+-            let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*256+p).collect();
++            let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*(if ROWS==32{128}else{256})+p).collect();
+             e.block_ownership.extend(ids.iter().map(|&physical_id|BlockOwnership{physical_id,sequence_tag:u64::from(i)+1}));
+             let mut valid=vec![16;ids.len()];*valid.last_mut().unwrap()=v.last_page_tokens;
+             e.rows.push(Row{sequence_tag:u64::from(i)+1,cookie:u64::from(i)+29,output_slot:active-1-i,progress,input_tokens:vec![33;progress.input_tokens as usize],physical_ids:ids,valid_tokens:valid});
+@@ -309,7 +310,7 @@ mod tests {
+         let mut x=e.clone();x.replay_id=4;cases.push(x);
+         let mut x=e.clone();x.rows.push(x.rows[0].clone());cases.push(x);
+         for x in cases {let mut packet=vec![0xa5;Layout::<16>::REQUEST_BYTES];assert!(encode_into(&mut packet,&x).is_err());assert!(packet.iter().all(|&x|x==0xa5));}
+-        let unsupported=fixture_rows::<32>(InputStage::Decode,1);let mut packet=vec![0xa5;Layout::<32>::REQUEST_BYTES];
++        let unsupported=fixture_rows::<64>(InputStage::Decode,1);let mut packet=vec![0xa5;Layout::<64>::REQUEST_BYTES];
+         assert!(encode_into(&mut packet,&unsupported).is_err());assert!(packet.iter().all(|&x|x==0xa5));
+         let mut old=fixture(InputStage::Decode,8);old.max_active_rows=16;
+         assert!(validate(&old).is_err());
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index d66a5bb..a5c21a9 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -20,13 +20,13 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+     /// The caller must have recorded the V3 model and bound the digest to its
+     /// actual prepared model/kernel catalog. This constructor does not create it.
+     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
+-        if !matches!(ROWS,8|16) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
++        if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
+         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
+         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens},
+             compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+     }
+     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
+-    pub(crate) fn new_shared_compact(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{if ROWS!=16{return Err(bad("compact requires sixteen rows"));}let mut s=Self::new_shared(graph,digest,physical,context)?;s.compact=true;Ok(s)}
++    pub(crate) fn new_shared_compact(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{if !matches!(ROWS,16|32){return Err(bad("compact requires sixteen or thirty-two rows"));}let mut s=Self::new_shared(graph,digest,physical,context)?;s.compact=true;Ok(s)}
+     pub fn supports_compact_greedy(&self)->bool{self.compact}
+     pub fn issue(&mut self)->Result<(VariableSessionIdentity,u64,u64)>{let(i,r,c)=self.issue_rows(1)?;Ok((i,r,c[0]))}
+     pub fn issue_rows(&mut self,rows:usize)->Result<(VariableSessionIdentity,u64,Vec<u64>)> {
+@@ -166,7 +166,7 @@ impl super::PreparedLlamaBatchExecutor {
+     pub fn into_owned_variable_shared16_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,true)}
+     fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+-        if !matches!(ROWS,8|16) || (compact && (!shared || ROWS!=16)) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
++        if !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
+         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
+         parents.scratch.compact=compact;
+         let mut identity=None;
+diff --git a/crates/riley-scheduler/src/config.rs b/crates/riley-scheduler/src/config.rs
+index e2b1561..a762d8b 100644
+--- a/crates/riley-scheduler/src/config.rs
++++ b/crates/riley-scheduler/src/config.rs
+@@ -33,6 +33,8 @@ pub enum ExecutionShapePolicy {
+     VariablePrefillDecodeN,
+     /// Variable prefill and up to sixteen decode rows on a prepared V4 session.
+     VariablePrefillDecode16,
++    /// Variable prefill and up to thirty-two decode rows on a prepared V5 session.
++    VariablePrefillDecode32,
+ }
+ 
+ /// All host-memory, work, and KV promises enforced by one scheduler.
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 0117fb8..84038d8 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -647,7 +647,7 @@ thread_local! {
+ #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+ enum DownloadedLlamaOutput {
+     Logits(Vec<u8>),
+-    ValidatedLogits { logits:Vec<u8>, argmax:[u32;16] },
++    ValidatedLogits { logits:Vec<u8>, argmax:[u32;32] },
+     GreedyTokens(Vec<u32>),
+ }
+ 
+@@ -2174,8 +2174,8 @@ fn execute_variable_graph_impl<G:riley_runtime::llama::variable_session::Variabl
+     let tokens=workspace.unwrap_or(&mut local_tokens);
+     if compact_greedy {prepare_greedy_token_workspace(tokens,prepared.output_count).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;}
+     let mut logits=zeroed_vec(if compact_greedy{0}else{prepared.output_count*49152*2},"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+-    if prepared.output_count>ROWS || ROWS>16{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
+-    let mut argmax=[0u32;16];
++    if prepared.output_count>ROWS || ROWS>32{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
++    let mut argmax=[0u32;32];
+     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+         catalog_digest:identity.catalog_digest,max_active_rows:ROWS as u32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+@@ -2195,7 +2195,7 @@ mod validated_argmax_routing_tests {
+  use super::*;
+  #[test]
+  fn validated_logits_keep_distinct_dense_argmax_and_full_rows(){
+-  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},commit_outputs:vec![]};
++  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},commit_outputs:vec![]};
+   assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),Some(3));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(1)),Some(1));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(2)),None);
+   assert_eq!(d.logits_for_slot(OutputSlot::new(1)).unwrap().len(),8);assert!(d.greedy_token_ids().is_empty());
+   d.output=DownloadedLlamaOutput::Logits(vec![0;16]);assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),None);
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index 65447df..288973d 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1582,7 +1582,7 @@ impl Scheduler {
+ 
+         let mut selected = Vec::new();
+         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16) {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32) {
+             // Alternate classes immediately when both are ready. Neither aging
+             // nor decode subtraction changes the independently bounded prefill chunk.
+             // A NotDispatched abort retains the previous class so a retry cannot
+@@ -1606,7 +1606,7 @@ impl Scheduler {
+                 // Admission capacity is independent of the eight-row V3 wire.
+                 // Ready timestamps already rotate committed decode work and roll
+                 // back on NotDispatched, preserving fairness across batches.
+-                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,_=>self.config.max_active_sequences};
++                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,ExecutionShapePolicy::VariablePrefillDecode32=>32,_=>self.config.max_active_sequences};
+                 for item in decode.into_iter().take(limit) {
+                     selected.push(Candidate {
+                         request_id: item.request_id,
+@@ -1681,7 +1681,7 @@ impl Scheduler {
+     }
+ 
+     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
+-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16) {
++        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32) {
+             self.last_dispatched_shape = Some(if inflight.prefill_count == 1 {
+                 WorkKind::Prefill
+             } else {
+@@ -2102,7 +2102,7 @@ impl Scheduler {
+             }
+         }
+         for output in result.outputs() {
+-            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16)
++            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32)
+                 && output.token_id() >= 49_152
+             {
+                 return Err(SchedulerError::InvalidIterationResult {
+@@ -2666,7 +2666,7 @@ fn validate_descriptor(
+     policy: ExecutionShapePolicy,
+     descriptor: &RequestDescriptor,
+ ) -> SchedulerResult<usize> {
+-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16)
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32)
+         && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
+         return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
+     }
+@@ -2728,7 +2728,7 @@ fn validate_execution_shape_config(
+     if policy == ExecutionShapePolicy::General {
+         return Ok(());
+     }
+-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16) {
++    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32) {
+         for (valid,field,reason) in [
+             (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
+             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
+diff --git a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+index b73e02e..f858e0c 100644
+--- a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
++++ b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+@@ -40,8 +40,9 @@ let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let m
+ let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
+ let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,physical as usize)?,PreparedLlamaForwardConfig::default());
+ let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=if compact{executor.into_owned_variable_shared_greedy_session_rows::<ROWS>(&context,capacity)?}else{executor.into_owned_variable_shared_session_rows::<ROWS>(&context,capacity)?};assert_eq!(session.supports_compact_greedy(),compact);
+-let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:chunk,max_prefill_chunk_tokens:chunk,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,if ROWS==16{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16}else{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN})?;
+-let mut refs=std::collections::BTreeMap::new();for prompt in requests.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
++let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:chunk,max_prefill_chunk_tokens:chunk,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,if ROWS==32{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32}else if ROWS==16{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16}else{riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN})?;
++let request_set=if ROWS==32 && request_count==32{vec![requests.iter().max_by_key(|p|p.len()).unwrap().clone()]}else{requests.clone()};
++let mut refs=std::collections::BTreeMap::new();for prompt in request_set.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
+ let(mut iteration,mut widest,mut checked)=(0u64,0usize,0usize);let mut peak_active=0;let mut workspace=Vec::with_capacity(ROWS);let workspace_pointer=workspace.as_ptr();
+ loop {
+  iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};peak_active=peak_active.max(scheduler.metrics_snapshot()?.gauges.active_sequences);widest=widest.max(plan.decode_items().len());assert!(plan.decode_items().len()<=ROWS);
+@@ -57,8 +58,18 @@ loop {
+  if greedy{downloaded.restore_greedy_token_workspace(&mut workspace).unwrap();assert_eq!(workspace.as_ptr(),workspace_pointer);}
+  drop(authority);let result=downloaded.into_result(&samples,IterationTiming::new(0,0)).unwrap();assert!(scheduler.complete_iteration(&result,iteration*2+1)?.settlement_failures().is_empty());session.confirm_scheduler_commit(plan.iteration_id().get()).unwrap();
+ }
+-assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(ROWS));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
++assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(ROWS),"widest={} expected={}",widest,request_count.min(ROWS));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
+ scheduler.submit(RequestDescriptor::new(vec![17;chunk+1],4),iteration*2+1)?;
+ let plan=scheduler.plan_iteration(iteration*2+2)?.into_parts().0.unwrap();let authority=scheduler.authorize_execution(&plan)?;
+ let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph_mode(&authority,&mut session,compact).unwrap();assert_eq!(downloaded.output_count(),0);drop(authority);drop(downloaded);assert!(session.issue_rows(2).is_err());
+ session.close()?;assert!(scheduler.abort_iteration(plan.iteration_id(),riley_scheduler::ExecutionAbort::DeviceQuiescedMutationUnknown,iteration*2+3)?.settlement_failures().is_empty());scheduler.close(iteration*2+4,None)?;stream.close()?;assert!(context.allocation_stats()?.is_zero());eprintln!("LOADED_SHARED rows_max={} logits_checked={} iterations={} pending_close_abort=true allocation_zero=true",widest,checked,iteration-1);Ok(())}
++
++#[test]
++#[ignore="requires GPU; V5 full logits32 rows"]
++fn loaded_v5_full32()->Result<(),Box<dyn std::error::Error>>{run_shared_profile_mode::<32>(32,32,2048,512,512,false)}
++#[test]
++#[ignore="requires GPU; V5 alternating compact/full32 rows"]
++fn loaded_v5_compact32()->Result<(),Box<dyn std::error::Error>>{run_shared_profile_mode::<32>(32,32,2048,512,512,true)}
++#[test]
++#[ignore="requires GPU; V5 partial prefill and close"]
++fn loaded_v5_prefill32()->Result<(),Box<dyn std::error::Error>>{run_shared_profile_mode::<32>(4,3,64,512,129,true)}
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index e726a5a..b3bf7ba 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2184,7 +2184,7 @@ mod cuda_backend {
+             if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8|16|32)
+                 || config.scheduler.iteration_token_budget>1024 || config.scheduler.max_prefill_chunk_tokens>1024
+                 || config.scheduler.max_sequence_tokens>4096 || config.executor.metadata().max_rows()!=1
+-                || config.executor.metadata().max_input_tokens()!=1 || (config.gpu_greedy && config.executor.variable_graph_rows()!=16)) {
++                || config.executor.metadata().max_input_tokens()!=1 || (config.gpu_greedy && !matches!(config.executor.variable_graph_rows(),16|32))) {
+                 return Err(internal("V3 scheduler and prepared model geometry differ"));
+             }
+             if config.executor.vllm_smol_p128_batched_prefill()
+@@ -2230,7 +2230,7 @@ mod cuda_backend {
+                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
+                 )));
+             }
+-            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
++            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
+                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16
+             } else if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
+                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN
+@@ -2453,13 +2453,14 @@ mod cuda_backend {
+     enum VariableServingSession {
+         Eight(riley_runtime::llama::variable_session::OwnedVariableSession),
+         Sixteen(riley_runtime::llama::variable_session::OwnedVariableSession<16>),
++        ThirtyTwo(riley_runtime::llama::variable_session::OwnedVariableSession<32>),
+     }
+     impl VariableServingSession {
+         fn execute(&mut self,authority:&riley_scheduler::AuthorizedExecution<'_>,gpu_greedy:bool,workspace:&mut Vec<u32>)->Result<riley_scheduler::execution::DownloadedLlamaIteration,riley_scheduler::execution::IterationExecutionFailure>{
+-            match self {Self::Eight(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g),Self::Sixteen(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)}}
++            match self {Self::Eight(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g),Self::Sixteen(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)},Self::ThirtyTwo(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)}}
+         }
+-        fn confirm_scheduler_commit(&mut self,id:u64)->riley_runtime::llama::multi_descriptor::Result<()>{match self{Self::Eight(g)=>g.confirm_scheduler_commit(id),Self::Sixteen(g)=>g.confirm_scheduler_commit(id)}}
+-        fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close()}}
++        fn confirm_scheduler_commit(&mut self,id:u64)->riley_runtime::llama::multi_descriptor::Result<()>{match self{Self::Eight(g)=>g.confirm_scheduler_commit(id),Self::Sixteen(g)=>g.confirm_scheduler_commit(id),Self::ThirtyTwo(g)=>g.confirm_scheduler_commit(id)}}
++        fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close(),Self::ThirtyTwo(g)=>g.close()}}
+     }
+ 
+     struct CudaBackend {
+@@ -2555,7 +2556,7 @@ mod cuda_backend {
+             }
+             let use_variable=resources.executor.config().variable_graph();
+             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
+-                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || (resources.gpu_greedy && resources.executor.config().variable_graph_rows()!=16)) {
++                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || (resources.gpu_greedy && !matches!(resources.executor.config().variable_graph_rows(),16|32))) {
+                 return Err(internal("V3 requires graph policy require, capacity1/2/4/8/16/32; GPU greedy requires sixteen-row graphs"));
+             }
+             let supported = use_variable || resources.executor.supports_owned_decode_graph();
+@@ -2570,7 +2571,7 @@ mod cuda_backend {
+                 && resources.executor.config().vllm_smol_p128_batched_prefill()
+                 && resources.scheduler.config().max_active_sequences > 1;
+             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
+-                let graph=if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
++                let graph=if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
+                 (None,None,None,Some(graph))
+             } else if use_multi {
+@@ -2595,7 +2596,7 @@ mod cuda_backend {
+                 !use_graph,
+                 !use_graph,
+                 decode_graph.as_ref().map_or(
+-                    if use_variable { "variable-smol-v3" } else if use_multi {
++                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(_))=>"variable-smol-v5",Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
+                         "vllm-smol-p128-multi-v1"
+                     } else {
+                         "existing"
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index d8ef886..13153ef 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -46,7 +46,7 @@ serve options:
+   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+-  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4
++  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5
+   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+@@ -90,6 +90,7 @@ struct ServeOptions {
+     shared_rows_graph: bool,
+     variable_graph: bool,
+     variable_graph16: bool,
++    variable_graph32: bool,
+     max_weight_bytes: u64,
+     shutdown_on_stdin: bool,
+     c02_runtime_config: Option<C02RuntimeConfigOptions>,
+@@ -367,14 +368,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+             "--graph-numerics" => {
+                 let value = next_value(&mut arguments, "--graph-numerics")?;
+                 let enabled = match value.to_str() {
+-                    Some("existing") => (false, false, false, false),
+-                    Some("vllm-smol-p128-v1") => (true, false, false, false),
+-                    Some("shared-smol-p128-v1") => (true, true, false, false),
+-                    Some("variable-smol-v3") => (false, false, true, false),
+-                    Some("variable-smol-v4") => (false, false, true, true),
++                    Some("existing") => (false, false, false, false, false),
++                    Some("vllm-smol-p128-v1") => (true, false, false, false, false),
++                    Some("shared-smol-p128-v1") => (true, true, false, false, false),
++                    Some("variable-smol-v3") => (false, false, true, false, false),
++                    Some("variable-smol-v4") => (false, false, true, true, false),
++                    Some("variable-smol-v5") => (false, false, true, false, true),
+                     _ => {
+                         return Err(
+-                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3 or variable-smol-v4".to_owned()
++                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3, variable-smol-v4 or variable-smol-v5".to_owned()
+                         );
+                     }
+                 };
+@@ -506,7 +508,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+     )?;
+     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
+ 
+-    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16) = graph_numerics.unwrap_or((false, false, false, false));
++    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32) = graph_numerics.unwrap_or((false, false, false, false, false));
+     if (vllm_smol_p128_graph || variable_graph)
+         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
+     {
+@@ -540,6 +542,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
+         shared_rows_graph,
+         variable_graph,
+         variable_graph16,
++        variable_graph32,
+         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+         shutdown_on_stdin,
+         c02_runtime_config,
+@@ -925,8 +928,8 @@ fn run_serve(
+     }
+     if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
+         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
+-        || (options.sampling_backend!=SamplingBackendMode::Cpu && !options.variable_graph16)) {
+-        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4".to_owned());
++        || (options.sampling_backend!=SamplingBackendMode::Cpu && !options.variable_graph16 && !options.variable_graph32)) {
++        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4 or variable-smol-v5".to_owned());
+     }
+     if options.vllm_smol_p128_graph
+         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
+@@ -976,7 +979,7 @@ fn run_serve(
+             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
+         ));
+     }
+-    if options.variable_graph && max_sequence_tokens>4096 {return Err("variable-smol-v3 context must not exceed4096".to_owned());}
++    if options.variable_graph && max_sequence_tokens>4096 {return Err("variable graph context must not exceed4096".to_owned());}
+     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
+     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
+     let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
+@@ -1066,7 +1069,7 @@ fn run_serve(
+             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+         }
+     };
+-    let executor = if options.variable_graph16 {
++    let executor = if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+         executor.with_variable_graph16()
+     } else if options.variable_graph {
+         executor.with_variable_graph()
+@@ -2943,6 +2946,13 @@ mod tests {
+         }
+     }
+     #[test]
++    fn variable_v5_cli_selects_thirtytwo_row_profile_explicitly(){
++        for capacity in ["1","4","8","16","32"] {
++            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v5","--execution-graph-policy","require","--max-active-sequences",capacity,"--batch-token-budget","512","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
++            let super::CliCommand::Serve(options)=result else{panic!("serve")};assert!(options.variable_graph&&options.variable_graph32&&!options.variable_graph16);
++        }
++    }
++    #[test]
+     fn c02_generation_audit_v2_schema_is_narrow_and_canonical() {
+         let schema: serde_json::Value = serde_json::from_str(include_str!(
+             "../../../benchmarks/release/candidates/c02-generation-audit-v2.schema.json"
+@@ -3881,6 +3891,7 @@ mod tests {
+                 shared_rows_graph: false,
+                 variable_graph: false,
+                 variable_graph16: false,
++                variable_graph32: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4271,6 +4282,7 @@ mod tests {
+                 shared_rows_graph: false,
+                 variable_graph: false,
+                 variable_graph16: false,
++                variable_graph32: false,
+                 max_weight_bytes: 4096,
+                 shutdown_on_stdin: true,
+                 c02_runtime_config: None,
+@@ -4428,6 +4440,7 @@ mod tests {
+                 shared_rows_graph: false,
+                 variable_graph: false,
+                 variable_graph16: false,
++                variable_graph32: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+@@ -4552,6 +4565,7 @@ mod tests {
+                 shared_rows_graph: false,
+                 variable_graph: false,
+                 variable_graph16: false,
++                variable_graph32: false,
+                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                 shutdown_on_stdin: false,
+                 c02_runtime_config: None,
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index 0ecbf70..09564fc 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2752,6 +2752,14 @@ RileyCudaStatus riley_cuda_graph_resources_record_v4_shared_greedy(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_v5_shared(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
++    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
++    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
++RileyCudaStatus riley_cuda_graph_resources_record_v5_shared_greedy(
++    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
++    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
++    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+ 
+ RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
+     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+diff --git a/kernels/src/compact_shared_result.cuh b/kernels/src/compact_shared_result.cuh
+index 314153c..515b4bb 100644
+--- a/kernels/src/compact_shared_result.cuh
++++ b/kernels/src/compact_shared_result.cuh
+@@ -82,12 +82,12 @@ __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint
+   result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
+   for(int i=0;i<8;++i)result[20+i]=m[16+i];
+   result[28]=shape[1];result[29]=shape[10];result[30]=m[8];
+-  result[31]=(Rows==8?0x33524d52U:0x34524d52U)^0x80000000U;
++  result[31]=(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U))^0x80000000U;
+  }
+ }
+ template<uint32_t Rows>
+ inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const void* logits,const uint32_t* status,void* partial,void* output){
+- static_assert(Rows==8||Rows==16,"wire capacity");
++ static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
+  if(!metadata||!logits||!status||!partial||!output)return cudaErrorInvalidValue;
+  parts<Rows><<<Rows*24,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const __nv_bfloat16*>(logits),static_cast<GreedyPartial*>(partial));
+  auto e=cudaGetLastError();if(e!=cudaSuccess)return e;
+diff --git a/kernels/src/decode_shared32.cuh b/kernels/src/decode_shared32.cuh
+new file mode 100644
+index 0000000..cc16010
+--- /dev/null
++++ b/kernels/src/decode_shared32.cuh
+@@ -0,0 +1,95 @@
++#pragma once
++#include "decode_tiled.cuh"
++// One MMA shares weights across up to thirty-two independent decode rows.
++// Live rows are supplied by validated metadata; inactive rows never load/store.
++template<int N,int K,int Interval,bool Tiled,bool Compact=false>
++__device__ __forceinline__ void shared32_projection_compute(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows,int column,int chunk_index){
++ const uint32_t rows=*live_rows;if(rows<1||rows>32)return;
++ const int lane=threadIdx.x%32,g=lane/4,t=lane%4,base=column*8;
++ constexpr int Chunk=Interval>0?Interval:K;
++ int begin=chunk_index*Chunk,end=min(begin+Chunk,K);float d[2][4]={};
++ const auto* xp=x+g*K+begin+2*t;
++ const auto* wp=Tiled?w+column*(K/16)*128+(begin/16)*128+lane*2:w+(base+g)*K+begin+2*t;
++ #pragma unroll 1
++ for(int depth=0;depth<Chunk;depth+=64){
++  uint32_t a[2][4],aa[2][4],a1[2][4],a3[2][4],b[4],bb[4];
++  #pragma unroll
++  for(int step=0;step<4;++step){
++   int offset=depth+step*16;bool valid=begin+offset<end;
++   #pragma unroll
++   for(int tile=0;tile<2;++tile){
++    const auto* p=xp+tile*16*K;int row=g+tile*16;
++    a[tile][step]=valid&&row<rows?*reinterpret_cast<const uint32_t*>(p+offset):0;
++    aa[tile][step]=valid&&row<rows?*reinterpret_cast<const uint32_t*>(p+offset+8):0;
++    a1[tile][step]=valid&&row+8<rows?*reinterpret_cast<const uint32_t*>(p+8*K+offset):0;
++    a3[tile][step]=valid&&row+8<rows?*reinterpret_cast<const uint32_t*>(p+8*K+offset+8):0;
++   }
++   if constexpr(Tiled){b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128):0;bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128+64):0;}
++   else{b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset):0;bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset+8):0;}
++  }
++  #pragma unroll
++  for(int step=0;step<4;++step)if(begin+depth+step*16<end){
++   #pragma unroll
++   for(int tile=0;tile<2;++tile)riley_prefill_shape::mma(d[tile],a[tile][step],a1[tile][step],aa[tile][step],a3[tile][step],b[step],bb[step]);
++  }
++ }
++ #pragma unroll
++ for(int tile=0;tile<2;++tile)for(int half=0;half<2;++half){int row=tile*16+g+half*8;if(row>=rows)continue;
++  for(int j=0;j<2;++j){auto value=__float2bfloat16_rn(d[tile][half*2+j]);
++   if constexpr(Interval>0)parts[(chunk_index*32+row)*N+base+2*t+j]=__bfloat162float(value);
++   else if constexpr(Compact)out[row*8+2*t+j]=value;
++   else out[row*N+base+2*t+j]=value;
++  }
++ }
++}
++
++template<int N,int K,int Interval,bool Tiled>
++__global__ void shared32_projection_parts(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows){
++ shared32_projection_compute<N,K,Interval,Tiled>(x,w,parts,out,live_rows,blockIdx.x,blockIdx.y);
++}
++// Independent projections share one dispatch while retaining each MMA order.
++__global__ void shared32_gate_up(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* g,__nv_bfloat16* u,const uint32_t* live){
++ shared32_projection_compute<1536,576,0,true>(x,blockIdx.y?up:gate,nullptr,blockIdx.y?u:g,live,blockIdx.x,0);
++}
++__global__ void shared32_qkv_parts(const __nv_bfloat16* x,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,float* parts,const uint32_t* live){
++ int col=blockIdx.x;
++ if(col<72)shared32_projection_compute<576,576,192,false>(x,q,parts,nullptr,live,col,blockIdx.y);
++ else shared32_projection_compute<192,576,192,false>(x,col<96?k:v,parts+3*32*576+(col<96?0:3*32*192),nullptr,live,col<96?col-72:col-96,blockIdx.y);
++}
++__global__ void shared32_qkv_merge(const float* parts,__nv_bfloat16* q,__nv_bfloat16* k,__nv_bfloat16* v,const uint32_t* live){
++ uint32_t rows=*live;if(rows<1||rows>32)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=rows*960)return;
++ int row=i/960,col=i%960,n=col<576?576:192;
++ const float* src=col<576?parts:parts+3*32*576+(col<768?0:3*32*192);
++ __nv_bfloat16* out=col<576?q:(col<768?k:v);col=col<576?col:(col<768?col-576:col-768);
++ float value=0.;for(int c=0;c<3;++c)value+=src[c*32*n+row*n+col];out[row*n+col]=__float2bfloat16_rn(value);
++}
++inline void enqueue_shared32_qkv(cudaStream_t s,const __nv_bfloat16* x,const __nv_bfloat16* qw,const __nv_bfloat16* kw,const __nv_bfloat16* vw,__nv_bfloat16* q,__nv_bfloat16* k,__nv_bfloat16* v,float* parts,const uint32_t* active){
++ shared32_qkv_parts<<<dim3(120,3),32,0,s>>>(x,qw,kw,vw,parts,active);
++ shared32_qkv_merge<<<120,256,0,s>>>(parts,q,k,v,active);
++}
++
++template<int N,int K,int Interval>
++__global__ void shared32_projection_merge(const float* parts,__nv_bfloat16* out,const uint32_t* live_rows){
++ uint32_t rows=*live_rows;if(rows<1||rows>32)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=rows*N)return;float value=0.;
++ #pragma unroll
++ for(int chunk=0;chunk<(K+Interval-1)/Interval;++chunk)value+=parts[chunk*32*N+i];
++ out[i]=__float2bfloat16_rn(value);
++}
++template<int N,int K,int Interval,bool Tiled>
++inline void enqueue_shared32_projection(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* out,float* parts,const uint32_t* live_rows){
++ constexpr int chunk=Interval>0?Interval:K;
++ shared32_projection_parts<N,K,Interval,Tiled><<<dim3(N/8,(K+chunk-1)/chunk),32,0,stream>>>(x,w,parts,out,live_rows);
++ if constexpr(Interval>0)shared32_projection_merge<N,K,Interval><<<(32*N+255)/256,256,0,stream>>>(parts,out,live_rows);
++}
++
++// Two warps compute independent gate/up tiles, then share rounded results.
++template<bool Tiled>
++__global__ void shared32_gate_up_swiglu(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,const uint32_t* live){
++ uint32_t rows=*live;if(rows<1||rows>32)return;
++ int warp=threadIdx.x/32;__shared__ __nv_bfloat16 partials[2][256];
++ shared32_projection_compute<1536,576,0,Tiled,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
++ __syncthreads();
++ for(int i=threadIdx.x;i<256;i+=blockDim.x){int row=i/8,col=i%8;if(row<rows){float g=__bfloat162float(partials[0][i]);out[row*1536+blockIdx.x*8+col]=__float2bfloat16_rn((g/(1.F+expf(-g)))*__bfloat162float(partials[1][i]));}}
++}
+diff --git a/kernels/src/decode_shared32_attention.cuh b/kernels/src/decode_shared32_attention.cuh
+new file mode 100644
+index 0000000..bad5864
+--- /dev/null
++++ b/kernels/src/decode_shared32_attention.cuh
+@@ -0,0 +1,75 @@
++#pragma once
++#include "decode_shape.cuh"
++namespace riley_shared32_attention {
++
++// Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
++__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/9;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ q+=row*576;result+=row*9*4096;
++ int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
++ if(count<1 || count>4096)return;
++ int lane=threadIdx.x,g=lane/4,t=lane%4;
++ uint32_t query[4],query_hi[4];
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){auto* qp=q+head*64+depth*16;query[depth]=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);query_hi[depth]=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);}
++ for(;token<count;token+=gridDim.x*8){
++ float d[4]={};uint32_t key[4],key_hi[4];
++ bool valid=token+g<count;int kb=valid?riley_prefill_shape::cache_index(token+g,head/3,0,pages):0;
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){key[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
++ #pragma unroll
++ for(int depth=0;depth<4;++depth)riley_prefill_shape::mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
++ if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
++ }
++}
++// Independent output eight-column groups share the precomputed score buffer.
++// Tile order, lane-local denominator and BF16 probability rounding are unchanged.
++__global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/9;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ scores+=row*9*4096;out+=row*576;
++ int count=shape[1]+1,head=blockIdx.y%9,block=blockIdx.x,lane=threadIdx.x,g=lane/4,t=lane%4;
++ if(count<1||count>4096)return;
++ __shared__ __nv_bfloat16 probs[128];
++ __shared__ float exponentials[128];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[head*4096+begin+i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++  // Preserve unrounded exponentials for the original lane-local sum order.
++  for(int i=lane;i<128;i+=32){float value=i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.;exponentials[i]=value;probs[i]=__float2bfloat16_rn(value);}
++  __syncwarp();
++  float local_den=den*alpha;
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
++  den=local_den;maximum=mx;__syncwarp();
++  for(int j=0;j<4;++j)accum[j]*=alpha;
++  #pragma unroll 1
++  for(int token=begin;token<end;token+=64){
++   uint32_t pa[4],paa[4],vb[4],vbb[4];
++   #pragma unroll
++   for(int part=0;part<4;++part){
++    int at=token+part*16,pi=at-begin;bool live=at<end;
++    pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
++    paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
++    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
++    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
++    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
++    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
++   }
++   #pragma unroll
++   for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
++  }
++  __syncwarp();
++ }
++ den+=__shfl_xor_sync(0xffffffff,den,2);den+=__shfl_xor_sync(0xffffffff,den,1);float inverse=1.0F/den;
++ if(g==0)for(int j=0;j<2;++j)out[head*64+block*8+2*t+j]=__float2bfloat16_rn(accum[j]*inverse);
++}
++
++inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context){
++ scores<<<dim3(min((context+7)/8,32u),288),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
++ values<<<dim3(8,288),32,0,stream>>>(scratch,v,out,shape,pages,live_rows);
++}
++}
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+new file mode 100644
+index 0000000..1a60d0c
+--- /dev/null
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -0,0 +1,80 @@
++#pragma once
++#include "prefill_shape_model.cuh"
++#include "decode_shared32.cuh"
++#include "decode_shared32_attention.cuh"
++// Internal model sequence: caller validates all row identities, context/page
++// ownership and buffer extents before enqueue. Final hidden rows stay in b(1).
++namespace riley_shared32_model {
++__global__ void embedding(const __nv_bfloat16* weights,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* active,uint32_t* status){
++ uint32_t row=blockIdx.x,rows=*active;if(!rows||rows>32){if(threadIdx.x==0)atomicOr(status,2u);return;}if(row>=rows)return;
++ uint32_t token=shape[row*416];if(token>=49152){if(threadIdx.x==0)atomicOr(status,1u);return;}
++ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)out[row*576+i]=weights[token*576+i];
++}
++__global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,
++ __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,
++ const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++ const uint32_t rows=*active,row=blockIdx.y;if(!rows||rows>32||row>=rows)return;
++ pages+=row*416;shape+=row*416;
++ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;
++ const uint32_t pos=shape[1];int head=i/32,dim=i%32;
++ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++ const __nv_bfloat16* src=head<9?q+row*576:k+row*192;
++ int base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
++ const __nv_bfloat16 first=__float2bfloat16_rn(a*c-b*s),second=__float2bfloat16_rn(b*c+a*s);
++ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++ else{
++  uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
++  keys[destination]=first;keys[destination+32]=second;
++  values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
++ }
++}
++
++__device__ __forceinline__ __nv_bfloat16 qkv_rounded(const float* p,int n,int row,int col){
++ float value=0.;for(int chunk=0;chunk<3;++chunk)value+=p[chunk*32*n+row*n+col];return __float2bfloat16_rn(value);
++}
++__global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++ uint32_t rows=*active,row=blockIdx.y;if(rows<1||rows>32||row>=rows)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=384)return;
++ shape+=row*416;pages+=row*416;uint32_t pos=shape[1];int head=i/32,dim=i%32;
++ const float* src=head<9?parts:parts+3*32*576;int n=head<9?576:192,base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(qkv_rounded(src,n,row,base+dim)),b=__bfloat162float(qkv_rounded(src,n,row,base+dim+32));
++ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++ auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
++ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++ else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
++}
++// Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
++__global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
++ uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
++ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
++}
++inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false){
++ if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
++ for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
++ for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
++ auto b=[&](int i){return static_cast<__nv_bfloat16*>(scratch[i]);};
++ auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
++ const auto* meta=static_cast<const uint32_t*>(metadata);auto* shape=meta+32;auto* pages=meta+64;auto* active=meta+5;auto* pointwise=meta+3;
++ auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
++ embedding<<<32,256,0,stream>>>(w(0),b(0),shape,active,status);
++ if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
++ for(int layer=0;layer<30;++layer){int base=3+9*layer;
++ if(layer==0)riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,32);
++ shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
++ auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
++ auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
++ qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
++ enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
++ riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
++ if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
++ else shared32_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
++ if(tiled)enqueue_shared32_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
++ else enqueue_shared32_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
++ riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
++ }
++ clear_inactive_hidden<<<32,256,0,stream>>>(b(1),active);
++ return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/decode_shared32_result.cuh b/kernels/src/decode_shared32_result.cuh
+new file mode 100644
+index 0000000..cd40604
+--- /dev/null
++++ b/kernels/src/decode_shared32_result.cuh
+@@ -0,0 +1,35 @@
++#pragma once
++#include <cuda_runtime.h>
++#include <math_constants.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++namespace riley_shared32_result {
++constexpr uint32_t record_bytes=98432,batch_bytes=32*record_bytes;
++// Each record follows descriptor row order; its output slot is explicit.
++template<uint32_t Magic>
++__global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint32_t* status,uint8_t* bytes){
++ uint32_t row=blockIdx.x,active=m[5];if(active<1||active>32||row>=active)return;
++ auto* shape=m+32+row*416;auto* result=reinterpret_cast<uint32_t*>(bytes+row*record_bytes);
++ auto* out=reinterpret_cast<__nv_bfloat16*>(bytes+row*record_bytes+128);
++ uint32_t tid=threadIdx.x;bool published=shape[11]!=0xffffffffu;
++ __shared__ float maxima[256];__shared__ uint32_t tokens[256],errors[256];
++ float maximum=-CUDART_INF_F;uint32_t token=0,failed=0;
++ for(uint32_t i=tid;i<49152;i+=256){auto v=published?logits[row*49152+i]:__float2bfloat16_rn(0.F);out[i]=v;float f=__bfloat162float(v);failed|=!isfinite(f);if(f>maximum||(f==maximum&&i<token)){maximum=f;token=i;}}
++ maxima[tid]=maximum;tokens[tid]=token;errors[tid]=failed;__syncthreads();
++ for(uint32_t step=128;step;step>>=1){if(tid<step){float other=maxima[tid+step];uint32_t id=tokens[tid+step];if(other>maxima[tid]||(other==maxima[tid]&&id<tokens[tid])){maxima[tid]=other;tokens[tid]=id;}errors[tid]|=errors[tid+step];}__syncthreads();}
++ if(tid==0){
++ result[0]=*status;result[1]=published;result[2]=published?tokens[0]:0;result[3]=errors[0];
++ for(int i=0;i<6;++i)result[4+i]=m[10+i];
++ for(int i=0;i<4;++i)result[10+i]=shape[12+i];
++ result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
++ for(int i=0;i<8;++i)result[20+i]=m[16+i];
++ result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=Magic;
++ }
++}
++template<uint32_t Magic=0x35524d52>
++inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const __nv_bfloat16* logits,const uint32_t* status,void* result){
++ if(!metadata||!logits||!status||!result)return cudaErrorInvalidValue;
++ auto e=cudaMemsetAsync(result,0,batch_bytes,stream);if(e!=cudaSuccess)return e;
++ finish<Magic><<<32,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 1b20767..8211106 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2409,4 +2409,8 @@ cudaError_t enqueue_compiled_v4_shared_model(cudaStream_t,void*const*,const void
+ cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v4_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v4_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
++cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
++cudaError_t enqueue_compiled_v5_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v5_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
+ }
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 8c4ac93..f753846 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1370,7 +1370,7 @@ RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
+     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+     RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
+     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
+-  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8&&rows!=16) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
++  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8&&rows!=16&&rows!=32) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
+     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+         RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "requires shared-row algorithm21 with exact M/N/K and no workspace");
+   *state = RileyCudaCanonicalGemmBf16GraphState{};
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index b9b5d7d..57c8819 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -341,3 +341,20 @@ cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t s,const void* m,const
+  return riley_shared16_result::enqueue<0x34524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+ }
+ }
++
++#include "decode_shared32_model.cuh"
++#include "decode_shared32_result.cuh"
++namespace riley_cuda_internal {
++cudaError_t enqueue_compiled_v5_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
++ return enqueue_v3_prefill_model<32>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
++}
++cudaError_t enqueue_compiled_v5_result_header(cudaStream_t stream,const void* metadata,void* status,const void* publish,const void* argmax) noexcept {
++ v3_prefill_result_header<0x35524d52><<<1,32,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<uint32_t*>(status),static_cast<const uint32_t*>(publish),static_cast<const uint32_t*>(argmax));return cudaGetLastError();
++}
++cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
++ return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled);
++}
++cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
++ return riley_shared32_result::enqueue<0x35524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
++}
++}
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index c1b704d..a5c0d9d 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -360,7 +360,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+   if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
+     return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   if(r->v3_prefill_capacity){
+-    if(!(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8)))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++    if(!(r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
+     if((!r->v3_shared&&value(20)!=1)||value(136)>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
+       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+@@ -1217,8 +1217,8 @@ static RileyCudaStatus record_variable_shared(
+  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+- static_assert(Rows==8||Rows==16,"wire capacity");
+- static_assert(!Compact||Rows==16,"compact capture currently requires sixteen rows");
++ static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
++ static_assert(!Compact||Rows==16||Rows==32,"compact capture currently requires sixteen rows");
+  constexpr uint64_t request_bytes=128+Rows*1664+4096;
+  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
+@@ -1258,7 +1258,7 @@ static RileyCudaStatus record_variable_shared(
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+   auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
+   if(row_capacity==1){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:enqueue_compiled_v4_shared_model)(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:enqueue_compiled_v5_shared_model))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+    if(compact){
+@@ -1266,12 +1266,12 @@ static RileyCudaStatus record_variable_shared(
+     if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+     return result;
+    }
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_result:enqueue_compiled_v4_shared_result)(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_result:(Rows==16?enqueue_compiled_v4_shared_result:enqueue_compiled_v5_shared_result))(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
+    return result;
+   }
+   if(!compact&&result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:enqueue_compiled_v4_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:(Rows==16?enqueue_compiled_v4_prefill_model:enqueue_compiled_v5_prefill_model))(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(compact){
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact prefill validation");
+@@ -1279,7 +1279,7 @@ static RileyCudaStatus record_variable_shared(
+    return result;
+   }
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_result_header:enqueue_compiled_v4_result_header)(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_result_header:(Rows==16?enqueue_compiled_v4_result_header:enqueue_compiled_v5_result_header))(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[25]->device_data,d[18]->device_data,128,cudaMemcpyDeviceToDevice);
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(static_cast<uint8_t*>(d[25]->device_data)+128,d[20]->device_data,98304,cudaMemcpyDeviceToDevice);
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
+@@ -1318,3 +1318,15 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v4_shared_greedy(
+  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+  return record_variable_shared<16,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+ }
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v5_shared(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<32>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
++extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v5_shared_greedy(
++ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
++ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
++ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
++ return record_variable_shared<32,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
++}
+diff --git a/kernels/src/prefill_shape_model.cuh b/kernels/src/prefill_shape_model.cuh
+index 091e3a6..1da33c9 100644
+--- a/kernels/src/prefill_shape_model.cuh
++++ b/kernels/src/prefill_shape_model.cuh
+@@ -12,7 +12,7 @@ template<uint32_t WireRows=8>
+ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scratch,const void*const* weights,
+  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
+  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
+- static_assert(WireRows==8||WireRows==16,"wire capacity");
++ static_assert(WireRows==8||WireRows==16||WireRows==32,"wire capacity");
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!publish||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
+diff --git a/kernels/src/prefill_shape_packet.hpp b/kernels/src/prefill_shape_packet.hpp
+index ebf9805..d82906c 100644
+--- a/kernels/src/prefill_shape_packet.hpp
++++ b/kernels/src/prefill_shape_packet.hpp
+@@ -5,10 +5,10 @@
+ // complete page ownership, catalog and replay order before GPU dispatch.
+ template<uint32_t Rows>
+ inline bool valid_variable_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
+- static_assert(Rows==8||Rows==16,"unsupported wire capacity");
++ static_assert(Rows==8||Rows==16||Rows==32,"unsupported wire capacity");
+  constexpr uint32_t header=128,stride=1664,tokens=header+Rows*stride,extent=tokens+4096;
+- constexpr uint32_t magic=Rows==8?0x33444d52:0x34444d52,version=Rows==8?3:4;
+- if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||(Rows==16&&capacity==16)))return false;
++ constexpr uint32_t magic=Rows==8?0x33444d52:(Rows==16?0x34444d52:0x35444d52),version=Rows==8?3:(Rows==16?4:5);
++ if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||(Rows>=16&&capacity==16)||(Rows==32&&capacity==32)))return false;
+  auto u32=[&](uint32_t at){uint32_t v;std::memcpy(&v,p+at,4);return v;};
+  auto u64=[&](uint32_t at){uint64_t v;std::memcpy(&v,p+at,8);return v;};
+  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
+@@ -40,3 +40,5 @@ inline bool valid_prefill_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t
+ inline bool valid_v4_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
+  return valid_variable_shape_packet<16>(p,bytes,physical,capacity);
+ }
++
++inline bool valid_v5_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32>(p,bytes,physical,capacity);}
+diff --git a/kernels/tests/shared32_primitive_probe.cu b/kernels/tests/shared32_primitive_probe.cu
+new file mode 100644
+index 0000000..c311ac8
+--- /dev/null
++++ b/kernels/tests/shared32_primitive_probe.cu
+@@ -0,0 +1,61 @@
++#include "decode_shared16.cuh"
++#include "decode_shared16_attention.cuh"
++#include "decode_shared32.cuh"
++#include "decode_shared32_attention.cuh"
++#include <cstdio>
++#include <cstdlib>
++#include <vector>
++#define OK(x) do{auto e=(x);if(e!=cudaSuccess){fprintf(stderr,"line %d %s\n",__LINE__,cudaGetErrorString(e));exit(2);}}while(0)
++template<class T>T* alloc(size_t n){T*p;OK(cudaMallocManaged(&p,n*sizeof(T)));return p;}
++void exact(const __nv_bfloat16*a,const __nv_bfloat16*b,int valid,int size,const char*kind,int rows){for(int i=0;i<size+16;++i)if(__bfloat16_as_ushort(b[i])!=(i<valid?__bfloat16_as_ushort(a[i]):0x4123)){fprintf(stderr,"%s rows=%d mismatch=%d\n",kind,rows,i);exit(3);}}
++template<class F>void timing(const char*kind,int rows,int context,F launch){
++ cudaStream_t stream;OK(cudaStreamCreate(&stream));cudaEvent_t a,b;OK(cudaEventCreate(&a));OK(cudaEventCreate(&b));
++ for(int pair=0;pair<4;++pair)for(int order=0;order<2;++order){bool candidate=(pair+order)%2;cudaGraph_t graph;cudaGraphExec_t exec;
++ OK(cudaStreamBeginCapture(stream,cudaStreamCaptureModeThreadLocal));launch(candidate,stream);OK(cudaStreamEndCapture(stream,&graph));OK(cudaGraphInstantiate(&exec,graph,0,0,0));
++ for(int i=0;i<40;++i)OK(cudaGraphLaunch(exec,stream));OK(cudaStreamSynchronize(stream));
++ OK(cudaEventRecord(a,stream));for(int i=0;i<200;++i)OK(cudaGraphLaunch(exec,stream));OK(cudaEventRecord(b,stream));OK(cudaEventSynchronize(b));float ms;OK(cudaEventElapsedTime(&ms,a,b));printf("{\"kind\":\"%s\",\"rows\":%d,\"context\":%d,\"pair\":%d,\"candidate\":%s,\"us\":%.6f}\n",kind,rows,context,pair,candidate?"true":"false",ms*5);
++ OK(cudaGraphExecDestroy(exec));OK(cudaGraphDestroy(graph));}
++ OK(cudaEventDestroy(a));OK(cudaEventDestroy(b));OK(cudaStreamDestroy(stream));
++}
++void live_set(uint32_t*l,int rows){l[0]=rows;l[1]=rows>=1&&rows<=32?min(rows,16):0;l[2]=rows>16&&rows<=32?rows-16:0;}
++template<int N,int K,int I,bool Tiled>void projection(bool bench){
++ auto*x=alloc<__nv_bfloat16>(32*K);auto*w=alloc<__nv_bfloat16>(N*K);auto*tw=alloc<__nv_bfloat16>(N*K);auto*a=alloc<__nv_bfloat16>(32*N);auto*b=alloc<__nv_bfloat16>(32*N+16);auto*p=alloc<float>(8*32*N);auto*l=alloc<uint32_t>(3);
++ auto launch=[&](bool candidate,cudaStream_t stream){if(candidate)enqueue_shared32_projection<N,K,I,Tiled>(stream,x,Tiled?tw:w,b,p,l);else{enqueue_shared16_projection<N,K,I,Tiled>(stream,x,Tiled?tw:w,a,p,l+1);if(l[0]>16)enqueue_shared16_projection<N,K,I,Tiled>(stream,x+16*K,Tiled?tw:w,a+16*N,p,l+2);}};
++ for(int seed:{1,17,99}){
++ for(int i=0;i<32*K;++i)x[i]=__float2bfloat16_rn(float((i*17+seed)%127-63)/128);
++ for(int i=0;i<N*K;++i)w[i]=__float2bfloat16_rn(float((i*13+seed)%251-125)/256);
++ for(int n=0;n<N;n+=8)for(int k=0;k<K;k+=16)for(int lane=0;lane<32;++lane)for(int hi=0;hi<2;++hi)for(int z=0;z<2;++z)tw[((n/8)*(K/16)+k/16)*128+hi*64+lane*2+z]=w[(n+lane/4)*K+k+hi*8+2*(lane%4)+z];
++ for(int rows=0;rows<=33;++rows){live_set(l,rows);for(int i=0;i<32*N+16;++i)b[i]=__ushort_as_bfloat16(0x4123);if(rows>=1&&rows<=32)launch(false,0);launch(true,0);OK(cudaDeviceSynchronize());exact(a,b,rows>=1&&rows<=32?rows*N:0,32*N,"projection",rows);}
++ }
++ if(bench){char name[80];snprintf(name,sizeof(name),"projection-%d-%d-%d-%d",N,K,I,Tiled);for(int rows:{4,8,16,24,32}){live_set(l,rows);OK(cudaDeviceSynchronize());timing(name,rows,0,launch);}}
++ else printf("projection N=%d K=%d interval=%d seeds=3 active0..33 exact guards=true\n",N,K,I);
++ for(void*z:{(void*)x,(void*)w,(void*)tw,(void*)a,(void*)b,(void*)p,(void*)l})OK(cudaFree(z));
++}
++void gate(bool bench){
++ auto*x=alloc<__nv_bfloat16>(32*576);auto*g=alloc<__nv_bfloat16>(1536*576);auto*u=alloc<__nv_bfloat16>(1536*576);auto*a=alloc<__nv_bfloat16>(32*1536);auto*b=alloc<__nv_bfloat16>(32*1536+16);auto*l=alloc<uint32_t>(3);
++ for(int i=0;i<32*576;++i)x[i]=__float2bfloat16_rn(float(i*17%127-63)/128);for(int i=0;i<1536*576;++i){g[i]=__float2bfloat16_rn(float(i*13%251-125)/256);u[i]=__float2bfloat16_rn(float(i*7%127-63)/256);}
++ auto launch=[&](bool candidate,cudaStream_t stream){if(candidate)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(x,g,u,b,l);else{shared16_gate_up_swiglu<true><<<192,64,0,stream>>>(x,g,u,a,l+1);if(l[0]>16)shared16_gate_up_swiglu<true><<<192,64,0,stream>>>(x+16*576,g,u,a+16*1536,l+2);}};
++ for(int rows=0;rows<=33;++rows){live_set(l,rows);for(int i=0;i<32*1536+16;++i)b[i]=__ushort_as_bfloat16(0x4123);if(rows>=1&&rows<=32)launch(false,0);launch(true,0);OK(cudaDeviceSynchronize());exact(a,b,rows>=1&&rows<=32?rows*1536:0,32*1536,"gate",rows);}
++ if(bench)for(int rows:{4,8,16,24,32}){live_set(l,rows);OK(cudaDeviceSynchronize());timing("gate-up-swiglu",rows,0,launch);}else printf("gate active0..33 exact guards=true\n");
++ for(void*z:{(void*)x,(void*)g,(void*)u,(void*)a,(void*)b,(void*)l})OK(cudaFree(z));
++}
++void attention(bool bench){
++ auto*q=alloc<__nv_bfloat16>(32*576);auto*k=alloc<__nv_bfloat16>(8192*16*192);auto*v=alloc<__nv_bfloat16>(8192*16*192);auto*a=alloc<__nv_bfloat16>(32*576);auto*b=alloc<__nv_bfloat16>(32*576+16);auto*p=alloc<float>(32*9*4096);auto*shape=alloc<uint32_t>(32*416);auto*l=alloc<uint32_t>(3);
++ int counts[16]={1,16,17,127,128,129,2049,4096,2,15,73,255,256,398,1024,4095};
++ for(int i=0;i<32*576;++i)q[i]=__float2bfloat16_rn(float(i*7%127-63)/128);for(int i=0;i<8192*16*192;++i){k[i]=__float2bfloat16_rn(float(i*17%251-125)/256);v[i]=__float2bfloat16_rn(float(i*13%127-63)/64);}
++ for(int row=0;row<32;++row){shape[row*416+1]=counts[row%16]-1;for(int page=0;page<256;++page)shape[row*416+32+page]=row*256+(page*17+3)%256;}
++ auto launch=[&](bool candidate,cudaStream_t stream){if(candidate)riley_shared32_attention::enqueue(stream,q,k,v,b,p,shape,shape+32,l,4096);else{riley_shared16_attention::enqueue(stream,q,k,v,a,p,shape,shape+32,l+1,4096);if(l[0]>16)riley_shared16_attention::enqueue(stream,q+16*576,k,v,a+16*576,p,shape+16*416,shape+16*416+32,l+2,4096);}};
++ for(int rows=0;rows<=33;++rows){live_set(l,rows);for(int i=0;i<32*576+16;++i)b[i]=__ushort_as_bfloat16(0x4123);if(rows>=1&&rows<=32)launch(false,0);launch(true,0);OK(cudaDeviceSynchronize());exact(a,b,rows>=1&&rows<=32?rows*576:0,32*576,"attention",rows);}
++ if(bench)for(int count:{16,128,398,1024,4096,-1})for(int rows:{4,8,16,24,32}){live_set(l,rows);for(int row=0;row<32;++row)shape[row*416+1]=(count<0?counts[row%16]:count)-1;launch(false,0);launch(true,0);OK(cudaDeviceSynchronize());exact(a,b,rows*576,rows*576-16,"attention timing",rows);timing("attention",rows,count,launch);}else printf("attention active0..33 mixed contexts1..4096 disjoint permuted pages exact guards=true\n");
++ for(void*z:{(void*)q,(void*)k,(void*)v,(void*)a,(void*)b,(void*)p,(void*)shape,(void*)l})OK(cudaFree(z));
++}
++void qkv(bool bench){
++ auto*x=alloc<__nv_bfloat16>(32*576);auto*wq=alloc<__nv_bfloat16>(576*576);auto*wk=alloc<__nv_bfloat16>(192*576);auto*wv=alloc<__nv_bfloat16>(192*576);
++ auto*aq=alloc<__nv_bfloat16>(32*576);auto*ak=alloc<__nv_bfloat16>(32*192);auto*av=alloc<__nv_bfloat16>(32*192);auto*bq=alloc<__nv_bfloat16>(32*576+16);auto*bk=alloc<__nv_bfloat16>(32*192+16);auto*bv=alloc<__nv_bfloat16>(32*192+16);auto*p=alloc<float>(3*32*960);auto*l=alloc<uint32_t>(3);
++ for(int i=0;i<32*576;++i)x[i]=__float2bfloat16_rn(float(i*17%127-63)/128);for(int i=0;i<576*576;++i)wq[i]=__float2bfloat16_rn(float(i*13%251-125)/256);for(int i=0;i<192*576;++i){wk[i]=__float2bfloat16_rn(float(i*7%127-63)/128);wv[i]=__float2bfloat16_rn(float(i*11%251-125)/256);}
++ auto launch=[&](bool candidate,cudaStream_t stream){if(candidate)enqueue_shared32_qkv(stream,x,wq,wk,wv,bq,bk,bv,p,l);else{enqueue_shared16_qkv(stream,x,wq,wk,wv,aq,ak,av,p,l+1);if(l[0]>16)enqueue_shared16_qkv(stream,x+16*576,wq,wk,wv,aq+16*576,ak+16*192,av+16*192,p,l+2);}};
++ for(int rows=0;rows<=33;++rows){live_set(l,rows);for(int i=0;i<32*576+16;++i)bq[i]=__ushort_as_bfloat16(0x4123);for(int i=0;i<32*192+16;++i)bk[i]=bv[i]=__ushort_as_bfloat16(0x4123);if(rows>=1&&rows<=32)launch(false,0);launch(true,0);OK(cudaDeviceSynchronize());int n=rows>=1&&rows<=32?rows:0;exact(aq,bq,n*576,32*576,"qkv-q",rows);exact(ak,bk,n*192,32*192,"qkv-k",rows);exact(av,bv,n*192,32*192,"qkv-v",rows);}
++ if(bench)for(int rows:{4,8,16,24,32}){live_set(l,rows);OK(cudaDeviceSynchronize());timing("qkv-fused",rows,0,launch);}else printf("qkv active0..33 exact guards=true\n");
++ for(void*z:{(void*)x,(void*)wq,(void*)wk,(void*)wv,(void*)aq,(void*)ak,(void*)av,(void*)bq,(void*)bk,(void*)bv,(void*)p,(void*)l})OK(cudaFree(z));
++}
++int main(int argc,char**){bool bench=argc>1;projection<576,576,192,false>(bench);projection<192,576,192,false>(bench);projection<576,576,128,false>(bench);projection<1536,576,0,true>(bench);projection<576,1536,320,true>(bench);gate(bench);attention(bench);qkv(bench);}

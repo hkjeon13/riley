@@ -1,0 +1,42 @@
+{
+  "date": "2026-09-10",
+  "scope": "G02A borrowed embedding cold audit; aggregate/full graph pending",
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "gpu": {
+    "passed": 6,
+    "borrowed_fixture": 1,
+    "C05_20": 3,
+    "actual_models": 2,
+    "exit_code": 0
+  },
+  "cpu": {
+    "cuda_lib": 83,
+    "graph_contracts": 32,
+    "runtime_lib": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "new_embedding_diagnostics": [],
+    "baseline_warnings_remain": true
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "README.md": "d7ad67661933aa50d8947cc8dc499fad5bac0b403f48fa93aadc1180473e061b",
+    "clippy.jsonl": "d17096f39263dea9155cc10798916f418b44b4a58dc4a9b38a4acd0ad72e3dd0",
+    "clippy.log": "151369aa2bf58c5a4d0ded76697fc34165443c8578375fd26499b8ec0a6d4c41",
+    "cuda-cpu.log": "bd7f3d699f720dcf270aec23bb08aeb5d81c83c7d40ad339aecb31a61070253a",
+    "gpu-embedding.log": "f5bfe9aef5dede7f79a86584d85e7e75757607dc50fa98f0705cc40a1c5eda97",
+    "gpu-model.log": "de3ab537bd6ca10938b57434043c99683aacb1478f99f3e521f3dc8bc7954870",
+    "model-preservation.json": "37d3dc67453dbf16a4702404e274511dc860ff5ec59135d585849e245106b28b",
+    "remote-source-verification.json": "9fd3cfb94c943631914d83df6cd0519c0d46246442128a868e01f87ed988266a",
+    "runtime-cpu.log": "f8163d969108a56d79f302c112aa54b560e83624b5fa508c5f1d7ead87f8e09e",
+    "runtime-identities.json": "d1d7b26650d7161ac7d446c026880e054fe3c1d05171ad6df9f709e03c9377c3",
+    "source-hashes.json": "b0eb00bf19bc30aedeedeba190da0a4925973c21bd254bb2f2766c1afbf68d5f",
+    "source-overlay.tar.gz": "e78458e971fb199c5ca398976d9cced2532fac387e23cd490f1834a274f55e37"
+  }
+}

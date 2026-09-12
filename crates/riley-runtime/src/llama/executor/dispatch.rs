@@ -630,14 +630,19 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         })?;
     }
 
-    for layer in plan.layers() {
+    for (ordinal, layer) in plan.layers().iter().enumerate() {
+        let (hidden_current, hidden_projection) = layer_hidden_roles(
+            ordinal,
+            &mut buffers.hidden_current,
+            &mut buffers.hidden_projection,
+        );
         let layer_index = layer.index();
         let input_norm_site = ExecutionSite::layer(layer_index, LlamaOp::InputNorm);
         let input_norm_weight = weight_span(weights, layer.input_norm_weight(), input_norm_site)?;
         {
             let mut params = RmsNormParams {
                 input: span(
-                    &buffers.hidden_current,
+                    hidden_current,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
                     input_norm_site,
@@ -662,7 +667,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut gemms.hidden,
             &buffers.hidden_norm,
             weight_span(weights, layer.query_weight(), query_site)?,
-            &mut buffers.hidden_projection,
+            hidden_projection,
             &mut buffers.gemm_workspace,
             stream,
             query_site,
@@ -670,7 +675,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         execute_projection_bias(
             weights,
             layer.query_bias(),
-            &mut buffers.hidden_projection,
+            hidden_projection,
             dense_rows,
             hidden,
             stream,
@@ -719,7 +724,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         {
             let mut params = IndexedRopeParams {
                 input: span(
-                    &buffers.hidden_projection,
+                    hidden_projection,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
                     query_rope_site,
@@ -874,7 +879,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut gemms.hidden,
             &buffers.hidden_context,
             weight_span(weights, layer.output_weight(), output_site)?,
-            &mut buffers.hidden_projection,
+            hidden_projection,
             &mut buffers.gemm_workspace,
             stream,
             output_site,
@@ -882,7 +887,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         execute_projection_bias(
             weights,
             layer.output_bias(),
-            &mut buffers.hidden_projection,
+            hidden_projection,
             dense_rows,
             hidden,
             stream,
@@ -894,13 +899,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             ResidualNormImplementation::Separate => {
                 let mut residual = ResidualAddParams {
                     left: span(
-                        &buffers.hidden_current,
+                        hidden_current,
                         CudaDType::BF16,
                         plan.workspace_spec().hidden_buffer_bytes(),
                         attention_residual_site,
                     )?,
                     right: span(
-                        &buffers.hidden_projection,
+                        hidden_projection,
                         CudaDType::BF16,
                         plan.workspace_spec().hidden_buffer_bytes(),
                         attention_residual_site,
@@ -943,13 +948,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             ResidualNormImplementation::Fused => {
                 let mut fused = ResidualRmsNormParams {
                     left: span(
-                        &buffers.hidden_current,
+                        hidden_current,
                         CudaDType::BF16,
                         plan.workspace_spec().hidden_buffer_bytes(),
                         post_norm_site,
                     )?,
                     right: span(
-                        &buffers.hidden_projection,
+                        hidden_projection,
                         CudaDType::BF16,
                         plan.workspace_spec().hidden_buffer_bytes(),
                         post_norm_site,
@@ -1048,7 +1053,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             &mut gemms.down,
             &buffers.gated_product,
             weight_span(weights, layer.down_weight(), down_site)?,
-            &mut buffers.hidden_current,
+            hidden_current,
             &mut buffers.gemm_workspace,
             stream,
             down_site,
@@ -1063,13 +1068,13 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     mlp_residual_site,
                 )?,
                 right: span(
-                    &buffers.hidden_current,
+                    hidden_current,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
                     mlp_residual_site,
                 )?,
                 output: span_mut(
-                    &mut buffers.hidden_projection,
+                    hidden_projection,
                     CudaDType::BF16,
                     plan.workspace_spec().hidden_buffer_bytes(),
                     mlp_residual_site,
@@ -1079,6 +1084,12 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             residual_add(&mut params, stream)
                 .map_err(|source| batch_cuda(mlp_residual_site, source))?;
         }
+    }
+
+    // Preserve the public owner roles after an odd number of layers. Within
+    // the chain, physical owners never move; a future native recorder can use
+    // the same parity mapping without retaining conflicting per-op borrows.
+    if plan.layers().len() % 2 != 0 {
         mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
     }
 
@@ -1182,5 +1193,86 @@ mod tests {
 
         disposition = BatchDispatchDisposition::CommandSubmissionStarted;
         assert!(disposition.mutation_may_have_occurred());
+    }
+}
+
+/// Selects physical scratch owners without moving either allocation. The final
+/// output of one layer is the next layer's current input. This is ordinal
+/// parity, independent of any model-supplied layer identifier.
+fn layer_hidden_roles<'a, T>(
+    ordinal: usize,
+    first: &'a mut T,
+    second: &'a mut T,
+) -> (&'a mut T, &'a mut T) {
+    if ordinal % 2 == 0 {
+        (first, second)
+    } else {
+        (second, first)
+    }
+}
+
+#[cfg(test)]
+mod hidden_role_tests {
+    use super::layer_hidden_roles;
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct Owner {
+        identity: u64,
+        value: u64,
+    }
+
+    // Compare against the previous dispatch semantics across odd/even layer
+    // counts and repeated iterations. Values model preserved residual input,
+    // projection scratch overwrite, down output, and final residual output.
+    #[test]
+    fn physical_roles_preserve_legacy_chain_and_continuation() {
+        fn layer(current: &mut Owner, projection: &mut Owner, ordinal: usize) {
+            let residual = current.value;
+            projection.value = residual.wrapping_mul(3).wrapping_add(ordinal as u64);
+            let attention_residual = residual.wrapping_add(projection.value);
+            current.value = attention_residual.wrapping_mul(7);
+            projection.value = attention_residual.wrapping_add(current.value);
+        }
+        for count in [0, 1, 2, 3, 29, 30, 31, 64] {
+            let mut legacy = (
+                Owner {
+                    identity: 11,
+                    value: 0,
+                },
+                Owner {
+                    identity: 22,
+                    value: 0,
+                },
+            );
+            let mut fixed = (
+                Owner {
+                    identity: 11,
+                    value: 0,
+                },
+                Owner {
+                    identity: 22,
+                    value: 0,
+                },
+            );
+            for iteration in 0..16 {
+                legacy.0.value = iteration;
+                fixed.0.value = iteration;
+                let identities = (fixed.0.identity, fixed.1.identity);
+                for ordinal in 0..count {
+                    layer(&mut legacy.0, &mut legacy.1, ordinal);
+                    std::mem::swap(&mut legacy.0, &mut legacy.1);
+                    let (current, projection) =
+                        layer_hidden_roles(ordinal, &mut fixed.0, &mut fixed.1);
+                    layer(current, projection, ordinal);
+                    assert_eq!(projection.value, legacy.0.value);
+                    assert_eq!(projection.identity, legacy.0.identity);
+                    assert_eq!((fixed.0.identity, fixed.1.identity), identities);
+                }
+                if count % 2 != 0 {
+                    std::mem::swap(&mut fixed.0, &mut fixed.1);
+                }
+                assert_eq!(fixed, legacy, "layers={count} iteration={iteration}");
+            }
+        }
     }
 }

@@ -1,0 +1,242 @@
+{
+  "completed": true,
+  "scope": "offline copied-log reparse; no fresh GPU or live-process claim",
+  "raw_native_replays": 4096,
+  "retained_native_replays": 1536,
+  "strict_http_responses": 128,
+  "python_float_sum_differences": [
+    {
+      "path": "off-before-baseline.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 175019359.65199983,
+      "saved_sum_ns": 175019359.652,
+      "absolute_difference_ns": 1.7881393432617188e-07
+    },
+    {
+      "path": "off-before-candidate.whole_graph.groups.prefill.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 27667135.24,
+      "saved_sum_ns": 27667135.240000002,
+      "absolute_difference_ns": 3.725290298461914e-09
+    },
+    {
+      "path": "combined-ab-baseline.whole_graph.groups.prefill.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 27615583.896,
+      "saved_sum_ns": 27615583.895999998,
+      "absolute_difference_ns": 3.725290298461914e-09
+    },
+    {
+      "path": "combined-ab-baseline.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 198788352.48400012,
+      "saved_sum_ns": 198788352.484,
+      "absolute_difference_ns": 1.1920928955078125e-07
+    },
+    {
+      "path": "combined-ab-candidate.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 210418112.39900002,
+      "saved_sum_ns": 210418112.399,
+      "absolute_difference_ns": 2.9802322387695312e-08
+    },
+    {
+      "path": "combined-ba-candidate.whole_graph.groups.prefill.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 27708255.766,
+      "saved_sum_ns": 27708255.766000003,
+      "absolute_difference_ns": 3.725290298461914e-09
+    },
+    {
+      "path": "combined-ba-candidate.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 210677151.91999993,
+      "saved_sum_ns": 210677151.92,
+      "absolute_difference_ns": 5.960464477539063e-08
+    },
+    {
+      "path": "combined-ba-baseline.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 199259552.24800003,
+      "saved_sum_ns": 199259552.248,
+      "absolute_difference_ns": 2.9802322387695312e-08
+    },
+    {
+      "path": "off-after-baseline.whole_graph.groups.prefill.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 27701983.452000003,
+      "saved_sum_ns": 27701983.452,
+      "absolute_difference_ns": 3.725290298461914e-09
+    },
+    {
+      "path": "off-after-baseline.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 175337279.85099995,
+      "saved_sum_ns": 175337279.851,
+      "absolute_difference_ns": 5.960464477539063e-08
+    },
+    {
+      "path": "off-after-candidate.whole_graph.groups.decode.metrics.cuda_graph_span_ns.sum",
+      "local_sum_ns": 188316032.1109999,
+      "saved_sum_ns": 188316032.111,
+      "absolute_difference_ns": 8.940696716308594e-08
+    }
+  ],
+  "percentiles_and_comparison_exact": true,
+  "processes": [
+    {
+      "label": "off-before-baseline",
+      "server_log_sha256": "5f111aad1a31bfd45d0bb088b0f37c2d70aaec7469c7845d0a5378820e765ac6",
+      "native_validation_sha256": "8f704adfe4001ce889532078bd7f5b4262ff2083ff1a8f5e1fd4b65bdaa7f80b",
+      "completion_sha256": "f246c906cf82731817f58818fbfe207b9533b8fde055d1fb58e440d470b9ab97",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "off-before-candidate",
+      "server_log_sha256": "57eab950adb7d09fc571af52c1be1bd35012e50da0820bf19428c34a44cb782f",
+      "native_validation_sha256": "6c5e8858efc5a20a90a719b19c6d56df2df5f3b1e48a9c4e9f882ee732bfe9ae",
+      "completion_sha256": "c34b872b4df1184854e4483b6ea180e59ed27d0167a8954dc068d1a15efab83d",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "combined-ab-baseline",
+      "server_log_sha256": "52fbc0653f8e820b28aa29f5642a874ee09a87851ac58ec87b8e78026caf3382",
+      "native_validation_sha256": "44de7cbd29c85e50c9e3d459719edb7b1778bcb5168f58a323bff683a1ea9196",
+      "completion_sha256": "ee0cebfa459ebe33b4052d6cf843e918e2ce4f034a248345cddcd8d3ee32ab17",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "combined-ab-candidate",
+      "server_log_sha256": "ce59900cff1dfadab9c8d403dd7107e598af2016e81cfa97e172c2b29c333733",
+      "native_validation_sha256": "5a67cd02cadc005807f204c0fd0ec445f4c8bacd77cde7820558ad3072e35854",
+      "completion_sha256": "c8217c5696b42d8ee75c1bdadc56cbdeb0279ec313fae5d25bda4478b72d71a0",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "combined-ba-candidate",
+      "server_log_sha256": "09b40884409c987fb9655ba00b11f2e9abe57ba6ccff18f227afc9137eae08dd",
+      "native_validation_sha256": "31e381afb87fefcf11a7af7261fda58829bd880903bd2d50e88c5145f512a927",
+      "completion_sha256": "7cf5661c9646378d9baf573e7c15b7f5033fa2349727789fbc48ab4bfab45680",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "combined-ba-baseline",
+      "server_log_sha256": "8dc7336bb7d18679ae7aeeb166670a36d0817a871b43ad88de9f84a856ff5f6f",
+      "native_validation_sha256": "7230a414fa67920a894046a52f064669471f0861b7859f08741b7e3eea9f0c47",
+      "completion_sha256": "713873a4bea8d3bff31958977c13278c74aa0f0fc919849962afcdec4b59f3cc",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "off-after-baseline",
+      "server_log_sha256": "1af770265ede40189d12e9eecbd73caaebe9cb493a58b0c905eb747d8c58d603",
+      "native_validation_sha256": "0989070ece23943925eed5a140cdf26f854ad882b1d2bbbf84afe48f95124079",
+      "completion_sha256": "9904f92d3cce71d45208497cacbe97aedaf63ae1f93e63c2db2dd2939c29c3b8",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    },
+    {
+      "label": "off-after-candidate",
+      "server_log_sha256": "463f248f424b7e8d67d5506834ca0955f14f138cd222d71f5a6bee29fedca189",
+      "native_validation_sha256": "7d58f1a0f5c55a5ba499bae77b1db6660513b613f064958dad9719e81385dce4",
+      "completion_sha256": "d572c6d5311d9e859a906b1c4c3bd0dee3156db316f27cb422c3c9edc4cee30d",
+      "native_replays": 512,
+      "strict_http_responses": 16
+    }
+  ],
+  "comparison": {
+    "paired_combined_intervals": [
+      {
+        "order": "AB",
+        "baseline_combined_median_ns": 360448.0,
+        "candidate_combined_median_ns": 422400.0,
+        "candidate_over_baseline": 1.171875
+      },
+      {
+        "order": "BA",
+        "baseline_combined_median_ns": 359936.0,
+        "candidate_combined_median_ns": 422912.0,
+        "candidate_over_baseline": 1.1749644381223328
+      }
+    ],
+    "whole_graph_drift_and_perturbation": [
+      {
+        "lane": "baseline",
+        "phase": "prefill",
+        "off_before_median_ns": 4611040.115499999,
+        "off_after_median_ns": 4617295.9805,
+        "off_after_over_before": 1.0013567145033007,
+        "selected_median_ns": [
+          4602256.0594999995,
+          4618128.061000001
+        ],
+        "selected_over_off_before": [
+          0.9980949946693215,
+          1.0015371684744565
+        ],
+        "selected_over_off_after": [
+          0.996742699392996,
+          1.000180209478343
+        ]
+      },
+      {
+        "lane": "baseline",
+        "phase": "decode",
+        "off_before_median_ns": 943215.996,
+        "off_after_median_ns": 943296.015,
+        "off_after_over_before": 1.0000848363474955,
+        "selected_median_ns": [
+          1070864.0219999999,
+          1074832.0219999999
+        ],
+        "selected_over_off_before": [
+          1.1353327621046831,
+          1.1395396458055826
+        ],
+        "selected_over_off_after": [
+          1.1352364527904848,
+          1.1394429796250118
+        ]
+      },
+      {
+        "lane": "candidate",
+        "phase": "prefill",
+        "off_before_median_ns": 4611135.96,
+        "off_after_median_ns": 4619264.126,
+        "off_after_over_before": 1.0017627252960029,
+        "selected_median_ns": [
+          4609823.9425,
+          4616591.93
+        ],
+        "selected_over_off_before": [
+          0.9997154676176584,
+          1.0011832160333871
+        ],
+        "selected_over_off_after": [
+          0.997956344724506,
+          0.9994215104555377
+        ]
+      },
+      {
+        "lane": "candidate",
+        "phase": "decode",
+        "off_before_median_ns": 1003232.002,
+        "off_after_median_ns": 1009632.051,
+        "off_after_over_before": 1.0063794306673244,
+        "selected_median_ns": [
+          1126623.988,
+          1135071.993
+        ],
+        "selected_over_off_before": [
+          1.122994467634616,
+          1.1314152566277487
+        ],
+        "selected_over_off_after": [
+          1.1158758152379613,
+          1.124243224921155
+        ]
+      }
+    ],
+    "scope": "Combined region is timed directly, then layers are summed per replay. Event perturbation remains; two pairs are diagnostic evidence only.",
+    "performance_claim_eligible": false,
+    "candidate_acceptance": null
+  },
+  "completion_sha256": "fec1ddb624f8e774000620c02ec3987f0f200bd20cdf2a2fa5014ce2e536cb36",
+  "restoration_sha256": "39487322b5ca6cfd41d8a87892a47259ff901455f12222d890a9bc6261274d92",
+  "performance_acceptance": false
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": "riley.owned-graph-diagnostic-summary.v1",
+  "performance_claim_eligible": false,
+  "classification": {
+    "source": "position",
+    "prefill_tokens": 128
+  },
+  "graph_inventories": [
+    {
+      "schema": "riley.owned-graph-diagnostic.v1",
+      "kind": "graph",
+      "capture_id": 1,
+      "inventory_status": 0,
+      "nodes": 612,
+      "kernel_nodes": 607,
+      "memcpy_nodes": 5,
+      "other_nodes": 0
+    }
+  ],
+  "groups": {
+    "prefill": {
+      "replays": 768,
+      "metrics": {
+        "event_setup_ns": {
+          "measured_count": 768,
+          "unmeasured_count": 0,
+          "median": 393.0,
+          "sum": 363951
+        },
+        "host_staging_ns": {
+          "measured_count": 768,
+          "unmeasured_count": 0,
+          "median": 1538.0,
+          "sum": 1223981
+        },
+        "host_launch_ns": {
+          "measured_count": 768,
+          "unmeasured_count": 0,
+          "median": 5045.0,
+          "sum": 4250937
+        },
+        "host_wait_ns": {
+          "measured_count": 768,
+          "unmeasured_count": 0,
+          "median": 3371707.0,
+          "sum": 2602145578
+        },
+        "cuda_graph_span_ns": {
+          "measured_count": 768,
+          "unmeasured_count": 0,
+          "median": 3374143.9584999997,
+          "sum": 2604236191.5089993
+        }
+      }
+    },
+    "decode": {
+      "replays": 186,
+      "metrics": {
+        "event_setup_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 384.0,
+          "sum": 75389
+        },
+        "host_staging_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 1534.0,
+          "sum": 288550
+        },
+        "host_launch_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 4869.5,
+          "sum": 927415
+        },
+        "host_wait_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 2318598.0,
+          "sum": 427424985
+        },
+        "cuda_graph_span_ns": {
+          "measured_count": 186,
+          "unmeasured_count": 0,
+          "median": 2320511.9375,
+          "sum": 427839584.82699996
+        }
+      }
+    }
+  },
+  "failed_replays": 0,
+  "read_records": 954,
+  "unmeasured": [
+    "per_kernel_cuda_time",
+    "Rust_metadata_pack",
+    "request_latency_without_instrumentation"
+  ]
+}

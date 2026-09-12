@@ -1,0 +1,16 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.31s
+     Running tests/graph_c05_18_gpu.rs (/tmp/riley-g01-native-260910-target/debug/deps/graph_c05_18_gpu-6109903a45b9a6e5)
+
+running 3 tests
+test owned_ragged_paged_kv_write_graph_preflight_and_abort_recover_every_resource ... ok
+test owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop ... ok
+test owned_ragged_paged_kv_write_graph_replays_byte_exact_against_eager ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+

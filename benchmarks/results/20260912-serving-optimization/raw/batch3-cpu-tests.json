@@ -1,0 +1,36 @@
+{
+  "passed": true,
+  "source_commit": "83cda03e183e29f48a82f7e7be3282c2e83ee186",
+  "source_clean": true,
+  "service_sha256": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+  "argv": [
+    "cargo",
+    "test",
+    "--release",
+    "-p",
+    "riley-server",
+    "--features",
+    "server",
+    "--lib"
+  ],
+  "features": [
+    "server"
+  ],
+  "target_dir": "/tmp/riley-opt-260912/batch3-cpu-target",
+  "log": {
+    "path": "/tmp/riley-opt-260912/batch3-cpu-tests.log",
+    "sha256": "691c4a06fdb9eaa9cd74c162dc0433a5dff7385b06717692d0f67091ce6effe1"
+  },
+  "test_counts": {
+    "passed": 56,
+    "failed": 0,
+    "ignored": 1
+  },
+  "required_tests": [
+    "accepted_connection_waits_for_delayed_request_bytes",
+    "shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections",
+    "listener_shutdown_wakeup_persists_and_takes_priority_over_backlog"
+  ],
+  "gpu_executed": false,
+  "transport_timing_executed": false
+}

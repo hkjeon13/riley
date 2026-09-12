@@ -1,0 +1,44 @@
+{
+  "completed": true,
+  "summary": {
+    "phase": "retained",
+    "warmup": false,
+    "requested": 256,
+    "attempted": 256,
+    "succeeded": 256,
+    "failed": 0,
+    "unresolved_attempts": 0,
+    "not_started": 0,
+    "offered_concurrency": 2,
+    "observed_max_request_in_flight": 2,
+    "observed_max_call_in_flight": 2,
+    "phase_started_ns": 809306668481389,
+    "phase_finished_ns": 809315441628001,
+    "completed": true,
+    "worker_errors": [],
+    "watchdog_timed_out_request_indices": [],
+    "failure_policy": "stop new requests; drain in-flight calls; total deadline aborts owned server; no retries",
+    "client_socket_timeout_seconds": 120,
+    "total_request_deadline_seconds": 120,
+    "retained_first_start_ns": 809306668520119,
+    "retained_last_finish_ns": 809315441392840,
+    "retained_wall_ns": 8772872721,
+    "output_tokens": 8192,
+    "output_tokens_per_wall_second": 933.7876269868204,
+    "request_tokens_verified": "reference text and available usage; raw IDs unavailable over HTTP",
+    "token_ttft": "unmeasured",
+    "http_tpot": "unmeasured; SSE events are not token boundaries",
+    "e2e_ms": {
+      "median": 68.452194,
+      "p95": 68.558496,
+      "p99": 68.650838,
+      "max": 68.990412
+    },
+    "first_text_event_ms": {
+      "median": 38.8105535,
+      "p95": 38.888385,
+      "p99": 38.918424,
+      "max": 39.380958
+    }
+  }
+}

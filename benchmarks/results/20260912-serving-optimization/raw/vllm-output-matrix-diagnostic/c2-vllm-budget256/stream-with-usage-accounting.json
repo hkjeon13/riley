@@ -1,0 +1,27 @@
+{
+  "phase": "stream-with-usage",
+  "requested": 2,
+  "recorded": 2,
+  "response_records": [
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/stream-with-usage-0.json",
+      "sha256": "d65d99ce91f3b2a383ae06052fcac36bc2896b33e717e16bc7b8d000d8fa4abc"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget256/stream-with-usage-1.json",
+      "sha256": "e0c4f73d0f49fd9446045c3d2fde0fa4e8f519747051bc5609941bd71686927a"
+    }
+  ],
+  "responses_complete": 2,
+  "http_200": 2,
+  "observed_max_request_in_flight": 2,
+  "reference_text_equal": 2,
+  "reference_token_ids_equal": 2,
+  "counts_prompt_usage_and_finish_valid": 2,
+  "parse_errors": 0,
+  "request_errors": 0,
+  "watchdog_timed_out_indices": [],
+  "worker_errors": [],
+  "total_request_deadline_seconds": 120,
+  "performance_claim": false
+}

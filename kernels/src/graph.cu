@@ -927,6 +927,7 @@ bool canonical_rms_norm_capture_fields_are_clear(
          capture->canonical_rms_norm_weight == nullptr &&
          capture->canonical_rms_norm_row_count == 0 &&
          capture->canonical_rms_norm_hidden_size == 0 &&
+         capture->rms_norm_profile == 0 &&
          capture->canonical_rms_norm_epsilon == 0.0F &&
          capture->canonical_rms_norm_enqueue_count == 0 &&
          !capture->canonical_rms_norm_input_lease_held &&
@@ -939,6 +940,7 @@ bool canonical_rms_norm_graph_fields_are_clear(
          graph->canonical_rms_norm_weight == nullptr &&
          graph->canonical_rms_norm_row_count == 0 &&
          graph->canonical_rms_norm_hidden_size == 0 &&
+         graph->rms_norm_profile == 0 &&
          graph->canonical_rms_norm_epsilon == 0.0F;
 }
 
@@ -948,6 +950,7 @@ bool canonical_rms_norm_exec_fields_are_clear(
          exec->canonical_rms_norm_weight == nullptr &&
          exec->canonical_rms_norm_row_count == 0 &&
          exec->canonical_rms_norm_hidden_size == 0 &&
+         exec->rms_norm_profile == 0 &&
          exec->canonical_rms_norm_epsilon == 0.0F;
 }
 
@@ -1038,6 +1041,12 @@ bool bf16_row_gather_argmax_exec_fields_are_clear(
          exec->bf16_row_gather_argmax_vocabulary_size == 0;
 }
 
+bool output_indices_span_valid(const RileyCudaDeviceBuffer* parent, uint64_t offset,
+                               uint64_t rows) noexcept {
+  return parent != nullptr && offset % sizeof(uint32_t) == 0 &&
+         offset <= parent->byte_len && rows <= (parent->byte_len - offset) / sizeof(uint32_t);
+}
+
 bool bf16_row_gather_argmax_d2h_capture_fields_are_clear(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr &&
@@ -1049,6 +1058,7 @@ bool bf16_row_gather_argmax_d2h_capture_fields_are_clear(
          capture->bf16_row_gather_argmax_d2h_output_row_count == 0 &&
          capture->bf16_row_gather_argmax_d2h_vocabulary_size == 0 &&
          capture->bf16_row_gather_argmax_d2h_result_byte_len == 0 &&
+         capture->output_indices_byte_offset == 0 && !capture->output_parent_binding &&
          capture->bf16_row_gather_argmax_d2h_enqueue_count == 0 &&
          !capture->bf16_row_gather_argmax_d2h_input_lease_held &&
          !capture->bf16_row_gather_argmax_d2h_indices_lease_held &&
@@ -1065,7 +1075,8 @@ bool bf16_row_gather_argmax_d2h_graph_fields_are_clear(
          graph->bf16_row_gather_argmax_d2h_input_row_count == 0 &&
          graph->bf16_row_gather_argmax_d2h_output_row_count == 0 &&
          graph->bf16_row_gather_argmax_d2h_vocabulary_size == 0 &&
-         graph->bf16_row_gather_argmax_d2h_result_byte_len == 0;
+         graph->bf16_row_gather_argmax_d2h_result_byte_len == 0 &&
+         graph->output_indices_byte_offset == 0 && !graph->output_parent_binding;
 }
 
 bool bf16_row_gather_argmax_d2h_exec_fields_are_clear(
@@ -1078,6 +1089,7 @@ bool bf16_row_gather_argmax_d2h_exec_fields_are_clear(
          exec->bf16_row_gather_argmax_d2h_output_row_count == 0 &&
          exec->bf16_row_gather_argmax_d2h_vocabulary_size == 0 &&
          exec->bf16_row_gather_argmax_d2h_result_byte_len == 0 &&
+         exec->output_indices_byte_offset == 0 && !exec->output_parent_binding &&
          !exec->bf16_row_gather_argmax_d2h_completion_visible;
 }
 
@@ -1087,6 +1099,7 @@ bool indexed_rope_bf16_capture_fields_are_clear(
          capture->indexed_rope_bf16_cos == nullptr &&
          capture->indexed_rope_bf16_sin == nullptr &&
          capture->indexed_rope_bf16_positions == nullptr &&
+         capture->indexed_rope_bf16_positions_byte_offset == 0 &&
          capture->indexed_rope_bf16_active_row_count == 0 &&
          capture->indexed_rope_bf16_head_count == 0 &&
          capture->indexed_rope_bf16_head_size == 0 &&
@@ -1105,6 +1118,7 @@ bool indexed_rope_bf16_graph_fields_are_clear(
          graph->indexed_rope_bf16_cos == nullptr &&
          graph->indexed_rope_bf16_sin == nullptr &&
          graph->indexed_rope_bf16_positions == nullptr &&
+         graph->indexed_rope_bf16_positions_byte_offset == 0 &&
          graph->indexed_rope_bf16_active_row_count == 0 &&
          graph->indexed_rope_bf16_head_count == 0 &&
          graph->indexed_rope_bf16_head_size == 0 &&
@@ -1118,6 +1132,7 @@ bool indexed_rope_bf16_exec_fields_are_clear(
          exec->indexed_rope_bf16_cos == nullptr &&
          exec->indexed_rope_bf16_sin == nullptr &&
          exec->indexed_rope_bf16_positions == nullptr &&
+         exec->indexed_rope_bf16_positions_byte_offset == 0 &&
          exec->indexed_rope_bf16_active_row_count == 0 &&
          exec->indexed_rope_bf16_head_count == 0 &&
          exec->indexed_rope_bf16_head_size == 0 &&
@@ -1133,7 +1148,7 @@ bool canonical_gemm_bf16_state_is_clear(
          state.output_byte_len == 0 && state.workspace_byte_len == 0 &&
          state.enqueue_count == 0 && !state.plan_lease_held &&
          !state.input_lease_held && !state.weight_lease_held &&
-         !state.workspace_lease_held;
+         !state.workspace_lease_held && !state.selected_no_split;
 }
 
 bool canonical_gemm_bf16_capture_fields_are_clear(
@@ -1192,7 +1207,11 @@ bool ragged_paged_kv_cache_write_bf16_state_is_clear(
          state.physical_block_count == 0 && state.key_value_head_count == 0 &&
          state.head_size == 0 && state.query_head_count == 0 &&
          state.output_row_count == 0 && state.attention_scale == 0.0F &&
-         !state.grouped_attention && state.enqueue_count == 0 &&
+         !state.grouped_attention && state.attention_parent_layers == 0 &&
+         state.attention_layer_index == 0 && !state.attention_metadata_packed &&
+         state.attention_metadata_offsets[0] == 0 && state.attention_metadata_offsets[1] == 0 &&
+         state.attention_metadata_offsets[2] == 0 && state.attention_metadata_offsets[3] == 0 &&
+         state.attention_metadata_offsets[4] == 0 && state.enqueue_count == 0 &&
          !state.key_source_lease_held && !state.value_source_lease_held &&
          !state.value_pool_lease_held &&
          !state.sequence_block_offsets_lease_held &&
@@ -1570,9 +1589,17 @@ bool residual_add_exec_state_is_valid(
              std::memory_order_acquire) == 1;
 }
 
-// Canonical RMSNorm owns three distinct BF16 allocations. It has the same
-// fixed-address lease shape as residual add, but carries the exact generic
-// RMSNorm geometry and epsilon so profile-specific reductions cannot enter.
+// The norm family owns three distinct BF16 allocations. The legacy operation
+// tag keeps the same lease shape; the separate immutable profile discriminant
+// distinguishes canonical and reviewed HF kernels at every ownership phase.
+bool norm_profile_is_valid(uint32_t profile, uint64_t rows,
+                           uint64_t hidden, float epsilon) noexcept {
+  uint32_t bits = 0;
+  std::memcpy(&bits, &epsilon, sizeof(bits));
+  return profile == 0 || (profile == 1 && rows > 0 && rows <= 8192 &&
+                          hidden == 576 && bits == 0x3727c5acU);
+}
+
 bool canonical_rms_norm_capture_state_is_valid(
     const RileyCudaGraphCapture* capture) noexcept {
   uint64_t element_count = 0;
@@ -1593,6 +1620,9 @@ bool canonical_rms_norm_capture_state_is_valid(
          canonical_rms_norm_element_count(
              capture->canonical_rms_norm_row_count,
              capture->canonical_rms_norm_hidden_size, &element_count) &&
+         norm_profile_is_valid(capture->rms_norm_profile,
+             capture->canonical_rms_norm_row_count, capture->canonical_rms_norm_hidden_size,
+             capture->canonical_rms_norm_epsilon) &&
          std::isfinite(capture->canonical_rms_norm_epsilon) &&
          capture->canonical_rms_norm_epsilon > 0.0F &&
          capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
@@ -1652,6 +1682,9 @@ bool canonical_rms_norm_graph_state_is_valid(
          canonical_rms_norm_element_count(graph->canonical_rms_norm_row_count,
                                           graph->canonical_rms_norm_hidden_size,
                                           &element_count) &&
+         norm_profile_is_valid(graph->rms_norm_profile,
+             graph->canonical_rms_norm_row_count, graph->canonical_rms_norm_hidden_size,
+             graph->canonical_rms_norm_epsilon) &&
          std::isfinite(graph->canonical_rms_norm_epsilon) &&
          graph->canonical_rms_norm_epsilon > 0.0F &&
          graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
@@ -1701,6 +1734,9 @@ bool canonical_rms_norm_exec_state_is_valid(
          canonical_rms_norm_element_count(exec->canonical_rms_norm_row_count,
                                           exec->canonical_rms_norm_hidden_size,
                                           &element_count) &&
+         norm_profile_is_valid(exec->rms_norm_profile,
+             exec->canonical_rms_norm_row_count, exec->canonical_rms_norm_hidden_size,
+             exec->canonical_rms_norm_epsilon) &&
          std::isfinite(exec->canonical_rms_norm_epsilon) &&
          exec->canonical_rms_norm_epsilon > 0.0F &&
          exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
@@ -2330,15 +2366,15 @@ bool bf16_row_gather_argmax_d2h_capture_state_is_valid(
          input_element_count <=
              capture->bf16_row_gather_argmax_d2h_input->byte_len /
                  sizeof(__nv_bfloat16) &&
-         capture->bf16_row_gather_argmax_d2h_output_row_count <=
-             capture->bf16_row_gather_argmax_d2h_indices->byte_len /
-                 sizeof(uint32_t) &&
+         output_indices_span_valid(capture->bf16_row_gather_argmax_d2h_indices,
+             capture->output_indices_byte_offset, capture->bf16_row_gather_argmax_d2h_output_row_count) &&
+         (capture->output_parent_binding || capture->output_indices_byte_offset == 0) &&
          gathered_element_count <=
              capture->bf16_row_gather_argmax_d2h_gathered_logits->byte_len /
                  sizeof(__nv_bfloat16) &&
          result_byte_len <= capture->fill_buffer->byte_len &&
-         result_byte_len ==
-             capture->bf16_row_gather_argmax_d2h_pinned_results->byte_len &&
+         (capture->output_parent_binding ? result_byte_len <= capture->bf16_row_gather_argmax_d2h_pinned_results->byte_len :
+          result_byte_len == capture->bf16_row_gather_argmax_d2h_pinned_results->byte_len) &&
          capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          capture->fill_buffer->active_uses.load(std::memory_order_acquire) ==
              1 &&
@@ -2413,15 +2449,15 @@ bool bf16_row_gather_argmax_d2h_graph_state_is_valid(
          input_element_count <=
              graph->bf16_row_gather_argmax_d2h_input->byte_len /
                  sizeof(__nv_bfloat16) &&
-         graph->bf16_row_gather_argmax_d2h_output_row_count <=
-             graph->bf16_row_gather_argmax_d2h_indices->byte_len /
-                 sizeof(uint32_t) &&
+         output_indices_span_valid(graph->bf16_row_gather_argmax_d2h_indices,
+             graph->output_indices_byte_offset, graph->bf16_row_gather_argmax_d2h_output_row_count) &&
+         (graph->output_parent_binding || graph->output_indices_byte_offset == 0) &&
          gathered_element_count <=
              graph->bf16_row_gather_argmax_d2h_gathered_logits->byte_len /
                  sizeof(__nv_bfloat16) &&
          result_byte_len <= graph->fill_buffer->byte_len &&
-         result_byte_len ==
-             graph->bf16_row_gather_argmax_d2h_pinned_results->byte_len &&
+         (graph->output_parent_binding ? result_byte_len <= graph->bf16_row_gather_argmax_d2h_pinned_results->byte_len :
+          result_byte_len == graph->bf16_row_gather_argmax_d2h_pinned_results->byte_len) &&
          graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
          graph->bf16_row_gather_argmax_d2h_input->active_uses.load(
@@ -2496,15 +2532,15 @@ bool bf16_row_gather_argmax_d2h_exec_state_is_valid(
          input_element_count <=
              exec->bf16_row_gather_argmax_d2h_input->byte_len /
                  sizeof(__nv_bfloat16) &&
-         exec->bf16_row_gather_argmax_d2h_output_row_count <=
-             exec->bf16_row_gather_argmax_d2h_indices->byte_len /
-                 sizeof(uint32_t) &&
+         output_indices_span_valid(exec->bf16_row_gather_argmax_d2h_indices,
+             exec->output_indices_byte_offset, exec->bf16_row_gather_argmax_d2h_output_row_count) &&
+         (exec->output_parent_binding || exec->output_indices_byte_offset == 0) &&
          gathered_element_count <=
              exec->bf16_row_gather_argmax_d2h_gathered_logits->byte_len /
                  sizeof(__nv_bfloat16) &&
          result_byte_len <= exec->fill_buffer->byte_len &&
-         result_byte_len ==
-             exec->bf16_row_gather_argmax_d2h_pinned_results->byte_len &&
+         (exec->output_parent_binding ? result_byte_len <= exec->bf16_row_gather_argmax_d2h_pinned_results->byte_len :
+          result_byte_len == exec->bf16_row_gather_argmax_d2h_pinned_results->byte_len) &&
          exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
          exec->bf16_row_gather_argmax_d2h_input->active_uses.load(
@@ -2892,8 +2928,10 @@ bool indexed_rope_bf16_capture_state_is_valid(
                                     sizeof(float) &&
          table_element_count <= capture->indexed_rope_bf16_sin->byte_len /
                                     sizeof(float) &&
+         capture->indexed_rope_bf16_positions_byte_offset % sizeof(uint32_t) == 0 &&
+         capture->indexed_rope_bf16_positions_byte_offset <= capture->indexed_rope_bf16_positions->byte_len &&
          capture->indexed_rope_bf16_active_row_count <=
-             capture->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+             (capture->indexed_rope_bf16_positions->byte_len - capture->indexed_rope_bf16_positions_byte_offset) / sizeof(uint32_t) &&
          capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          capture->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
          capture->indexed_rope_bf16_input->active_uses.load(
@@ -2965,8 +3003,10 @@ bool indexed_rope_bf16_graph_state_is_valid(
                                     sizeof(float) &&
          table_element_count <= graph->indexed_rope_bf16_sin->byte_len /
                                     sizeof(float) &&
+         graph->indexed_rope_bf16_positions_byte_offset % sizeof(uint32_t) == 0 &&
+         graph->indexed_rope_bf16_positions_byte_offset <= graph->indexed_rope_bf16_positions->byte_len &&
          graph->indexed_rope_bf16_active_row_count <=
-             graph->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+             (graph->indexed_rope_bf16_positions->byte_len - graph->indexed_rope_bf16_positions_byte_offset) / sizeof(uint32_t) &&
          graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
          graph->indexed_rope_bf16_input->active_uses.load(
@@ -3039,8 +3079,10 @@ bool indexed_rope_bf16_exec_state_is_valid(
                                     sizeof(float) &&
          table_element_count <= exec->indexed_rope_bf16_sin->byte_len /
                                     sizeof(float) &&
+         exec->indexed_rope_bf16_positions_byte_offset % sizeof(uint32_t) == 0 &&
+         exec->indexed_rope_bf16_positions_byte_offset <= exec->indexed_rope_bf16_positions->byte_len &&
          exec->indexed_rope_bf16_active_row_count <=
-             exec->indexed_rope_bf16_positions->byte_len / sizeof(uint32_t) &&
+             (exec->indexed_rope_bf16_positions->byte_len - exec->indexed_rope_bf16_positions_byte_offset) / sizeof(uint32_t) &&
          exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
          exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
          exec->indexed_rope_bf16_input->active_uses.load(
@@ -3060,10 +3102,10 @@ bool ragged_paged_kv_cache_write_bf16_state_has_expected_leases(
          state.value_source_lease_held == held &&
          state.value_pool_lease_held == held &&
          state.sequence_block_offsets_lease_held == held &&
-         state.block_ids_lease_held == held &&
-         state.valid_tokens_lease_held == held &&
-         state.row_sequence_slots_lease_held == held &&
-         state.row_positions_lease_held == held;
+         state.block_ids_lease_held == (held && !state.attention_metadata_packed) &&
+         state.valid_tokens_lease_held == (held && !state.attention_metadata_packed) &&
+         state.row_sequence_slots_lease_held == (held && !state.attention_metadata_packed) &&
+         state.row_positions_lease_held == (held && !state.attention_metadata_packed);
 }
 
 bool ragged_paged_kv_cache_write_bf16_state_geometry_matches(
@@ -3085,7 +3127,55 @@ bool ragged_paged_kv_cache_write_bf16_state_geometry_matches(
          left.query_head_count == right.query_head_count &&
          left.output_row_count == right.output_row_count &&
          left.attention_scale == right.attention_scale &&
-         left.grouped_attention == right.grouped_attention;
+         left.grouped_attention == right.grouped_attention &&
+         left.attention_parent_layers == right.attention_parent_layers &&
+         left.attention_layer_index == right.attention_layer_index &&
+         left.attention_metadata_packed == right.attention_metadata_packed &&
+         std::memcmp(left.attention_metadata_offsets, right.attention_metadata_offsets,
+                     sizeof(left.attention_metadata_offsets)) == 0;
+}
+
+// The opaque graph owner retains exclusive leases on both complete parent
+// allocations. Only checked layer geometry selects a subrange; no address or
+// caller-supplied byte offset is accepted.
+bool attention_parent_layer_is_valid(uint64_t layers, uint64_t layer,
+    uint64_t elements, uint64_t key_bytes, uint64_t value_bytes) noexcept {
+  if (layers == 0) return layer == 0; // legacy whole-allocation C05-19
+  if (layer >= layers || elements == 0 ||
+      elements > UINT64_MAX / sizeof(__nv_bfloat16)) return false;
+  const uint64_t stride = elements * sizeof(__nv_bfloat16);
+  if (layers > UINT64_MAX / stride) return false;
+  return key_bytes == layers * stride && value_bytes == layers * stride;
+}
+
+// Validate all five views before lease acquisition or pointer arithmetic.
+bool attention_metadata_ranges_valid(const uint64_t* offsets, uint64_t bytes,
+    uint64_t sequences, uint64_t blocks, uint64_t rows) noexcept {
+  if (offsets == nullptr) return true;
+  if (sequences == UINT64_MAX) return false;
+  const uint64_t counts[5] = {sequences + 1, blocks, blocks, rows, rows};
+  const uint64_t widths[5] = {4, 4, 2, 4, 4};
+  uint64_t ends[5]{};
+  for (size_t i = 0; i < 5; ++i) {
+    if (counts[i] == 0 || counts[i] > UINT64_MAX / widths[i] ||
+        offsets[i] % widths[i] != 0 || offsets[i] > bytes ||
+        counts[i] * widths[i] > bytes - offsets[i]) return false;
+    ends[i] = offsets[i] + counts[i] * widths[i];
+    for (size_t j = 0; j < i; ++j) {
+      if (offsets[i] < ends[j] && offsets[j] < ends[i]) return false;
+    }
+  }
+  return true;
+}
+
+bool release_ragged_metadata_leases(
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state) noexcept {
+  if (!state.attention_metadata_packed &&
+      (!release_exclusive_use(state.row_positions->active_uses) ||
+       !release_exclusive_use(state.row_sequence_slots->active_uses) ||
+       !release_exclusive_use(state.valid_tokens->active_uses) ||
+       !release_exclusive_use(state.block_ids->active_uses))) return false;
+  return release_exclusive_use(state.sequence_block_offsets->active_uses);
 }
 
 bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
@@ -3141,11 +3231,28 @@ bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
       return false;
     }
     for (size_t other = index + 1; other < kBufferCount; ++other) {
-      if (buffers[index] == buffers[other]) {
+      if (buffers[index] == buffers[other] &&
+          !(state.attention_metadata_packed && index >= 4 && other >= 4)) {
         return false;
       }
     }
   }
+  if (!attention_parent_layer_is_valid(
+          state.attention_parent_layers, state.attention_layer_index,
+          pool_element_count, is_attention ? state.value_source->byte_len : state.key_pool->byte_len,
+          state.value_pool->byte_len)) return false;
+  if (state.attention_metadata_packed) {
+    if (state.attention_parent_layers == 0) return false;
+    for (size_t i = 5; i < kBufferCount; ++i) {
+      if (buffers[i] != buffers[4]) return false;
+    }
+  } else {
+    for (uint64_t offset : state.attention_metadata_offsets) if (offset != 0) return false;
+  }
+  if (!attention_metadata_ranges_valid(
+      state.attention_metadata_packed ? state.attention_metadata_offsets : nullptr,
+      state.sequence_block_offsets->byte_len, state.sequence_count,
+      state.block_count, state.active_row_count)) return false;
   if (stream->active_uses.load(std::memory_order_acquire) != 1 ||
       source_element_count >
           state.key_source->byte_len / sizeof(__nv_bfloat16) ||
@@ -3955,6 +4062,7 @@ bool release_capture_canonical_rms_norm_bf16_leases(
   capture->canonical_rms_norm_row_count = 0;
   capture->canonical_rms_norm_hidden_size = 0;
   capture->canonical_rms_norm_epsilon = 0.0F;
+  capture->rms_norm_profile = 0;
   capture->canonical_rms_norm_enqueue_count = 0;
   capture->canonical_rms_norm_input_lease_held = false;
   capture->canonical_rms_norm_weight_lease_held = false;
@@ -4098,6 +4206,8 @@ bool release_capture_bf16_row_gather_argmax_d2h_leases(
   capture->bf16_row_gather_argmax_d2h_output_row_count = 0;
   capture->bf16_row_gather_argmax_d2h_vocabulary_size = 0;
   capture->bf16_row_gather_argmax_d2h_result_byte_len = 0;
+  capture->output_indices_byte_offset = 0;
+  capture->output_parent_binding = false;
   capture->bf16_row_gather_argmax_d2h_enqueue_count = 0;
   capture->bf16_row_gather_argmax_d2h_input_lease_held = false;
   capture->bf16_row_gather_argmax_d2h_indices_lease_held = false;
@@ -4136,6 +4246,7 @@ bool release_capture_indexed_rope_bf16_leases(
   capture->indexed_rope_bf16_cos = nullptr;
   capture->indexed_rope_bf16_sin = nullptr;
   capture->indexed_rope_bf16_positions = nullptr;
+  capture->indexed_rope_bf16_positions_byte_offset = 0;
   capture->indexed_rope_bf16_active_row_count = 0;
   capture->indexed_rope_bf16_head_count = 0;
   capture->indexed_rope_bf16_head_size = 0;
@@ -4167,11 +4278,7 @@ bool release_capture_ragged_paged_kv_cache_write_bf16_leases(
   }
   RileyCudaRaggedPagedKvCacheWriteBf16State& state =
       capture->ragged_paged_kv_write_bf16;
-  if (!release_exclusive_use(state.row_positions->active_uses) ||
-      !release_exclusive_use(state.row_sequence_slots->active_uses) ||
-      !release_exclusive_use(state.valid_tokens->active_uses) ||
-      !release_exclusive_use(state.block_ids->active_uses) ||
-      !release_exclusive_use(state.sequence_block_offsets->active_uses) ||
+  if (!release_ragged_metadata_leases(state) ||
       !release_exclusive_use(state.value_pool->active_uses) ||
       !release_exclusive_use(state.value_source->active_uses) ||
       !release_exclusive_use(state.key_source->active_uses) ||
@@ -4202,7 +4309,7 @@ bool release_capture_canonical_gemm_bf16_leases(
       state.enqueue_count != kCanonicalGemmBf16EnqueueTerminal) {
     return false;
   }
-  if (!release_exclusive_use(state.workspace->active_uses) ||
+  if ((state.workspace != nullptr && !release_exclusive_use(state.workspace->active_uses)) ||
       !release_exclusive_use(state.weight->active_uses) ||
       !release_exclusive_use(state.input->active_uses) ||
       !release_exclusive_use(capture->fill_buffer->active_uses) ||
@@ -4382,7 +4489,8 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
         graph->canonical_rms_norm_hidden_size !=
             capture->canonical_rms_norm_hidden_size ||
         graph->canonical_rms_norm_epsilon !=
-            capture->canonical_rms_norm_epsilon) {
+            capture->canonical_rms_norm_epsilon ||
+        graph->rms_norm_profile != capture->rms_norm_profile) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kBf16Argmax) {
@@ -4444,7 +4552,9 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
         graph->bf16_row_gather_argmax_d2h_vocabulary_size !=
             capture->bf16_row_gather_argmax_d2h_vocabulary_size ||
         graph->bf16_row_gather_argmax_d2h_result_byte_len !=
-            capture->bf16_row_gather_argmax_d2h_result_byte_len) {
+            capture->bf16_row_gather_argmax_d2h_result_byte_len ||
+        graph->output_indices_byte_offset != capture->output_indices_byte_offset ||
+        graph->output_parent_binding != capture->output_parent_binding) {
       return false;
     }
   } else if (capture->operation ==
@@ -4456,6 +4566,7 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
         graph->indexed_rope_bf16_sin != capture->indexed_rope_bf16_sin ||
         graph->indexed_rope_bf16_positions !=
             capture->indexed_rope_bf16_positions ||
+        graph->indexed_rope_bf16_positions_byte_offset != capture->indexed_rope_bf16_positions_byte_offset ||
         graph->indexed_rope_bf16_active_row_count !=
             capture->indexed_rope_bf16_active_row_count ||
         graph->indexed_rope_bf16_head_count !=
@@ -4716,7 +4827,8 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         graph->canonical_rms_norm_hidden_size !=
             capture->canonical_rms_norm_hidden_size ||
         graph->canonical_rms_norm_epsilon !=
-            capture->canonical_rms_norm_epsilon) {
+            capture->canonical_rms_norm_epsilon ||
+        graph->rms_norm_profile != capture->rms_norm_profile) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kBf16Argmax) {
@@ -4780,7 +4892,9 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         graph->bf16_row_gather_argmax_d2h_vocabulary_size !=
             capture->bf16_row_gather_argmax_d2h_vocabulary_size ||
         graph->bf16_row_gather_argmax_d2h_result_byte_len !=
-            capture->bf16_row_gather_argmax_d2h_result_byte_len) {
+            capture->bf16_row_gather_argmax_d2h_result_byte_len ||
+        graph->output_indices_byte_offset != capture->output_indices_byte_offset ||
+        graph->output_parent_binding != capture->output_parent_binding) {
       return false;
     }
   } else if (capture->operation ==
@@ -4793,6 +4907,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         graph->indexed_rope_bf16_sin != capture->indexed_rope_bf16_sin ||
         graph->indexed_rope_bf16_positions !=
             capture->indexed_rope_bf16_positions ||
+        graph->indexed_rope_bf16_positions_byte_offset != capture->indexed_rope_bf16_positions_byte_offset ||
         graph->indexed_rope_bf16_active_row_count !=
             capture->indexed_rope_bf16_active_row_count ||
         graph->indexed_rope_bf16_head_count !=
@@ -4886,6 +5001,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->canonical_rms_norm_row_count = 0;
   capture->canonical_rms_norm_hidden_size = 0;
   capture->canonical_rms_norm_epsilon = 0.0F;
+  capture->rms_norm_profile = 0;
   capture->canonical_rms_norm_enqueue_count = 0;
   capture->canonical_rms_norm_input_lease_held = false;
   capture->canonical_rms_norm_weight_lease_held = false;
@@ -4920,6 +5036,8 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->bf16_row_gather_argmax_d2h_output_row_count = 0;
   capture->bf16_row_gather_argmax_d2h_vocabulary_size = 0;
   capture->bf16_row_gather_argmax_d2h_result_byte_len = 0;
+  capture->output_indices_byte_offset = 0;
+  capture->output_parent_binding = false;
   capture->bf16_row_gather_argmax_d2h_enqueue_count = 0;
   capture->bf16_row_gather_argmax_d2h_input_lease_held = false;
   capture->bf16_row_gather_argmax_d2h_indices_lease_held = false;
@@ -4929,6 +5047,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->indexed_rope_bf16_cos = nullptr;
   capture->indexed_rope_bf16_sin = nullptr;
   capture->indexed_rope_bf16_positions = nullptr;
+  capture->indexed_rope_bf16_positions_byte_offset = 0;
   capture->indexed_rope_bf16_active_row_count = 0;
   capture->indexed_rope_bf16_head_count = 0;
   capture->indexed_rope_bf16_head_size = 0;
@@ -5208,11 +5327,7 @@ bool release_graph_ragged_paged_kv_cache_write_bf16_leases(
           owner, stream, key_pool, state, true)) {
     return false;
   }
-  return release_exclusive_use(state.row_positions->active_uses) &&
-         release_exclusive_use(state.row_sequence_slots->active_uses) &&
-         release_exclusive_use(state.valid_tokens->active_uses) &&
-         release_exclusive_use(state.block_ids->active_uses) &&
-         release_exclusive_use(state.sequence_block_offsets->active_uses) &&
+  return release_ragged_metadata_leases(state) &&
          release_exclusive_use(state.value_pool->active_uses) &&
          release_exclusive_use(state.value_source->active_uses) &&
          release_exclusive_use(state.key_source->active_uses) &&
@@ -5229,7 +5344,7 @@ bool release_graph_canonical_gemm_bf16_leases(
           owner, stream, output, state, true)) {
     return false;
   }
-  return release_exclusive_use(state.workspace->active_uses) &&
+  return (state.workspace == nullptr || release_exclusive_use(state.workspace->active_uses)) &&
          release_exclusive_use(state.weight->active_uses) &&
          release_exclusive_use(state.input->active_uses) &&
          release_exclusive_use(output->active_uses) &&
@@ -6670,7 +6785,7 @@ RileyCudaStatus capture_begin_canonical_rms_norm_bf16_impl(
     uint64_t row_count, uint64_t hidden_size, float epsilon,
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, uint32_t profile = 0) noexcept {
   using riley_cuda_internal::clear_error;
 
   clear_error(error);
@@ -6691,6 +6806,13 @@ RileyCudaStatus capture_begin_canonical_rms_norm_bf16_impl(
         "out_graph_error has an incompatible struct_size or nonzero reserved fields");
   }
   clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (!norm_profile_is_valid(profile, row_count, hidden_size, epsilon)) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginCanonicalRmsNormBf16Operation,
+                            "HF RMSNorm requires BF16 H576, rows 1..8192, exact epsilon 1e-5");
+  }
+
   if (stream == nullptr || input == nullptr || weight == nullptr ||
       output == nullptr || stream->owner == nullptr || input->owner == nullptr ||
       weight->owner == nullptr || output->owner == nullptr) {
@@ -6875,6 +6997,8 @@ RileyCudaStatus capture_begin_canonical_rms_norm_bf16_impl(
   capture->canonical_rms_norm_row_count = row_count;
   capture->canonical_rms_norm_hidden_size = hidden_size;
   capture->canonical_rms_norm_epsilon = epsilon;
+  capture->rms_norm_profile = profile;
+  capture->prepared_graph->rms_norm_profile = profile;
   capture->canonical_rms_norm_input_lease_held = true;
   capture->canonical_rms_norm_weight_lease_held = true;
 
@@ -7937,7 +8061,7 @@ RileyCudaStatus capture_begin_bf16_row_gather_argmax_d2h_impl(
     uint64_t output_row_count, uint64_t vocabulary_size,
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, uint64_t indices_offset = 0, bool parent_binding = false) noexcept {
   using riley_cuda_internal::clear_error;
 
   clear_error(error);
@@ -8008,7 +8132,8 @@ RileyCudaStatus capture_begin_bf16_row_gather_argmax_d2h_impl(
       gathered_element_count >
           gathered_logits->byte_len / sizeof(__nv_bfloat16) ||
       result_byte_len > results->byte_len ||
-      pinned_results->byte_len != result_byte_len) {
+      (parent_binding ? pinned_results->byte_len < result_byte_len : pinned_results->byte_len != result_byte_len) ||
+      !output_indices_span_valid(row_indices, indices_offset, output_row_count)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -8237,6 +8362,10 @@ RileyCudaStatus capture_begin_bf16_row_gather_argmax_d2h_impl(
       nullptr, nullptr, nullptr, 0, 0, 0, input, row_indices,
       gathered_logits, pinned_results, input_row_count, output_row_count,
       vocabulary_size, result_byte_len);
+  capture->output_indices_byte_offset = indices_offset;
+  capture->output_parent_binding = parent_binding;
+  capture->prepared_graph->output_indices_byte_offset = indices_offset;
+  capture->prepared_graph->output_parent_binding = parent_binding;
   capture->fill_buffer = results;
   capture->fill_lease_held = true;
   capture->bf16_row_gather_argmax_d2h_input = input;
@@ -8736,7 +8865,7 @@ RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
     RileyCudaDeviceBuffer* positions, RileyCudaDeviceBuffer* output,
     const uint32_t* positions_mirror, uint64_t positions_mirror_len,
     uint64_t active_row_count, uint64_t head_count, uint64_t head_size,
-    uint64_t rotary_dimension, uint64_t table_position_count,
+    uint64_t rotary_dimension, uint64_t table_position_count, uint64_t positions_byte_offset,
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) noexcept {
@@ -8804,7 +8933,9 @@ RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
       tensor_element_count > output->byte_len / sizeof(__nv_bfloat16) ||
       table_element_count > cos->byte_len / sizeof(float) ||
       table_element_count > sin->byte_len / sizeof(float) ||
-      active_row_count > positions->byte_len / sizeof(uint32_t)) {
+      positions_byte_offset % sizeof(uint32_t) != 0 ||
+      positions_byte_offset > positions->byte_len ||
+      active_row_count > (positions->byte_len - positions_byte_offset) / sizeof(uint32_t)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginIndexedRopeBf16Operation,
@@ -8993,6 +9124,7 @@ RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
   graph->indexed_rope_bf16_cos = cos;
   graph->indexed_rope_bf16_sin = sin;
   graph->indexed_rope_bf16_positions = positions;
+  graph->indexed_rope_bf16_positions_byte_offset = positions_byte_offset;
   graph->indexed_rope_bf16_active_row_count = active_row_count;
   graph->indexed_rope_bf16_head_count = head_count;
   graph->indexed_rope_bf16_head_size = head_size;
@@ -9004,6 +9136,7 @@ RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
   capture->indexed_rope_bf16_cos = cos;
   capture->indexed_rope_bf16_sin = sin;
   capture->indexed_rope_bf16_positions = positions;
+  capture->indexed_rope_bf16_positions_byte_offset = positions_byte_offset;
   capture->indexed_rope_bf16_active_row_count = active_row_count;
   capture->indexed_rope_bf16_head_count = head_count;
   capture->indexed_rope_bf16_head_size = head_size;
@@ -9119,6 +9252,7 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
     uint64_t block_count, uint64_t active_row_count,
     uint64_t physical_block_count, uint64_t key_value_head_count,
     uint64_t head_size, RileyCudaGraphCaptureMode mode,
+    uint64_t parent_layers, uint64_t layer_index, const uint64_t* metadata_offsets,
     RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) noexcept {
@@ -9171,13 +9305,24 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
           "capture stream and ragged paged-KV allocations must share one context owner");
     }
     for (size_t other = index + 1; other < kBufferCount; ++other) {
-      if (buffers[index] == buffers[other]) {
+      if (buffers[index] == buffers[other] &&
+          !(metadata_offsets != nullptr && index >= 4 && other >= 4)) {
         return validation_error(
             error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
             RILEY_CUDA_ERROR_STAGE_VALIDATION,
             kBeginRaggedPagedKvCacheWriteBf16Operation,
             "graph BF16 ragged paged-KV write requires nine distinct device allocations");
       }
+    }
+  }
+  if (metadata_offsets != nullptr) {
+    bool identical = parent_layers != 0;
+    for (size_t i = 5; i < kBufferCount; ++i) identical = identical && buffers[i] == buffers[4];
+    if (!identical || !attention_metadata_ranges_valid(metadata_offsets,
+        sequence_block_offsets->byte_len, sequence_count, block_count, active_row_count)) {
+      return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "packed KV metadata requires one parent with aligned disjoint fields");
     }
   }
   if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
@@ -9192,6 +9337,8 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
           sequence_count, block_count, active_row_count, physical_block_count,
           key_value_head_count, head_size, &source_element_count,
           &pool_element_count) ||
+      !attention_parent_layer_is_valid(parent_layers, layer_index,
+          pool_element_count, key_pool->byte_len, value_pool->byte_len) ||
       source_element_count > key_source->byte_len / sizeof(__nv_bfloat16) ||
       source_element_count > value_source->byte_len / sizeof(__nv_bfloat16) ||
       pool_element_count > key_pool->byte_len / sizeof(__nv_bfloat16) ||
@@ -9276,6 +9423,7 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
                             message);
   };
   for (size_t index = 0; index < kBufferCount; ++index) {
+    if (metadata_offsets != nullptr && index > 4) continue;
     if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
       return reject_busy(
           "a fixed ragged paged-KV graph allocation has an active asynchronous use");
@@ -9365,6 +9513,13 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
   graph_state.physical_block_count = physical_block_count;
   graph_state.key_value_head_count = key_value_head_count;
   graph_state.head_size = head_size;
+  graph_state.attention_parent_layers = parent_layers;
+  graph_state.attention_layer_index = layer_index;
+  graph_state.attention_metadata_packed = metadata_offsets != nullptr;
+  if (metadata_offsets != nullptr) {
+    std::memcpy(graph_state.attention_metadata_offsets, metadata_offsets,
+                sizeof(graph_state.attention_metadata_offsets));
+  }
   graph->ragged_paged_kv_write_bf16 = graph_state;
   capture->fill_buffer = key_pool;
   capture->fill_lease_held = true;
@@ -9373,10 +9528,10 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
   capture->ragged_paged_kv_write_bf16.value_source_lease_held = true;
   capture->ragged_paged_kv_write_bf16.value_pool_lease_held = true;
   capture->ragged_paged_kv_write_bf16.sequence_block_offsets_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = metadata_offsets == nullptr;
   for (size_t index = 0; index < kBufferCount; ++index) {
     resource_leases_held[index] = false;
   }
@@ -9492,7 +9647,8 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
     uint64_t block_count, uint64_t active_row_count,
     uint64_t physical_block_count, uint64_t query_head_count,
     uint64_t key_value_head_count, uint64_t output_row_count, float scale,
-    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
+    const uint64_t* metadata_offsets, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) noexcept {
   using riley_cuda_internal::clear_error;
@@ -9544,13 +9700,24 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
           "capture stream and grouped ragged-attention allocations must share one context owner");
     }
     for (size_t other = index + 1; other < kBufferCount; ++other) {
-      if (buffers[index] == buffers[other]) {
+      if (buffers[index] == buffers[other] &&
+          !(metadata_offsets != nullptr && index >= 4 && other >= 4)) {
         return validation_error(
             error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
             RILEY_CUDA_ERROR_STAGE_VALIDATION,
             kBeginGroupedRaggedPagedAttentionBf16Operation,
             "graph grouped ragged attention requires nine distinct device allocations");
       }
+    }
+  }
+  if (metadata_offsets != nullptr) {
+    bool identical = parent_layers != 0;
+    for (size_t i = 5; i < kBufferCount; ++i) identical = identical && buffers[i] == buffers[4];
+    if (!identical || !attention_metadata_ranges_valid(metadata_offsets,
+        sequence_block_offsets->byte_len, sequence_count, block_count, active_row_count)) {
+      return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "packed metadata requires one parent and aligned non-overlapping in-range fields");
     }
   }
   if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
@@ -9567,6 +9734,8 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
           sequence_count, block_count, active_row_count, physical_block_count,
           query_head_count, key_value_head_count, output_row_count, scale,
           &query_element_count, &pool_element_count, &output_element_count) ||
+      !attention_parent_layer_is_valid(parent_layers, layer_index,
+          pool_element_count, key_pool->byte_len, value_pool->byte_len) ||
       query_element_count > query->byte_len / sizeof(__nv_bfloat16) ||
       pool_element_count > key_pool->byte_len / sizeof(__nv_bfloat16) ||
       pool_element_count > value_pool->byte_len / sizeof(__nv_bfloat16) ||
@@ -9651,6 +9820,7 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
                             message);
   };
   for (size_t index = 0; index < kBufferCount; ++index) {
+    if (metadata_offsets != nullptr && index > 4) continue;
     if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
       return reject_busy(
           "a fixed grouped ragged-attention graph allocation has an active asynchronous use");
@@ -9746,6 +9916,13 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
   graph_state.output_row_count = output_row_count;
   graph_state.attention_scale = scale;
   graph_state.grouped_attention = true;
+  graph_state.attention_parent_layers = parent_layers;
+  graph_state.attention_layer_index = layer_index;
+  graph_state.attention_metadata_packed = metadata_offsets != nullptr;
+  if (metadata_offsets != nullptr) {
+    std::memcpy(graph_state.attention_metadata_offsets, metadata_offsets,
+                sizeof(graph_state.attention_metadata_offsets));
+  }
   graph->ragged_paged_kv_write_bf16 = graph_state;
   capture->fill_buffer = output;
   capture->fill_lease_held = true;
@@ -9755,10 +9932,10 @@ RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
   capture->ragged_paged_kv_write_bf16.value_pool_lease_held = true;
   capture->ragged_paged_kv_write_bf16.sequence_block_offsets_lease_held =
       true;
-  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = true;
-  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = metadata_offsets == nullptr;
+  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = metadata_offsets == nullptr;
   for (size_t index = 0; index < kBufferCount; ++index) {
     resource_leases_held[index] = false;
   }
@@ -9865,7 +10042,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, bool selected_no_split = false) noexcept {
   using riley_cuda_internal::clear_error;
 
   clear_error(error);
@@ -9903,7 +10080,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
   RileyCudaStatus status =
       riley_cuda_internal::preflight_canonical_gemm_bf16_graph_state(
           plan, stream, input, weight, output, workspace, &graph_state,
-          error, kBeginCanonicalGemmBf16Operation);
+          error, kBeginCanonicalGemmBf16Operation, selected_no_split);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
@@ -9979,6 +10156,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
   }
   plan_lease_held = true;
   for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index] == nullptr) continue;
     if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
       return reject_busy(
           "a fixed canonical GEMM graph allocation has an active asynchronous use");
@@ -10057,7 +10235,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
   capture->canonical_gemm_bf16.plan_lease_held = true;
   capture->canonical_gemm_bf16.input_lease_held = true;
   capture->canonical_gemm_bf16.weight_lease_held = true;
-  capture->canonical_gemm_bf16.workspace_lease_held = true;
+  capture->canonical_gemm_bf16.workspace_lease_held = workspace != nullptr;
   plan_lease_held = false;
   for (size_t index = 0; index < kBufferCount; ++index) {
     resource_leases_held[index] = false;
@@ -11075,6 +11253,19 @@ riley_cuda_graph_capture_begin_canonical_rms_norm_bf16(
       out_capture, out_graph_error, error);
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_hf_smollm2_rms_norm_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* weight, RileyCudaDeviceBuffer* output,
+    uint64_t row_count, uint64_t hidden_size, float epsilon,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_canonical_rms_norm_bf16_impl(
+      stream, input, weight, output, row_count, hidden_size, epsilon, mode,
+      out_capture, out_graph_error, error, 1);
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_bf16_argmax(
     RileyCudaStream* stream, RileyCudaDeviceBuffer* logits,
     RileyCudaDeviceBuffer* results, uint64_t row_count,
@@ -11133,6 +11324,22 @@ riley_cuda_graph_capture_begin_bf16_row_gather_argmax_d2h(
 }
 
 extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_output_parent_d2h(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits, RileyCudaDeviceBuffer* results,
+    RileyCudaPinnedHostBuffer* pinned_results, uint64_t input_row_count,
+    uint64_t output_row_count, uint64_t vocabulary_size,
+    uint64_t indices_offset, RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_bf16_row_gather_argmax_d2h_impl(
+      stream, input, row_indices, gathered_logits, results, pinned_results,
+      input_row_count, output_row_count, vocabulary_size, mode, out_capture,
+      out_graph_error, error, indices_offset, true);
+}
+
+extern "C" RileyCudaStatus
 riley_cuda_graph_capture_begin_bf16_embedding_status_d2h(
     RileyCudaStream* stream, RileyCudaDeviceBuffer* table,
     RileyCudaDeviceBuffer* token_ids, RileyCudaDeviceBuffer* output,
@@ -11161,7 +11368,24 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
   return capture_begin_indexed_rope_bf16_impl(
       stream, input, cos, sin, positions, output, positions_mirror,
       positions_mirror_len, active_row_count, head_count, head_size,
-      rotary_dimension, table_position_count, mode, out_capture,
+      rotary_dimension, table_position_count, 0, mode, out_capture,
+      out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16_positions_span(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* cos, RileyCudaDeviceBuffer* sin,
+    RileyCudaDeviceBuffer* positions, RileyCudaDeviceBuffer* output,
+    const uint32_t* positions_mirror, uint64_t positions_mirror_len,
+    uint64_t active_row_count, uint64_t head_count, uint64_t head_size,
+    uint64_t rotary_dimension, uint64_t table_position_count, uint64_t positions_byte_offset,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_indexed_rope_bf16_impl(
+      stream, input, cos, sin, positions, output, positions_mirror,
+      positions_mirror_len, active_row_count, head_count, head_size,
+      rotary_dimension, table_position_count, positions_byte_offset, mode, out_capture,
       out_graph_error, error);
 }
 
@@ -11184,8 +11408,26 @@ riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
       stream, key_source, value_source, key_pool, value_pool,
       sequence_block_offsets, block_ids, valid_tokens, row_sequence_slots,
       row_positions, sequence_count, block_count, active_row_count,
-      physical_block_count, key_value_head_count, head_size, mode, out_capture,
+      physical_block_count, key_value_head_count, head_size, mode, 0, 0, nullptr, out_capture,
       out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_packed_parent_kv_write_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* key_source,
+    RileyCudaDeviceBuffer* value_source, RileyCudaDeviceBuffer* key_parent,
+    RileyCudaDeviceBuffer* value_parent, RileyCudaDeviceBuffer* metadata,
+    const uint64_t* metadata_offsets,
+    uint64_t sequence_count, uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t key_value_head_count,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error, RileyCudaErrorInfo* error) noexcept {
+  if (parent_layers == 0 || metadata_offsets == nullptr) layer_index = UINT64_MAX;
+  return capture_begin_ragged_paged_kv_cache_write_bf16_impl(
+      stream, key_source, value_source, key_parent, value_parent, metadata,
+      metadata, metadata, metadata, metadata, sequence_count, block_count,
+      active_row_count, physical_block_count, key_value_head_count, 64, mode,
+      parent_layers, layer_index, metadata_offsets, out_capture, out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus
@@ -11208,7 +11450,55 @@ riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16(
       block_ids, valid_tokens, row_sequence_slots, row_positions,
       sequence_count, block_count, active_row_count, physical_block_count,
       query_head_count, key_value_head_count, output_row_count, scale, mode,
-      out_capture, out_graph_error, error);
+      0, 0, nullptr, out_capture, out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_parent_layer_attention_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool, RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids, RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions, uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t output_row_count, float scale,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  if (parent_layers == 0) layer_index = UINT64_MAX;
+  return capture_begin_grouped_ragged_paged_attention_bf16_impl(
+      stream, query, key_pool, value_pool, output, sequence_block_offsets,
+      block_ids, valid_tokens, row_sequence_slots, row_positions,
+      sequence_count, block_count, active_row_count, physical_block_count,
+      query_head_count, key_value_head_count, output_row_count, scale, mode,
+      parent_layers, layer_index, nullptr, out_capture, out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_packed_parent_attention_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool, RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* metadata_slab, const uint64_t* metadata_offsets,
+    uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t output_row_count, float scale,
+    RileyCudaGraphCaptureMode mode, uint64_t parent_layers, uint64_t layer_index,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  if (parent_layers == 0 || metadata_offsets == nullptr) layer_index = UINT64_MAX;
+  return capture_begin_grouped_ragged_paged_attention_bf16_impl(
+      stream, query, key_pool, value_pool, output, metadata_slab,
+      metadata_slab, metadata_slab, metadata_slab, metadata_slab,
+      sequence_count, block_count, active_row_count, physical_block_count,
+      query_head_count, key_value_head_count, output_row_count, scale, mode,
+      parent_layers, layer_index, metadata_offsets, out_capture, out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus
@@ -11222,6 +11512,19 @@ riley_cuda_graph_capture_begin_canonical_gemm_bf16(
   return capture_begin_canonical_gemm_bf16_impl(
       stream, plan, input, weight, output, workspace, mode, out_capture,
       out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_canonical_gemm_bf16_impl(
+      stream, plan, input, weight, output, workspace, mode, out_capture,
+      out_graph_error, error, true);
 }
 
 extern "C" RileyCudaStatus
@@ -11769,11 +12072,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_residual_add_bf16(
   return status;
 }
 
-extern "C" RileyCudaStatus
-riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+static RileyCudaStatus enqueue_norm_bf16_impl(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, uint32_t profile) noexcept {
   using riley_cuda_internal::clear_error;
 
   clear_error(error);
@@ -11799,6 +12101,7 @@ riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
   if (owner->prepared_graph == nullptr || !owner->capture_started ||
       owner->capture_terminated || owner->unreleased_graph != nullptr ||
       !canonical_rms_norm_capture_state_is_valid(owner) ||
+      owner->rms_norm_profile != profile ||
       owner->canonical_rms_norm_enqueue_count != 0) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -11822,6 +12125,13 @@ riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
       error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueCanonicalRmsNormBf16Operation,
       owner);
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    if (profile == 1) {
+      riley_cuda_internal::launch_graph_hf_smollm2_rms_norm(
+          owner->canonical_rms_norm_input->device_data,
+          owner->canonical_rms_norm_weight->device_data,
+          owner->fill_buffer->device_data, owner->canonical_rms_norm_row_count,
+          owner->stream->stream);
+    } else {
     graph_canonical_rms_norm_bf16<<<
         grid_x, kGraphCanonicalRmsNormThreads,
         kGraphCanonicalRmsNormThreads * sizeof(float), owner->stream->stream>>>(
@@ -11833,6 +12143,7 @@ riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
         owner->canonical_rms_norm_row_count,
         owner->canonical_rms_norm_hidden_size,
         owner->canonical_rms_norm_epsilon);
+    }
     status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
                            kEnqueueCanonicalRmsNormBf16Operation);
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
@@ -11848,6 +12159,18 @@ riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
                          false, status != RILEY_CUDA_STATUS_SUCCESS ||
                                     !restoration_known);
   return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+    RileyCudaGraphCapture* capture, RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return enqueue_norm_bf16_impl(capture, out_graph_error, error, 0);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_hf_smollm2_rms_norm_bf16(
+    RileyCudaGraphCapture* capture, RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return enqueue_norm_bf16_impl(capture, out_graph_error, error, 1);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_argmax(
@@ -12202,8 +12525,8 @@ riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax_d2h(
                                   0, owner->stream->stream>>>(
         static_cast<const __nv_bfloat16*>(
             owner->bf16_row_gather_argmax_d2h_input->device_data),
-        static_cast<const uint32_t*>(
-            owner->bf16_row_gather_argmax_d2h_indices->device_data),
+        reinterpret_cast<const uint32_t*>(
+            static_cast<const unsigned char*>(owner->bf16_row_gather_argmax_d2h_indices->device_data) + owner->output_indices_byte_offset),
         static_cast<__nv_bfloat16*>(
             owner->bf16_row_gather_argmax_d2h_gathered_logits->device_data),
         owner->bf16_row_gather_argmax_d2h_input_row_count,
@@ -12484,8 +12807,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
             owner->indexed_rope_bf16_input->device_data),
         static_cast<const float*>(owner->indexed_rope_bf16_cos->device_data),
         static_cast<const float*>(owner->indexed_rope_bf16_sin->device_data),
-        static_cast<const uint32_t*>(
-            owner->indexed_rope_bf16_positions->device_data),
+        reinterpret_cast<const uint32_t*>(
+            static_cast<const unsigned char*>(owner->indexed_rope_bf16_positions->device_data) +
+            owner->indexed_rope_bf16_positions_byte_offset),
         static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
         owner->indexed_rope_bf16_table_position_count,
         owner->indexed_rope_bf16_head_count,
@@ -12588,11 +12912,11 @@ riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
           ? requested_blocks
           : kMaximumGraphBf16RowGatherBlocks);
   const GraphRaggedPagedKvDeviceBatch batch{
-      static_cast<const uint32_t*>(state.sequence_block_offsets->device_data),
-      static_cast<const uint32_t*>(state.block_ids->device_data),
-      static_cast<const uint16_t*>(state.valid_tokens->device_data),
-      static_cast<const uint32_t*>(state.row_sequence_slots->device_data),
-      static_cast<const uint32_t*>(state.row_positions->device_data),
+      reinterpret_cast<const uint32_t*>(static_cast<const unsigned char*>(state.sequence_block_offsets->device_data) + state.attention_metadata_offsets[0]),
+      reinterpret_cast<const uint32_t*>(static_cast<const unsigned char*>(state.block_ids->device_data) + state.attention_metadata_offsets[1]),
+      reinterpret_cast<const uint16_t*>(static_cast<const unsigned char*>(state.valid_tokens->device_data) + state.attention_metadata_offsets[2]),
+      reinterpret_cast<const uint32_t*>(static_cast<const unsigned char*>(state.row_sequence_slots->device_data) + state.attention_metadata_offsets[3]),
+      reinterpret_cast<const uint32_t*>(static_cast<const unsigned char*>(state.row_positions->device_data) + state.attention_metadata_offsets[4]),
       state.sequence_count,
       state.block_count,
       state.active_row_count,
@@ -12611,8 +12935,8 @@ riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
         grid_x, kGraphBf16RowGatherThreads, 0, owner->stream->stream>>>(
         static_cast<const __nv_bfloat16*>(state.key_source->device_data),
         static_cast<const __nv_bfloat16*>(state.value_source->device_data),
-        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
-        static_cast<__nv_bfloat16*>(state.value_pool->device_data), batch,
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data) + state.attention_layer_index * pool_element_count,
+        static_cast<__nv_bfloat16*>(state.value_pool->device_data) + state.attention_layer_index * pool_element_count, batch,
         state.key_value_head_count, state.head_size, source_element_count);
     status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
                            kEnqueueRaggedPagedKvCacheWriteBf16Operation);
@@ -12919,11 +13243,21 @@ riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
   (void)pool_element_count;
   (void)output_element_count;
   const GraphRaggedPagedKvDeviceBatch batch{
-      static_cast<const uint32_t*>(state.sequence_block_offsets->device_data),
-      static_cast<const uint32_t*>(state.block_ids->device_data),
-      static_cast<const uint16_t*>(state.valid_tokens->device_data),
-      static_cast<const uint32_t*>(state.row_sequence_slots->device_data),
-      static_cast<const uint32_t*>(state.row_positions->device_data),
+      reinterpret_cast<const uint32_t*>(
+          static_cast<const uint8_t*>(state.sequence_block_offsets->device_data) +
+          state.attention_metadata_offsets[0]),
+      reinterpret_cast<const uint32_t*>(
+          static_cast<const uint8_t*>(state.block_ids->device_data) +
+          state.attention_metadata_offsets[1]),
+      reinterpret_cast<const uint16_t*>(
+          static_cast<const uint8_t*>(state.valid_tokens->device_data) +
+          state.attention_metadata_offsets[2]),
+      reinterpret_cast<const uint32_t*>(
+          static_cast<const uint8_t*>(state.row_sequence_slots->device_data) +
+          state.attention_metadata_offsets[3]),
+      reinterpret_cast<const uint32_t*>(
+          static_cast<const uint8_t*>(state.row_positions->device_data) +
+          state.attention_metadata_offsets[4]),
       state.sequence_count,
       state.block_count,
       state.active_row_count,
@@ -12950,8 +13284,12 @@ riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
                                 kGraphRaggedAttentionWarpSize),
           0, owner->stream->stream>>>(
           static_cast<const __nv_bfloat16*>(state.key_source->device_data),
-          static_cast<const __nv_bfloat16*>(state.value_source->device_data),
-          static_cast<const __nv_bfloat16*>(state.value_pool->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_source->device_data) +
+              state.attention_layer_index * state.physical_block_count *
+                  state.key_value_head_count * 16 * 64,
+          static_cast<const __nv_bfloat16*>(state.value_pool->device_data) +
+              state.attention_layer_index * state.physical_block_count *
+                  state.key_value_head_count * 16 * 64,
           static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data), batch,
           state.query_head_count, state.key_value_head_count,
           state.attention_scale);
@@ -12969,8 +13307,12 @@ riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
           grid, query_head_warps * kGraphRaggedAttentionWarpSize, 0,
           owner->stream->stream>>>(
           static_cast<const __nv_bfloat16*>(state.key_source->device_data),
-          static_cast<const __nv_bfloat16*>(state.value_source->device_data),
-          static_cast<const __nv_bfloat16*>(state.value_pool->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_source->device_data) +
+              state.attention_layer_index * state.physical_block_count *
+                  state.key_value_head_count * 16 * 64,
+          static_cast<const __nv_bfloat16*>(state.value_pool->device_data) +
+              state.attention_layer_index * state.physical_block_count *
+                  state.key_value_head_count * 16 * 64,
           static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data), batch,
           state.query_head_count, state.key_value_head_count,
           state.attention_scale);
@@ -13812,10 +14154,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->bf16_row_gather_argmax_d2h_output_row_count,
       owner->bf16_row_gather_argmax_d2h_vocabulary_size,
       owner->bf16_row_gather_argmax_d2h_result_byte_len);
+  exec->output_indices_byte_offset = owner->output_indices_byte_offset;
+  exec->output_parent_binding = owner->output_parent_binding;
+  exec->rms_norm_profile = owner->rms_norm_profile;
   exec->indexed_rope_bf16_input = owner->indexed_rope_bf16_input;
   exec->indexed_rope_bf16_cos = owner->indexed_rope_bf16_cos;
   exec->indexed_rope_bf16_sin = owner->indexed_rope_bf16_sin;
   exec->indexed_rope_bf16_positions = owner->indexed_rope_bf16_positions;
+  exec->indexed_rope_bf16_positions_byte_offset = owner->indexed_rope_bf16_positions_byte_offset;
   exec->indexed_rope_bf16_active_row_count =
       owner->indexed_rope_bf16_active_row_count;
   exec->indexed_rope_bf16_head_count = owner->indexed_rope_bf16_head_count;

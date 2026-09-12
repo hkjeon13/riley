@@ -1,0 +1,4 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912');p=r/'prefill-shapes-source-v11/crates/riley-server/src/main.rs';s=p.read_text();old='    let server_config = ServerConfig {\n        bind_address,\n        request_limits,';assert s.count(old)==1;s=s.replace(old,'    let server_config = ServerConfig {\n        bind_address,\n        // A blocking SSE response owns its HTTP worker until completion.\n        worker_threads: options.max_active_sequences.max(8),\n        request_limits,');s=s.replace('for capacity in ["1","2","4","8"] {','for capacity in ["1","2","4","8","16","32"] {');p.write_text(s)
+s=(r/'build_cli_v36.py').read_text().replace('v36','v37');(r/'build_cli_v37.py').write_text(s)
+s=(r/'run_v3_http_v36_c32.py').read_text().replace('v36','v37');(r/'run_v3_http_v37_c32.py').write_text(s)

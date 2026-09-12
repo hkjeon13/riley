@@ -2620,3 +2620,94 @@ riley_cuda_fixed37_ragged_paged_attention_two_pass_execute(
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
 }
+
+cudaError_t riley_cuda_internal::enqueue_qkv_rope(cudaStream_t stream,
+    const void* q, const void* k, void* qr, void* kr, const void* cos,
+    const void* sin, const void* positions, uint64_t q_heads, uint64_t kv_heads,
+    uint64_t table_positions) noexcept {
+  indexed_rope_kernel<__nv_bfloat16><<<block_count(q_heads * 32), kThreads, 0, stream>>>(
+      static_cast<const __nv_bfloat16*>(q), static_cast<const float*>(cos), static_cast<const float*>(sin),
+      static_cast<const uint32_t*>(positions), static_cast<__nv_bfloat16*>(qr), table_positions, q_heads, 64, 64, q_heads * 32);
+  auto status = cudaGetLastError();
+  if (status != cudaSuccess) return status;
+  indexed_rope_kernel<__nv_bfloat16><<<block_count(kv_heads * 32), kThreads, 0, stream>>>(
+      static_cast<const __nv_bfloat16*>(k), static_cast<const float*>(cos), static_cast<const float*>(sin),
+      static_cast<const uint32_t*>(positions), static_cast<__nv_bfloat16*>(kr), table_positions, kv_heads, 64, 64, kv_heads * 32);
+  return cudaGetLastError();
+}
+
+namespace {
+__global__ void bound_kv_write_kernel(const __nv_bfloat16* key, const __nv_bfloat16* value,
+    __nv_bfloat16* key_pool, __nv_bfloat16* value_pool, const uint32_t* position,
+    uint64_t heads, uint64_t physical) {
+  for (uint64_t i = static_cast<uint64_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+       i < heads*64; i += static_cast<uint64_t>(gridDim.x)*blockDim.x) {
+    const uint64_t target = ((physical*heads+i/64)*16+(*position%16))*64+i%64;
+    key_pool[target]=key[i]; value_pool[target]=value[i];
+  }
+}
+}
+cudaError_t riley_cuda_internal::enqueue_bound_kv_write(cudaStream_t stream,
+    const void* key,const void* value,void* key_pool,void* value_pool,const void* position,
+    uint64_t heads,uint64_t physical_block) noexcept {
+  bound_kv_write_kernel<<<block_count(heads*64),kThreads,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(key),static_cast<const __nv_bfloat16*>(value),
+      static_cast<__nv_bfloat16*>(key_pool),static_cast<__nv_bfloat16*>(value_pool),
+      static_cast<const uint32_t*>(position),heads,physical_block);
+  return cudaGetLastError();
+}
+
+cudaError_t riley_cuda_internal::enqueue_bound_attention(cudaStream_t stream,const void* query,
+    const void* key,const void* value,void* output,const void* metadata,const uint64_t* fields,
+    uint64_t position_offset,uint64_t query_heads,uint64_t kv_heads,uint64_t physical_blocks) noexcept {
+  const auto* m=static_cast<const uint8_t*>(metadata);
+  DeviceBatch batch{reinterpret_cast<const uint32_t*>(m+fields[0]),reinterpret_cast<const uint32_t*>(m+fields[1]),
+      reinterpret_cast<const uint16_t*>(m+fields[2]),reinterpret_cast<const uint32_t*>(m+fields[3]),
+      reinterpret_cast<const uint32_t*>(m+position_offset),1,1,1,physical_blocks};
+  const auto group=query_heads/kv_heads;
+  if(group>1 && group<=kRaggedAttentionMaximumWarpsPerBlock) {
+    ragged_paged_attention_gqa_shared_kv_kernel<<<dim3(1,static_cast<uint32_t>(kv_heads),1),static_cast<uint32_t>(group*kWarpSize),0,stream>>>(
+      static_cast<const __nv_bfloat16*>(query),static_cast<const __nv_bfloat16*>(key),static_cast<const __nv_bfloat16*>(value),
+      static_cast<__nv_bfloat16*>(output),batch,query_heads,kv_heads,0.125F);
+  } else {
+    const auto warps=static_cast<uint32_t>(query_heads<kRaggedAttentionMaximumWarpsPerBlock?query_heads:kRaggedAttentionMaximumWarpsPerBlock);
+    ragged_paged_attention_grouped_heads_kernel<<<dim3(1,static_cast<uint32_t>((query_heads+warps-1)/warps),1),warps*kWarpSize,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(query),static_cast<const __nv_bfloat16*>(key),static_cast<const __nv_bfloat16*>(value),
+      static_cast<__nv_bfloat16*>(output),batch,query_heads,kv_heads,0.125F);
+  }
+  return cudaGetLastError();
+}
+
+// Metadata: token, position, [0,live_blocks], padded physical ids, valid prefixes,
+// then one row slot. Host replay validates the complete mapping before staging.
+cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream,
+    const void* query,const void* key_source,const void* value_source,void* key,void* value,
+    void* output,const void* metadata,uint64_t capacity,uint64_t query_heads,
+    uint64_t kv_heads,uint64_t physical_blocks) noexcept {
+  const auto* m=static_cast<const uint8_t*>(metadata);
+  const uint64_t slot=(16+6*capacity+3)&~uint64_t(3);
+  DeviceBatch batch{reinterpret_cast<const uint32_t*>(m+8),reinterpret_cast<const uint32_t*>(m+16),
+      reinterpret_cast<const uint16_t*>(m+16+4*capacity),reinterpret_cast<const uint32_t*>(m+slot),
+      reinterpret_cast<const uint32_t*>(m+4),1,capacity,1,physical_blocks};
+  ragged_paged_kv_cache_write_kernel<<<block_count(kv_heads*64),kThreads,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(key_source),static_cast<const __nv_bfloat16*>(value_source),
+      static_cast<__nv_bfloat16*>(key),static_cast<__nv_bfloat16*>(value),batch,kv_heads,64,kv_heads*64);
+  auto status=cudaGetLastError(); if(status!=cudaSuccess) return status;
+  const auto group=query_heads/kv_heads;
+  if(group>1 && group<=kRaggedAttentionMaximumWarpsPerBlock) {
+    ragged_paged_attention_gqa_shared_kv_kernel<<<dim3(1,static_cast<uint32_t>(kv_heads),1),static_cast<uint32_t>(group*kWarpSize),0,stream>>>(
+      static_cast<const __nv_bfloat16*>(query),static_cast<const __nv_bfloat16*>(key),static_cast<const __nv_bfloat16*>(value),
+      static_cast<__nv_bfloat16*>(output),batch,query_heads,kv_heads,0.125F);
+  } else {
+    const auto warps=static_cast<uint32_t>(query_heads<kRaggedAttentionMaximumWarpsPerBlock?query_heads:kRaggedAttentionMaximumWarpsPerBlock);
+    ragged_paged_attention_grouped_heads_kernel<<<dim3(1,static_cast<uint32_t>((query_heads+warps-1)/warps),1),warps*kWarpSize,0,stream>>>(
+      static_cast<const __nv_bfloat16*>(query),static_cast<const __nv_bfloat16*>(key),static_cast<const __nv_bfloat16*>(value),
+      static_cast<__nv_bfloat16*>(output),batch,query_heads,kv_heads,0.125F);
+  }
+  return cudaGetLastError();
+}
+
+cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
+  bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab);
+  return cudaGetLastError();
+}

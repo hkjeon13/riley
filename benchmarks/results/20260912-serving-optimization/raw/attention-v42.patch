@@ -1,0 +1,126 @@
+commit fca8a7204cfeae342a7837fb43a686021d8cbf13
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 03:23:23 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 03:23:23 2026 +0900
+
+    Group attention fragment loads while preserving ordered MMA
+
+diff --git a/kernels/src/decode_shared16_attention.cuh b/kernels/src/decode_shared16_attention.cuh
+index 8973dcc..a1f61a1 100644
+--- a/kernels/src/decode_shared16_attention.cuh
++++ b/kernels/src/decode_shared16_attention.cuh
+@@ -9,18 +9,17 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
+  q+=row*576;result+=row*9*4096;
+  int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
+  if(count<1 || count>4096)return;
++ int lane=threadIdx.x,g=lane/4,t=lane%4;
++ uint32_t query[4],query_hi[4];
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){auto* qp=q+head*64+depth*16;query[depth]=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);query_hi[depth]=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);}
+  for(;token<count;token+=gridDim.x*8){
+- int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
++ float d[4]={};uint32_t key[4],key_hi[4];
++ bool valid=token+g<count;int kb=valid?riley_prefill_shape::cache_index(token+g,head/3,0,pages):0;
+  #pragma unroll
+- for(int depth=0;depth<64;depth+=16){
+-  auto* qp=q+head*64+depth;
+-  uint32_t a=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);
+-  uint32_t aa=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);
+-  int kb=token+g<count?riley_prefill_shape::cache_index(token+g,head/3,depth,pages):0;
+-  uint32_t b=token+g<count?riley_prefill_shape::pair(k[kb+2*t],k[kb+2*t+1]):0;
+-  uint32_t bb=token+g<count?riley_prefill_shape::pair(k[kb+2*t+8],k[kb+2*t+9]):0;
+-  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
+- }
++ for(int depth=0;depth<4;++depth){key[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
++ #pragma unroll
++ for(int depth=0;depth<4;++depth)riley_prefill_shape::mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
+  if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
+  }
+ }
+@@ -47,15 +46,21 @@ __global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16*
+   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
+   den=local_den;maximum=mx;__syncwarp();
+   for(int j=0;j<4;++j)accum[j]*=alpha;
+-  for(int token=begin;token<end;token+=16){
+-   int pi=token-begin;uint32_t a=riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]);
+-   uint32_t aa=riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]);
+-   // Each aligned K16 tile lies entirely in one physical KV page.
+-   int dim=block*8+g;int value_base=((pages[token/16]*3+head/3)*16)*64+dim;
+-   auto val=[&](int pos){return pos<end?v[value_base+(pos-token)*64]:zero;};
+-   uint32_t b=riley_prefill_shape::pair(val(token+2*t),val(token+2*t+1));
+-   uint32_t bb=riley_prefill_shape::pair(val(token+2*t+8),val(token+2*t+9));
+-   riley_prefill_shape::mma(accum,a,a,aa,aa,b,bb);
++  #pragma unroll 1
++  for(int token=begin;token<end;token+=64){
++   uint32_t pa[4],paa[4],vb[4],vbb[4];
++   #pragma unroll
++   for(int part=0;part<4;++part){
++    int at=token+part*16,pi=at-begin;bool live=at<end;
++    pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
++    paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
++    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
++    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
++    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
++    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
++   }
++   #pragma unroll
++   for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
+   }
+   __syncwarp();
+  }
+diff --git a/kernels/src/prefill_shape_attention.cuh b/kernels/src/prefill_shape_attention.cuh
+index d63370a..8b3762b 100644
+--- a/kernels/src/prefill_shape_attention.cuh
++++ b/kernels/src/prefill_shape_attention.cuh
+@@ -37,14 +37,12 @@ __global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,co
+   int begin=tile*128,end=min(begin+128,count);
+   for(int token=begin;token<end;token+=8){
+    float d[4]={};
+-   for(int depth=0;depth<64;depth+=16){
+-    uint32_t a=query[depth/16];
+-    uint32_t aa=query_hi[depth/16];
+-    int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
+-    uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
+-    uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
+-    mma(d,a,a,aa,aa,b,bb);
+-   }
++   uint32_t key[4],key_hi[4];bool valid=token+group<end;
++   int kb=valid?cache_index(token+group,kvh,0,blocks):0;
++   #pragma unroll
++   for(int depth=0;depth<4;++depth){key[depth]=valid?pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
++   #pragma unroll
++   for(int depth=0;depth<4;++depth)mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
+    if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[warp][token-begin+2*t+j]=d[j]*.125F;}
+   }
+   __syncwarp();
+diff --git a/kernels/tests/prefill_shape_attention_probe.cu b/kernels/tests/prefill_shape_attention_probe.cu
+index 51a0a42..9333029 100644
+--- a/kernels/tests/prefill_shape_attention_probe.cu
++++ b/kernels/tests/prefill_shape_attention_probe.cu
+@@ -24,7 +24,7 @@ __global__ void attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __
+  int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
+  int row=blockIdx.x,kvh=blockIdx.y,qh=kvh*3+warp,count=n-rows+row+1;
+  int qb=(row*9+qh)*64;
+- if(n<rows || n>160){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
++ if(n<rows || n>4096){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
+  __shared__ float scores[3][128];
+  __shared__ __nv_bfloat16 probs[3][128];
+  float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
+@@ -94,7 +94,7 @@ void run(int rows,int start){
+  unsigned rng=start+rows+131;for(auto* xs:{&q,&k,&v})for(auto& x:*xs){rng=rng*1664525+1013904223;x=__bfloat16_as_ushort(__float2bfloat16_rn(float(int(rng%2049)-1024)/2048.f));}
+  auto dq=upload(q),dk=upload(k),dv=upload(v),da=upload(a),db=upload(b);auto dp=upload(pages);
+  ck(riley_prefill_shape::launch(0,(__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)da,dp,start,rows,context));ck(cudaDeviceSynchronize());ck(cudaMemcpy(a.data(),da,a.size()*2,cudaMemcpyDeviceToHost));
+- if(end<=160){oracle::attention<<<dim3(rows,3),96>>>((__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,rows,end,nullptr,dp);ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,b.size()*2,cudaMemcpyDeviceToHost));if(a!=b)exit(3);}
++ if(end<=4096){oracle::attention<<<dim3(rows,3),96>>>((__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,rows,end,nullptr,dp);ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,b.size()*2,cudaMemcpyDeviceToHost));if(a!=b)exit(3);}
+  // Independent FP64 softmax/dot diagnostic, not full-model numerical qualification.
+  // Predeclared absolute bound0.005 for bounded inputs in[-0.5,0.5].
+  double maxerr=0.;int sampled=0;
+@@ -109,6 +109,6 @@ void run(int rows,int start){
+   ck(cudaMemcpy(dk,pk.data(),pk.size()*2,cudaMemcpyHostToDevice));ck(cudaMemcpy(dv,pv.data(),pv.size()*2,cudaMemcpyHostToDevice));ck(riley_prefill_shape::launch(0,(__nv_bfloat16*)dq+row*576,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,dp,count-1,1,context));ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,576*2,cudaMemcpyDeviceToHost));for(int i=0;i<576;++i)if(a[row*576+i]!=b[i])exit(6);
+  }
+  for(void* p:{(void*)dq,(void*)dk,(void*)dv,(void*)da,(void*)db,(void*)dp})ck(cudaFree(p));
+- printf("{\"rows\":%d,\"start\":%d,\"old_exact_checked\":%s,\"fp64_sampled_elements\":%d,\"max_abs_error\":%.9g,\"causal_suffix_nan_exact\":true}\n",rows,start,end<=160?"true":"false",sampled,maxerr);
++ printf("{\"rows\":%d,\"start\":%d,\"old_exact_checked\":%s,\"fp64_sampled_elements\":%d,\"max_abs_error\":%.9g,\"causal_suffix_nan_exact\":true}\n",rows,start,end<=4096?"true":"false",sampled,maxerr);
+ }
+ int main(){for(int start:{0,13,128,1024})for(int rows:{1,17,127,129,398})run(rows,start);run(1,4095);run(1024,3072);}

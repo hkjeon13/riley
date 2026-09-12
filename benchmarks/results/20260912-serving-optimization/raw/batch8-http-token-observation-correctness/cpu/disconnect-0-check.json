@@ -1,0 +1,17 @@
+{
+  "check_id": "disconnect-0",
+  "kind": "intentional_disconnect",
+  "completed": true,
+  "sampler": "cpu",
+  "request": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/cpu/disconnect-0-request.json",
+    "sha256": "ded236ea3dd57be0014456906f8b31778752cb1897ae37f5992ad97d9eae152d"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/batch8-http-token-observation-correctness/cpu/disconnect-0-response.json",
+    "sha256": "3f1cbd699570778d09f21c2f16bb1800454f4f095efdf02b3f473570aa87daf6"
+  },
+  "boundary": "after_headers",
+  "claim": "connection closed and following request reuses engine; cancellation race outcome is not inferred",
+  "performance_claim": false
+}

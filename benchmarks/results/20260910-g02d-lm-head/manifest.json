@@ -1,0 +1,36 @@
+{
+  "scope": "G02D actual LM head cold graph audit; full graph pending",
+  "gpu": {
+    "passed": 2,
+    "exit_code": 0,
+    "head_comparisons_per_model": 4,
+    "head_replays_per_model": 16,
+    "independent_baseline_full_logits_equal": true
+  },
+  "cpu": {
+    "runtime": 258,
+    "architecture": 15,
+    "inventory": 1,
+    "exit_code": 0
+  },
+  "clippy": {
+    "exit_code": 0,
+    "inherited_warnings_remain": true,
+    "new_lm_head_diagnostics": []
+  },
+  "fmt_diff": {
+    "exit_code": 0
+  },
+  "artifacts": {
+    "source-hashes.json": "429ca72e50c812501c1eda80c09fcd40f44caba06cc12017e72675f6f3e50f68",
+    "runtime-identities.json": "4b7b00c0029bc6a64f7a698b1ec7af88b7d03c7057dc60496cb0af45fad4c4bb",
+    "model-preservation.json": "009cd67b64f74b09b513af8ad064671c672b3dbb5451123da09a319bff222971",
+    "clippy.log": "1f9c126158fab3a6222319ae13021e4e1657ad2e21174c4f8a1db488ad97f26e",
+    "clippy.jsonl": "7ecfd26fd0cba1854c7b47f2f4c14cb74961e5caee3afa9edc39687f65dd7558",
+    "remote-source-verification.json": "2322b922ac7e24343c7f6fc1eeb8c2bd0e07635070113bc9a40320e0a6b9c796",
+    "README.md": "c249c2c0527e60f3e989242d0282461b7a7fe1740733cc4bd9271beea7178dbe",
+    "cpu.log": "1245b56c9688cb304aefcc9fca9c1b25e6f74ea076aa651ad95510010073afaf",
+    "source-overlay.tar.gz": "30f96192c9ecd3b97437b151c7ae80db950cb94e3dd661117b4955377d398c3d",
+    "gpu-model.log": "8433e14a50a800e920248a4658820cb5775aa2ea37286d690d9b40c3e045a87e"
+  }
+}

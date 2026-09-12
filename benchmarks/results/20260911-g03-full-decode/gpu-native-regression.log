@@ -1,0 +1,33 @@
+
+running 3 tests
+test ffi::aggregate_transfer_gpu_tests::aggregate_transfer_fresh_replay_membership_completion_and_cleanup ... ok
+test ffi::graph_resource_native_gpu_tests::aggregate_resource_context_capacity_and_capture_rejection ... ok
+test ffi::graph_resource_native_gpu_tests::aggregate_resource_duplicates_busy_rollback_and_drop ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 76 filtered out; finished in 0.20s
+
+
+running 2 tests
+test ffi::swiglu_native_gpu_tests::swiglu_native_rejects_absent_odd_and_short_parents ... ok
+test graph_resources::swiglu_gpu_tests::swiglu_chain_matches_eager_across_sizes_and_fresh_inputs ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.11s
+
+
+running 1 test
+test ffi::norm_qkv_native_gpu_tests::norm_qkv_parent_geometry_capture_and_cleanup ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.15s
+
+
+running 1 test
+test ffi::mlp_native_gpu_tests::mlp_reserved_geometry_capture_close_and_rejection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.17s
+
+
+running 1 test
+test ffi::qkv_rope_native_gpu_tests::qkv_rope_capture_position_guard_and_cleanup ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.16s
+

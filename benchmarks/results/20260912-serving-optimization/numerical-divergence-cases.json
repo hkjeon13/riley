@@ -1,0 +1,2032 @@
+{
+  "schema_version": "riley.common-prefix-divergence-cases.v1",
+  "diagnostic_only": true,
+  "gpu_executed": false,
+  "performance_claim": false,
+  "acceptance_gate_changed": false,
+  "input_id_encoding": "u32 little endian when serialized to bytes; arrays below are exact integer IDs",
+  "case_derivation": "original128 + frozen reference output IDs strictly before the first unequal output; every listed source has that identical prefix",
+  "reference_prompt_token_ids": [
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556,
+    19556
+  ],
+  "reference_output_token_ids": [
+    28,
+    339,
+    5248,
+    253,
+    1838,
+    3241,
+    282,
+    253,
+    1443,
+    929,
+    3156,
+    28,
+    198,
+    198,
+    504,
+    808,
+    2775,
+    339,
+    1277,
+    288,
+    1643,
+    314,
+    338,
+    339,
+    5248,
+    2045,
+    288,
+    1138,
+    346,
+    253,
+    1443,
+    282
+  ],
+  "inputs": {
+    "matrix_preparation": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/vllm-output-matrix-diagnostic/preparation.json",
+      "sha256": "6fcce68c8646ba07ddf2be3b818825037a1d3f80784f21dca45264c2ae6fa4e6"
+    },
+    "matrix_completion": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/raw/vllm-output-matrix-diagnostic/completion.json",
+      "sha256": "f75a4608c7958f201d2cd15352926d83e4c41dfac56c3d02fd93cf75b7307848"
+    },
+    "prior_analysis": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260912-serving-optimization/vllm-output-matrix-analysis.json",
+      "sha256": "aa8352b95886b5a4593e3ae9f742031cb4d36bb785ee60fead6c0903347a5416"
+    },
+    "prior_common136": {
+      "path": "/Users/psyche/PycharmProjects/riley/benchmarks/results/20260911-g04-attention-trace/prefixes.json",
+      "sha256": "7c9736afb6e18ac159b2a82fc3051c9301a9acfbe0a875cc7c72c92574dcda48"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "common-prefix-136-output-08",
+      "generated_index": 8,
+      "input_token_ids": [
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        28,
+        339,
+        5248,
+        253,
+        1838,
+        3241,
+        282,
+        253
+      ],
+      "input_length": 136,
+      "logits_input_position": 135,
+      "reference_token_id": 1443,
+      "observed_token_ids": [
+        1838,
+        2341
+      ],
+      "source_responses": [
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-first-0.json",
+            "sha256": "28c0b0e158c2ec3e7542362f9dc49f5cdd9c75276f942d244a80f15d6eecd1c1"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-first-0.response",
+            "sha256": "7cbca252fea93c84fe1d65e39278c897fb62a6767c25180264e12db586d315be"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "ad82e3dd76318f602658cac67b12cc83cf40f04b73e714298488c6ed47aa1a04"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "74b35d8640d373d6a51eea28f74bbd4312fe7894258e4607225e8f3f4e7423e3"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-repeat-1.json",
+            "sha256": "845dc4f7bdd8d114355ffc62ad50ad4e72015f513dd84eff12b5857794191107"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-repeat-1.response",
+            "sha256": "df49fb7446c29c6867889a2520b9872ee91f9689629d6019f47febfa21786012"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/stream-with-usage-1.json",
+            "sha256": "389f09ed6c6ca450a794a5ff2e628387b17363ea2f001565fa95decc4c838e2b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/stream-with-usage-1.response",
+            "sha256": "bc6320debe02ae199807c22d37009711c3be7e054259205400d66269d503089a"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-0.json",
+            "sha256": "5e9418776b19ee3c774e56c043591fd46898a6929194c3f7d645046c1ce2e5a5"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-0.response",
+            "sha256": "8845f32add65b6eb0001c68fe3d454f14c73ac004357ac6508eb8b26cdb26224"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-2.json",
+            "sha256": "f77610634aef03797450df7606f29d27e2a5ee640676dca4a4e35dea23ecfa67"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-2.response",
+            "sha256": "1ab786c9f2498eb0903913c2cb27391e55ea8b00855119cd470b908f2736ed23"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "d3c06921e1e86057211f6d907dab54ce1ed9457f1b20f166ab87e4d9c720d739"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "b1eedcc45cd366efba22c356f8317661112c7a63ad3059bfe8d813136cabadb0"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "8d75aec9c7afb450e331d0b8520f8d83030bfab4d6a33c949b8bac5e5a3ded9b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "be671c30b0c3d97f851592e3f5f3e60bc44f0085be72ccf19462c324bd585299"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-0.json",
+            "sha256": "d0f27d9c9197a0c79e161c5c3051ca17c6ec9c2d04d516ff65ac9eb0847e6a79"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-0.response",
+            "sha256": "d213933a85d1d0d56d7d5b6db5d49937c254efd6fd96c10b3dbc01efb9201986"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-3.json",
+            "sha256": "bf55ce1b19db1ea2d4f39457bd228a5997403103e6c9e10e21022073fbd93fbb"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-3.response",
+            "sha256": "71ea023ef4ede24e66635b42c0bd372d191fd0cc3037944deb2faa24adcbdb6d"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-1.json",
+            "sha256": "25538b9096c6aee9d27d7ba6e68207c4dbfe91f2aad976f4a160383d559ab3b6"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-1.response",
+            "sha256": "54b0434ece61eceaf1a2b3b755c70caeb84c4b212a14635119f423244890c761"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-3.json",
+            "sha256": "091743b17226bdae83ca30acb5ba48ab2d7cb0944fe2e99a3f687cf1aad52a62"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-3.response",
+            "sha256": "d68f0a6206b04274f02f718d12aa0632d058f1cca5522a054afc881c0ad07726"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-first",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-0.json",
+            "sha256": "dc669d7d881f6a1b034cf622d07b002a7f58bd0cd05c4af2b0cf7e03f6fc261b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-0.response",
+            "sha256": "8d3b1a4a2f15f3b4d5a62b3383f7c41cc3a16d6a33df720732e0dd9c1f9ced52"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-first",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-1.json",
+            "sha256": "ea2ad807a3501d84c96882481609941c5b1e293732362d120eadc66dde919dfd"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-1.response",
+            "sha256": "cd4fd99df2366f6819a5b2e2465548c4da83e37fc28a804752e6f15343fe3a0c"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-first",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-2.json",
+            "sha256": "9a07a502409fc5cccd525a19bd614f8b4307c9970e3fe1e554efa580cb59981c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-2.response",
+            "sha256": "f418b32c3938d97bce882960324539cc7a1a8780503d48fb99828148469d5959"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-first",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-3.json",
+            "sha256": "780b4081663ff411dc9a2234a2eb28bc0b679db29e4425b1b13d017dd67d6cff"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-first-3.response",
+            "sha256": "c58dcd5a186eff23fb1d19fc02a64279edd9119c24f4b3d16dfa8a1ed3ea5c56"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "a807e31bb3f477f8a6fef166ae08dc8ad358b59aa621cca9683ffdec5abe6114"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "0917e2f93448702a713ada83ba21f8334c16feea5f0a43247f0c554573b50643"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "0b10fdc52dfb7d7bbba38670c71b8eedf24a3feccfa9c860de3f823e4453d29d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "8c06cb54a750c823f1e560635cf345a536a949f17826259604e710900dec9174"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "fd76f5819a78435f02adc424f6c7517f0cd3ebd11d5a8cd1d2059e5ae6a3cd6c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "589a3622fc3e62649b989e3068c541d631577d0fba04cb5a58fc36f3da9b96a8"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "5015c6eae445669897555e31fe113709fab4014e780f66d91650a0ea33aa620b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "2520c8cfe0793e25bcaa9f8430df9b1555017eaf0b962a982b31d108976867af"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-repeat",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-0.json",
+            "sha256": "e44a670d387a0e4221f160b4e00118e5d783c5b7ccefdf703e359e911627fefd"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-0.response",
+            "sha256": "cf019c2eafd6a7d624498637a1cec95c97f9e64cba029b048fca96c162053b56"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-repeat",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-1.json",
+            "sha256": "66a0a5f734a40362955cdeb8c3f8ea2711994e533d11c92345c15bfac88f8d86"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-1.response",
+            "sha256": "7566aefa490086ceecafe5d2c4a3ca4abe6a55dfe1f15f696a8fb375575793ce"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-repeat",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-2.json",
+            "sha256": "c483dfb858df7edea115905019517418feefb234af690c8a31323a5c25d2f08e"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-2.response",
+            "sha256": "f101349222e62326188d6272995af9809bf7731b769965cf43d492a908abf27e"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "nonstream-repeat",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-3.json",
+            "sha256": "a82351ba3d6c842ed9ac841d17bedcaafe85b9f96a44de4385f83fe11a08850b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/nonstream-repeat-3.response",
+            "sha256": "f40d3a838769d2bc1153bac8bb058bc8169d4900ffb9a6bf1a0a459de1f4a036"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "stream-with-usage",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-0.json",
+            "sha256": "8155d27f1a3c2d9632bb59adbe8cfe75949620b6927c0d4b88a5ccfa7ff1c1f6"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-0.response",
+            "sha256": "ac42ec3c96d52dfd47949fe7fe134d179e389f712bfdfeaa0fd60a1bd7db559f"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "stream-with-usage",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-1.json",
+            "sha256": "eaf89ca1ac95bb3fd1adf575fa4b00b05ce0198a8cb2665200f0bb62ca445c5e"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-1.response",
+            "sha256": "de8af178b06a6e36b6988a11ef87b6e44827ba491d6ce0ca5ea9ccea7d125a09"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "stream-with-usage",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-2.json",
+            "sha256": "f287d84e47eda61cf18b7c0e66ebbb38f825a688a1027185d3dff7548eb54630"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-2.response",
+            "sha256": "abe485d3ac99fe41cf9aa60c2ae2b2c4694c82b4bf8490f5ef3b2ede4bbed6b4"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c4-vllm-budget512",
+          "phase": "stream-with-usage",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-3.json",
+            "sha256": "9acd5aa29d74c3ed4fb5ef6d1139149c2b3318324872ef48e9b05f880003d5c8"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget512/stream-with-usage-3.response",
+            "sha256": "2d6fe018143e2c3378a36e0b413654cf49698e3bdb1e25d53d94da39e9b73569"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-1.json",
+            "sha256": "2bbdecd84f0cf05be969d88c4b845fa109d32c6aa9134db144dace6c1d576c21"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-1.response",
+            "sha256": "6729eaf1c0e10a554ebcbcb66a40468c725a03895614b992dd3701b51cab74d5"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-3.json",
+            "sha256": "c2b13d4386f71d441304d990124f72497542d1e27f315a86c44ad4aa04f39706"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-3.response",
+            "sha256": "3c578fe91358aab6c7e3cb3f9707deb5849e7614c81552a7e38bc419eae21dd2"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-6.json",
+            "sha256": "55952b4f8ec018530c8633b1ef5b8dcd4c05c85eb90c520c63c5de82e49f6f93"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-6.response",
+            "sha256": "cf89601a566ffe9367484141bb487cbfed2ea78730208d6f5a47cdb2892ec80c"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "827b9ebcb0fe3303bd8e642def1995a1cf20c1189aee04df517e9745be89918c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "63a9b18c9e2d81f1c0a63685aa7e219c836308931a383e3f728c76d987ce0cc8"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "1d83bcc02364a1dc56447fe1586d8586d82f651b6b24df3148c7c1ef4e9537d1"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "9a73ba30ae07949d1f83213af1d8b9ee18ea3ea8e73a29678144eb6aea67c202"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-4.json",
+            "sha256": "8130651afb1399b169a42d18dc437d4fab0745e05214ab1b39f5c0d0781fa0c5"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-4.response",
+            "sha256": "3ddfb823a75a7dc0a70387ffcd3716222c3c8e1a512b1dfb9834db06fc8399c7"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-0.json",
+            "sha256": "c45c0fb1ce1dc3323c373cbb66f0f0ceadca99a42bf08863ce56e5f2981bc82c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-0.response",
+            "sha256": "de3d1292f42c5446287489bc2dd462de3409d6c13ba1725ecc395af5de10a0d9"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-2.json",
+            "sha256": "fa7a8edff3fbf2ce6dee510e6ebafcee69b068e965f112e0c1ee8bef924e89fe"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-2.response",
+            "sha256": "93c9714f3a34d6ee41b001d16721c7738dbf181c034833fe289d7481e2736ba8"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-6.json",
+            "sha256": "e329943e914b5f09ed4c80c316a2efa94676aa47abb0a7ac86476549f052f0a4"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-6.response",
+            "sha256": "6e0fb43608578e3f896d976c40a913f16f9d0174a7f240750d9affd126759796"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-0.json",
+            "sha256": "4391ea7740b8f57069c757470bfc9575939bee1209426923fe90bc2610ca6c9f"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-0.response",
+            "sha256": "0656bc2f2392250ed127874312e2c564488920c1f523bd87359ca0cf4a376e83"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-1.json",
+            "sha256": "2441db0904e1389a677015dcfff3695c1c4fe9efc0a1199fb2c27de61a24eca6"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-1.response",
+            "sha256": "a8e54ae1ea916e754df65d0d6dd9c95e9419ba378e7297886a44a73f92a99e60"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-4.json",
+            "sha256": "de16d270fb2085fd9bbbab1fac11efb8aae9746ed29f41b58190c5305d67b518"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-4.response",
+            "sha256": "34549a577a8905b8ffecf478ad21f7cf993f16b6dd25acd0bb7b4e33e6689ccc"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-0.json",
+            "sha256": "5b0d1717691deafa8d5898d7cc455faea311d27ad2bfe24e408df55bc0b65f92"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-0.response",
+            "sha256": "0c2716ea49eb57f12f2cd00922eb844c53e911f1584861b0777e9fdb9e71fcf0"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-1.json",
+            "sha256": "f3b0b3940587884ee38598998cf30a8a7f54999015728c0b8cf3a66e8d6cf16f"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-1.response",
+            "sha256": "f89f35899395adec1819973435c1f6c71a294e337e7fa4293903692eb4e0dcb0"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-2.json",
+            "sha256": "bd36ea00d08a45e4116e399418ac6e274c4ca817009636abf72d76d6c9edeeab"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-2.response",
+            "sha256": "da38eee6c91107fbfa51e1458e7939b8b7b65bbac48e34816af561c3ce48a837"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-3.json",
+            "sha256": "9b34bfae0a5244c7b200512aca95be2779ef356b63dac97c419238df30cec207"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-3.response",
+            "sha256": "db4dfa399e75115db2394ce7bfdf2bb3f96d9e2869b1522fed40e95a245871e8"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-4.json",
+            "sha256": "987d896a37b3c8f6a21d2f94f04a8a811bbd5bdfa33f6e9e98e7ee191de1677a"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-4.response",
+            "sha256": "038fd68a4d07e5e7f0c94b36a17138bfcbbd2dd93564d3dd9035d9780a93a68a"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 5,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-5.json",
+            "sha256": "88ee43ce945b492d67036a977c3a00106a4847209d036e8fbe3b9660a210f7d0"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-5.response",
+            "sha256": "ecc3fcd5b85cf76c4bfda690cd2262e62b1ecf00ed5b49d6ffc644d2bfb1619d"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-6.json",
+            "sha256": "3f80d43a54350118944a667c39cd3f17d4744e6ed05be93600cb100dce2353af"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-6.response",
+            "sha256": "d8dc99353023bd8eb28ccd9add8236abe3742cae7ca8815cac68210559eee708"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-first",
+          "request_index": 7,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-7.json",
+            "sha256": "4a7628e5f9d4053a1dea3de2211476a43443dd6fbeffd6cd5d91d16b154b7311"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-first-7.response",
+            "sha256": "2cf51be12a597f833afa1f84fd3bc19d57d3632270d777811c5d63fb6f8c8df4"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "613d976f4be2afe9e7ded84bbc390796199c940a7d8f61ff27745d142a06b43c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "3cf81a1a8d033ed0ca861d41269a7f0413c285d15838fb53fd5cc1dfa207adbb"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-1.json",
+            "sha256": "dfdecca5c046fd28b63ee6e934b67411b3ad7bee7a6b13bd856a31bcd337906a"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-1.response",
+            "sha256": "f075396721c039ce21713b2f2bc67f343c2f4219e65c74fc7fab0032169fc9b7"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "a17edb0a7e93c8d351ddce0af5b665a4825e19ba1103d636ff4dc5b76279ff52"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "7d777fbc4d9897f21372cc625fa354f5107e06d82e8b8af8b4144280303b6e0c"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "1bb3571b8e72766f85c49bb92b0e1133743b7be11728bafe673af5438e5539ff"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "44b8911f2b82d0a9b1b5f725e6594c40b7a1eeb89b33cca30e522835a7a3c9af"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-4.json",
+            "sha256": "c69a083e2c480ad4b3bcc8846615bb6cc753e4d99ab4d9b0a72d8edb99f4d9b7"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-4.response",
+            "sha256": "12d52afdc0a4f8d54c1ebe942a888295c54b6d8a135b2deda1a718090125605c"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 5,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-5.json",
+            "sha256": "a8cc453960dce34493060708107ac5e8ba04b7af1347e2241b34b085d265355c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-5.response",
+            "sha256": "499016cb863e877bc4efe161eb3b35fe4fee73a916daf79ed5f7ea41e93c0202"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-6.json",
+            "sha256": "1fd4597b1e3e612ba068a287a802e1b9ff395c1b7883d1da6e4220d02d27dc5e"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-6.response",
+            "sha256": "1f02f00e382381d040b2e8a2d636c0e9ab5db47e6210c7f7dc2f98e87ebba482"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 7,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-7.json",
+            "sha256": "a1317d82681903ca079f3a41da528072ed32a12ee64c046e461a8c4a95651e0b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-logprobs-diagnostic-7.response",
+            "sha256": "1b5d6e1999d216af1413f11af8559c948546eba7e2aed577b60c6fc7ffbd3fa3"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-0.json",
+            "sha256": "88f39bcf0fdde7a2718ccf0e3996037b1d0c07d23488f319b3e5c8ff884b8dd2"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-0.response",
+            "sha256": "ea56193135ff547d894cd7a943191e7a4daf272d756762de090a6ef7fce18029"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-1.json",
+            "sha256": "0568a7404b49358f401d0ee1a4c9281edc24947444140175778db0e31d83f78c"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-1.response",
+            "sha256": "0a1a800e803292dbab1c2de68592e5d39ca835509c9104fcc648bbd625c97b99"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-2.json",
+            "sha256": "aae6b2becd902b43bc4dab11f96fdd83e67fbcccebce85fd03ba3c2d8f902f19"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-2.response",
+            "sha256": "abeed65c135983eef41135234784df1ddc06b6361c5fb3f2ed19da643ab7f2e9"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-3.json",
+            "sha256": "db645f07fa7baf194e2933fee4511334f7990269a247f04a5e3316b69663b88d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-3.response",
+            "sha256": "2fd8267cfbb0253f3c81422fc44cb29d0183e8be4d254e1ca03d37bd29d72608"
+          },
+          "observed_token_id": 2341
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-4.json",
+            "sha256": "553e5dcd1bc43066600ffdf66df763e8a1f4aaef24544ee17ca4613c8dca4d27"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-4.response",
+            "sha256": "c1d96c044ce1dee019ecd8b62e572ba7de80bff3ad5e0739b67e4e9af63d9931"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 5,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-5.json",
+            "sha256": "f30d6a915247090696bb332c64095b9f8d2ea61cd0517d3360877317db5c1524"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-5.response",
+            "sha256": "57af15c9055e806ca87b594c7aa8cb8be61245006b2b11d867be4ec687d6c14f"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-6.json",
+            "sha256": "48eae3a8beab30033808f1dd6834eb8b2a48cf678fe9bfff9cc6a6c14475ad67"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-6.response",
+            "sha256": "6a26d9eaefbeef5ccf96eccaeb746ee842d317b12e4bdfad7b2f0551057f139d"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "nonstream-repeat",
+          "request_index": 7,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-7.json",
+            "sha256": "9668c0fd93ea7f52def7074fab38c99d64088c9776dd2f626ea3d537d7d6eec6"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/nonstream-repeat-7.response",
+            "sha256": "472569d663abe1c1e8d555aa55fff1e79f808dc4353658bf9363d70ae8a2ae03"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 0,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-0.json",
+            "sha256": "56433f4f4cc4db129f7217434cdbb8fd9b55115005d383eb1fcfa0c4cd036542"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-0.response",
+            "sha256": "03b80edded363217bbcfb8fe5bc7fb98680d20bdcc315ed56e06352ca21bafc4"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 1,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-1.json",
+            "sha256": "b021e5f447d695393b3c21f7a550ae215b0b9dd8d5c527f34247e22d61190ca6"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-1.response",
+            "sha256": "816af81d0eeffa3f9253a842bb866b9ad5c59f736520e529ceab0bdcc825a963"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 2,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-2.json",
+            "sha256": "93e3ff7549540c65e2931573742a92b7fcc6af50a7eefa0a4e18be3762e21b83"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-2.response",
+            "sha256": "0107d3e6a2a1b120ca608301b35365ef19fd0db058e56c5dfd695cfcbd5bde9e"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 3,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-3.json",
+            "sha256": "0445c26f7c4b4d06ba45073c4595a84d3a0c216b61f76bc2af6e1187b22a5d8b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-3.response",
+            "sha256": "fdddab03a404aace18f896f872b7b0dfd499815257478d533c1aea238819c2fd"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 4,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-4.json",
+            "sha256": "8c3312fa4aefe7cc27760b7130023f27ace83d0d8aff57423aade8f30fa9b2d2"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-4.response",
+            "sha256": "e204bb3f902370db024fecad336c30aa1a28b2c976f8f985b78d31af5f1f8748"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 5,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-5.json",
+            "sha256": "e1e61695d05263a332ecc106916ae04357bc57fd669162878043ef571f60de80"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-5.response",
+            "sha256": "ee1e5b44d53e936cef9a430d615c088edb651fa8939be5796f07e18ac916da5f"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 6,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-6.json",
+            "sha256": "b82d754734897dfa22266b31da0ab3666956b05c740d2670c21ec2768f5490ea"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-6.response",
+            "sha256": "4f696667558c8c6c1502f6fd9e78085d13f92cbc7f888a384822749e848f66ef"
+          },
+          "observed_token_id": 1838
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "stream-with-usage",
+          "request_index": 7,
+          "first_divergent_generated_index": 8,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-7.json",
+            "sha256": "53bdefc010d644c6932f03620d922142454097359562b02acc02ad40666c8442"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/stream-with-usage-7.response",
+            "sha256": "0583675914a13e9b968a8e3c51e3a30e720d1247fc2bf4c83bb92fd2a53504c7"
+          },
+          "observed_token_id": 2341
+        }
+      ],
+      "source_response_count": 72
+    },
+    {
+      "case_id": "common-prefix-157-output-29",
+      "generated_index": 29,
+      "input_token_ids": [
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        19556,
+        28,
+        339,
+        5248,
+        253,
+        1838,
+        3241,
+        282,
+        253,
+        1443,
+        929,
+        3156,
+        28,
+        198,
+        198,
+        504,
+        808,
+        2775,
+        339,
+        1277,
+        288,
+        1643,
+        314,
+        338,
+        339,
+        5248,
+        2045,
+        288,
+        1138,
+        346
+      ],
+      "input_length": 157,
+      "logits_input_position": 156,
+      "reference_token_id": 253,
+      "observed_token_ids": [
+        638
+      ],
+      "source_responses": [
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 1,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-first-1.json",
+            "sha256": "ec3cb12f8ec61c9abd05baea1bbc2fbbc2a9e233a515b79f40fcbee69b9205e2"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-first-1.response",
+            "sha256": "91d74763e357244bc8b14e88078f8cd4960db79d26b4a9367c67a1e3486b2b6f"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-0.json",
+            "sha256": "b249ffe61ceae2deaa91dfaa154140d3b0558e66bdb89772e7fdc9b1b16a2734"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-logprobs-diagnostic-0.response",
+            "sha256": "a4020882ecc1b1b31524b954689b7ec0644cc5b9d10b58f3745c34de79be2ea7"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-repeat-0.json",
+            "sha256": "5162dc7f3df8cd8a8d7b877167378c7eaf92d74d7fd266f511d1bbf7b6d2b942"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/nonstream-repeat-0.response",
+            "sha256": "7206baf0cdd8ba59af555842630722f8b7d974ccc05bdbf888bca0269dbee7d4"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c2-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/stream-with-usage-0.json",
+            "sha256": "e57c774b1f9f7f60ac9bc93c6ecabd55d5e64acd841e8b829dfe8e6dc09fb6eb"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c2-vllm-budget128/stream-with-usage-0.response",
+            "sha256": "d3b2ec5ffff63d0cff73238c5091de2948ce97280b45f8524c27bb971c80865a"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 1,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-1.json",
+            "sha256": "4165822b67c838d26019cfd2a07842d95bd9fad939d19af5d4a154316ae39380"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-first-1.response",
+            "sha256": "e4c87f26633bad74c9e0e901a9bb55bdde2d8e28808ec9de28ee57eb3c2f7d85"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "565e438f5cdaabd9409c6b52c75541c100974abdb8484599cc2b01801e7b9fae"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "c6bced60f1303ed09a8c8d78bb8cd7930985d74c72c6eaf8c2e243a9ad9c9542"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 1,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-1.json",
+            "sha256": "6cff186ec48ea6b5f08aecf90845397969729d6196e24cb5d1fa4de399395049"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/nonstream-repeat-1.response",
+            "sha256": "3491e2f3d791136db54a8ac6ed66b6762f43f6aca415aca2e114ad0d04a1ca46"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c4-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 2,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-2.json",
+            "sha256": "e0baa1f8cdb832ad9a117c117c78cb039f9df055bbdfab86407973c8eae46320"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c4-vllm-budget128/stream-with-usage-2.response",
+            "sha256": "7f8d8317524f4e52fc79a1d699125e932aacca6f7e36821808fc891ba2667c44"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-0.json",
+            "sha256": "6587ea531fb6cff8964b7d4b57917acc7d954b51abf71a3dcb7295a75bf9e4d9"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-0.response",
+            "sha256": "c1495c1936ed531a4236803040420b1e0cd14e301ba99e9ed743a282f8c57e83"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 2,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-2.json",
+            "sha256": "9fee831f5fd0a6ea711085ae716690a114447df62c0fab33d76a91cd7a3ee9ce"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-2.response",
+            "sha256": "0b9fcfb14395b050e17fe1bfdfd60c621afe53a82672fcd4239c8c5514ed1544"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 4,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-4.json",
+            "sha256": "6c45ae64dc1dbe05630a8e434e22985946733214841ee561537c741d064fad60"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-4.response",
+            "sha256": "e2bd592b688792786d5877f1928a2cf7fbb168f86c267db1c7bdfeb7fe759302"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 5,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-5.json",
+            "sha256": "b376d4f7cb78726d0ef4e817dad6cb945565114fd3aa6af2bd6304d840234cba"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-5.response",
+            "sha256": "cacead334628b36c11bca5c2616e4307737145a02119d8c7b42619344a08baf9"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-first",
+          "request_index": 7,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-7.json",
+            "sha256": "b27b3924aa25f269227111f6fba584764f99e917b4c650900cc49493b19a56a2"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-first-7.response",
+            "sha256": "8975faa828b23a9d9faec6e735081802d65c0ee304f4763d0beddc20aea58a46"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 2,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-2.json",
+            "sha256": "aa6c05fffa328265117d1ba6a816a3a10cad5be3d5faeaf51f725546e63115e9"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-2.response",
+            "sha256": "9d8f7db189f982d6b4eeef63c3f9e33aa19d656e84bcdf1ff3a81d54ae69665e"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-3.json",
+            "sha256": "6ac092daa3f417e2422030031ec75c9aeaafb3fb18e0a95a00125a0df340a9cf"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-3.response",
+            "sha256": "4916ad12e7f86d7de7513cecd6da53ac3cf98ac40dd2e1903825ea7022160046"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 5,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-5.json",
+            "sha256": "b8a80cf52d95b15caa315fc7a93a3d3e9781a4bfcc4e32a897a331c66eef4e24"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-5.response",
+            "sha256": "de17e8dd2d158255e9f265171f047f0be82ada37ccc6417fb27861004440461d"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 6,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-6.json",
+            "sha256": "7110df4be6607ad44260277b58626f9accd1fc95805ffbd7e3fc01843afe8994"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-6.response",
+            "sha256": "8e0dfd0fb97f5bf08b6603a14eb9c0b787665ffa9b5474b6d4e9fbf895ff2afd"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-logprobs-diagnostic",
+          "request_index": 7,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-7.json",
+            "sha256": "f2bbbe6424b09dc31e3a8050d92687c25ef50c0f3d8f67568acceb86656adb10"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-logprobs-diagnostic-7.response",
+            "sha256": "8f021c736a998e3d47053a96d17584e069d91e8b7e3d61fb552c6e7ca5b572bb"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 1,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-1.json",
+            "sha256": "29ed7b6ccb18304b74897d704e2016c4ddcc1a76be530a2039af650b7105346d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-1.response",
+            "sha256": "4b7f9dd3cbd63ce22931c030cd3c4d6a7bffefb9aefe6dca6a93c14c5b618df9"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-3.json",
+            "sha256": "517c23b760c0820099d117c6f27618c421e23812d0838999990661b2ad68003d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-3.response",
+            "sha256": "ed97c06ee16ef734baf84db27f19bf36d871ce83b1f77fdd314d9b573747ce4a"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 4,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-4.json",
+            "sha256": "029c3ca87b96f7611d374653c6437bb7cc030111f1b3c6dffbd65e83cd89790b"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-4.response",
+            "sha256": "0651a06c70d2f952e282be9af32481c23575e980ac92277fe0bff6129c8505e1"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 5,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-5.json",
+            "sha256": "0f34981c676277e852c8bde186b9b9fad5f56106ea6f7785da244d080cd2c973"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-5.response",
+            "sha256": "03ba38ae5745027ea6d284b4b415dce9a90a7c02f2bf3127fe6d3d078f7364f3"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "nonstream-repeat",
+          "request_index": 7,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-7.json",
+            "sha256": "a2280bf797b4d600d18d987e8e728a2e682f6eb0c3228f8c691b1f9b0e2057df"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/nonstream-repeat-7.response",
+            "sha256": "91adc0863b78fd69233b294e6710a5107b26b9b61dad9e398a4be7d9b0801b2e"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 2,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-2.json",
+            "sha256": "a25f57d3ef3056a68d0f9b1c51544a01a97e2d11f18895f024e6033a852f177f"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-2.response",
+            "sha256": "a51efce825bba9fa52801033d5f6e241ef51f30bd24145d633d39b9a15f5682b"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 3,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-3.json",
+            "sha256": "bf5690aa68f5010305adde63688e40d56d611d906aa7758e5e8422840be8fa5d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-3.response",
+            "sha256": "7a4416688aec4ea50b2063e78039203fa2b495459b91ff989a5ba86aac03ddd2"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 5,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-5.json",
+            "sha256": "08aee21f90148d602c4b1977a7e7949791ded9807cfc2376ad2665ce5649c079"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-5.response",
+            "sha256": "4b436afd7024bc7a2a6179d058430a5d95d3cefa8fcd91222ff9bd6662542e31"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 6,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-6.json",
+            "sha256": "ef461a0fd39a543c7838ed611980e40aca6ae66ef08343c2ad2b9a4e0525adde"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-6.response",
+            "sha256": "68a681684e5ebdc316ca8bebb6894b392f63bbdc29d1458ca435032564e73f3f"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget128",
+          "phase": "stream-with-usage",
+          "request_index": 7,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-7.json",
+            "sha256": "e9840afce66b26d6d1df52a7cf91181fe640006721a5475611eec6834497e40e"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget128/stream-with-usage-7.response",
+            "sha256": "b45f81bfdaf9d44da5af91a306f2fe116843ffb069553f1e98a15a139b35e8f9"
+          },
+          "observed_token_id": 638
+        },
+        {
+          "setting": "c8-vllm-budget1024",
+          "phase": "offered-c1-same-capacity",
+          "request_index": 0,
+          "first_divergent_generated_index": 29,
+          "record": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/offered-c1-same-capacity-0.json",
+            "sha256": "af4cabfe0a7ac27a78e2b8a1e380fc809f10167eabfee239035b6227f522c37d"
+          },
+          "raw_response": {
+            "path": "/tmp/riley-opt-260912/vllm-output-matrix-diagnostic/c8-vllm-budget1024/offered-c1-same-capacity-0.response",
+            "sha256": "0754075d20433ea5e1212c2393183523bdafa2ba47ebf36fba27c6880c71fc59"
+          },
+          "observed_token_id": 638
+        }
+      ],
+      "source_response_count": 29
+    }
+  ]
+}

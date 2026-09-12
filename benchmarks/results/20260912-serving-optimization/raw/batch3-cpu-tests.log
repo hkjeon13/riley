@@ -1,0 +1,93 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling typenum v1.20.1
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling tinyvec_macros v0.1.1
+   Compiling serde_json v1.0.145
+   Compiling hybrid-array v0.4.14
+   Compiling tinyvec v1.12.0
+   Compiling syn v2.0.119
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling digest v0.11.3
+   Compiling itoa v1.0.18
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-core)
+   Compiling cfg-if v1.0.4
+   Compiling cpufeatures v0.3.0
+   Compiling sha2 v0.11.0
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-tensor)
+   Compiling unicode-normalization v0.1.25
+   Compiling serde_derive v1.0.228
+   Compiling libc v0.2.189
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-runtime)
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-scheduler)
+   Compiling riley-server v0.1.0 (/tmp/riley-opt-260912/batch3-source/crates/riley-server)
+    Finished `release` profile [optimized + debuginfo] target(s) in 17.94s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/batch3-cpu-target/release/deps/riley_server-eda1c3f5e9d5a2eb)
+
+running 57 tests
+test domain::tests::model_metadata_checks_token_limit_relationship ... ok
+test domain::tests::request_metadata_enforces_public_identifier_bounds ... ok
+test domain::tests::usage_total_is_checked_once ... ok
+test engine::tests::active_shape_buckets_route_without_hot_path_growth ... ok
+test engine::tests::committed_shape_without_matching_flattened_rows_degrades_without_a_hit ... ok
+test engine::tests::c02_metrics_map_only_checked_source_owned_scheduler_and_allocation_facts ... ok
+test engine::tests::complete_iteration_failure_produces_no_audit_record ... ok
+test engine::tests::deferred_cancel_checkpoint_excludes_current_uncommitted_token ... ok
+test engine::tests::gpu_greedy_ineligibility_is_typed_and_has_a_stable_precedence ... ok
+test engine::tests::events_are_ordered_and_terminal_is_last ... ok
+test engine::tests::metrics_snapshot_is_serialized_through_the_worker ... ok
+test engine::tests::native_fallback_attribution_requires_one_output_slot ... ok
+test engine::tests::shape_metric_overflow_is_isolated_as_degraded_observability ... ok
+test engine::tests::staged_shape_metrics_count_only_committed_iterations ... ok
+test engine::tests::user_input_diagnostics_do_not_retain_prompt_text ... ok
+test engine::tests::concurrent_requests_finish_without_deadlock ... ok
+test http::tests::response_headers_are_close_delimited_and_non_sniffable ... ok
+test http::tests::framing_ambiguity_and_missing_required_fields_fail_closed ... ok
+test http::tests::fixed_json_and_get_requests_are_framed_exactly ... ok
+test http::tests::header_body_target_and_field_bounds_are_enforced ... ok
+test engine::tests::slow_consumer_is_cancelled_when_request_channel_is_full ... ok
+test openai::tests::empty_and_aggregate_stop_constraints_are_checked ... ok
+test openai::tests::finish_reason_uses_openai_values ... ok
+test openai::tests::in_stream_failure_is_sanitized_then_done ... ok
+test openai::tests::multi_or_token_prompt_is_an_explicit_validation_error ... ok
+test openai::tests::non_finite_and_out_of_range_floats_are_rejected ... ok
+test openai::tests::non_neutral_and_unsupported_options_fail_explicitly ... ok
+test openai::tests::non_streaming_response_has_one_choice_and_checked_usage ... ok
+test openai::tests::normalization_applies_defaults_and_preserves_supported_values ... ok
+test openai::tests::numeric_and_byte_bounds_are_enforced_before_admission ... ok
+test openai::tests::request_deserialization_accepts_stop_string_or_array ... ok
+test openai::tests::sanitized_errors_never_contain_internal_diagnostics ... ok
+test openai::tests::sse_encoder_is_deterministic_and_enforces_terminal_order ... ok
+test service::tests::loopback_transport_timing ... ignored, prints loopback transport latency; run alone in release mode
+test service::tests::observation_buffer_evicts_oldest_metadata_as_one_consistent_state ... ok
+test tests::version_line_is_available_without_cuda ... ok
+test service::tests::shutdown_metrics_fail_closed_without_post_close_backend_evidence ... ok
+test engine::tests::drop_guard_cancels_without_relying_on_command_capacity ... ok
+test engine::tests::graceful_shutdown_rejects_new_work_and_closes_backend ... ok
+test service::tests::c02_shutdown_evidence_requires_post_close_typed_quiescence ... ok
+test service::tests::graceful_shutdown_stops_admission_cancels_active_and_joins ... ok
+test service::tests::listener_shutdown_wakeup_persists_and_takes_priority_over_backlog ... ok
+test service::tests::streaming_and_non_streaming_text_match_and_are_observed ... ok
+test service::tests::concurrent_clients_finish_without_deadlock ... ok
+test service::tests::runtime_config_endpoint_is_immutable_and_fails_closed ... ok
+test service::tests::metrics_endpoint_consumes_committed_fixed_shape_snapshot ... ok
+test service::tests::readiness_health_and_model_metadata_are_separate ... ok
+test service::tests::malformed_bounded_and_unavailable_requests_are_sanitized ... ok
+test service::tests::c02_metrics_endpoint_is_raw_canonical_and_explicitly_gated ... ok
+test service::tests::accepted_connection_waits_for_delayed_request_bytes ... ok
+test service::tests::shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections ... ok
+test service::tests::shutdown_interrupts_partial_requests_within_global_grace ... ok
+test engine::tests::model_mismatch_and_live_capacity_are_rejected ... ok
+test service::tests::backend_and_connection_queue_overload_return_429 ... ok
+test service::tests::shutdown_deadline_contains_a_backend_that_violates_its_contract ... ok
+test service::tests::absolute_framing_deadline_rejects_trickle_and_releases_worker ... ok
+test service::tests::request_timeout_and_client_disconnect_cancel_backend_work ... ok
+
+test result: ok. 56 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.15s
+

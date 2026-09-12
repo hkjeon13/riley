@@ -1,0 +1,76 @@
+{
+  "source_commit": "a791d63081dcdb319c8e45c79ec9301166ee199a",
+  "source_root": "/tmp/riley-opt-260912/batch5-source",
+  "parent_source_commit": "53677519082135c42a5d044044c5b31cad4a146a",
+  "parent_build_sha256": "e33eca0efd3670c2cac7d935245599bc65099c402021f9a5c78eea0c76ef307b",
+  "source_files": {
+    "crates/riley-cuda/src/ffi.rs": "a2a70991eb735915988454fe6ee452a7a63e85374f6454b8a6ee234e3a8b7343",
+    "crates/riley-cuda/src/graph_resources.rs": "b8d4a420ade3e9e69d42fca6cc2bfbc905a43fe61bba985345ade05fa09d6e9e",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "dcd2896a52cf43f0a3ff8df9dc67c84a2525b599478adc3947e668fe427c601d",
+    "crates/riley-runtime/src/llama/graph_decode_prefill_parity_gpu.rs": "906b1afaa8cb3f732187ebe55aca93b01c34c08b454850347d90696c25021a77",
+    "crates/riley-runtime/src/llama/executor/config.rs": "9cd42e4d63b6a0164e1a6682aea73b69a04f085c08bebb72a03ebf131b872509",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "36f1c3aa06c153f17ec0c5a4c2acc0a4775f6c4ad64566eebf4a21081cad0660",
+    "crates/riley-runtime/src/llama/batch_executor.rs": "ff997de152b72615e04486e5b04c72fc65440bfcc9f2cfd03783be4846f8b447",
+    "crates/riley-server/src/engine.rs": "10598ca2af76a41bdb081fe087f5519be84534f20425706557af94454b0d628c",
+    "crates/riley-server/src/benchmark.rs": "0cb5fe3cdc06d9cc08f280d03598cf7d5e5c36520451587024af9e9758af79f2",
+    "crates/riley-server/src/main.rs": "0605eb751a3535e87e80dade3493f926dcfc52968201806088b355fd9d31cc85",
+    "crates/riley-server/src/bin/riley-profile.rs": "ab2094c2670f1cc93aa0545c3e7eb803873b31beec1e076c20b4001d4000d838",
+    "kernels/src/graph_resources.cu": "4265e519f521e165f0b28db24c483ed9616172a714c1a35dafa20f16ce7844b9",
+    "kernels/src/primitives.cu": "dab332a05bc377465c7e6a3da23574291ce2b241de8a49da9ef210cc04f62e1a",
+    "kernels/src/graph_numerics.cu": "d86de0d147fab0e7083095bd0b9515daf73cfe87465dde9c5ead2b6fda744dbf",
+    "kernels/src/graph_numerics_precise.cu": "1808139535df65ff2435bc09a2e610ffb5dfacfbb3649bf98fcabd614d818543",
+    "kernels/src/ffi_internal.hpp": "67e7591732e30c31a06c32bb9df9b4cd1c8f7315f84fe57b12e7e03e3f38a707",
+    "kernels/include/riley_cuda.h": "b19be8cf3f3afdfa95bafa4cba6e080cda97c38ceaed34ce4a934e23cb26221f",
+    "crates/riley-server/src/service.rs": "b6cfe46e9b6ad3efdea6505408d955389ff5b114e090eed1a2a8e358e029eca6",
+    "crates/riley-runtime/src/llama/graph_decode_packed.rs": "e8f455bf5cdb5588468ad23181e83052ce75a9ffe89f46c67b683659dd8ea554",
+    "kernels/src/gemm.cu": "0ab4d7af6a7591d000212e450a9823ac0eb75fad5dd3df761ae95fe13deb9d67"
+  },
+  "changed_files": [
+    "crates/riley-runtime/src/llama/graph_decode_full.rs",
+    "kernels/src/ffi_internal.hpp",
+    "kernels/src/graph_numerics.cu",
+    "kernels/src/graph_resources.cu"
+  ],
+  "binaries": {
+    "/tmp/riley-opt-260912/batch5-target/release/riley": "32f75a53d3e1799e4285ce0f957360cf4c4ed741758564c5060f922d725e9dce",
+    "/tmp/riley-opt-260912/batch5-target/release/riley-profile": "fbedd08bd081d66c3235cd1eddd7d5483cfdc7485c65ed3a27a8ad2555509309"
+  },
+  "build_argv": [
+    [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-runtime",
+      "--features",
+      "cuda",
+      "--lib",
+      "--no-run"
+    ],
+    [
+      "cargo",
+      "build",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--bin",
+      "riley",
+      "--bin",
+      "riley-profile"
+    ]
+  ],
+  "build_environment": {
+    "CUDA_HOME": "/data/riley-g04-cuda13",
+    "CUDAToolkit_ROOT": "/data/riley-g04-cuda13",
+    "CMAKE": "/data/cmake-3.31.12/bin/cmake",
+    "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+    "CARGO_BUILD_JOBS": "4",
+    "CARGO_TARGET_DIR": "/tmp/riley-opt-260912/batch5-target",
+    "LD_LIBRARY_PATH": "/data/riley-g04-cuda13/lib"
+  },
+  "gpu_tests_executed": false,
+  "build_log_sha256": "9e69e8591f63adaf9a9cab034013fabb5952f93bd1c60335c32b3398e42e2ffd",
+  "performance_measured": false
+}

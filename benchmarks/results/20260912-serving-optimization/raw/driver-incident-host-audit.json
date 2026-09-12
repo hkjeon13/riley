@@ -1,0 +1,231 @@
+{
+  "schema": "riley.driver-incident-host-audit.v1",
+  "read_only": true,
+  "observed_utc": "2026-09-12T01:06:48.080051+00:00",
+  "kernel_driver": "NVRM version: NVIDIA UNIX x86_64 Kernel Module  580.173.02  Tue Jun 23 08:38:17 UTC 2026\nGCC version:  gcc version 12.3.0 (Ubuntu 12.3.0-1ubuntu1~22.04.3) \n",
+  "host_kernel": {
+    "argv": [
+      "uname",
+      "-r"
+    ],
+    "exit_code": 0,
+    "stdout": "6.8.0-138-generic\n",
+    "stderr": ""
+  },
+  "nvidia_updates": [
+    [
+      "Start-Date: 2026-09-12  06:43:31",
+      "Commandline: /usr/bin/unattended-upgrade",
+      "NVIDIA upgrade entries: libnvidia-common-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-fbc1-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-gl-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-extra-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-compute-utils-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-dkms-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-driver-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-encode-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-utils-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); xserver-xorg-video-nvidia-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-decode-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-kernel-common-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-cfg1-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); nvidia-kernel-source-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1); libnvidia-compute-580:amd64 (580.173.02-0ubuntu0.22.04.1, 580.178.04-0ubuntu0.22.04.1)",
+      "End-Date: 2026-09-12  06:44:11"
+    ]
+  ],
+  "default_nvml": {
+    "argv": [
+      "/usr/bin/nvidia-smi",
+      "--query-gpu=uuid,driver_version",
+      "--format=csv,noheader"
+    ],
+    "exit_code": 18,
+    "stdout": "Failed to initialize NVML: Driver/library version mismatch\nNVML library version: 580.178\n",
+    "stderr": ""
+  },
+  "private_nvml": {
+    "argv": [
+      "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin/nvidia-smi",
+      "--query-gpu=uuid,driver_version",
+      "--format=csv,noheader"
+    ],
+    "exit_code": 0,
+    "stdout": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02\n",
+    "stderr": ""
+  },
+  "installed_packages": {
+    "argv": [
+      "dpkg-query",
+      "-W",
+      "-f=${Package}\t${Version}\n",
+      "libnvidia-compute-580",
+      "libnvidia-gl-580",
+      "nvidia-utils-580"
+    ],
+    "exit_code": 0,
+    "stdout": "libnvidia-compute-580\t580.178.04-0ubuntu0.22.04.1\nlibnvidia-compute-580\t580.178.04-0ubuntu0.22.04.1\nlibnvidia-gl-580\t580.178.04-0ubuntu0.22.04.1\nlibnvidia-gl-580\t580.178.04-0ubuntu0.22.04.1\nnvidia-utils-580\t580.178.04-0ubuntu0.22.04.1\n",
+    "stderr": ""
+  },
+  "host_libcuda": "/usr/lib/x86_64-linux-gnu/libcuda.so.580.178.04",
+  "host_libnvml": "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.178.04",
+  "blender_sessions_unchanged": true,
+  "blender": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "blender_driver_mappings": {
+    "4177821": [
+      "73f2dfe00000-73f2dff66000 r--p 00000000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f2dff66000-73f2e0eea000 r-xp 00166000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f2e0eea000-73f2e5895000 r--p 010ea000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f2e5895000-73f2e5896000 ---p 05a95000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f2e5896000-73f2e59cb000 r--p 05a95000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f2e59cb000-73f2e59d4000 rw-p 05bca000 103:02 55055537                  /usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02 (deleted)",
+      "73f328e00000-73f3290ab000 r--p 00000000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f3290ab000-73f32c199000 r-xp 002ab000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f32c199000-73f32d009000 r--p 03399000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f32d009000-73f32d00a000 ---p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f32d00a000-73f32d1e1000 r--p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f32d1e1000-73f32d2ec000 rw-p 043e0000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "73f32d400000-73f32d659000 r-xp 00000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32d659000-73f32d67a000 rwxp 00259000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32d67a000-73f32d800000 r-xp 0027a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32d800000-73f32e400000 r-xp 00400000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32e400000-73f32f57b000 r-xp 01000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32f57b000-73f32f6f6000 r--p 0217a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f32f6f6000-73f32f759000 rw-p 022f5000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "73f3428d3000-73f342924000 r--p 00000000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f342924000-73f342981000 r-xp 00051000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f342981000-73f3429b6000 rwxp 000ae000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f3429b6000-73f3429b7000 r-xp 000e3000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f3429b7000-73f3429d7000 r--p 000e4000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f3429d7000-73f3429f7000 r--p 00103000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f3429f7000-73f3429fc000 rw-p 00123000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "73f369464000-73f369474000 r--p 00000000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "73f369474000-73f3694d4000 r-xp 00010000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "73f3694d4000-73f3694f1000 r--p 00070000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "73f3694f1000-73f3694f7000 r--p 0008c000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "73f3694f7000-73f3694f8000 rw-p 00092000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "73f369e05000-73f369e09000 r--p 00000000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "73f369e09000-73f369e22000 r-xp 00004000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "73f369e22000-73f369e2d000 r--p 0001d000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "73f369e2d000-73f369e2e000 r--p 00027000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "73f369e2e000-73f369e2f000 rw-p 00028000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "73f37d333000-73f37d334000 r--p 00000000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "73f37d334000-73f37d336000 r-xp 00001000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "73f37d336000-73f37d337000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "73f37d337000-73f37d338000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "73f37d338000-73f37d339000 rw-p 00004000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)"
+    ],
+    "4177822": [
+      "75ef54200000-75ef544ab000 r--p 00000000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef544ab000-75ef57599000 r-xp 002ab000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef57599000-75ef58409000 r--p 03399000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef58409000-75ef5840a000 ---p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef5840a000-75ef585e1000 r--p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef585e1000-75ef586ec000 rw-p 043e0000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "75ef58800000-75ef58a59000 r-xp 00000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef58a59000-75ef58a7a000 rwxp 00259000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef58a7a000-75ef58c00000 r-xp 0027a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef58c00000-75ef59800000 r-xp 00400000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef59800000-75ef5a97b000 r-xp 01000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef5a97b000-75ef5aaf6000 r--p 0217a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef5aaf6000-75ef5ab59000 rw-p 022f5000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "75ef680d4000-75ef68125000 r--p 00000000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef68125000-75ef68182000 r-xp 00051000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef68182000-75ef681b7000 rwxp 000ae000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef681b7000-75ef681b8000 r-xp 000e3000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef681b8000-75ef681d8000 r--p 000e4000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef681d8000-75ef681f8000 r--p 00103000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef681f8000-75ef681fd000 rw-p 00123000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "75ef7b8aa000-75ef7b8ae000 r--p 00000000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "75ef7b8ae000-75ef7b8c7000 r-xp 00004000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "75ef7b8c7000-75ef7b8d2000 r--p 0001d000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "75ef7b8d2000-75ef7b8d3000 r--p 00027000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "75ef7b8d3000-75ef7b8d4000 rw-p 00028000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "75ef95006000-75ef95016000 r--p 00000000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "75ef95016000-75ef95076000 r-xp 00010000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "75ef95076000-75ef95093000 r--p 00070000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "75ef95093000-75ef95099000 r--p 0008c000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "75ef95099000-75ef9509a000 rw-p 00092000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "75efa8534000-75efa8535000 r--p 00000000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "75efa8535000-75efa8537000 r-xp 00001000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "75efa8537000-75efa8538000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "75efa8538000-75efa8539000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "75efa8539000-75efa853a000 rw-p 00004000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)"
+    ],
+    "4177823": [
+      "7928e8a00000-7928e8cab000 r--p 00000000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928e8cab000-7928ebd99000 r-xp 002ab000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928ebd99000-7928ecc09000 r--p 03399000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928ecc09000-7928ecc0a000 ---p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928ecc0a000-7928ecde1000 r--p 04209000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928ecde1000-7928eceec000 rw-p 043e0000 103:02 55058435                  /usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.580.173.02 (deleted)",
+      "7928ed000000-7928ed259000 r-xp 00000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ed259000-7928ed27a000 rwxp 00259000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ed27a000-7928ed400000 r-xp 0027a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ed400000-7928ee000000 r-xp 00400000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ee000000-7928ef17b000 r-xp 01000000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ef17b000-7928ef2f6000 r--p 0217a000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7928ef2f6000-7928ef359000 rw-p 022f5000 103:02 55058432                  /usr/lib/x86_64-linux-gnu/libnvidia-glcore.so.580.173.02 (deleted)",
+      "7929024d3000-792902524000 r--p 00000000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "792902524000-792902581000 r-xp 00051000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "792902581000-7929025b6000 rwxp 000ae000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "7929025b6000-7929025b7000 r-xp 000e3000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "7929025b7000-7929025d7000 r--p 000e4000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "7929025d7000-7929025f7000 r--p 00103000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "7929025f7000-7929025fc000 rw-p 00123000 103:02 55058406                  /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.580.173.02 (deleted)",
+      "79290380a000-79290381a000 r--p 00000000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "79290381a000-79290387a000 r-xp 00010000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "79290387a000-792903897000 r--p 00070000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "792903897000-79290389d000 r--p 0008c000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "79290389d000-79290389e000 rw-p 00092000 103:02 55058433                  /usr/lib/x86_64-linux-gnu/libnvidia-glsi.so.580.173.02 (deleted)",
+      "792929005000-792929009000 r--p 00000000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "792929009000-792929022000 r-xp 00004000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "792929022000-79292902d000 r--p 0001d000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "79292902d000-79292902e000 r--p 00027000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "79292902e000-79292902f000 rw-p 00028000 103:02 55055861                  /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.580.173.02 (deleted)",
+      "79293308b000-79293308c000 r--p 00000000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "79293308c000-79293308e000 r-xp 00001000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "79293308e000-79293308f000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "79293308f000-792933090000 r--p 00003000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)",
+      "792933090000-792933091000 rw-p 00004000 103:02 55058439                  /usr/lib/x86_64-linux-gnu/libnvidia-tls.so.580.173.02 (deleted)"
+    ]
+  },
+  "private_compute_receipt": {
+    "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+    "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+  },
+  "private_gui_receipt": {
+    "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/receipt.json",
+    "sha256": "091701fb0b91904024748a9baf59891735809ac2ba43e089165e619308f8f7ed"
+  },
+  "fresh_context_completion": {
+    "path": "/tmp/riley-opt-260912/driver-runtime-gui-probe-v2/completion.json",
+    "sha256": "ded56de3396c5a60ebc1d6d42227b3330aff674eb85a1394606947960c1f4cfc"
+  },
+  "capture_helper_sha256": "b9cfe2e15cc0aaec794cafd61499f080c76241ad23c6876f654706f69d395102",
+  "performance_claim": false,
+  "host_configuration_modified": false
+}

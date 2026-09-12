@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use riley_tensor::DType;
@@ -10,6 +11,26 @@ use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 
 /// Required checkpoint provenance filename.
 pub const PROVENANCE_FILENAME: &str = "riley-checkpoint.json";
+/// Legacy `RustInfer` checkpoint provenance filename accepted for migration.
+pub const LEGACY_PROVENANCE_FILENAME: &str = "rustinfer-checkpoint.json";
+
+const PROVENANCE_FORMAT: &str = "riley-checkpoint-v1";
+const LEGACY_PROVENANCE_FORMAT: &str = "rustinfer-checkpoint-v1";
+
+#[derive(Clone, Copy)]
+struct ManifestContract {
+    filename: &'static str,
+    format: &'static str,
+}
+
+const CURRENT_MANIFEST: ManifestContract = ManifestContract {
+    filename: PROVENANCE_FILENAME,
+    format: PROVENANCE_FORMAT,
+};
+const LEGACY_MANIFEST: ManifestContract = ManifestContract {
+    filename: LEGACY_PROVENANCE_FILENAME,
+    format: LEGACY_PROVENANCE_FORMAT,
+};
 
 /// One immutable file assertion from a checkpoint manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,6 +63,7 @@ impl ProvenanceFile {
 /// Validated source identity and file checksums for a checkpoint.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CheckpointProvenance {
+    manifest_filename: &'static str,
     source_model: String,
     source_revision: String,
     converter_revision: Option<String>,
@@ -51,19 +73,22 @@ pub struct CheckpointProvenance {
 
 impl CheckpointProvenance {
     /// Loads the mandatory manifest from a local checkpoint directory.
+    /// `riley-checkpoint.json` takes precedence. The legacy
+    /// `rustinfer-checkpoint.json` is read only when the Riley manifest is absent.
     ///
     /// # Errors
     ///
     /// Returns an error for an unsafe/missing/oversized file or an invalid
     /// manifest contract.
     pub fn load(root: &Path, limits: LoadLimits) -> ModelResult<Self> {
+        let contract = select_manifest_contract(root)?;
         let artifact = read_bounded_file(
             root,
-            Path::new(PROVENANCE_FILENAME),
+            Path::new(contract.filename),
             limits.manifest_bytes(),
             "checkpoint provenance manifest",
         )?;
-        Self::from_json_slice_with_limits(artifact.bytes(), limits)
+        Self::from_json_slice_with_contract(artifact.bytes(), limits, contract)
     }
 
     /// Parses a manifest using production limits.
@@ -82,6 +107,14 @@ impl CheckpointProvenance {
     ///
     /// Returns [`ModelError::LimitExceeded`] before parsing oversized input.
     pub fn from_json_slice_with_limits(input: &[u8], limits: LoadLimits) -> ModelResult<Self> {
+        Self::from_json_slice_with_contract(input, limits, CURRENT_MANIFEST)
+    }
+
+    fn from_json_slice_with_contract(
+        input: &[u8],
+        limits: LoadLimits,
+        contract: ManifestContract,
+    ) -> ModelResult<Self> {
         let input_len = u64::try_from(input.len()).map_err(|_| ModelError::NumericOverflow {
             field: "manifest byte length".to_owned(),
         })?;
@@ -93,23 +126,41 @@ impl CheckpointProvenance {
             });
         }
         let raw: RawManifest = strict_json::from_slice(input, ArtifactKind::Manifest)?;
-        Self::from_raw(raw, limits)
+        Self::from_raw(raw, limits, contract)
     }
 
-    fn from_raw(raw: RawManifest, limits: LoadLimits) -> ModelResult<Self> {
+    fn from_raw(
+        raw: RawManifest,
+        limits: LoadLimits,
+        contract: ManifestContract,
+    ) -> ModelResult<Self> {
         if let Some((field, value)) = raw.unknown.iter().next() {
-            return invalid_manifest(&format!("unknown field {field}={}", stable_value(value)));
+            return invalid_manifest(
+                contract.filename,
+                &format!("unknown field {field}={}", stable_value(value)),
+            );
         }
-        if raw.format != "riley-checkpoint-v1" {
-            return invalid_manifest("format must be riley-checkpoint-v1");
+        if raw.format != contract.format {
+            return invalid_manifest(
+                contract.filename,
+                &format!("format must be {}", contract.format),
+            );
         }
-        validate_source_model(&raw.source_model)?;
-        validate_revision("source_revision", &raw.source_revision, true)?;
+        validate_source_model(contract.filename, &raw.source_model)?;
+        validate_revision(
+            contract.filename,
+            "source_revision",
+            &raw.source_revision,
+            true,
+        )?;
         if let Some(revision) = &raw.converter_revision {
-            validate_revision("converter_revision", revision, false)?;
+            validate_revision(contract.filename, "converter_revision", revision, false)?;
         }
         if let Some(transform) = first_duplicate(&raw.transforms) {
-            return invalid_manifest(&format!("duplicate transform {transform:?}"));
+            return invalid_manifest(
+                contract.filename,
+                &format!("duplicate transform {transform:?}"),
+            );
         }
         if let Some(transform) = raw.transforms.first() {
             return Err(ModelError::UnsupportedTransform {
@@ -132,25 +183,29 @@ impl CheckpointProvenance {
             });
         }
         if raw.files.is_empty() {
-            return invalid_manifest("files must not be empty");
+            return invalid_manifest(contract.filename, "files must not be empty");
         }
 
         let mut files = BTreeMap::new();
         for raw_file in raw.files {
             let path = PathBuf::from(raw_file.path);
             validate_relative_file(&path)?;
-            validate_sha256(&raw_file.sha256)?;
+            validate_sha256(contract.filename, &raw_file.sha256)?;
             let file = ProvenanceFile {
                 path: path.clone(),
                 byte_len: raw_file.bytes,
                 sha256: raw_file.sha256,
             };
             if files.insert(path.clone(), file).is_some() {
-                return invalid_manifest(&format!("duplicate file path {}", path.display()));
+                return invalid_manifest(
+                    contract.filename,
+                    &format!("duplicate file path {}", path.display()),
+                );
             }
         }
 
         Ok(Self {
+            manifest_filename: contract.filename,
             source_model: raw.source_model,
             source_revision: raw.source_revision,
             converter_revision: raw.converter_revision,
@@ -163,6 +218,12 @@ impl CheckpointProvenance {
     #[must_use]
     pub fn source_model(&self) -> &str {
         &self.source_model
+    }
+
+    /// Returns the selected checkpoint provenance filename.
+    #[must_use]
+    pub const fn manifest_filename(&self) -> &'static str {
+        self.manifest_filename
     }
 
     /// Returns the immutable source revision.
@@ -248,7 +309,7 @@ impl CheckpointProvenance {
             .map(|path| path.display().to_string())
             .collect();
         Err(ModelError::InvalidArtifact {
-            artifact: PROVENANCE_FILENAME.to_owned(),
+            artifact: self.manifest_filename.to_owned(),
             reason: format!("file set mismatch: missing={missing:?}, extra={extra:?}"),
         })
     }
@@ -275,18 +336,26 @@ struct RawManifestFile {
     sha256: String,
 }
 
-fn validate_source_model(value: &str) -> ModelResult<()> {
+fn validate_source_model(filename: &str, value: &str) -> ModelResult<()> {
     if value.is_empty()
         || value.len() > 512
         || value.trim() != value
         || value.chars().any(char::is_control)
     {
-        return invalid_manifest("source_model must be a bounded non-empty identifier");
+        return invalid_manifest(
+            filename,
+            "source_model must be a bounded non-empty identifier",
+        );
     }
     Ok(())
 }
 
-fn validate_revision(field: &str, value: &str, immutable_only: bool) -> ModelResult<()> {
+fn validate_revision(
+    filename: &str,
+    field: &str,
+    value: &str,
+    immutable_only: bool,
+) -> ModelResult<()> {
     let valid_length = if immutable_only {
         matches!(value.len(), 40 | 64)
     } else {
@@ -297,20 +366,24 @@ fn validate_revision(field: &str, value: &str, immutable_only: bool) -> ModelRes
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
-        return invalid_manifest(&format!(
-            "{field} must be a lowercase immutable hexadecimal revision"
-        ));
+        return invalid_manifest(
+            filename,
+            &format!("{field} must be a lowercase immutable hexadecimal revision"),
+        );
     }
     Ok(())
 }
 
-fn validate_sha256(value: &str) -> ModelResult<()> {
+fn validate_sha256(filename: &str, value: &str) -> ModelResult<()> {
     if value.len() != 64
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
-        return invalid_manifest("file sha256 must be 64 lowercase hexadecimal characters");
+        return invalid_manifest(
+            filename,
+            "file sha256 must be 64 lowercase hexadecimal characters",
+        );
     }
     Ok(())
 }
@@ -338,9 +411,21 @@ fn stable_value(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unrenderable-json>".to_owned())
 }
 
-fn invalid_manifest<T>(reason: &str) -> ModelResult<T> {
+fn select_manifest_contract(root: &Path) -> ModelResult<ManifestContract> {
+    match root.join(PROVENANCE_FILENAME).symlink_metadata() {
+        Ok(_) => Ok(CURRENT_MANIFEST),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(LEGACY_MANIFEST),
+        Err(error) => Err(ModelError::Io {
+            operation: "inspect checkpoint provenance manifest",
+            path: PathBuf::from(PROVENANCE_FILENAME),
+            reason: error.to_string(),
+        }),
+    }
+}
+
+fn invalid_manifest<T>(filename: &str, reason: &str) -> ModelResult<T> {
     Err(ModelError::InvalidArtifact {
-        artifact: PROVENANCE_FILENAME.to_owned(),
+        artifact: filename.to_owned(),
         reason: reason.to_owned(),
     })
 }

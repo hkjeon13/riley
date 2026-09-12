@@ -1,0 +1,354 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-g04-cuda13 nvcc=/data/riley-g04-cuda13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-g04-cuda13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-g04-cuda13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/usr/lib/x86_64-linux-gnu/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10120:19
+      |
+10119 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10120 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10130 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10424:19
+      |
+10423 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10424 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10435 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10447 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+warning: unused import: `U16_BYTES`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:23:50
+   |
+23 | use super::executor::buffers::{BatchDeviceInput, U16_BYTES, U32_BYTES};
+   |                                                  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `PackedIterationLayout` and `pack_iteration_input`
+  --> crates/riley-runtime/src/llama/batch_executor.rs:42:5
+   |
+42 |     PackedIterationLayout, pack_iteration_input, validate_for_execution,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `rejected` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:22:4
+   |
+22 | fn rejected(reason: &'static str) -> LlamaBatchExecutorError {
+   |    ^^^^^^^^
+
+warning: function `read` is never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:28:4
+   |
+28 | fn read(
+   |    ^^^^
+
+warning: methods `audit_c07_norm_qkv`, `audit_c07_qkv_rope`, `audit_c07_qkv_kv`, `audit_c07_attention_chain`, and `audit_qkv_impl` are never used
+  --> crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs:39:19
+   |
+37 | impl PreparedLlamaBatchExecutor {
+   | ------------------------------- methods in this implementation
+38 |     #[allow(clippy::too_many_lines)]
+39 |     pub(crate) fn audit_c07_norm_qkv(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+45 |     pub(crate) fn audit_c07_qkv_rope(
+   |                   ^^^^^^^^^^^^^^^^^^
+...
+52 |     pub(crate) fn audit_c07_qkv_kv(
+   |                   ^^^^^^^^^^^^^^^^
+...
+59 |     pub(crate) fn audit_c07_attention_chain(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+67 |     fn audit_qkv_impl(
+   |        ^^^^^^^^^^^^^^
+
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/multisequence-prefill-source-v5/crates/riley-runtime)
+warning: `riley-runtime` (lib) generated 6 warnings (run `cargo fix --lib -p riley-runtime` to apply 2 suggestions)
+warning: `riley-runtime` (lib test) generated 1 warning (1 duplicate)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 10s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/riley_runtime-835ae91bc565a2d5)
+
+running 2 tests
+test llama::batch_executor::full_decode::prefill_parity_gpu::batched_prefill_exact_logits_status_and_every_decode_kv ... P128_PREFILL_PARITY prompts=3 full_logits_exact=true argmax_status_exact=true full_initialized_kv_snapshots=96 every_decode_kv_exact=true snapshot_method=close_and_reopen zero_allocations=true performance_claim=false
+ok
+test llama::batch_executor::full_decode::prefill_parity_gpu::batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation ... P128_PREFILL_REUSE requests=6 retained_slow_replays=899 retained_fast_replays=137 cancelled_after_prefill=1 cancelled_after_decode=1 invalid_shape_stage_cases=42 raw_outputs_exact=true full_initialized_final_kv_exact=true zero_allocations=true performance_claim=false
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 320 filtered out; finished in 43.24s
+
+     Running tests/architecture_boundary.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/architecture_boundary-51c63cc648a1714f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/cuda_weights_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/cuda_weights_gpu-58fa6840bb605ad5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_attention_parent_binding_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_attention_parent_binding_cpu-ea8c9cca38100cbc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_binding_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_binding_cpu-1824c016bd5525a4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_capture_capability_dispatch_binding_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c05_capture_capability_dispatch_binding_cpu-25275d971c9456c2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_capture_capability_evidence_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c05_capture_capability_evidence_cpu-6c6af0f34de5c583)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_h2d_metadata_owner_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c05_h2d_metadata_owner_cpu-216fef00be8ca81d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_owned_exec_resolver_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c05_owned_exec_resolver_cpu-2495ebe8b9bc8c52)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c05_owned_h2d_exec_resolver_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c05_owned_h2d_exec_resolver_cpu-ca3e44cdb980e4de)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_identity_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c06_identity_cpu-94dbb6d496191867)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_registry_dispatch_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c06_registry_dispatch_cpu-34902b877f8408e9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_registry_observation_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c06_registry_observation_cpu-595480cc11ac411d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_c06_signature_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_c06_signature_cpu-1efbd8d50fd1d72e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_capture_inventory_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_capture_inventory_cpu-6268baaffa2246bc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_device_slab_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_device_slab_cpu-91919bac882847e8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_field_sources_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_field_sources_cpu-00699dc255b632e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_h2d_completion_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_h2d_completion_cpu-6401345b36dabca5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_h2d_submission_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_h2d_submission_cpu-540f236120395584)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_host_slab_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_host_slab_cpu-96b8146d007d7163)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_pinned_host_slab_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_pinned_host_slab_cpu-e55d523579429201)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_projection_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_projection_cpu-1178ad1a8b1c6f80)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_slab_writer_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_slab_writer_cpu-b541aead8b9af8fc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_exact_sources_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_exact_sources_cpu-ef83fc4c189ab6ab)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_layout_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_layout_cpu-291e27ade00188ec)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_layout_signature_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_layout_signature_cpu-fe7d6ed6ef9e5df3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_packer_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_packer_cpu-8988978d9f6977e4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_padding_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_padding_cpu-7b60042c6b1b3230)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_preflight_binding_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_preflight_binding_cpu-8a9edd48000c4947)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_decode_preflight_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_decode_preflight_cpu-9f339e987303c057)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_dispatch_cpu-544f0702eac31896)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_dispatch_gpu-f4da08cfcf18df1e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/graph_dispatch_metrics_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_dispatch_metrics_cpu-93010466d4f6c10f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_registry_cpu-6b31cfda3a09a226)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/graph_registry_dispatch_cpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/graph_registry_dispatch_cpu-dfe965ebbbd2d0a8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/llama_batch_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/llama_batch_gpu-f2543f4d4bdebd83)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/llama_decode_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/llama_decode_gpu-54d3c1e506e2006b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/llama_forward_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/llama_forward_gpu-43f83318d75f263e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/llama_generation_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/llama_generation_gpu-c458c0573899a587)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/qwen_architecture_boundary.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/qwen_architecture_boundary-cba26642a3653e48)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/qwen_compat_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/qwen_compat_gpu-0cf4b725d103c525)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/smollm_cache_empty_gpu.rs (/tmp/riley-opt-260912/multisequence-prefill-target-v5/release/deps/smollm_cache_empty_gpu-545043a5150f980c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+

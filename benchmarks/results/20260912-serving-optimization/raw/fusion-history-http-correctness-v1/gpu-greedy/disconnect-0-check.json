@@ -1,0 +1,17 @@
+{
+  "check_id": "disconnect-0",
+  "kind": "intentional_disconnect",
+  "completed": true,
+  "sampler": "gpu-greedy",
+  "request": {
+    "path": "/tmp/riley-opt-260912/fusion-history-http-correctness-v1/gpu-greedy/disconnect-0-request.json",
+    "sha256": "ded236ea3dd57be0014456906f8b31778752cb1897ae37f5992ad97d9eae152d"
+  },
+  "response": {
+    "path": "/tmp/riley-opt-260912/fusion-history-http-correctness-v1/gpu-greedy/disconnect-0-response.json",
+    "sha256": "c4e5ef4640ad267a7d414cebb93a66ecd5bac3f82436ac49587393724e4ff21c"
+  },
+  "boundary": "after_headers",
+  "claim": "connection closed and following request reuses engine; cancellation race outcome is not inferred",
+  "performance_claim": false
+}

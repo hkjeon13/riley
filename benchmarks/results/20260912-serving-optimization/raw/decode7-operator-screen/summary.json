@@ -1,0 +1,499 @@
+{
+  "diagnostic_cases_completed": 12,
+  "operators": [
+    {
+      "operator": "qkv",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 156672.0,
+        "sum": 14618688.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4780288.219,
+            "ratio": 0.9985895219864575
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1084607.959,
+            "ratio": 1.1184292586635567
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4780288.219,
+            "ratio": 0.9991573182598975
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1084607.959,
+            "ratio": 1.1170286027513996
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "0046197aeee41c42be52fee64c0b9dddf6cc4e8d1441bfe5a219963d364a8875",
+      "summary_after_sha256": "1e7ec821d7888ff71647041152d545c030a4dc37c67e318d7d16967e086fef8f"
+    },
+    {
+      "operator": "rope_kv",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 107520.0,
+        "sum": 10031840.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4791039.944,
+            "ratio": 1.0008355288037045
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1105855.942,
+            "ratio": 1.1403398169234245
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4791039.944,
+            "ratio": 1.0014046021527327
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1105855.942,
+            "ratio": 1.138911721499356
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "7c1ed2e40235c0c9bae771b3c9b231bc6a4b4993ff69bacb111d77daaf40d17d",
+      "summary_after_sha256": "66cec8f81e0ee4b2ab023b95c9ca576b88e8a93b165f785c21fe26e2a7d12f3f"
+    },
+    {
+      "operator": "attention",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 314368.0,
+        "sum": 29188256.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4607679.844,
+            "ratio": 0.9625320905543906
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1062144.041,
+            "ratio": 1.095264848936577
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4607679.844,
+            "ratio": 0.9630793846347412
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1062144.041,
+            "ratio": 1.0938932027871606
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "7e20fd0efcfedfc07d68b05df759d6c3a6108aae139572b1f90e7172d248a7bc",
+      "summary_after_sha256": "3674aa62b15145b47314edbe2b6559892ec6af37635601fdb3d77ef02c40ae56"
+    },
+    {
+      "operator": "o",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 140288.0,
+        "sum": 13033536.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4599391.937,
+            "ratio": 0.9608007687783306
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1076575.994,
+            "ratio": 1.110146833123508
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4599391.937,
+            "ratio": 0.9613470784321165
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1076575.994,
+            "ratio": 1.10875654964055
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "bbca3e60ddb6e8707ac8f537a38143a26eb957683f001725ce326c655efeaff5",
+      "summary_after_sha256": "81ebe5536003f11ecf670b8d434b1b7b2b40acea2976a962b824ad9521548993"
+    },
+    {
+      "operator": "post_norm",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 105472.0,
+        "sum": 9801760.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4791423.798,
+            "ratio": 1.0009157148855499
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1070207.953,
+            "ratio": 1.1035802176790337
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4791423.798,
+            "ratio": 1.0014848338282454
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1070207.953,
+            "ratio": 1.1021981578442626
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "acc79f58fb142be5f4e7a82beea71e0c67840abf3171b50117a3985b80d456ab",
+      "summary_after_sha256": "79775e7594c4a28d3b5c0381e4770f92e1d08cefa53665887cf8af9e477efd9b"
+    },
+    {
+      "operator": "gate_up",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 244736.0,
+        "sum": 22747200.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4800320.148,
+            "ratio": 1.0027741387894924
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1109055.996,
+            "ratio": 1.1436396581178438
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4800320.148,
+            "ratio": 1.0033443144288021
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1109055.996,
+            "ratio": 1.1422074301641207
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "7567e6d8751ecb0753bec1c9ac7a4ba8fdb5f44cb4bbdd90d691b904d040eda6",
+      "summary_after_sha256": "c620283640028740e9f27ab891576ba376c4a6ee840b658399c0f5b89af459fa"
+    },
+    {
+      "operator": "swiglu",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 93216.0,
+        "sum": 8751136.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4606304.169,
+            "ratio": 0.9622447156979546
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1061184.049,
+            "ratio": 1.0942749215328793
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4606304.169,
+            "ratio": 0.9627918463774592
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1061184.049,
+            "ratio": 1.0929045151111074
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "b5214ba25f6c93c80c783865d048e2a4dee6dc21dce24d824074f30f765e883f",
+      "summary_after_sha256": "5904d4e4198c723b13567e2eea5569077dac54acaf5797f3bb2486c11e0a0cb0"
+    },
+    {
+      "operator": "down",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 169984.0,
+        "sum": 15801376.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4793471.813,
+            "ratio": 1.0013435397835848
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1077855.945,
+            "ratio": 1.111466696799758
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4793471.813,
+            "ratio": 1.0019129019867765
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1077855.945,
+            "ratio": 1.1100747603961105
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "f2ade6eabcfff449551ea1270ade5d9e2f47bd7891952bb0d3bb1e2a8d5ded33",
+      "summary_after_sha256": "73a1050ce6b8978cc8d86cd0b0dc8070f86c8a00b6aa1ad4fc46f315d22cf52c"
+    },
+    {
+      "operator": "next_norm",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 108544.0,
+        "sum": 10079328.0
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4796768.188,
+            "ratio": 1.002032143772452
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 1087903.976,
+            "ratio": 1.1218280552695223
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4796768.188,
+            "ratio": 1.0026018975146795
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 1087903.976,
+            "ratio": 1.1204231429016944
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "959b5fa9823b1670780ac5b46787ad7a2c2d9b05c8c62775df9123b767c28723",
+      "summary_after_sha256": "0f0ed3f19e0d91bee93ece81e2f83767890985b20da5b39d9a2d72b8972b59b7"
+    },
+    {
+      "operator": "head",
+      "sum_across_selected_layers_ns": {
+        "measured_count": 93,
+        "unmeasured_count": 0,
+        "median": 64511.999,
+        "sum": 6005759.9199999925
+      },
+      "whole_graph_vs_off_before": {
+        "baseline_log_sha256": "1d7fe1d904b2df1cb3bc99791fbe9610f606428c2ce53e49960148c4e860b22d",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4787040.234,
+            "selected_median_ns": 4787072.182,
+            "ratio": 1.0000066738524094
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 969760.001,
+            "selected_median_ns": 972191.989,
+            "ratio": 1.0025078246138137
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "whole_graph_vs_off_after": {
+        "baseline_log_sha256": "ef13508985dfa4ac4c227bf1b804cb5ccab20920264c91f2d576e2ee200f1d6a",
+        "groups": [
+          {
+            "phase": "prefill",
+            "off_median_ns": 4784319.878,
+            "selected_median_ns": 4787072.182,
+            "ratio": 1.0005752759159472
+          },
+          {
+            "phase": "decode",
+            "off_median_ns": 970975.995,
+            "selected_median_ns": 972191.989,
+            "ratio": 1.0012523419798858
+          }
+        ],
+        "matched_runtime_provenance_verified": false,
+        "performance_claim_eligible": false
+      },
+      "summary_before_sha256": "94dd3202715b4229113eed9801108cabb6b597f976300f56f96c65ff2c1df66a",
+      "summary_after_sha256": "7e12951b0d5473ebc461999302aa42cf6c3a73c89460ce7ad5ec9658bb320e1f"
+    }
+  ],
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "binary_sha256": "4f13752623c47082649b09a124f10c49444491c170ee6d26eed4cf27462c1f41",
+  "performance_claim_eligible": false,
+  "interpretation": "Per-family intervals include event perturbation. Families come from separate processes; do not add their medians as a whole-graph time."
+}

@@ -1,0 +1,125 @@
+{
+  "scope": "Nonexclusive instrumented actual HTTP serving; wall times include instrumentation/host interference, diagnostic not matched performance",
+  "phases": {
+    "before": {
+      "log_sha256": "eebde42619ccfdea55f6b7717207fd162b34dc7eafa1f993e053095bdb0f9fa5",
+      "stages": {
+        "NATIVE": {
+          "n": 586,
+          "median_us": 1950.5,
+          "total_us": 1235114
+        },
+        "VALIDATE/rows1": {
+          "n": 451,
+          "median_us": 168,
+          "total_us": 76639
+        },
+        "EXECUTE": {
+          "n": 586,
+          "median_us": 2146.0,
+          "total_us": 1348835
+        },
+        "SAMPLE/rows1": {
+          "n": 422,
+          "median_us": 133.0,
+          "total_us": 58257
+        },
+        "SAMPLE/rows0": {
+          "n": 29,
+          "median_us": 0,
+          "total_us": 0
+        },
+        "VALIDATE/rows2": {
+          "n": 9,
+          "median_us": 188,
+          "total_us": 1690
+        },
+        "SAMPLE/rows2": {
+          "n": 9,
+          "median_us": 262,
+          "total_us": 2386
+        },
+        "VALIDATE/rows3": {
+          "n": 12,
+          "median_us": 206.0,
+          "total_us": 2470
+        },
+        "SAMPLE/rows3": {
+          "n": 12,
+          "median_us": 390.0,
+          "total_us": 4703
+        },
+        "VALIDATE/rows4": {
+          "n": 114,
+          "median_us": 225.0,
+          "total_us": 25839
+        },
+        "SAMPLE/rows4": {
+          "n": 114,
+          "median_us": 517.0,
+          "total_us": 59324
+        }
+      }
+    },
+    "after": {
+      "log_sha256": "4353a7ef03c06d907a55ee746e37a081f4e7668f805454c02ab1caf060b1dee6",
+      "stages": {
+        "NATIVE": {
+          "n": 621,
+          "median_us": 1959,
+          "total_us": 1304192
+        },
+        "VALIDATE/rows1": {
+          "n": 485,
+          "median_us": 43,
+          "total_us": 20197
+        },
+        "EXECUTE": {
+          "n": 621,
+          "median_us": 2036,
+          "total_us": 1349782
+        },
+        "SAMPLE/rows1": {
+          "n": 456,
+          "median_us": 66.0,
+          "total_us": 30460
+        },
+        "SAMPLE/rows0": {
+          "n": 29,
+          "median_us": 0,
+          "total_us": 0
+        },
+        "VALIDATE/rows2": {
+          "n": 11,
+          "median_us": 81,
+          "total_us": 891
+        },
+        "SAMPLE/rows2": {
+          "n": 11,
+          "median_us": 125,
+          "total_us": 1386
+        },
+        "VALIDATE/rows3": {
+          "n": 46,
+          "median_us": 118.0,
+          "total_us": 5622
+        },
+        "SAMPLE/rows3": {
+          "n": 46,
+          "median_us": 183.0,
+          "total_us": 8717
+        },
+        "VALIDATE/rows4": {
+          "n": 79,
+          "median_us": 154,
+          "total_us": 12159
+        },
+        "SAMPLE/rows4": {
+          "n": 79,
+          "median_us": 240,
+          "total_us": 19009
+        }
+      }
+    }
+  }
+}

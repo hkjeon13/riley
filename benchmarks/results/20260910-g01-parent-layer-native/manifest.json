@@ -1,0 +1,29 @@
+{
+  "base_revision": "3bc72c99dc62e6f93bfdb69b061f82b6c107d494",
+  "source_kind": "HEAD archive plus scoped source overlay; unrelated dirty riley-model files excluded",
+  "overlay_sha256": "ce93056b452705bfecb1ef741645fce7a687f7a9fcd503c8f2ec8fea5172069b",
+  "source_files_sha256": {
+    "crates/riley-cuda/Cargo.toml": "7d11e6a7e331f8044faa276de2ad673838dea0a597e4a1822167d75b6b0d6e37",
+    "crates/riley-cuda/src/lib.rs": "8936b9fa51a15fda4b7898c340813eb4c68e079449f172073fbf01c6560a4239",
+    "crates/riley-cuda/src/graph.rs": "7f69b13e2431435ed496542492af4213c3dec40c4d22d1469054923668d3c7fb",
+    "crates/riley-cuda/src/graph/parent_attention.rs": "56aaa6d2bea33bd24f7413bb42c68270fc263f1de52bc0018cf476befb238c39",
+    "crates/riley-cuda/src/ffi.rs": "70681ab04c750bf26cc72a4b13eff665930475da5c4603871176cdde53d0902f",
+    "crates/riley-cuda/tests/graph_parent_attention_gpu.rs": "b759bdf0f960c2de3802ef4a6e487c941403ba7d4fddc60de1290c880ee35790",
+    "crates/riley-runtime/src/llama/executor/owner.rs": "95386a576e9d4ec69c75ae0c8ad6f1314a61a7288cbbea5bd90b274b11e55b65",
+    "kernels/src/graph.cu": "3af356c2febc84ddcf9b332614f23f7b3213c22bef635008a6027869632218e8",
+    "kernels/src/ffi_internal.hpp": "6207cb95ca4a7c9ebd6e36ddae95757816e672d1a7eceee083df3f45ebe101a7",
+    "kernels/include/riley_cuda.h": "fa062776e9851616c3ecd24d385213c3fa5c7914851c2678d4880aa25ed492e2"
+  },
+  "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "driver": "580.173.02",
+  "toolkit": "12.8.1",
+  "architecture": "89",
+  "fixture": "synthetic BF16 D64 page16; 3 layers; P6/KVH3; QH3 and QH9; active rows5/output rows8",
+  "parent_attention_test_binary_sha256": "e2b6d90057d0c9d8b537c36bfed7f7b01e7b9397f610bed53a322768867771e9",
+  "parent_attention_exit_code": 0,
+  "legacy_attention_exit_code": 0,
+  "legacy_kv_exit_code": 0,
+  "decision": "development GPU correctness verified; C07 admission remains Unknown; no performance or release claim",
+  "runtime_cuda_check_exit_code": 0
+}

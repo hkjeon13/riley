@@ -1,0 +1,23 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a)
+
+running 1 test
+test llama::graph_decode_attention_owner::tests::c07_packed_attention_owner_parity_binds_only_matching_live_inventory ... canonical metadata/output SHA256: [99, 1f, 40, 86, 1d, 05, 50, ee, cd, 8f, c2, bb, 2a, 23, ef, d3, 94, 8d, 87, da, 77, 13, 9b, 5c, 43, ac, a4, a0, bc, 75, fd, 87] [e7, 27, 10, 53, 1b, 01, d9, 1e, e7, 6a, 24, 57, cd, c9, c6, c8, 9a, 19, 7d, b4, 7d, a8, eb, d4, ae, 67, 2e, 13, dd, d6, 68, cd]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 280 filtered out; finished in 0.09s
+

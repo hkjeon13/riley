@@ -346,18 +346,42 @@ fn wait_for_disconnect_observation(
 #[test]
 #[ignore = "requires pinned checkpoint and CUDA on server-4096"]
 fn real_cuda_http_lifecycle_is_bounded_and_consistent() -> TestResult {
+    lifecycle(false, false)
+}
+
+#[test]
+#[ignore = "requires pinned checkpoint and CUDA"]
+fn full_graph_http_lifecycle_cancel_reuse_shutdown() -> TestResult {
+    lifecycle(true, false)
+}
+
+#[test]
+#[ignore = "requires pinned checkpoint and CUDA"]
+fn full_graph_http_gpu_greedy_lifecycle() -> TestResult {
+    lifecycle(true, true)
+}
+
+fn lifecycle(graph: bool, gpu_greedy: bool) -> TestResult {
     let limits = LoadLimits::default().with_weight_byte_limits(ONE_GIB, ONE_GIB)?;
     let model = LoadedModel::load(&checkpoint_path(), limits)?;
     if model.spec().max_sequence_length() < MAX_SEQUENCE_TOKENS {
         return Err(io::Error::other("checkpoint context is smaller than the GPU gate").into());
     }
-    let parity_prompt = "Once upon a time, a careful engineer";
+    let graph_prompt = "Hello".repeat(128);
+    let parity_prompt = if graph {
+        graph_prompt.as_str()
+    } else {
+        "Once upon a time, a careful engineer"
+    };
     let parity_prompt_tokens = model
         .tokenizer()
         .encode(parity_prompt, EncodeOptions::default())?
         .len();
     if parity_prompt_tokens + MAX_OUTPUT_TOKENS > MAX_SEQUENCE_TOKENS {
         return Err(io::Error::other("parity prompt exceeded the test context").into());
+    }
+    if graph {
+        assert_eq!(parity_prompt_tokens, 128);
     }
     let long_prompt = multi_iteration_prompt(&model)?;
 
@@ -368,15 +392,39 @@ fn real_cuda_http_lifecycle_is_bounded_and_consistent() -> TestResult {
         context_window_tokens: MAX_SEQUENCE_TOKENS,
         max_output_tokens: MAX_OUTPUT_TOKENS,
     };
-    let resources = CudaEngineResources::prepare(metadata, model, cuda_config()?)?;
+    let mut config = cuda_config()?;
+    config.gpu_greedy = gpu_greedy;
+    if graph {
+        config.scheduler.max_active_sequences = 1;
+        config.scheduler.iteration_token_budget = 1;
+        config.executor = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 1, PHYSICAL_BLOCKS, 1, PHYSICAL_BLOCKS)?,
+            PreparedLlamaForwardConfig::default(),
+        )
+        .with_separate_residual_norm()
+        .with_grouped_ragged_attention_heads();
+    }
+    let resources = CudaEngineResources::prepare(metadata, model, config)?
+        .with_execution_graph_policy(if graph {
+            riley_runtime::llama::ExecutionGraphPolicy::Require
+        } else {
+            riley_runtime::llama::ExecutionGraphPolicy::Disabled
+        });
     let engine = Arc::new(InferenceEngine::start_cuda(resources, engine_config())?);
     let backend: Arc<dyn CompletionBackend> = engine.clone();
     let server = start_server(server_config(), backend)?;
     let address = server.local_address();
 
-    let non_streaming_body = completion_body(parity_prompt, 8, false)?;
-    let non_streaming = parse_non_streaming(&send_completion(address, &non_streaming_body)?)?;
-    let streaming_body = completion_body(parity_prompt, 8, true)?;
+    let outputs = if graph { 32 } else { 8 };
+    let non_streaming_body = completion_body(parity_prompt, outputs, false)?;
+    let response = send_completion(address, &non_streaming_body)?;
+    if graph {
+        let value: serde_json::Value = serde_json::from_slice(&response.body)?;
+        assert_eq!(value["usage"]["prompt_tokens"], 128);
+        assert_eq!(value["usage"]["completion_tokens"], 32);
+    }
+    let non_streaming = parse_non_streaming(&response)?;
+    let streaming_body = completion_body(parity_prompt, outputs, true)?;
     let streaming = parse_streaming(&send_completion(address, &streaming_body)?)?;
     if streaming.text != non_streaming.text {
         return Err(io::Error::other("streaming and non-streaming text differed").into());
@@ -460,6 +508,17 @@ fn real_cuda_http_lifecycle_is_bounded_and_consistent() -> TestResult {
         .into());
     }
     let status = engine.status();
+    if graph {
+        let metrics = engine
+            .final_metrics_snapshot()
+            .ok_or("final metrics missing")?;
+        let allocation = metrics.allocation.ok_or("allocation metrics missing")?;
+        assert_eq!(allocation.device_live_allocations, 0);
+        assert_eq!(allocation.pinned_host_live_allocations, 0);
+        println!(
+            "G04_HTTP p128_o32=true streaming_parity=true prefill_cancel=true decode_cancel=true queued_reuse=true shutdown=true zero_allocations=true"
+        );
+    }
     if status.ready
         || status.accepting
         || status.active_requests != 0

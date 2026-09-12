@@ -1,0 +1,31 @@
+{
+  "pid": 1992689,
+  "process_group": 1992689,
+  "fresh_process": true,
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+    "serve",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--tokenizer",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "19342",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "2",
+    "--max-num-batched-tokens",
+    "256",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ]
+}

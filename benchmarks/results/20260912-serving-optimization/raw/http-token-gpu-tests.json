@@ -1,0 +1,167 @@
+{
+  "schema_version": "riley.http-token-gpu-correctness.v1",
+  "passed": true,
+  "source_commit": "a179617070526068b66ba5627ba82a7151da8c64",
+  "source_clean": true,
+  "binaries": {
+    "/tmp/riley-opt-260912/http-token-target/release/riley": "18cbd5f8a8ad8583ecfcd2d38815a484831c05eb9f081b1db67be6194ffebd8c",
+    "/tmp/riley-opt-260912/http-token-target/release/riley-profile": "5bf38bfb95adf3ce84379029f579eed020dae6b534ff3c53c7a32a3809315d95"
+  },
+  "build_sha256": "5576db88790d5a87e976c082df77f985595129b122fde55b2b475ce06e17a4f5",
+  "checks": [
+    {
+      "name": "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/http-token-batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation.log",
+      "sha256": "60d86e1ee14b6298042bee868c7658efbb647e0a1ca7572a50bab0b6cb9ef75d",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "batched_prefill_exact_logits_status_and_every_decode_kv",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/http-token-batched_prefill_exact_logits_status_and_every_decode_kv.log",
+      "sha256": "dddd2a9fe0a31286e9dce2f5fc42b2e6b627279a333a7e45cf01e7046ad97d06",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_exact_logits_status_and_every_decode_kv",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/http-token-owned_graph_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "13dc822208a15a11a3f9a8a7f5628691de5d8df10b98c0330520b311bfb183fe",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/http-token-owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "5827259b5a81b6fff22857cca4e591affc1a579300333c58e9aaa8244c505d9e",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    }
+  ],
+  "profile_unit_tests": {
+    "name": "profile-unit-tests",
+    "passed": true,
+    "path": "/tmp/riley-opt-260912/http-token-profile-unit-tests.log",
+    "sha256": "4998ac266c5e74455b731a2b7f0e46313f5d55e92103a4f5c36b25e3d561ceea",
+    "argv": [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--bin",
+      "riley-profile",
+      "--",
+      "--test-threads=1"
+    ],
+    "passed_tests": 10,
+    "failed_tests": 0,
+    "ignored_tests": 0
+  },
+  "server_unit_tests": {
+    "name": "server-unit-tests",
+    "passed": true,
+    "path": "/tmp/riley-opt-260912/http-token-server-unit-tests.log",
+    "sha256": "38748d657b9ca309279e11360444876195b947a2359a094316f321f790ada6bf",
+    "argv": [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--lib",
+      "--",
+      "--test-threads=1"
+    ],
+    "passed_tests": 72,
+    "failed_tests": 0,
+    "ignored_tests": 2
+  },
+  "private_runtime_pins": {
+    "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70",
+    "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/receipt.json": "091701fb0b91904024748a9baf59891735809ac2ba43e089165e619308f8f7ed",
+    "/tmp/riley-opt-260912/check_gui_driver_runtime.py": "49858e49d10756047b82a6271876a57cad9b5e96e8597e3d1d269b5aaace4ff7"
+  },
+  "gpu_query": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02",
+  "reference_binding_sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b",
+  "gpu_tests_executed": true,
+  "vllm_reference_tokens_exact": true,
+  "full_logits_and_kv_exact": true,
+  "runner_sha256": "6c1c9f7ddaafd4831e9eb976265084dbe28a8b69b32972f53fa3e1434e6464ef",
+  "http_helper_sha256": "975a727cdcc879789fc7956a19402d6fd14f137129867d18fa11392d75aec805",
+  "desktop_session_policy": "left untouched; no performance qualification",
+  "performance_claim_eligible": false,
+  "performance_measured": false
+}

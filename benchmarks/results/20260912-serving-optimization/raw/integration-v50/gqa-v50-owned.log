@@ -1,0 +1,37 @@
+
+running 16 tests
+test loaded_32_active_owners_match_every_logit ... LOADED_SHARED rows_max=8 logits_checked=2336 iterations=414 pending_close_abort=true allocation_zero=true
+ok
+test loaded_32_owners_sixteen_rows_match_every_logit ... LOADED_SHARED rows_max=16 logits_checked=2336 iterations=318 pending_close_abort=true allocation_zero=true
+ok
+test loaded_compact_sixteen_alternates_full_and_greedy ... LOADED_SHARED rows_max=16 logits_checked=2336 iterations=318 pending_close_abort=true allocation_zero=true
+ok
+test loaded_compact_sixteen_prefill_shapes ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_prefill_buckets_eight_rows ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_prefill_buckets_sixteen_rows ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_shared_scheduler_matches_every_logit ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=144 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v5_compact32 ... LOADED_SHARED rows_max=32 logits_checked=4096 iterations=190 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v5_full32 ... LOADED_SHARED rows_max=32 logits_checked=4096 iterations=190 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v5_prefill32 ... LOADED_SHARED rows_max=3 logits_checked=224 iterations=138 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v6_compact32 ... LOADED_PACKED rows_max=32 logits_checked=4096 iterations=154 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v6_full32 ... LOADED_PACKED rows_max=32 logits_checked=4096 iterations=154 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v6_partial ... LOADED_PACKED rows_max=3 logits_checked=224 iterations=130 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v7_compact32 ... LOADED_MIXED rows_max=32 logits_checked=4096 iterations=141 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v7_full32 ... LOADED_MIXED rows_max=32 logits_checked=4096 iterations=141 pending_close_abort=true allocation_zero=true
+ok
+test loaded_v7_partial ... LOADED_MIXED rows_max=3 logits_checked=224 iterations=129 pending_close_abort=true allocation_zero=true
+ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.24s
+

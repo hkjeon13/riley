@@ -1,0 +1,1762 @@
+[
+  {
+    "case": "c1-p0-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854623924745870,
+      "phase_finished_ns": 854628370564378,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854623924798187,
+      "common_wall_finished_ns": 854628370301490,
+      "common_wall_ns": 4445503303,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 921.3804873873019,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4445818508,
+      "successful_output_tokens_per_phase_wall_second": 921.3151622427858,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 34.4956485,
+        "p95": 35.062152,
+        "p99": 35.271386,
+        "max": 35.314494
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.141635,
+        "p95": 5.291042,
+        "p99": 5.420789,
+        "max": 5.953827
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9456731290322581,
+        "p95": 0.9594320322580645,
+        "p99": 0.9643506774193548,
+        "max": 0.9659549354838709
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.141635,
+        "p95": 5.291042,
+        "p99": 5.420789,
+        "max": 5.953827
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.9462675,
+        "p95": 0.972267,
+        "p99": 1.006062,
+        "max": 1.482408
+      }
+    }
+  },
+  {
+    "case": "c1-p0-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854629889047295,
+      "phase_finished_ns": 854634022601599,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854629889094045,
+      "common_wall_finished_ns": 854634022402182,
+      "common_wall_ns": 4133308137,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 990.9737827997797,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4133554304,
+      "successful_output_tokens_per_phase_wall_second": 990.9147669927406,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 32.117078,
+        "p95": 32.256254,
+        "p99": 32.841729,
+        "max": 33.87469
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.172005,
+        "p95": 5.252499,
+        "p99": 5.283795,
+        "max": 5.355229
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.8678109516129031,
+        "p95": 0.8702492258064516,
+        "p99": 0.8892875161290322,
+        "max": 0.9220002903225806
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.172005,
+        "p95": 5.252499,
+        "p99": 5.283795,
+        "max": 5.355229
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.867158,
+        "p95": 0.895405,
+        "p99": 0.916276,
+        "max": 5.49654
+      }
+    }
+  },
+  {
+    "case": "c1-p0-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854635543203466,
+      "phase_finished_ns": 854639671966265,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854635543263656,
+      "common_wall_finished_ns": 854639671766786,
+      "common_wall_ns": 4128503130,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 992.1271393101741,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4128762799,
+      "successful_output_tokens_per_phase_wall_second": 992.0647417652729,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 32.0716665,
+        "p95": 32.324481,
+        "p99": 32.74756,
+        "max": 33.084501
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.1440304999999995,
+        "p95": 5.30308,
+        "p99": 5.366857,
+        "max": 5.553447
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.867518435483871,
+        "p95": 0.8710318387096775,
+        "p99": 0.8841253870967741,
+        "max": 0.8869453225806452
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.1440304999999995,
+        "p95": 5.30308,
+        "p99": 5.366857,
+        "max": 5.553447
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.8672135,
+        "p95": 0.89452,
+        "p99": 0.905503,
+        "max": 1.19027
+      }
+    }
+  },
+  {
+    "case": "c1-p0-vllm",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854651786200696,
+      "phase_finished_ns": 854656414156280,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854651786247835,
+      "common_wall_finished_ns": 854656413957110,
+      "common_wall_ns": 4627709275,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 885.1031377721972,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4627955584,
+      "successful_output_tokens_per_phase_wall_second": 885.0560308229614,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 35.343028000000004,
+        "p95": 42.877156,
+        "p99": 46.335853,
+        "max": 52.25788
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 7.4693065,
+        "p95": 12.089394,
+        "p99": 16.605181,
+        "max": 17.126063
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.8958240322580645,
+        "p95": 0.9911877741935483,
+        "p99": 1.0319799677419355,
+        "max": 1.1308744838709677
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 7.4693065,
+        "p95": 12.089394,
+        "p99": 16.605181,
+        "max": 17.126063
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.906837,
+        "p95": 1.069711,
+        "p99": 1.324407,
+        "max": 2.521607
+      }
+    }
+  },
+  {
+    "case": "c1-p1-vllm",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854668416961214,
+      "phase_finished_ns": 854672971694300,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854668417002478,
+      "common_wall_finished_ns": 854672971540801,
+      "common_wall_ns": 4554538323,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 899.3227654525546,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4554733086,
+      "successful_output_tokens_per_phase_wall_second": 899.2843098951244,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 35.1807315,
+        "p95": 36.835542,
+        "p99": 39.119138,
+        "max": 44.004413
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 7.3939140000000005,
+        "p95": 8.983889,
+        "p99": 9.935494,
+        "max": 10.898087
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.8947513548387096,
+        "p95": 0.9021260322580645,
+        "p99": 1.0043534838709678,
+        "max": 1.1656355161290322
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 7.3939140000000005,
+        "p95": 8.983889,
+        "p99": 9.935494,
+        "max": 10.898087
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.905257,
+        "p95": 1.002484,
+        "p99": 1.193167,
+        "max": 3.228997
+      }
+    }
+  },
+  {
+    "case": "c1-p1-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854674685254984,
+      "phase_finished_ns": 854678828924933,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854674685370789,
+      "common_wall_finished_ns": 854678828673646,
+      "common_wall_ns": 4143302857,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 988.5832972793473,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4143669949,
+      "successful_output_tokens_per_phase_wall_second": 988.4957176641194,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 32.1012985,
+        "p95": 32.584843,
+        "p99": 32.800916,
+        "max": 37.441186
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.142248,
+        "p95": 5.282885,
+        "p99": 5.344571,
+        "max": 5.349496
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.8683813709677419,
+        "p95": 0.8831226774193548,
+        "p99": 0.8857531935483871,
+        "max": 1.0422430645161291
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.142248,
+        "p95": 5.282885,
+        "p99": 5.344571,
+        "max": 5.349496
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.867504,
+        "p95": 0.896186,
+        "p99": 0.939548,
+        "max": 6.260932
+      }
+    }
+  },
+  {
+    "case": "c1-p1-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854680350268471,
+      "phase_finished_ns": 854684496314519,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854680350325346,
+      "common_wall_finished_ns": 854684496018626,
+      "common_wall_ns": 4145693280,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 988.0132762740228,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4146046048,
+      "successful_output_tokens_per_phase_wall_second": 987.9292107659678,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 32.1303535,
+        "p95": 32.672062,
+        "p99": 33.432548,
+        "max": 34.26758
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.1434999999999995,
+        "p95": 5.306959,
+        "p99": 5.756293,
+        "max": 7.357853
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.8688321129032257,
+        "p95": 0.8849983548387097,
+        "p99": 0.8884274193548387,
+        "max": 0.9105560322580645
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.1434999999999995,
+        "p95": 5.306959,
+        "p99": 5.756293,
+        "max": 7.357853
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.868339,
+        "p95": 0.896772,
+        "p99": 1.00583,
+        "max": 4.066077
+      }
+    }
+  },
+  {
+    "case": "c1-p1-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 1,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 1,
+      "observed_max_call_in_flight": 1,
+      "observed_max_successful_request_in_flight": 1,
+      "phase_started_ns": 854686053075407,
+      "phase_finished_ns": 854690508703905,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854686053133799,
+      "common_wall_finished_ns": 854690508494685,
+      "common_wall_ns": 4455360886,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 919.341912990884,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4455628498,
+      "successful_output_tokens_per_phase_wall_second": 919.2866958810802,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 34.596584500000006,
+        "p95": 35.059383,
+        "p99": 35.207255,
+        "max": 35.23097
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 5.149059,
+        "p95": 5.247164,
+        "p99": 5.330883,
+        "max": 5.552967
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9483924516129032,
+        "p95": 0.9630258387096775,
+        "p99": 0.9683174516129033,
+        "max": 0.9685319032258064
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 5.149059,
+        "p95": 5.247164,
+        "p99": 5.330883,
+        "max": 5.552967
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.950536,
+        "p95": 0.973579,
+        "p99": 1.037885,
+        "max": 2.183216
+      }
+    }
+  },
+  {
+    "case": "c4-p0-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854692061841990,
+      "phase_finished_ns": 854696443637481,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854692061882209,
+      "common_wall_finished_ns": 854696443248802,
+      "common_wall_ns": 4381366593,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 934.8681314510584,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4381795491,
+      "successful_output_tokens_per_phase_wall_second": 934.7766248819667,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 136.697343,
+        "p95": 136.912788,
+        "p99": 137.35955,
+        "max": 137.875235
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 107.0927885,
+        "p95": 107.248574,
+        "p99": 107.749335,
+        "max": 108.944608
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9538283548387096,
+        "p95": 0.9555059354838709,
+        "p99": 0.9596379677419355,
+        "max": 0.9672530322580645
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 107.0927885,
+        "p95": 107.248574,
+        "p99": 107.749335,
+        "max": 108.944608
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.9492685,
+        "p95": 0.969827,
+        "p99": 1.182643,
+        "max": 2.738931
+      }
+    }
+  },
+  {
+    "case": "c4-p0-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854697726289874,
+      "phase_finished_ns": 854700023384956,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854697726348300,
+      "common_wall_finished_ns": 854700023128041,
+      "common_wall_ns": 2296779741,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1783.3664791107194,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2297095082,
+      "successful_output_tokens_per_phase_wall_second": 1783.1216618311491,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 71.499635,
+        "p95": 72.024654,
+        "p99": 77.769746,
+        "max": 84.48909
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 11.00439,
+        "p95": 11.356343,
+        "p99": 17.433555,
+        "max": 23.823468
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 1.9510861612903225,
+        "p95": 2.1044979032258064,
+        "p99": 2.117564129032258,
+        "max": 2.1600050967741935
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 11.00439,
+        "p95": 11.356343,
+        "p99": 17.433555,
+        "max": 23.823468
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.6261804999999998,
+        "p95": 6.391967,
+        "p99": 6.867102,
+        "max": 9.509749
+      }
+    }
+  },
+  {
+    "case": "c4-p0-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854702327367693,
+      "phase_finished_ns": 854704543751432,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854702327426438,
+      "common_wall_finished_ns": 854704543460334,
+      "common_wall_ns": 2216033896,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1848.3471788917077,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2216383739,
+      "successful_output_tokens_per_phase_wall_second": 1848.0554282752748,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 69.016977,
+        "p95": 69.387848,
+        "p99": 75.506149,
+        "max": 82.339876
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 10.925926,
+        "p95": 11.273199,
+        "p99": 17.152953,
+        "max": 23.66495
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 1.8728317096774194,
+        "p95": 2.0258307419354837,
+        "p99": 2.0364593548387098,
+        "max": 2.0394929032258067
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 10.925926,
+        "p95": 11.273199,
+        "p99": 17.152953,
+        "max": 23.66495
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.547796,
+        "p95": 6.341029,
+        "p99": 6.789025,
+        "max": 6.917167
+      }
+    }
+  },
+  {
+    "case": "c4-p0-vllm",
+    "phase": "warmup",
+    "correctness_pass": false
+  },
+  {
+    "case": "c4-p1-vllm",
+    "phase": "warmup",
+    "correctness_pass": false
+  },
+  {
+    "case": "c4-p1-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854730107924431,
+      "phase_finished_ns": 854732332665335,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854730107972976,
+      "common_wall_finished_ns": 854732332387477,
+      "common_wall_ns": 2224414501,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1841.3834283846902,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2224740904,
+      "successful_output_tokens_per_phase_wall_second": 1841.1132697005512,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 69.121543,
+        "p95": 69.465877,
+        "p99": 75.519064,
+        "max": 81.370895
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 10.952784,
+        "p95": 11.295368,
+        "p99": 17.238058,
+        "max": 23.263599
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 1.8757687258064517,
+        "p95": 2.0328094516129034,
+        "p99": 2.0778409677419356,
+        "max": 2.238378677419355
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 10.952784,
+        "p95": 11.295368,
+        "p99": 17.238058,
+        "max": 23.263599
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.5514435,
+        "p95": 6.344907,
+        "p99": 6.780071,
+        "max": 7.24917
+      }
+    }
+  },
+  {
+    "case": "c4-p1-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854734642471639,
+      "phase_finished_ns": 854736942270102,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854734642529798,
+      "common_wall_finished_ns": 854736942084789,
+      "common_wall_ns": 2299554991,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1781.214198412705,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2299798463,
+      "successful_output_tokens_per_phase_wall_second": 1781.0256272007953,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 71.61342300000001,
+        "p95": 72.207997,
+        "p99": 77.704139,
+        "max": 84.438023
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 11.012902,
+        "p95": 11.362744,
+        "p99": 17.272333,
+        "max": 23.658892
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 1.954212112903226,
+        "p95": 2.1084737419354838,
+        "p99": 2.1251826129032256,
+        "max": 2.1266659677419355
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 11.012902,
+        "p95": 11.362744,
+        "p99": 17.272333,
+        "max": 23.658892
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.6294559999999998,
+        "p95": 6.425806,
+        "p99": 6.874963,
+        "max": 7.175216
+      }
+    }
+  },
+  {
+    "case": "c4-p1-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 4,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 4,
+      "observed_max_call_in_flight": 4,
+      "observed_max_successful_request_in_flight": 4,
+      "phase_started_ns": 854739513692522,
+      "phase_finished_ns": 854743898844371,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854739513751258,
+      "common_wall_finished_ns": 854743898478890,
+      "common_wall_ns": 4384727632,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 934.1515240552575,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4385151849,
+      "successful_output_tokens_per_phase_wall_second": 934.0611547885305,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 136.7977075,
+        "p95": 137.035164,
+        "p99": 137.164778,
+        "max": 138.192886
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 107.1613375,
+        "p95": 107.345384,
+        "p99": 107.550927,
+        "max": 109.219439
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9547141935483872,
+        "p95": 0.9568013225806452,
+        "p99": 0.9582614193548387,
+        "max": 0.9620209677419355
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 107.1613375,
+        "p95": 107.345384,
+        "p99": 107.550927,
+        "max": 109.219439
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.949471,
+        "p95": 0.971494,
+        "p99": 1.192143,
+        "max": 1.285889
+      }
+    }
+  },
+  {
+    "case": "c8-p0-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854746471339633,
+      "phase_finished_ns": 854750857678866,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854746471406528,
+      "common_wall_finished_ns": 854750857263126,
+      "common_wall_ns": 4385856598,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 933.91106354636,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4386339233,
+      "successful_output_tokens_per_phase_wall_second": 933.8083040145017,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 273.7119955,
+        "p95": 274.19044,
+        "p99": 275.242415,
+        "max": 277.184603
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 244.0995045,
+        "p95": 244.600982,
+        "p99": 245.671989,
+        "max": 247.591733
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9543686935483872,
+        "p95": 0.9565411612903225,
+        "p99": 0.9649226774193548,
+        "max": 0.9842566129032259
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 244.0995045,
+        "p95": 244.600982,
+        "p99": 245.671989,
+        "max": 247.591733
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.9497215,
+        "p95": 0.972989,
+        "p99": 1.189963,
+        "max": 3.005385
+      }
+    }
+  },
+  {
+    "case": "c8-p0-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854753169316923,
+      "phase_finished_ns": 854755442647912,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854753169373872,
+      "common_wall_finished_ns": 854755442270746,
+      "common_wall_ns": 2272896874,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1802.1055186685958,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2273330989,
+      "successful_output_tokens_per_phase_wall_second": 1801.7613888251976,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 141.34679699999998,
+        "p95": 145.10136,
+        "p99": 154.30475,
+        "max": 160.907306
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 75.07898349999999,
+        "p95": 78.163962,
+        "p99": 88.52662,
+        "max": 95.181695
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 2.130620209677419,
+        "p95": 2.2108232580645164,
+        "p99": 2.2325552903225807,
+        "max": 2.235210612903226
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 75.07898349999999,
+        "p95": 78.163962,
+        "p99": 88.52662,
+        "max": 95.181695
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.636978,
+        "p95": 6.665315,
+        "p99": 6.813717,
+        "max": 7.329771
+      }
+    }
+  },
+  {
+    "case": "c8-p0-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854757736309139,
+      "phase_finished_ns": 854759916413400,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854757736351021,
+      "common_wall_finished_ns": 854759915975745,
+      "common_wall_ns": 2179624724,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1879.2225812538545,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2180104261,
+      "successful_output_tokens_per_phase_wall_second": 1878.8092263629587,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 135.8345995,
+        "p95": 136.437145,
+        "p99": 149.275899,
+        "max": 155.976047
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 72.403492,
+        "p95": 73.000688,
+        "p99": 85.961434,
+        "max": 92.569077
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 2.043376887096774,
+        "p95": 2.053177548387097,
+        "p99": 2.0640075483870968,
+        "max": 2.0647042903225805
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 72.403492,
+        "p95": 73.000688,
+        "p99": 85.961434,
+        "max": 92.569077
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.5561975000000001,
+        "p95": 6.549072,
+        "p99": 6.639638,
+        "max": 6.836808
+      }
+    }
+  },
+  {
+    "case": "c8-p0-vllm",
+    "phase": "warmup",
+    "correctness_pass": false
+  },
+  {
+    "case": "c8-p1-vllm",
+    "phase": "warmup",
+    "correctness_pass": false
+  },
+  {
+    "case": "c8-p1-new",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854785714868658,
+      "phase_finished_ns": 854787897460165,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854785714924016,
+      "common_wall_finished_ns": 854787897079240,
+      "common_wall_ns": 2182155224,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1877.0433720529866,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2182591507,
+      "successful_output_tokens_per_phase_wall_second": 1876.6681657393622,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 135.64235150000002,
+        "p95": 141.07472,
+        "p99": 149.65995,
+        "max": 156.441799
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 72.3280925,
+        "p95": 77.314131,
+        "p99": 86.384714,
+        "max": 93.099533
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 2.0409518387096774,
+        "p95": 2.0531234516129033,
+        "p99": 2.2108909032258066,
+        "max": 2.213295064516129
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 72.3280925,
+        "p95": 77.314131,
+        "p99": 86.384714,
+        "max": 93.099533
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.553613,
+        "p95": 6.552313,
+        "p99": 6.649571,
+        "max": 6.943805
+      }
+    }
+  },
+  {
+    "case": "c8-p1-candidate",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854790218203159,
+      "phase_finished_ns": 854792472492710,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854790218256979,
+      "common_wall_finished_ns": 854792472145434,
+      "common_wall_ns": 2253888455,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 1817.3037760202733,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 2254289551,
+      "successful_output_tokens_per_phase_wall_second": 1816.980431011189,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 140.28932650000002,
+        "p95": 141.053748,
+        "p99": 156.375281,
+        "max": 163.154663
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 74.6359765,
+        "p95": 75.489901,
+        "p99": 89.964229,
+        "max": 96.731214
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 2.116721403225806,
+        "p95": 2.133491,
+        "p99": 2.1426919032258067,
+        "max": 2.14419564516129
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 74.6359765,
+        "p95": 75.489901,
+        "p99": 89.964229,
+        "max": 96.731214
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 1.6297875,
+        "p95": 6.625644,
+        "p99": 6.730682,
+        "max": 6.994066
+      }
+    }
+  },
+  {
+    "case": "c8-p1-baseline",
+    "correctness_pass": true,
+    "summary": {
+      "schema_version": "riley.http-token-phase.v2",
+      "phase": "retained",
+      "warmup": false,
+      "offered_concurrency": 8,
+      "requested": 128,
+      "attempted": 128,
+      "succeeded": 128,
+      "failed": 0,
+      "unresolved_attempts": 0,
+      "not_started": 0,
+      "reference_matches": 128,
+      "protocol_valid_responses": 128,
+      "observed_max_request_in_flight": 8,
+      "observed_max_call_in_flight": 8,
+      "observed_max_successful_request_in_flight": 8,
+      "phase_started_ns": 854795043376101,
+      "phase_finished_ns": 854799432297235,
+      "completed": true,
+      "duplicate_response_ids": [],
+      "reference_sha256s": [
+        "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664"
+      ],
+      "modes": [
+        "strict"
+      ],
+      "streaming_transports": [
+        true
+      ],
+      "worker_errors": [],
+      "interrupted": null,
+      "correctness_qualified": false,
+      "performance_qualified": false,
+      "failure_policy": "stop refill; drain owned in-flight calls with total deadlines; no retries",
+      "common_wall_started_ns": 854795043452219,
+      "common_wall_finished_ns": 854799431820376,
+      "common_wall_ns": 4388368157,
+      "successful_output_tokens": 4096,
+      "observed_output_tokens_including_partial_failures": 4096,
+      "successful_output_tokens_per_wall_second": 933.3765658349253,
+      "common_wall_scope": "first request start through last terminal delivery (or failed-call completion)",
+      "phase_wall_ns": 4388921134,
+      "successful_output_tokens_per_phase_wall_second": 933.2589661429993,
+      "phase_wall_scope": "barrier release through all workers drained, including validation and EOF cleanup",
+      "descriptive_statistics_only": true,
+      "timing_scope": "client delivery; incomplete phases are not comparable",
+      "tail_sample_warning": "P95/P99 are empirical sample statistics, not a stability or winner qualification",
+      "e2e_ms": {
+        "samples": 128,
+        "median": 274.020602,
+        "p95": 274.308138,
+        "p99": 274.503737,
+        "max": 276.56569
+      },
+      "token_ttft_ms": {
+        "samples": 128,
+        "median": 244.37537700000001,
+        "p95": 244.661262,
+        "p99": 244.795782,
+        "max": 246.825391
+      },
+      "token_tpot_ms": {
+        "samples": 128,
+        "median": 0.9552606290322581,
+        "p95": 0.9568178064516129,
+        "p99": 0.957825870967742,
+        "max": 0.9598756774193548
+      },
+      "first_text_ms": {
+        "samples": 128,
+        "median": 244.37537700000001,
+        "p95": 244.661262,
+        "p99": 244.795782,
+        "max": 246.825391
+      },
+      "token_itl_ms": {
+        "samples": 3968,
+        "median": 0.9501455000000001,
+        "p95": 0.96866,
+        "p99": 1.187893,
+        "max": 2.634048
+      }
+    }
+  }
+]

@@ -1,0 +1,65 @@
+{
+  "performance_claim": false,
+  "window_created": false,
+  "runtime_receipts": [
+    {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+      "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+    },
+    {
+      "path": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/receipt.json",
+      "sha256": "091701fb0b91904024748a9baf59891735809ac2ba43e089165e619308f8f7ed"
+    }
+  ],
+  "child_only_overrides": {
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/tmp/riley-opt-260912/driver580173-gui-runtime-20260901/extracted/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia"
+  },
+  "blender_before": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "commands_and_gui_environment_match": true,
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "helpers": {
+    "/tmp/riley-opt-260912/probe_egl_context.py": "494a1df6dd41799f6a95df4cb3ff7c39dc324b36dd10816e597e979bcec20be1",
+    "/tmp/riley-opt-260912/probe_glx_context.py": "c40409de57e53112564d35626e5b018b5c82f443fe8a2f99acae81639d76da41",
+    "/tmp/riley-opt-260912/remote_session.py": "047b133460322099851213149c623be4ef7f67a4b1ebfa7c2fedb4a70ef24712",
+    "/tmp/riley-opt-260912/remote_session_round12.py": "8e22bea9d465f62ab71bddbf1266f95bcf3f3f8e029c6aaa710c404d2e15bb85",
+    "/tmp/riley-opt-260912/check_gui_driver_runtime.py": "89252175a7d237287466e2809f355e8589fcc60939784e5493ec5425cee19db8"
+  }
+}

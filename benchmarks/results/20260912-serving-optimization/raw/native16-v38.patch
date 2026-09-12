@@ -1,0 +1,478 @@
+commit 4ee3d8667c304ea019322f45e9291a80d74c4ac1
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 01:57:19 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 01:57:19 2026 +0900
+
+    Add independently validated sixteen-row native decode building blocks
+
+diff --git a/kernels/src/decode_shared16.cuh b/kernels/src/decode_shared16.cuh
+new file mode 100644
+index 0000000..a74c1f9
+--- /dev/null
++++ b/kernels/src/decode_shared16.cuh
+@@ -0,0 +1,96 @@
++#pragma once
++#include "decode_tiled.cuh"
++// One MMA shares weights across up to sixteen independent decode rows.
++// Live rows are supplied by validated metadata; inactive rows never load/store.
++template<int N,int K,int Interval,bool Tiled,bool Compact=false>
++__device__ __forceinline__ void shared16_projection_compute(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows,int column,int chunk_index){
++ const uint32_t rows=*live_rows;if(rows<1||rows>16)return;
++ const int lane=threadIdx.x%32,g=lane/4,t=lane%4,base=column*8;
++ constexpr int Chunk=Interval>0?Interval:K;
++ int begin=chunk_index*Chunk,end=min(begin+Chunk,K);float d[4]={};
++ // Hoist row/tile bases and issue four independent load groups before the
++ // ordered MMA recurrence. Bound code size instead of fully unrolling K.
++ const auto* xp=x+g*K+begin+2*t;
++ const auto* wp=Tiled?w+column*(K/16)*128+(begin/16)*128+lane*2:w+(base+g)*K+begin+2*t;
++ #pragma unroll 1
++ for(int depth=0;depth<Chunk;depth+=64){
++  uint32_t a[4],aa[4],a1[4],a3[4],b[4],bb[4];
++  #pragma unroll
++  for(int step=0;step<4;++step){
++   int offset=depth+step*16;bool valid=begin+offset<end;
++   a[step]=valid&&g<rows?*reinterpret_cast<const uint32_t*>(xp+offset):0;
++   aa[step]=valid&&g<rows?*reinterpret_cast<const uint32_t*>(xp+offset+8):0;
++   a1[step]=valid&&g+8<rows?*reinterpret_cast<const uint32_t*>(xp+8*K+offset):0;
++   a3[step]=valid&&g+8<rows?*reinterpret_cast<const uint32_t*>(xp+8*K+offset+8):0;
++   if constexpr(Tiled){
++    b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128):0;
++    bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128+64):0;
++   }else{
++    b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset):0;
++    bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset+8):0;
++   }
++  }
++  #pragma unroll
++  for(int step=0;step<4;++step)if(begin+depth+step*16<end)riley_prefill_shape::mma(d,a[step],a1[step],aa[step],a3[step],b[step],bb[step]);
++ }
++
++ for(int half=0;half<2;++half){int row=g+half*8;if(row>=rows)continue;
++  for(int j=0;j<2;++j){auto v=__float2bfloat16_rn(d[half*2+j]);
++   if constexpr(Interval>0)parts[(chunk_index*16+row)*N+base+2*t+j]=__bfloat162float(v);
++   else if constexpr(Compact)out[row*8+2*t+j]=v;
++   else out[row*N+base+2*t+j]=v;
++  }
++ }
++
++}
++
++template<int N,int K,int Interval,bool Tiled>
++__global__ void shared16_projection_parts(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows){
++ shared16_projection_compute<N,K,Interval,Tiled>(x,w,parts,out,live_rows,blockIdx.x,blockIdx.y);
++}
++// Independent projections share one dispatch while retaining each MMA order.
++__global__ void shared16_gate_up(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* g,__nv_bfloat16* u,const uint32_t* live){
++ shared16_projection_compute<1536,576,0,true>(x,blockIdx.y?up:gate,nullptr,blockIdx.y?u:g,live,blockIdx.x,0);
++}
++__global__ void shared16_qkv_parts(const __nv_bfloat16* x,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,float* parts,const uint32_t* live){
++ int col=blockIdx.x;
++ if(col<72)shared16_projection_compute<576,576,192,false>(x,q,parts,nullptr,live,col,blockIdx.y);
++ else shared16_projection_compute<192,576,192,false>(x,col<96?k:v,parts+3*16*576+(col<96?0:3*16*192),nullptr,live,col<96?col-72:col-96,blockIdx.y);
++}
++__global__ void shared16_qkv_merge(const float* parts,__nv_bfloat16* q,__nv_bfloat16* k,__nv_bfloat16* v,const uint32_t* live){
++ uint32_t rows=*live;if(rows<1||rows>16)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=rows*960)return;
++ int row=i/960,col=i%960,n=col<576?576:192;
++ const float* src=col<576?parts:parts+3*16*576+(col<768?0:3*16*192);
++ __nv_bfloat16* out=col<576?q:(col<768?k:v);col=col<576?col:(col<768?col-576:col-768);
++ float value=0.;for(int c=0;c<3;++c)value+=src[c*16*n+row*n+col];out[row*n+col]=__float2bfloat16_rn(value);
++}
++inline void enqueue_shared16_qkv(cudaStream_t s,const __nv_bfloat16* x,const __nv_bfloat16* qw,const __nv_bfloat16* kw,const __nv_bfloat16* vw,__nv_bfloat16* q,__nv_bfloat16* k,__nv_bfloat16* v,float* parts,const uint32_t* active){
++ shared16_qkv_parts<<<dim3(120,3),32,0,s>>>(x,qw,kw,vw,parts,active);
++ shared16_qkv_merge<<<60,256,0,s>>>(parts,q,k,v,active);
++}
++
++template<int N,int K,int Interval>
++__global__ void shared16_projection_merge(const float* parts,__nv_bfloat16* out,const uint32_t* live_rows){
++ uint32_t rows=*live_rows;if(rows<1||rows>16)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=rows*N)return;float value=0.;
++ #pragma unroll
++ for(int chunk=0;chunk<(K+Interval-1)/Interval;++chunk)value+=parts[chunk*16*N+i];
++ out[i]=__float2bfloat16_rn(value);
++}
++template<int N,int K,int Interval,bool Tiled>
++inline void enqueue_shared16_projection(cudaStream_t stream,const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* out,float* parts,const uint32_t* live_rows){
++ constexpr int chunk=Interval>0?Interval:K;
++ shared16_projection_parts<N,K,Interval,Tiled><<<dim3(N/8,(K+chunk-1)/chunk),32,0,stream>>>(x,w,parts,out,live_rows);
++ if constexpr(Interval>0)shared16_projection_merge<N,K,Interval><<<(16*N+255)/256,256,0,stream>>>(parts,out,live_rows);
++}
++
++// Two warps compute independent gate/up tiles, then share rounded results.
++template<bool Tiled>
++__global__ void shared16_gate_up_swiglu(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,const uint32_t* live){
++ uint32_t rows=*live;if(rows<1||rows>16)return;
++ int warp=threadIdx.x/32;__shared__ __nv_bfloat16 partials[2][128];
++ shared16_projection_compute<1536,576,0,Tiled,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
++ __syncthreads();
++ for(int i=threadIdx.x;i<128;i+=blockDim.x){int row=i/8,col=i%8;if(row<rows){float g=__bfloat162float(partials[0][i]);out[row*1536+blockIdx.x*8+col]=__float2bfloat16_rn((g/(1.F+expf(-g)))*__bfloat162float(partials[1][i]));}}
++}
+diff --git a/kernels/src/decode_shared16_attention.cuh b/kernels/src/decode_shared16_attention.cuh
+new file mode 100644
+index 0000000..8973dcc
+--- /dev/null
++++ b/kernels/src/decode_shared16_attention.cuh
+@@ -0,0 +1,70 @@
++#pragma once
++#include "decode_shape.cuh"
++namespace riley_shared16_attention {
++
++// Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
++__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/9;uint32_t active=*live_rows;if(active<1||active>16||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ q+=row*576;result+=row*9*4096;
++ int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
++ if(count<1 || count>4096)return;
++ for(;token<count;token+=gridDim.x*8){
++ int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
++ #pragma unroll
++ for(int depth=0;depth<64;depth+=16){
++  auto* qp=q+head*64+depth;
++  uint32_t a=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);
++  uint32_t aa=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);
++  int kb=token+g<count?riley_prefill_shape::cache_index(token+g,head/3,depth,pages):0;
++  uint32_t b=token+g<count?riley_prefill_shape::pair(k[kb+2*t],k[kb+2*t+1]):0;
++  uint32_t bb=token+g<count?riley_prefill_shape::pair(k[kb+2*t+8],k[kb+2*t+9]):0;
++  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
++ }
++ if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
++ }
++}
++// Independent output eight-column groups share the precomputed score buffer.
++// Tile order, lane-local denominator and BF16 probability rounding are unchanged.
++__global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/9;uint32_t active=*live_rows;if(active<1||active>16||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ scores+=row*9*4096;out+=row*576;
++ int count=shape[1]+1,head=blockIdx.y%9,block=blockIdx.x,lane=threadIdx.x,g=lane/4,t=lane%4;
++ if(count<1||count>4096)return;
++ __shared__ __nv_bfloat16 probs[128];
++ __shared__ float exponentials[128];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[head*4096+begin+i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++  // Preserve unrounded exponentials for the original lane-local sum order.
++  for(int i=lane;i<128;i+=32){float value=i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.;exponentials[i]=value;probs[i]=__float2bfloat16_rn(value);}
++  __syncwarp();
++  float local_den=den*alpha;
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
++  den=local_den;maximum=mx;__syncwarp();
++  for(int j=0;j<4;++j)accum[j]*=alpha;
++  for(int token=begin;token<end;token+=16){
++   int pi=token-begin;uint32_t a=riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]);
++   uint32_t aa=riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]);
++   // Each aligned K16 tile lies entirely in one physical KV page.
++   int dim=block*8+g;int value_base=((pages[token/16]*3+head/3)*16)*64+dim;
++   auto val=[&](int pos){return pos<end?v[value_base+(pos-token)*64]:zero;};
++   uint32_t b=riley_prefill_shape::pair(val(token+2*t),val(token+2*t+1));
++   uint32_t bb=riley_prefill_shape::pair(val(token+2*t+8),val(token+2*t+9));
++   riley_prefill_shape::mma(accum,a,a,aa,aa,b,bb);
++  }
++  __syncwarp();
++ }
++ den+=__shfl_xor_sync(0xffffffff,den,2);den+=__shfl_xor_sync(0xffffffff,den,1);float inverse=1.0F/den;
++ if(g==0)for(int j=0;j<2;++j)out[head*64+block*8+2*t+j]=__float2bfloat16_rn(accum[j]*inverse);
++}
++
++inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context){
++ scores<<<dim3(min((context+7)/8,32u),144),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
++ values<<<dim3(8,144),32,0,stream>>>(scratch,v,out,shape,pages,live_rows);
++}
++}
+diff --git a/kernels/src/decode_shared16_model.cuh b/kernels/src/decode_shared16_model.cuh
+new file mode 100644
+index 0000000..9ca75da
+--- /dev/null
++++ b/kernels/src/decode_shared16_model.cuh
+@@ -0,0 +1,80 @@
++#pragma once
++#include "prefill_shape_model.cuh"
++#include "decode_shared16.cuh"
++#include "decode_shared16_attention.cuh"
++// Internal model sequence: caller validates all row identities, context/page
++// ownership and buffer extents before enqueue. Final hidden rows stay in b(1).
++namespace riley_shared16_model {
++__global__ void embedding(const __nv_bfloat16* weights,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* active,uint32_t* status){
++ uint32_t row=blockIdx.x,rows=*active;if(!rows||rows>16){if(threadIdx.x==0)atomicOr(status,2u);return;}if(row>=rows)return;
++ uint32_t token=shape[row*416];if(token>=49152){if(threadIdx.x==0)atomicOr(status,1u);return;}
++ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)out[row*576+i]=weights[token*576+i];
++}
++__global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,
++ __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,
++ const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++ const uint32_t rows=*active,row=blockIdx.y;if(!rows||rows>16||row>=rows)return;
++ pages+=row*416;shape+=row*416;
++ int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;
++ const uint32_t pos=shape[1];int head=i/32,dim=i%32;
++ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),s=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++ const __nv_bfloat16* src=head<9?q+row*576:k+row*192;
++ int base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(src[base+dim]),b=__bfloat162float(src[base+dim+32]);
++ const __nv_bfloat16 first=__float2bfloat16_rn(a*c-b*s),second=__float2bfloat16_rn(b*c+a*s);
++ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++ else{
++  uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
++  keys[destination]=first;keys[destination+32]=second;
++  values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
++ }
++}
++
++__device__ __forceinline__ __nv_bfloat16 qkv_rounded(const float* p,int n,int row,int col){
++ float value=0.;for(int chunk=0;chunk<3;++chunk)value+=p[chunk*16*n+row*n+col];return __float2bfloat16_rn(value);
++}
++__global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
++ uint32_t rows=*active,row=blockIdx.y;if(rows<1||rows>16||row>=rows)return;
++ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=384)return;
++ shape+=row*416;pages+=row*416;uint32_t pos=shape[1];int head=i/32,dim=i%32;
++ const float* src=head<9?parts:parts+3*16*576;int n=head<9?576:192,base=(head<9?head:head-9)*64;
++ float a=__bfloat162float(qkv_rounded(src,n,row,base+dim)),b=__bfloat162float(qkv_rounded(src,n,row,base+dim+32));
++ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
++ auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
++ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
++ else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*16*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
++}
++// Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
++__global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
++ uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>16||row<rows)return;
++ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
++}
++inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false){
++ if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
++ for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
++ for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
++ auto b=[&](int i){return static_cast<__nv_bfloat16*>(scratch[i]);};
++ auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
++ const auto* meta=static_cast<const uint32_t*>(metadata);auto* shape=meta+32;auto* pages=meta+64;auto* active=meta+5;auto* pointwise=meta+3;
++ auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
++ embedding<<<16,256,0,stream>>>(w(0),b(0),shape,active,status);
++ if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
++ for(int layer=0;layer<30;++layer){int base=3+9*layer;
++ if(layer==0)riley_prefill_pointwise::norm_rows<<<16,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,16);
++ shared16_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
++ auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
++ auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
++ qkv_merge_rope<<<dim3(2,16),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
++ riley_shared16_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
++ enqueue_shared16_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
++ riley_prefill_pointwise::norm_rows<<<16,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,16);
++ if(tiled)shared16_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
++ else shared16_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
++ if(tiled)enqueue_shared16_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
++ else enqueue_shared16_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
++ riley_prefill_pointwise::norm_rows<<<16,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,16);
++ }
++ clear_inactive_hidden<<<16,256,0,stream>>>(b(1),active);
++ return cudaGetLastError();
++}
++}
+diff --git a/kernels/src/decode_shared16_result.cuh b/kernels/src/decode_shared16_result.cuh
+new file mode 100644
+index 0000000..898dbe7
+--- /dev/null
++++ b/kernels/src/decode_shared16_result.cuh
+@@ -0,0 +1,33 @@
++#pragma once
++#include <cuda_runtime.h>
++#include <math_constants.h>
++#include <cuda_bf16.h>
++#include <stdint.h>
++namespace riley_shared16_result {
++constexpr uint32_t record_bytes=98432,batch_bytes=16*record_bytes;
++// Each record follows descriptor row order; its output slot is explicit.
++__global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint32_t* status,uint8_t* bytes){
++ uint32_t row=blockIdx.x,active=m[5];if(active<1||active>16||row>=active)return;
++ auto* shape=m+32+row*416;auto* result=reinterpret_cast<uint32_t*>(bytes+row*record_bytes);
++ auto* out=reinterpret_cast<__nv_bfloat16*>(bytes+row*record_bytes+128);
++ uint32_t tid=threadIdx.x;bool published=shape[11]!=0xffffffffu;
++ __shared__ float maxima[256];__shared__ uint32_t tokens[256],errors[256];
++ float maximum=-CUDART_INF_F;uint32_t token=0,failed=0;
++ for(uint32_t i=tid;i<49152;i+=256){auto v=published?logits[row*49152+i]:__float2bfloat16_rn(0.F);out[i]=v;float f=__bfloat162float(v);failed|=!isfinite(f);if(f>maximum||(f==maximum&&i<token)){maximum=f;token=i;}}
++ maxima[tid]=maximum;tokens[tid]=token;errors[tid]=failed;__syncthreads();
++ for(uint32_t step=128;step;step>>=1){if(tid<step){float other=maxima[tid+step];uint32_t id=tokens[tid+step];if(other>maxima[tid]||(other==maxima[tid]&&id<tokens[tid])){maxima[tid]=other;tokens[tid]=id;}errors[tid]|=errors[tid+step];}__syncthreads();}
++ if(tid==0){
++ result[0]=*status;result[1]=published;result[2]=published?tokens[0]:0;result[3]=errors[0];
++ for(int i=0;i<6;++i)result[4+i]=m[10+i];
++ for(int i=0;i<4;++i)result[10+i]=shape[12+i];
++ result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
++ for(int i=0;i<8;++i)result[20+i]=m[16+i];
++ result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=0x33524d52;
++ }
++}
++inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const __nv_bfloat16* logits,const uint32_t* status,void* result){
++ if(!metadata||!logits||!status||!result)return cudaErrorInvalidValue;
++ auto e=cudaMemsetAsync(result,0,batch_bytes,stream);if(e!=cudaSuccess)return e;
++ finish<<<16,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
++}
++}
+diff --git a/kernels/tests/README_shared16.md b/kernels/tests/README_shared16.md
+new file mode 100644
+index 0000000..6dcb805
+--- /dev/null
++++ b/kernels/tests/README_shared16.md
+@@ -0,0 +1,17 @@
++# Native sixteen-row decode prototype
++
++The four `decode_shared16*.cuh` headers are independently validated native building blocks. Production V3 still dispatches eight rows; these headers are not connected to its graph recorder, Rust wire, or server. Do not claim serving speed from these tests.
++
++`shared16_model_probe.cu` compares graph-replayed hidden states, the entire K/V allocation, all 49152 logits, greedy output and inactive completion rows against the existing single-request model path. It runs active 1,2,4,8,9,15,16 for eight steps each with mixed real-prefill contexts and disjoint permuted pages, both original and packed weights. The 16-row head uses a zero-workspace, no-split reduction plan; the validated environment selected algorithm21 for M1 and M16.
++
++`shared16_primitive_probe.cu` checks original/packed projection recurrences and attention across active1..16, invalid0/17, inactive guards and divergent contexts through4096.
++
++Build with nvcc C++17, `-arch=sm_89 -O3 -Ikernels/src`; the model probe also links `-lcublasLt`. Pass the materialized loaded-RoPE fixture directory (`weights.bin`, `rope.bin`, `requests.bin`) to the model probe; add the second argument `packed` to exercise packed projections. Run compute-sanitizer memcheck and racecheck. These probes require the same pinned CUDA/private-driver environment as the serving campaign.
++
++## Remaining serving integration
++
++- Introduce a distinct 16-row wire/recorder contract or an explicitly parameterized contract; retain the eight-row baseline. Canonical 16-row input needs128+16*1664+1024*4 = 30848bytes, with token offset26752. The current standalone probe deliberately uses existing prefill token offset13440 in single-row reference setup; that overlapping layout is NOT a serving wire proposal.
++- Update request encoding, identity/digest/max-row checks, zero unused-row validation, result capacities and CPU-validated argmax slot arrays together. A 16-row result is1574912bytes; pinned input/output staging and offsets must be derived, not copied from the eight-row constants.
++- Bind16-row hidden/logits/head outputs, attention scratch16*9*4096*4, 16-row M16 head leases, mutable alias/extent checks, prefill token reading, compiled native wrappers and resource cleanup. Keep prefill single-request semantics until separately extended.
++- Connect the scheduler's maximum decode selection to actual prepared execution width. Active16/32 admission and HTTP workers already exist, but current GPU descriptors remain8.
++- Before performance adoption, run whole Rust-owned GPU32-request correctness, malformed/stale/unused-row fixtures, HTTP cancellation and mixed-context tests, then matched C4/C8/C16/C32 serving against frozen V33/V37 and tuned vLLM. Native parity alone is not sufficient.
+diff --git a/kernels/tests/shared16_model_probe.cu b/kernels/tests/shared16_model_probe.cu
+new file mode 100644
+index 0000000..304b15f
+--- /dev/null
++++ b/kernels/tests/shared16_model_probe.cu
+@@ -0,0 +1,86 @@
++#include <fstream>
++#include <vector>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include "decode_shared16_model.cuh"
++#include "decode_shared16_result.cuh"
++#include <cublasLt.h>
++#include "prefill_shape_packet.hpp"
++void ck(cudaError_t e){if(e!=cudaSuccess){fprintf(stderr,"%s\n",cudaGetErrorString(e));exit(2);}}
++template<class T>T read(std::ifstream& f){T x{};f.read((char*)&x,sizeof(x));if(!f)exit(8);return x;}
++
++void cb(cublasStatus_t s){if(s!=CUBLAS_STATUS_SUCCESS){fprintf(stderr,"cublas status %d\n",int(s));exit(12);}}
++struct Head{
++ cublasLtHandle_t handle; cublasLtMatmulDesc_t op; cublasLtMatrixLayout_t w,x,y;cublasLtMatmulAlgo_t algo;
++ Head(int rows){cb(cublasLtCreate(&handle));cb(cublasLtMatmulDescCreate(&op,CUBLAS_COMPUTE_32F,CUDA_R_32F));cublasOperation_t trans=CUBLAS_OP_T;cb(cublasLtMatmulDescSetAttribute(op,CUBLASLT_MATMUL_DESC_TRANSA,&trans,sizeof(trans)));
++ cb(cublasLtMatrixLayoutCreate(&w,CUDA_R_16BF,576,49152,576));cb(cublasLtMatrixLayoutCreate(&x,CUDA_R_16BF,576,rows,576));cb(cublasLtMatrixLayoutCreate(&y,CUDA_R_16BF,49152,rows,49152));
++ cublasLtMatmulPreference_t pref;cb(cublasLtMatmulPreferenceCreate(&pref));size_t workspace=0;cb(cublasLtMatmulPreferenceSetAttribute(pref,CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,&workspace,sizeof(workspace)));cublasLtMatmulHeuristicResult_t choices[32];int count=0;cb(cublasLtMatmulAlgoGetHeuristic(handle,op,w,x,y,y,pref,32,choices,&count));bool found=false;
++ for(int i=0;i<count;++i){uint32_t split=0,reduce=0;size_t size;cb(cublasLtMatmulAlgoConfigGetAttribute(&choices[i].algo,CUBLASLT_ALGO_CONFIG_SPLITK_NUM,&split,sizeof(split),&size));cb(cublasLtMatmulAlgoConfigGetAttribute(&choices[i].algo,CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,&reduce,sizeof(reduce),&size));if(choices[i].state==CUBLAS_STATUS_SUCCESS&&choices[i].workspaceSize==0&&split<=1&&reduce==0){algo=choices[i].algo;found=true;break;}}
++ if(!found)exit(13);int id;size_t size;cb(cublasLtMatmulAlgoConfigGetAttribute(&algo,CUBLASLT_ALGO_CONFIG_ID,&id,sizeof(id),&size));printf("head rows=%d algorithm=%d workspace=0\n",rows,id);cb(cublasLtMatmulPreferenceDestroy(pref));
++ }
++ void run(cudaStream_t stream,const void* weight,const void* input,void* output){float alpha=1,beta=0;cb(cublasLtMatmul(handle,op,&alpha,weight,w,input,x,&beta,output,y,output,y,&algo,nullptr,0,stream));}
++ ~Head(){cublasLtMatrixLayoutDestroy(w);cublasLtMatrixLayoutDestroy(x);cublasLtMatrixLayoutDestroy(y);cublasLtMatmulDescDestroy(op);cublasLtDestroy(handle);}
++};
++int main(int argc,char**argv){if(argc<2||argc>3)return 1;bool packed=argc==3;std::string root=argv[1];std::ifstream wf(root+"/weights.bin",std::ios::binary);std::vector<const void*>weights(273);std::vector<void*>owned;
++ for(int i=0;i<273;++i){auto bytes=read<uint64_t>(wf);if(!bytes){weights[i]=weights[0];continue;}std::vector<uint8_t>v(bytes);wf.read((char*)v.data(),bytes);if(!wf)exit(8);void*p;ck(cudaMalloc(&p,bytes));ck(cudaMemcpy(p,v.data(),bytes,cudaMemcpyHostToDevice));weights[i]=p;owned.push_back(p);}
++
++ if(packed)for(int layer=0;layer<30;++layer)for(int part=0;part<3;++part){int n=part==2?576:1536,k=part==2?1536:576;std::vector<uint16_t>src(n*k),dst(n*k);ck(cudaMemcpy(src.data(),weights[3+layer*9+6+part],n*k*2,cudaMemcpyDeviceToHost));
++ for(int row=0;row<n;row+=8)for(int depth=0;depth<k;depth+=16)for(int lane=0;lane<32;++lane)for(int hi=0;hi<2;++hi)for(int z=0;z<2;++z)dst[((row/8)*(k/16)+depth/16)*128+hi*64+lane*2+z]=src[(row+lane/4)*k+depth+hi*8+2*(lane%4)+z];
++ void*p;ck(cudaMalloc(&p,n*k*2));ck(cudaMemcpy(p,dst.data(),n*k*2,cudaMemcpyHostToDevice));weights.push_back(p);owned.push_back(p);}
++ constexpr unsigned cap=512,physical=1024,context=1024;size_t cachebytes=30ull*physical*16*192*2;std::vector<void*>scratch(12);unsigned widths[]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};for(int i=0;i<12;++i){ck(cudaMalloc(&scratch[i],i==7?16*9*4096*4:cap*widths[i]));owned.push_back(scratch[i]);}
++ void *keys,*values,*cos,*sin,*selected,*metadata;uint32_t *status,*publish;uint8_t* host;
++ auto alloc=[&](void**p,size_t n){ck(cudaMalloc(p,n));owned.push_back(*p);};alloc(&keys,cachebytes);alloc(&values,cachebytes);alloc(&cos,context*32*4);alloc(&sin,context*32*4);alloc(&selected,1152);alloc(&metadata,30848);ck(cudaMalloc(&status,4));ck(cudaMalloc(&publish,4));owned.push_back(status);owned.push_back(publish);ck(cudaMallocHost(&host,30848));
++ std::ifstream rf(root+"/rope.bin",std::ios::binary);std::vector<float>table(context*32);for(void*p:{cos,sin}){rf.read((char*)table.data(),table.size()*4);if(!rf)exit(8);ck(cudaMemcpy(p,table.data(),table.size()*4,cudaMemcpyHostToDevice));}
++
++ cudaStream_t stream;ck(cudaStreamCreate(&stream));
++ Head single(1),shared(16);void *logits,*records;alloc(&logits,16*98304);alloc(&records,riley_shared16_result::batch_bytes);
++ auto u32=[&](int at,uint32_t value){std::memcpy(host+at,&value,4);};
++ std::ifstream input(root+"/requests.bin",std::ios::binary);unsigned count=read<uint32_t>(input);std::vector<std::vector<uint32_t>> corpus;
++ for(unsigned i=0;i<count;++i){unsigned n=read<uint32_t>(input);corpus.emplace_back(n);input.read((char*)corpus.back().data(),n*4);if(!input)exit(8);}
++ auto row=[&](int slot,int request,unsigned pos,uint32_t token){unsigned base=128+slot*1664;
++  u32(base,token);u32(base+4,pos);u32(base+8,1);u32(base+16,pos);u32(base+44,0);
++  for(int page=0;page<64;++page)u32(base+128+page*4,request*64+(page*17+3)%64);
++ };
++ ck(cudaMemset(keys,0,cachebytes));ck(cudaMemset(values,0,cachebytes));
++ for(int request=0;request<16;++request){auto& tokens=corpus[request%corpus.size()];std::memset(host,0,30848);u32(20,1);row(0,request,tokens.size()-1,tokens[0]);u32(136,tokens.size());u32(144,0);u32(172,tokens.size()-1);
++  for(unsigned j=0;j<tokens.size();++j)u32(13440+j*4,tokens[j]);
++  ck(cudaMemcpyAsync(metadata,host,30848,cudaMemcpyHostToDevice,stream));ck(enqueue_v3_prefill_model(stream,scratch.data(),weights.data(),metadata,keys,values,cos,sin,selected,status,publish,cap,physical));ck(cudaStreamSynchronize(stream));
++ }
++ std::vector<uint8_t> initial_k(cachebytes),initial_v(cachebytes),expected_k(cachebytes),expected_v(cachebytes),actual_k(cachebytes),actual_v(cachebytes);
++ ck(cudaMemcpy(initial_k.data(),keys,cachebytes,cudaMemcpyDeviceToHost));ck(cudaMemcpy(initial_v.data(),values,cachebytes,cudaMemcpyDeviceToHost));
++ auto reset=[&](){ck(cudaMemcpy(keys,initial_k.data(),cachebytes,cudaMemcpyHostToDevice));ck(cudaMemcpy(values,initial_v.data(),cachebytes,cudaMemcpyHostToDevice));};
++ cudaGraph_t graph;cudaGraphExec_t exec;ck(cudaStreamBeginCapture(stream,cudaStreamCaptureModeThreadLocal));
++ ck(cudaMemcpyAsync(metadata,host,30848,cudaMemcpyHostToDevice,stream));ck(riley_shared16_model::enqueue(stream,scratch.data(),weights.data(),metadata,keys,values,(float*)cos,(float*)sin,status,physical,context,packed));
++ shared.run(stream,weights[2],scratch[1],logits);ck(riley_shared16_result::enqueue(stream,metadata,(const __nv_bfloat16*)logits,status,records));
++ ck(cudaStreamEndCapture(stream,&graph));ck(cudaGraphInstantiate(&exec,graph,nullptr,nullptr,0));
++ auto seed_k=initial_k,seed_v=initial_v;
++ for(int active:{1,2,4,8,9,15,16}){
++  initial_k=seed_k;initial_v=seed_v;
++  for(int step=0;step<8;++step){
++  reset();std::vector<uint8_t> expected(active*1152),actual(active*1152),expected_logits(active*98304),actual_records(riley_shared16_result::batch_bytes);
++  for(int request=0;request<active;++request){auto& tokens=corpus[request%corpus.size()];std::memset(host,0,30848);u32(16,1);u32(20,1);row(0,request,tokens.size()+step,17+request+step);
++   ck(cudaMemcpyAsync(metadata,host,30848,cudaMemcpyHostToDevice,stream));ck(enqueue_v3_prefill_model(stream,scratch.data(),weights.data(),metadata,keys,values,cos,sin,selected,status,publish,1,physical));ck(cudaStreamSynchronize(stream));
++   ck(cudaMemcpy(expected.data()+request*1152,selected,1152,cudaMemcpyDeviceToHost));
++   single.run(stream,weights[2],selected,logits);ck(cudaStreamSynchronize(stream));ck(cudaMemcpy(expected_logits.data()+request*98304,logits,98304,cudaMemcpyDeviceToHost));
++  }
++  ck(cudaMemcpy(expected_k.data(),keys,cachebytes,cudaMemcpyDeviceToHost));ck(cudaMemcpy(expected_v.data(),values,cachebytes,cudaMemcpyDeviceToHost));
++  reset();std::memset(host,0,30848);u32(16,1);u32(20,active);
++  for(int request=0;request<active;++request)row(request,request,corpus[request%corpus.size()].size()+step,17+request+step);
++  ck(cudaGraphLaunch(exec,stream));ck(cudaStreamSynchronize(stream));
++  ck(cudaMemcpy(actual.data(),scratch[1],actual.size(),cudaMemcpyDeviceToHost));ck(cudaMemcpy(actual_k.data(),keys,cachebytes,cudaMemcpyDeviceToHost));ck(cudaMemcpy(actual_v.data(),values,cachebytes,cudaMemcpyDeviceToHost));
++  uint32_t error;ck(cudaMemcpy(&error,status,4,cudaMemcpyDeviceToHost));
++  if(error||actual!=expected||actual_k!=expected_k||actual_v!=expected_v){fprintf(stderr,"shared model mismatch active=%d status=%u hidden=%d keys=%d values=%d\n",active,error,actual!=expected,actual_k!=expected_k,actual_v!=expected_v);exit(5);}
++  ck(cudaMemcpy(actual_records.data(),records,actual_records.size(),cudaMemcpyDeviceToHost));
++  for(int request=0;request<active;++request){auto* record=actual_records.data()+request*98432;auto* expected_row=expected_logits.data()+request*98304;
++   if(std::memcmp(record+128,expected_row,98304)){fprintf(stderr,"head logits differ active=%d step=%d row=%d\n",active,step,request);exit(15);}
++   uint32_t token=0;float maximum=-INFINITY;for(uint32_t i=0;i<49152;++i){uint16_t bits;std::memcpy(&bits,expected_row+2*i,2);uint32_t fbits=uint32_t(bits)<<16;float value;std::memcpy(&value,&fbits,4);if(value>maximum){maximum=value;token=i;}}
++   auto* words=reinterpret_cast<const uint32_t*>(record);if(words[0]||words[1]!=1||words[2]!=token||words[3])exit(16);
++  }
++  for(size_t i=active*98432;i<actual_records.size();++i)if(actual_records[i])exit(17);
++  initial_k=actual_k;initial_v=actual_v;
++  printf("shared_model active=%d step=%d real_prefill_contexts=16,128,398 hidden_exact=true full_kv_exact=true logits_exact=true result_argmax_exact=true inactive_records_zero=true graph_replay=true\n",active,step);fflush(stdout);
++  }
++ }
++ ck(cudaGraphExecDestroy(exec));ck(cudaGraphDestroy(graph));ck(cudaStreamDestroy(stream));ck(cudaFreeHost(host));for(void*p:owned)ck(cudaFree(p));
++}
+diff --git a/kernels/tests/shared16_primitive_probe.cu b/kernels/tests/shared16_primitive_probe.cu
+new file mode 100644
+index 0000000..80382fa
+--- /dev/null
++++ b/kernels/tests/shared16_primitive_probe.cu
+@@ -0,0 +1,46 @@
++#include "decode_shared16.cuh"
++#include "decode_shared16_attention.cuh"
++#include <cstdio>
++#include <cstdlib>
++#define OK(x) do{auto e=(x);if(e!=cudaSuccess){fprintf(stderr,"line %d %s\n",__LINE__,cudaGetErrorString(e));exit(2);}}while(0)
++template<class T>T* alloc(size_t n){T*p;OK(cudaMallocManaged(&p,n*sizeof(T)));return p;}
++template<int N,int K,int I,bool Tiled>void check(){
++ auto*x=alloc<__nv_bfloat16>(16*K);auto*w=alloc<__nv_bfloat16>(N*K);auto*tw=alloc<__nv_bfloat16>(N*K);auto*a=alloc<__nv_bfloat16>(16*N);auto*b=alloc<__nv_bfloat16>(16*N+16);auto*p=alloc<float>(8*16*N);auto*live=alloc<uint32_t>(1);
++ for(int seed:{1,17,99}){
++ for(int i=0;i<16*K;++i)x[i]=__float2bfloat16_rn(float((i*17+seed)%127-63)/128);
++ for(int i=0;i<N*K;++i)w[i]=__float2bfloat16_rn(float((i*13+seed)%251-125)/256);
++ for(int n=0;n<N;n+=8)for(int k=0;k<K;k+=16)for(int lane=0;lane<32;++lane)for(int hi=0;hi<2;++hi)for(int z=0;z<2;++z)
++ tw[((n/8)*(K/16)+k/16)*128+hi*64+lane*2+z]=w[(n+lane/4)*K+k+hi*8+2*(lane%4)+z];
++ for(int rows=0;rows<=17;++rows){
++ *live=rows;for(int i=0;i<16*N+16;++i)b[i]=__ushort_as_bfloat16(0x4123);
++ if(rows>=1&&rows<=16)for(int row=0;row<rows;++row){
++ if constexpr(Tiled)enqueue_tile_projection<N,K,I>(0,x+row*K,tw,a+row*N,p);
++ else enqueue_decode_projection<N,K,I>(0,x+row*K,w,a+row*N,p);
++ }
++ enqueue_shared16_projection<N,K,I,Tiled>(0,x,Tiled?tw:w,b,p,live);OK(cudaDeviceSynchronize());
++ int valid=rows>=1&&rows<=16?rows*N:0;
++ for(int i=0;i<16*N+16;++i){unsigned expected=i<valid?__bfloat16_as_ushort(a[i]):0x4123;
++ if(__bfloat16_as_ushort(b[i])!=expected){fprintf(stderr,"mismatch N=%d K=%d I=%d seed=%d rows=%d i=%d\n",N,K,I,seed,rows,i);exit(3);}}
++ }
++ }
++ printf("N=%d K=%d I=%d tiled=%d seeds=3 active_rows=1..16 invalid_rows=0,17 exact=true inactive_guard=true\n",N,K,I,Tiled);
++ for(void*z:{(void*)x,(void*)w,(void*)tw,(void*)a,(void*)b,(void*)p,(void*)live})OK(cudaFree(z));
++}
++
++void attention(){
++ auto*q=alloc<__nv_bfloat16>(16*576);auto*k=alloc<__nv_bfloat16>(4096*16*192);auto*v=alloc<__nv_bfloat16>(4096*16*192);auto*a=alloc<__nv_bfloat16>(16*576);auto*b=alloc<__nv_bfloat16>(16*576+16);auto*scratch=alloc<float>(16*9*4096);auto*shape=alloc<uint32_t>(16*416);auto*live=alloc<uint32_t>(1);
++ int counts[16]={1,16,17,127,128,129,2049,4096,2,15,73,255,256,398,1024,4095};
++ for(int i=0;i<16*576;++i)q[i]=__float2bfloat16_rn(float(i*7%127-63)/128);
++ for(int i=0;i<4096*16*192;++i){k[i]=__float2bfloat16_rn(float(i*17%251-125)/256);v[i]=__float2bfloat16_rn(float(i*13%127-63)/64);}
++ for(int row=0;row<16;++row){shape[row*416+1]=counts[row]-1;for(int page=0;page<256;++page)shape[row*416+32+page]=row*256+(page*17+3)%256;}
++ for(int rows=0;rows<=17;++rows){
++  *live=rows;for(int i=0;i<16*576+16;++i)b[i]=__ushort_as_bfloat16(0x4123);
++  if(rows>=1&&rows<=16)for(int row=0;row<rows;++row)riley_decode_shape::enqueue(0,q+row*576,k,v,a+row*576,scratch,shape+row*416,shape+row*416+32,4096);
++  riley_shared16_attention::enqueue(0,q,k,v,b,scratch,shape,shape+32,live,4096);OK(cudaDeviceSynchronize());
++  int valid=rows>=1&&rows<=16?rows*576:0;
++  for(int i=0;i<16*576+16;++i)if(__bfloat16_as_ushort(b[i])!=(i<valid?__bfloat16_as_ushort(a[i]):0x4123)){fprintf(stderr,"attention mismatch rows=%d i=%d\n",rows,i);exit(4);}
++ }
++ printf("attention active_rows=1..16 invalid_rows=0,17 contexts=1..4096 mixed disjoint_permuted_pages=true exact=true inactive_guard=true\n");
++ for(void*z:{(void*)q,(void*)k,(void*)v,(void*)a,(void*)b,(void*)scratch,(void*)shape,(void*)live})OK(cudaFree(z));
++}
++int main(){check<576,576,192,false>();check<192,576,192,false>();check<576,576,128,false>();check<1536,576,0,true>();check<576,1536,320,true>();attention();}

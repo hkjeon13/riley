@@ -1,0 +1,53 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "58e340dc9f96d9072167bce4f949af5a2c051fbc2e496f75c6316411288da9df",
+      "current_sha256": "8c2492929f0570d476a66ef8e760cef656cf585fb71b19404399d6609b489eb8"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "6340b60605551b2a547a263ffb770e74960095295169ba1f1deafa6c4b1a6641",
+      "current_sha256": "63c88918a0f06ea6fdf7099949d16704aaa0c0e7b904fe1681503412d6821a3f"
+    },
+    {
+      "path": "kernels/src/batch_primitives.cu",
+      "previous_sha256": "033acaef7237357cce5a396b857b3fae583c63122a24b423e21f1d57880fb25c",
+      "current_sha256": "78090cbd3cdbe77c5d22c6b66f3ce15a245a5dacf3e8201341e785285cde0482"
+    },
+    {
+      "path": "kernels/src/ffi_internal.hpp",
+      "previous_sha256": "78cc32fa1e50a8e437b0a0c292e023cada1a238bdc66b819d7149d59e0abd16d",
+      "current_sha256": "40cecc9ba35c108bef5bb8f6603c30a72c3b58ca579dec3f0a868204e141e8a8"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "3b02f894e82e2a3d31453396e6bb9a8d2adfb07d294210dfc76dd10208309f0d",
+      "current_sha256": "f2222439520ebfdacf3d0dc64d9f5657cd822318da098db24032fe34b670ca65"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "68eeebfebd847b35479c7c089d9f138f369a2c491fbd275f01ba426feb49559d",
+      "current_sha256": "3aed32412e38cae5d733c056cd28a508304ae77d39f3b65580bf70d5e44c11f0"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "27719f08911b91cfe0202113c8e636156f4134aaa073578fd1661b1c413b4e9e",
+      "current_sha256": "196376f8ec8b0d17cbcc9b5d3918e46d30ed87ba4fdd8761426dba7604c902e4"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs",
+      "previous_sha256": "f3a32e574b8df0d0a957e55afea6cd99365a2106b06b49ba7c8202d0448667e1",
+      "current_sha256": "dc1fc645e6e8af2f46340bd0ea615b617201eb293271da50d28a5e354bccc49c"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "51984c47ad6cc996fc551b2f2cc37c1bb4ed0187b9d644a305ffeb7a8da10b59",
+      "current_sha256": "cbb1a2a133fa83d98040d8296b58f402774b2833239cc1e36a0e7b3cdf65933f"
+    }
+  ],
+  "status": "blocked_pending_explicit_payload_approval",
+  "remote_write_performed": false,
+  "reason": "Automatic approval review requires explicit approval for this new attention-chain nine-source payload and destination."
+}

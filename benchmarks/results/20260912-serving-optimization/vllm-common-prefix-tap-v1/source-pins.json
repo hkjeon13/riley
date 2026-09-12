@@ -1,0 +1,19 @@
+{
+  "schema_version": "riley.vllm-common-prefix-source-pins.v1",
+  "version": "0.27.1",
+  "source_files": {
+    "entrypoints/openai/completion/protocol.py": "b9d3defe3d4193b1d252d3a9532718865ef277cb46a14281aba553f7929e50a3",
+    "entrypoints/openai/completion/serving.py": "2590281b465d8a9e31252bd92407661f3af9adeddf7bd52c80395cc9fbb9e19c",
+    "v1/sample/sampler.py": "315af950ef4c35fced53dc3a5df49a80af20b47e417e8f12bf315f535769bab2",
+    "v1/sample/logits_processor/interface.py": "171dfc6ef9b5b53128e8eaecc4bdf1de413a706d64bf5be686048f583c66eee1",
+    "v1/sample/logits_processor/__init__.py": "1f9b02dae8cf6d44484638037123d3a2dec6b7b9a2bcc9afceef1a9bf3eaedec",
+    "v1/sample/logits_processor/builtin.py": "d8967b2358debb3ba34e0c5fc49b43c3a880e3d408d83f517575485701ad5cc9",
+    "v1/sample/logits_processor/state.py": "a96411f14362c45f839e181dcb3ac01d5b880812bccb3552fc17863b219f44ac",
+    "v1/worker/gpu_model_runner.py": "993f2c926012241bcb8cc7f568c8e82968e4d81ca125641c831ecf501aac02ac",
+    "v1/worker/gpu_input_batch.py": "0687f0e38bf889cef454a38ee262a5686c1ea459337c42219cb91c900799305f",
+    "config/vllm.py": "66e82e95c5cdbb88715e25feb65f4cc2be83cd67bff5b5f703d52dea43a0815e",
+    "sampling_params.py": "cc040f9b21e373be3fa5f47c0f3a50e77229dede20cae6a8019f2b7f5ce365cf",
+    "engine/arg_utils.py": "165f9ec6e3b067bb7e6c72d68adedde7fa4d5ed7932fa7568064b9d9086e6830",
+    "model_executor/models/llama.py": "03ec84a266c202123bd5f66f5cb4fdbd9402a94b18db8f16cb9ad4795d07c410"
+  }
+}

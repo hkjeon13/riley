@@ -1,0 +1,23 @@
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index f8056fa..73374c9 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -50,14 +50,16 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
+             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
+             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
+             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
+-        wire::encode_into(&mut self.input,&e)?;
++        let batch_start=std::time::Instant::now();wire::encode_into(&mut self.input,&e)?;let encode_us=batch_start.elapsed().as_micros();
+         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
++        let native_start=std::time::Instant::now();
+         if self.graph.replay_transfer(&self.input).and_then(|()|self.graph.read_transfer(&mut self.output)).is_err() {
+             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
+         }
++        let native_us=native_start.elapsed().as_micros();let validate_start=std::time::Instant::now();
+         let e=self.retained.as_ref().unwrap();
+         match if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
+-            Ok(result)=>{self.completed=true;Ok(result)},
++            Ok(result)=>{eprintln!("BATCH stage={} rows={} tokens={} us={} encode_us={} native_us={} validate_us={}",if e.rows[0].progress.generated_index==0{"prefill"}else{"decode"},e.rows.len(),e.rows.iter().map(|r|r.progress.input_tokens).sum::<u32>(),batch_start.elapsed().as_micros(),encode_us,native_us,validate_start.elapsed().as_micros());self.completed=true;Ok(result)},
+             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
+         }
+     }

@@ -1,0 +1,49 @@
+{
+  "gpu": {
+    "timestamp_ns": 844506823482831,
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "driver_version": "580.173.02",
+    "temperature_c": 50,
+    "memory_used_mib": 8031,
+    "utilization_percent": 0,
+    "compute_processes": [
+      {
+        "pid": 3052278,
+        "used_memory_mib": "7720"
+      }
+    ]
+  },
+  "process_maps": {
+    "3052278": {
+      "ready": false,
+      "private_vendor_files": {
+        "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02": {
+          "sha256": "82d7b58d3f870b0635e8999c56eb8fd2d795c920daa2661e628ca523eee5f557",
+          "device": "103:02",
+          "inode": 10647863
+        },
+        "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02": {
+          "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4",
+          "device": "103:02",
+          "inode": 10647861
+        }
+      },
+      "driver_mappings": [
+        "78ba07e00000-78ba07e1b000 r--p 00000000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78ba07e1b000-78ba07f98000 r-xp 0001b000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78ba07f98000-78ba07ffd000 r--p 00198000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78ba07ffd000-78ba07ffe000 ---p 001fd000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78ba07ffe000-78ba0802e000 r--p 001fd000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78ba0802e000-78ba08031000 rw-p 0022d000 103:02 10647863                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02",
+        "78bad4e00000-78bad4f66000 r--p 00000000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "78bad4f66000-78bad5eea000 r-xp 00166000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "78bad5eea000-78bada895000 r--p 010ea000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "78bada895000-78bada896000 ---p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "78bada896000-78bada9cb000 r--p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "78bada9cb000-78bada9d4000 rw-p 05bca000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02"
+      ],
+      "compute_loaded": true,
+      "all_observed_vendor_mappings_pinned": true
+    }
+  }
+}

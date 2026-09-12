@@ -1,0 +1,114 @@
+{
+  "schema_version": "riley.multisequence-precise-result.v1",
+  "completed": true,
+  "precise_bitwise_equal": true,
+  "fixture_manifest": {
+    "path": "/tmp/riley-opt-260912/multisequence-precise-probe/fixtures.json",
+    "sha256": "d15620e55399cd5a4262dc94c013543c8b31038324c112649c74cc1fce3a4d0c"
+  },
+  "compile_receipt": {
+    "path": "/tmp/riley-opt-260912/multisequence-precise-probe/compile.json",
+    "sha256": "f53f19af0f8979d8220ff5184b05b8a3a8e42bc92aa0b2a0c058a9d931182b35"
+  },
+  "driver": {
+    "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+    "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+  },
+  "runtime": {
+    "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+    "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+  },
+  "loaded_native_files": {
+    "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+    },
+    "/data/riley-g04-cuda13/lib/libcudart.so.13": {
+      "path": "/data/riley-g04-cuda13/lib/libcudart.so.13",
+      "sha256": "96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0"
+    }
+  },
+  "command": [
+    "/tmp/riley-opt-260912/multisequence-precise-probe/build/probe",
+    "--cases",
+    "/tmp/riley-opt-260912/multisequence-precise-probe/cases.tsv",
+    "--device",
+    "0"
+  ],
+  "ld_library_path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/data/riley-g04-cuda13/lib",
+  "native_results": {
+    "path": "/tmp/riley-opt-260912/multisequence-precise-probe/native-results.jsonl",
+    "sha256": "c997a9155de11147f2f74433ba5f5d3888f7e7317f197a1e2017b8f7ed40144f"
+  },
+  "stderr": {
+    "path": "/tmp/riley-opt-260912/multisequence-precise-probe/native-stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "process_exit": {
+    "path": "/tmp/riley-opt-260912/multisequence-precise-probe/process-exit.json",
+    "sha256": "cd386437c79958478eadfbdeb2f32073c6eee117dc4e691f3a3382ab993bf934"
+  },
+  "device": {
+    "schema": "riley.multisequence-precise-native.v1",
+    "kind": "device",
+    "uuid_hex": "9087e4256acab722b8c9cc0423b39fb0",
+    "name": "NVIDIA GeForce RTX 4090",
+    "compute_major": 8,
+    "compute_minor": 9,
+    "runtime_version": 13000,
+    "driver_version": 13000,
+    "runtime_maps": [
+      "702f0ea00000-702f0eb66000 r--p 00000000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f0eb66000-702f0faea000 r-xp 00166000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f0faea000-702f14495000 r--p 010ea000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f14495000-702f14496000 ---p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f14496000-702f145cb000 r--p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f145cb000-702f145d4000 rw-p 05bca000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f15000000-702f150a6000 r-xp 00000000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f150a6000-702f152a6000 ---p 000a6000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f152a6000-702f152ab000 r--p 000a6000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f152ab000-702f152ac000 rw-p 000ab000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13"
+    ]
+  },
+  "summary": {
+    "schema": "riley.multisequence-precise-native.v1",
+    "kind": "summary",
+    "completed": true,
+    "precise_bitwise_equal": true,
+    "cases": 3456,
+    "failed_cases": 0,
+    "synthetic_seeds": 3,
+    "position_tuples": 32,
+    "patterns": 3,
+    "mappings": 3,
+    "modes": 4,
+    "graph_transitions": 3,
+    "failed_graph_transitions": 0,
+    "allocations_created": 107179,
+    "allocations_freed": 107179,
+    "live_bytes": 0,
+    "cleanup_errors": 0,
+    "graphs_created": 1,
+    "graphs_destroyed": 1,
+    "execs_created": 1,
+    "execs_destroyed": 1,
+    "stream_destroyed": true,
+    "runtime_maps": [
+      "702f0ea00000-702f0eb66000 r--p 00000000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f0eb66000-702f0faea000 r-xp 00166000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f0faea000-702f14495000 r--p 010ea000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f14495000-702f14496000 ---p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f14496000-702f145cb000 r--p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f145cb000-702f145d4000 rw-p 05bca000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+      "702f15000000-702f150a6000 r-xp 00000000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f150a6000-702f152a6000 ---p 000a6000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f152a6000-702f152ab000 r--p 000a6000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13",
+      "702f152ab000-702f152ac000 rw-p 000ab000 08:01 173693482                  /data/riley-g04-cuda13/lib/libcudart.so.13"
+    ],
+    "performance_claim": false,
+    "error": ""
+  },
+  "gpu_executed": true,
+  "performance_claim": false,
+  "production_integration": false
+}

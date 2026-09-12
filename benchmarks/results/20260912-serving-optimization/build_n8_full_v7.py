@@ -1,0 +1,6 @@
+import os,pathlib,subprocess
+r=pathlib.Path('/tmp/riley-opt-260912');s=r/'multisequence-n8-source-v7';env=os.environ.copy();env.update(PATH='/home/psyche/.cargo/bin:/data/riley-g04-cuda13/bin:'+env['PATH'],CUDA_HOME='/data/riley-g04-cuda13',CUDAToolkit_ROOT='/data/riley-g04-cuda13',CMAKE='/data/cmake-3.31.12/bin/cmake',CMAKE_BUILD_PARALLEL_LEVEL='4',CARGO_BUILD_JOBS='4',CARGO_TARGET_DIR=str(r/'multisequence-n8-target-v7'),LD_LIBRARY_PATH=str(r/'driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu')+':/data/riley-g04-cuda13/lib',CUDA_VISIBLE_DEVICES='0',RILEY_REAL_CHECKPOINT='/data/riley-benchmark/20260827T051948Z-d7ad713a/model')
+steps=[('wire-tests-final',['cargo','test','--release','-p','riley-runtime','--features','cuda','--lib','multi_descriptor','--','--nocapture']),('full-kv',['cargo','test','--release','-p','riley-runtime','--features','cuda','--lib','multisequence_full_model_logits_and_kv_match_m1','--','--ignored','--nocapture','--test-threads=1']),('server-build',['cargo','build','--release','-p','riley-server','--features','cuda,server'])]
+for name,cmd in steps:
+ with (r/('n8-v7-integration-r2-'+name+'.log')).open('w') as log:subprocess.run(cmd,cwd=s,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
+ print(name+' passed',flush=True)

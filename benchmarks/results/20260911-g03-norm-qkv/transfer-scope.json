@@ -1,0 +1,48 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "7b6e957549c2c6b6b699228e503653fd8fe85f9481d65c0123022d54baf14de8",
+      "current_sha256": "fc41375e61ebbdce2937c87f0685160c842a1c674bb999189a0a3f70aa9242db"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "197697b5adf91a8e379c32cab164987836049effc90da6c0e18f6d1a7c560b05",
+      "current_sha256": "7a0b4cabc68aaf79494015c06461059c99180f9da60ebb272602953cf719c7d1"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "5d8c05c1be05d1e02ea1b4f67f7c9374f6d39a5a0815999588ab9cf29c127751",
+      "current_sha256": "4efea0da835de1fa7c29923a22b814b40aff397f2345998e29a2e587b706cdb1"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "6b3326c6102e9bc49aba765ddf493cfd28a61af99ddc273ca74995b3f7ea499a",
+      "current_sha256": "6aa9a3c718b28989a611a4eb39fbe2a2befcae85063d5dc5ff3cecb293c2c88f"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "3e081b881e538467332a36ddf001130decb1150ab2d668fa1b3c5279abe260fa",
+      "current_sha256": "8811201f34beef1603e5da327da77708a8a1730000e741922afed5cce53d5a8e"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/batch_executor.rs",
+      "previous_sha256": "c43b1038be67466eab77da0350c7b68cb9c923a7f414f6725f138163e2723e65",
+      "current_sha256": "7398b8a78e32897579c84ff2fd4393b1d1cd06d749bd7efdfef079dd1f692cfc"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "0f0f4d7937a2f1581c11ef6bc7678bc2fce5e61831ac96a3e75b997ac8403fb1",
+      "current_sha256": "bddbc06f17050c41d127673d2617f9ffaf9deecd32093403f57934c90c5977ad"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs",
+      "previous_sha256": null,
+      "current_sha256": "4c30494ad23d09a130d3d5b0e792d15a3c655ac4648115dae39cd7b2cfc087ac"
+    }
+  ],
+  "status": "blocked_pending_explicit_payload_approval",
+  "remote_write_performed": false,
+  "reason": "Automatic approval review rejected new norm-QKV eight-source payload transfer; previous seven-file approval and continuation request were not accepted for this changed payload and destination."
+}

@@ -1,0 +1,67 @@
+Generating SQLite file /tmp/riley-opt-260912/mixed-p128-nsys-v4/c4.sqlite from /tmp/riley-opt-260912/mixed-p128-nsys-v4/c4.nsys-rep
+Processing [/tmp/riley-opt-260912/mixed-p128-nsys-v4/c4.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+42.6,229620006,33128,6931.3,5184.0,2176,64320,4274.9,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (bool)0, (bool)1, (bool)1, (bool)0, (int)7, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<const __nv_bfloat16>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>>(T13)"
+10.4,55921501,6870,8140.0,7712.0,6624,11839,1138.3,"attention_packed_multisequence_rope(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *)"
+10.0,53987961,1440,37491.6,37055.0,36384,39743,829.1,"attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, int, int, const int *, const unsigned int *)"
+9.4,50536230,2880,17547.3,17344.0,17055,18400,385.4,"void gemm_prefill_m16<(int)1536, (int)576, (int)0, (int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+8.3,44914372,1440,31190.5,31104.0,30304,32735,413.2,"void gemm_prefill_m16<(int)576, (int)1536, (int)320, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+4.9,26554913,2880,9220.5,9216.0,8736,9792,166.8,"void gemm_prefill_m16<(int)192, (int)576, (int)192, (int)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+4.7,25326833,16897,1498.9,1408.0,1311,2304,199.0,"compiled_norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int)"
+2.9,15753208,1440,10939.7,10944.0,10368,11776,241.0,"void gemm_prefill_m16<(int)576, (int)576, (int)192, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+2.8,15136874,1440,10511.7,10463.0,10112,11232,213.7,"void gemm_prefill_m16<(int)576, (int)576, (int)128, (int)2>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+1.5,7875678,6870,1146.4,1152.0,1088,1440,29.1,"riley_multisequence_precise::swiglu_rows(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)"
+0.7,3608473,480,7517.7,7520.0,5984,8384,277.4,"attention_packed_decode_rope(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *)"
+0.4,2159422,1440,1499.6,1472.0,1440,1568,35.2,"compiled_swiglu_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *)"
+0.3,1817292,1440,1262.0,1248.0,1216,1536,32.9,"compiled_kv_write_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int)"
+0.3,1731374,1440,1202.3,1184.0,1152,1376,31.5,"compiled_rope_rows(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)"
+0.2,1314067,976,1346.4,1344.0,1279,1696,58.9,"compiled_norm(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int)"
+0.2,894298,229,3905.2,3904.0,2784,4128,222.7,"riley_cuda_internal::<unnamed>::multi_completion(const unsigned int *, const unsigned int *, const unsigned short *, unsigned int *, unsigned int, unsigned int)"
+0.1,576505,293,1967.6,1920.0,1824,2400,132.7,"<unnamed>::partitioned_argmax(const unsigned short *, unsigned long long *)"
+0.1,478845,480,997.6,992.0,960,1056,17.0,"compiled_swiglu(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *)"
+0.1,433784,229,1894.3,1888.0,1696,2144,84.5,"riley_cuda_internal::<unnamed>::multi_embedding(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *)"
+0.0,261819,293,893.6,896.0,863,960,24.6,"<unnamed>::finish_partitioned_argmax(unsigned long long *, unsigned int)"
+0.0,114559,64,1790.0,1792.0,1632,2048,91.0,"void <unnamed>::embedding_kernel<__nv_bfloat16>(const T1 *, const unsigned int *, T1 *, const RileyCudaEmbeddingErrorReport *, unsigned long, unsigned long)"
+0.0,79327,64,1239.5,1312.0,960,1408,151.4,"<unnamed>::validate_embedding_tokens(const unsigned int *, unsigned long, unsigned long, RileyCudaEmbeddingErrorReport *)"
+0.0,77694,64,1214.0,1216.0,928,1312,69.8,"<unnamed>::finalize_embedding_error(const unsigned int *, unsigned long, RileyCudaEmbeddingErrorReport *)"
+0.0,58848,64,919.5,944.0,736,1056,93.9,<unnamed>::reset_embedding_error(RileyCudaEmbeddingErrorReport *)
+0.0,3424,2,1712.0,1712.0,1376,2048,475.2,"<unnamed>::rope_table_sin_kernel(const float *, float *, unsigned long)"
+0.0,3072,2,1536.0,1536.0,1280,1792,362.0,"<unnamed>::rope_table_cos_in_place_kernel(float *, unsigned long)"
+
+Processing [/tmp/riley-opt-260912/mixed-p128-nsys-v4/c4.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+Time (%),Total Time (ns),Count,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Operation
+55.8,28138305,1228,22913.9,19232.0,768,61536,16985.3,[CUDA memcpy Device-to-Host]
+44.0,22177211,824,26914.1,736.0,320,225437,40182.8,[CUDA memcpy Host-to-Device]
+0.2,99326,293,339.0,352.0,319,384,16.4,[CUDA memset]
+0.1,42240,48,880.0,864.0,832,928,24.7,[CUDA memcpy Device-to-Device]
+
+Processing [/tmp/riley-opt-260912/mixed-p128-nsys-v4/c4.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_api_sum.py]... 
+Time (%),Total Time (ns),Num Calls,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+88.0,599937910,1570,382126.1,44313.5,2596,4778847,893600.3,cudaStreamSynchronize
+5.8,39192495,293,133762.8,120027.0,105840,316595,30997.3,cudaGraphLaunch_v10000
+2.1,14647363,16,915460.2,540710.5,15779,2540466,947230.5,cuLibraryLoadData
+1.5,10471232,402,26047.8,2243.5,717,873984,50801.9,cudaFree
+0.9,6374592,401,15896.7,3644.0,859,67065,15944.8,cudaMalloc
+0.4,2556488,4,639122.0,640172.0,555543,720601,69028.1,cudaGraphInstantiate_v12000
+0.4,2428033,6,404672.2,255329.0,3326,1023456,468292.9,cudaHostAlloc
+0.3,2277316,1289,1766.7,1607.0,772,36201,1179.9,cudaMemcpyAsync
+0.3,1714211,1172,1462.6,705.0,539,138600,5618.9,cudaLaunchKernel
+0.1,802864,6,133810.7,84815.0,3098,325862,152466.2,cudaFreeHost
+0.1,572918,4,143229.5,134432.0,113167,190887,35701.4,cudaGraphExecDestroy_v10000
+0.0,185771,2,92885.5,92885.5,16633,169138,107837.3,cudaStreamCreateWithFlags
+0.0,173805,4,43451.3,38651.0,36800,59703,10869.6,cudaGraphDestroy_v10000
+0.0,85238,880,96.9,68.0,35,4612,201.9,cuGetProcAddress_v2
+0.0,43403,1172,37.0,35.0,26,532,21.9,cuKernelGetName
+0.0,32405,35,925.9,226.0,78,5546,1647.1,cuLibraryGetKernel
+0.0,15962,4,3990.5,2670.5,2126,8495,3030.3,cudaStreamEndCapture_v10000
+0.0,10855,17,638.5,328.0,310,3341,784.8,cudaDeviceSynchronize
+0.0,7286,3,2428.7,245.0,219,6822,3804.8,cudaEventCreateWithFlags
+0.0,6659,4,1664.8,1330.5,950,3048,974.3,cudaStreamBeginCapture_v10000
+0.0,5980,4,1495.0,1712.0,664,1892,566.5,cudaMemsetAsync
+0.0,4925,2,2462.5,2462.5,1603,3322,1215.5,cudaStreamDestroy
+0.0,4149,5,829.8,902.0,480,1154,268.3,cuInit
+0.0,2151,3,717.0,354.0,215,1582,752.3,cudaEventDestroy
+0.0,1846,8,230.8,172.5,120,589,154.1,cudaStreamIsCapturing_v10000
+0.0,630,3,210.0,182.0,119,329,107.8,cudaGetDriverEntryPointByVersion_v12050
+0.0,190,2,95.0,95.0,66,124,41.0,cuModuleGetLoadingMode
+

@@ -1,0 +1,9 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+SHARED16_NATIVE prefill_replays=3 decode_rows=1,2,4,8,9,15,16 inactive_zero=true cold_rejections=2 foreign_context_rejected=true stale_output_hidden=true allocation_zero=true
+test sixteen_recorder_owns_resources_and_transfers_all_records ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+
+========= ERROR SUMMARY: 0 errors

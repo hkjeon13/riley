@@ -1,0 +1,59 @@
+{
+  "records": [
+    {
+      "capacity": 1,
+      "requests": 12,
+      "strict_matches": 12,
+      "observed_overlap": 1,
+      "mismatches": []
+    },
+    {
+      "capacity": 4,
+      "requests": 48,
+      "strict_matches": 46,
+      "observed_overlap": 4,
+      "mismatches": [
+        {
+          "case": "sql",
+          "comparison": {
+            "prompt_token_ids": {
+              "matches": true,
+              "first_mismatch_index": null
+            },
+            "output_token_ids": {
+              "matches": false,
+              "first_mismatch_index": 4
+            },
+            "text": {
+              "matches": false
+            },
+            "finish_reason": {
+              "matches": true
+            }
+          }
+        },
+        {
+          "case": "sql",
+          "comparison": {
+            "prompt_token_ids": {
+              "matches": true,
+              "first_mismatch_index": null
+            },
+            "output_token_ids": {
+              "matches": false,
+              "first_mismatch_index": 4
+            },
+            "text": {
+              "matches": false
+            },
+            "finish_reason": {
+              "matches": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "performance_claim": false,
+  "observation_not_correctness_acceptance": true
+}

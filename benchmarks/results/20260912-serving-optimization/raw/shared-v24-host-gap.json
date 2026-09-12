@@ -1,0 +1,17 @@
+{
+  "scope": "Nonexclusive diagnostic; D2H completion to next H2D start includes host scheduling, sampling, transport and CUDA dispatch, not isolated sampling cost",
+  "versions": {
+    "23": {
+      "steps": 85,
+      "between_graph_gap_us_median": 822.181,
+      "between_graph_gap_us_p95": 1081.095,
+      "between_graph_gap_ms_total": 59.36808700000001
+    },
+    "24": {
+      "steps": 84,
+      "between_graph_gap_us_median": 822.184,
+      "between_graph_gap_us_p95": 1073.834,
+      "between_graph_gap_ms_total": 58.87714599999999
+    }
+  }
+}

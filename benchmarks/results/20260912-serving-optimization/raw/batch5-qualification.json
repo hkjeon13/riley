@@ -1,0 +1,195 @@
+{
+  "schema_version": "riley.decode-attention-qualification.v1",
+  "passed": true,
+  "source_root": "/tmp/riley-opt-260912/batch5-source",
+  "source_commit": "a791d63081dcdb319c8e45c79ec9301166ee199a",
+  "source_clean": true,
+  "implementation_id": "g09-decode-attention-v1",
+  "numerical_profile": "vllm-smol-p128-v1",
+  "correctness_gate_id": "g04-vllm-smol-p128-v1",
+  "scope": "SmolLM2-135M BF16 c1 P128 O32; current packed-decode attention uses 9 heads x 2 output halves, 32 threads per block, and FP32 exponential reuse. Actual current-source GPU full logits/status/KV parity, retained reuse, cancellation, rejection, scheduler block mapping tests, and release HTTP reference text/SSE/disconnect checks.",
+  "build": {
+    "path": "/tmp/riley-opt-260912/batch5-build.json",
+    "sha256": "76f4bfb6ab0fc3da68420aebe2348a755b30ff34d1b6ece04b4e664c2b6a8cba"
+  },
+  "gpu_tests": {
+    "path": "/tmp/riley-opt-260912/batch5-gpu-tests.json",
+    "sha256": "7f007aa13147a14dc34c0cff87a1f29af14d73a7d3c27de9f53ffce3dcd1b5d4"
+  },
+  "gpu_test_logs": [
+    {
+      "name": "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch5-batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation.log",
+      "sha256": "5c5cd3b8dcabbe7e9e436b5d4d7a40b7f1bb0d89878e952a7a82f130f5cee778",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_retained_reuse_cancel_and_rejected_output_invalidation",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "batched_prefill_exact_logits_status_and_every_decode_kv",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch5-batched_prefill_exact_logits_status_and_every_decode_kv.log",
+      "sha256": "6bf8db597e9b82a0d67bce45a813b1573ca756a263a606624a24232d04e5a996",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "batched_prefill_exact_logits_status_and_every_decode_kv",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch5-owned_graph_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "b42e0a88c6a52241b707bdab2703cd67d779ac857b54f22d7e91dfbf0acd0aea",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    },
+    {
+      "name": "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+      "passed": true,
+      "path": "/tmp/riley-opt-260912/batch5-owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings.log",
+      "sha256": "0c7a483b0dca2a4910c8f6ab4981575c0c2c1be0176026c2406e25161f25564c",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "riley-runtime",
+        "--features",
+        "cuda",
+        "--lib",
+        "owned_graph_vllm_smol_p128_o32_reuses_scheduler_block_mappings",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "passed_tests": 1,
+      "failed_tests": 0,
+      "ignored_tests": 0
+    }
+  ],
+  "profile_unit_tests": {
+    "name": "profile-unit-tests",
+    "passed": true,
+    "path": "/tmp/riley-opt-260912/batch5-profile-unit-tests.log",
+    "sha256": "0c6971bc106daa7ecada844ce81e545c3f69516f5c162cc19addda81853c85ef",
+    "argv": [
+      "cargo",
+      "test",
+      "--release",
+      "-p",
+      "riley-server",
+      "--features",
+      "server,bench,cuda",
+      "--bin",
+      "riley-profile",
+      "--",
+      "--test-threads=1"
+    ],
+    "passed_tests": 10,
+    "failed_tests": 0,
+    "ignored_tests": 0
+  },
+  "release_http": {
+    "path": "/tmp/riley-opt-260912/batch5-http-correctness/http-validation.json",
+    "sha256": "1eb26f16740606ae13e5683d44db27de57e017ac3c99ce48aaa918bb0f238efc"
+  },
+  "binaries": {
+    "/tmp/riley-opt-260912/batch5-target/release/riley": "32f75a53d3e1799e4285ce0f957360cf4c4ed741758564c5060f922d725e9dce",
+    "/tmp/riley-opt-260912/batch5-target/release/riley-profile": "fbedd08bd081d66c3235cd1eddd7d5483cfdc7485c65ed3a27a8ad2555509309"
+  },
+  "gpu_tests_executed_on_current_snapshot": true,
+  "vllm_reference_tokens_exact": true,
+  "full_logits_and_kv_exact": true,
+  "source_lineage": {
+    "parent_commit": "53677519082135c42a5d044044c5b31cad4a146a",
+    "parent_build": {
+      "path": "/tmp/riley-opt-260912/batch4-build.json",
+      "sha256": "e33eca0efd3670c2cac7d935245599bc65099c402021f9a5c78eea0c76ef307b"
+    },
+    "parent_qualification": {
+      "path": "/tmp/riley-opt-260912/batch4-qualification.json",
+      "sha256": "5f99ceb89ee705e2b75146541969be4f79687871f408f039bc52bcbee808a1cb"
+    },
+    "changed_files": [
+      "crates/riley-runtime/src/llama/graph_decode_full.rs",
+      "kernels/src/ffi_internal.hpp",
+      "kernels/src/graph_numerics.cu",
+      "kernels/src/graph_resources.cu"
+    ],
+    "other_parent_tracked_files_unchanged": true,
+    "overlay": {
+      "path": "/tmp/riley-opt-260912/batch5-source-overlay.json",
+      "sha256": "c54897e4452b74211498daed84af1d9a61c632cb45ebb84024e16f075fd94b79"
+    }
+  },
+  "graph_implementation_signature": "0xF105",
+  "candidate_scope": "Packed decode attention only; original attention and P128/M1 paths are correctness oracles",
+  "performance_metrics": {
+    "throughput": null,
+    "ttft": null,
+    "tpot": null,
+    "p95_latency": null,
+    "p99_latency": null,
+    "gpu_span": null,
+    "memory_efficiency": null
+  },
+  "reference_only": {
+    "binding": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/native-binding.json",
+      "sha256": "8e2f7ecde7c3de810141031d701d7ce796f8803730f2c6f81180a659d60c351b"
+    },
+    "verification": {
+      "path": "/tmp/riley-g04-vllm-profile-260911/verification.json",
+      "sha256": "8fb6d15ca85a23d424c05c7cbc3c23c4a2885b77869a43ec332adeeddbc47807"
+    }
+  },
+  "canonical_e0_claim": false,
+  "performance_measured": false
+}

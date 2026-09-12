@@ -1,0 +1,153 @@
+commit a399f04cbe853f836567a66e0689de0c3a51e09f
+Author:     Codex <codex@local>
+AuthorDate: Sat Sep 12 23:24:33 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sat Sep 12 23:24:33 2026 +0900
+
+    Optimize shared decode score dispatch and packed projections
+
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 819fccf..4b60316 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2117,7 +2117,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+         }
+         // Pack immutable gate/up/down weights once before capture. The buffers
+         // remain explicit reservation parents and are dropped after graph close.
+-        if scratch.shared_head.is_none() {
++        if !scratch.tiled.is_empty() {
+         for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
+             for layer in 0..30 { for part in 0..3 {
+                 if weights[3+layer*9+6+part]!=index {continue;}
+diff --git a/crates/riley-runtime/src/llama/variable_session.rs b/crates/riley-runtime/src/llama/variable_session.rs
+index 934b776..c3ce149 100644
+--- a/crates/riley-runtime/src/llama/variable_session.rs
++++ b/crates/riley-runtime/src/llama/variable_session.rs
+@@ -97,7 +97,7 @@ impl VariableGraphBuffers {
+             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
+     }
+     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
+-        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},false)?;
++        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},true)?;
+         s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(8*9*4096*4))?;
+         s.staging=context.allocate_pinned_host_buffer(2*wire::BATCH_RESULT_BYTES as u64)?;
+         for bytes in [8*1152,8*98304,wire::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}
+diff --git a/kernels/src/decode_shared_attention.cuh b/kernels/src/decode_shared_attention.cuh
+index e8b05e9..ab28bbd 100644
+--- a/kernels/src/decode_shared_attention.cuh
++++ b/kernels/src/decode_shared_attention.cuh
+@@ -8,7 +8,8 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
+  shape+=row*416;pages+=row*416;
+  q+=row*576;result+=row*9*4096;
+  int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
+- if(token>=count || count>4096)return;
++ if(count<1 || count>4096)return;
++ for(;token<count;token+=gridDim.x*8){
+  int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
+  #pragma unroll
+  for(int depth=0;depth<64;depth+=16){
+@@ -21,6 +22,7 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
+   riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
+  }
+  if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
++ }
+ }
+ // Independent output eight-column groups share the precomputed score buffer.
+ // Tile order, lane-local denominator and BF16 probability rounding are unchanged.
+@@ -57,7 +59,7 @@ __global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16*
+ }
+ 
+ inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context){
+- scores<<<dim3((context+7)/8,72),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
++ scores<<<dim3(min((context+7)/8,32u),72),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
+  values<<<dim3(8,72),32,0,stream>>>(scratch,v,out,shape,pages,live_rows);
+ }
+ }
+diff --git a/kernels/src/decode_shared_model.cuh b/kernels/src/decode_shared_model.cuh
+index 7f03a76..9199ab4 100644
+--- a/kernels/src/decode_shared_model.cuh
++++ b/kernels/src/decode_shared_model.cuh
+@@ -34,7 +34,7 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
+  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>8||row<rows)return;
+  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
+ }
+-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context){
++inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false){
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
+@@ -43,6 +43,7 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  const auto* meta=static_cast<const uint32_t*>(metadata);auto* shape=meta+32;auto* pages=meta+64;auto* active=meta+5;auto* pointwise=meta+3;
+  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
+  embedding<<<8,256,0,stream>>>(w(0),b(0),shape,active,status);
++ if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
+  for(int layer=0;layer<30;++layer){int base=3+9*layer;
+  if(layer==0)riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,8);
+  enqueue_shared_projection<576,576,192,false>(stream,b(1),w(base+1),b(2),static_cast<float*>(scratch[7]),active);
+@@ -54,10 +55,13 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  riley_shared_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  enqueue_shared_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,8);
+- enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]),active);
+- enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]),active);
++ if(tiled)enqueue_shared_projection<1536,576,0,true>(stream,b(1),w(273+layer*3+0),b(8),static_cast<float*>(scratch[7]),active);
++ else enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]),active);
++ if(tiled)enqueue_shared_projection<1536,576,0,true>(stream,b(1),w(273+layer*3+1),b(9),static_cast<float*>(scratch[7]),active);
++ else enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::swiglu_rows<<<dim3(6,8),256,0,stream>>>(b(8),b(9),b(11),pointwise,8);
+- enqueue_shared_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
++ if(tiled)enqueue_shared_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
++ else enqueue_shared_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,8);
+  }
+  clear_inactive_hidden<<<8,256,0,stream>>>(b(1),active);
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 2e2cc7d..6a28d2d 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2397,7 +2397,7 @@ cudaError_t enqueue_compiled_packed_multisequence_rope_attention(cudaStream_t,co
+ }
+ 
+ namespace riley_cuda_internal {
+-cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t) noexcept;
++cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v3_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ }
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index 0bdf00d..768b5d2 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -316,8 +316,8 @@ cudaError_t enqueue_compiled_v3_result_header(cudaStream_t stream,const void* me
+ #include "decode_shared_model.cuh"
+ #include "decode_shared_result.cuh"
+ namespace riley_cuda_internal {
+-cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context) noexcept {
+- return riley_shared_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context);
++cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
++ return riley_shared_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled);
+ }
+ cudaError_t enqueue_compiled_v3_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
+  return riley_shared_result::enqueue(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index d4229ac..4bbf304 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1218,7 +1218,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+  status=bind_reserved_shared_row_gemm_state(shared_head,r->stream,d[23],w[2],d[24],8,49152,576,&shared_state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  RileyCudaCanonicalGemmBf16GraphState state{};
+  status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+- void* scratch[12];const void* weights[273];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<273;++i)weights[i]=w[i]->device_data;
++ void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
+  constexpr uint64_t transfer=787456;
+  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
+  auto record_shape=[&](uint32_t row_capacity) noexcept {
+@@ -1227,7 +1227,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+   auto result=copy(d[16]->device_data,host,17536,cudaMemcpyHostToDevice);
+   if(row_capacity==1){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,8*1152,cudaMemcpyDeviceToDevice);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_shared_result(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");

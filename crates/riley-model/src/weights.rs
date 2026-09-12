@@ -197,7 +197,7 @@ impl LoadedWeights {
         let provenance = session.provenance().clone();
         if provenance.dtype() != spec.dtype() {
             return Err(ModelError::InvalidArtifact {
-                artifact: "riley-checkpoint.json".to_owned(),
+                artifact: provenance.manifest_filename().to_owned(),
                 reason: format!(
                     "manifest dtype {} differs from model dtype {}",
                     provenance.dtype(),

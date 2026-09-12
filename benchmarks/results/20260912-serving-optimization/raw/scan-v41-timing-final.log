@@ -1,0 +1,16 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/release/deps/riley_runtime-2c1cd40b3d7ef70a)
+
+running 1 test
+SCAN vector=false iterations=4096 ns_per_row=22914
+SCAN vector=true iterations=4096 ns_per_row=5761
+SCAN vector=true iterations=4096 ns_per_row=5472
+SCAN vector=false iterations=4096 ns_per_row=22048
+SCAN vector=false iterations=4096 ns_per_row=22068
+SCAN vector=true iterations=4096 ns_per_row=5390
+SCAN vector=true iterations=4096 ns_per_row=5505
+SCAN vector=false iterations=4096 ns_per_row=22072
+test llama::multi_descriptor::result_scan::tests::scan_timing_diagnostic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 302 filtered out; finished in 0.46s
+

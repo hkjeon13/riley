@@ -42,6 +42,7 @@ CORRECTNESS_GATES = {
     "metadata_transport": "pr16-packed-metadata-h2d-exact-v1",
     "greedy_output": "pr16-gpu-greedy-exact-v1",
     "decode_fast_path": "pr16-decode-fast-path-exact-v1",
+    "execution_graph_policy": "g04-full-decode-p128-o32",
 }
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -352,11 +353,12 @@ def _validate_environment(value: Any, path: str) -> None:
         "cublas_version",
     ):
         _string(software[key], f"{path}.software.{key}")
-    _string(
-        software["container_image_sha256"],
-        f"{path}.software.container_image_sha256",
-        pattern=SHA256_RE,
-    )
+    if software["container_image_sha256"] is not None:
+        _string(
+            software["container_image_sha256"],
+            f"{path}.software.container_image_sha256",
+            pattern=SHA256_RE,
+        )
 
 
 def _validate_workload(value: Any, path: str) -> None:
@@ -774,6 +776,7 @@ def _bind_pair(
         "metadata_transport": ("synchronous", "packed-async"),
         "greedy_output": ("cpu-logits", "gpu-token"),
         "decode_fast_path": ("fixed-sync-cpu", "bucket-packed-gpu"),
+        "execution_graph_policy": ("disabled", "require"),
     }
     baseline_name = baseline_flag["name"]
     candidate_name = candidate_flag["name"]

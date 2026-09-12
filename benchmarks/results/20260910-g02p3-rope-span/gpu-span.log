@@ -1,0 +1,87 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+error: failed to run custom build command for `riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/riley-g01-native-260910-target/debug/build/riley-cuda-767f7717b66443d5/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES
+  cargo:rustc-env=RILEY_CUDA_COMPILED_ARCHITECTURES=89
+  cargo:rerun-if-env-changed=CUDAToolkit_ROOT
+  cargo:rerun-if-env-changed=CUDA_HOME
+  cargo:rerun-if-env-changed=CUDA_PATH
+  cargo:rerun-if-env-changed=NVCC
+  cargo:rerun-if-env-changed=CUDACXX
+  cargo:rerun-if-env-changed=CMAKE
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/CMakeLists.txt
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/include/riley_cuda.h
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/ffi_internal.hpp
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/attention_online.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/attention_online.hpp
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/attention_cublaslt.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/attention_reference.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/batch_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/decode_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/fixed37_gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/fixed37_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/fixed37_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/fixed37_reduction.cuh
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/graph.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/host_runtime.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/memory.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/smoke_fill.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/src/version.cu
+  cargo:rerun-if-changed=/tmp/riley-g01-native-260910/crates/riley-cuda/../../kernels/tests/abi_layout.c
+  cargo:warning=riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+  cargo:warning=riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+  -- riley CUDA AOT architectures: 89 (compile targets only)
+  -- Configuring done (1.5s)
+  -- Generating done (0.0s)
+  -- Build files have been written to: /tmp/riley-g01-native-260910-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-build
+  cargo:warning=riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+  cargo:warning=riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+  cargo:warning=riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+  [  5%] Building C object CMakeFiles/riley_cuda_abi_checks.dir/tests/abi_layout.c.o
+  [  5%] Built target riley_cuda_abi_checks
+  [ 11%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/attention_cublaslt.cu.o
+  [ 17%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/attention_reference.cu.o
+  [ 29%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_gemm.cu.o
+  [ 29%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/batch_primitives.cu.o
+  [ 35%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_attention.cu.o
+  [ 41%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/decode_attention.cu.o
+  [ 47%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_primitives.cu.o
+  [ 52%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/gemm.cu.o
+  [ 58%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph.cu.o
+  [ 64%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/host_runtime.cu.o
+  [ 70%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/primitives.cu.o
+  [ 76%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/smoke_fill.cu.o
+  [ 82%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/memory.cu.o
+  [ 88%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/version.cu.o
+
+  --- stderr
+  /tmp/riley-g01-native-260910/kernels/src/graph.cu(1127): error: identifier "owner" is undefined
+             exec->indexed_rope_bf16_positions_byte_offset = owner->indexed_rope_bf16_positions_byte_offset;
+                                                             ^
+
+  /tmp/riley-g01-native-260910/kernels/src/graph.cu(1122): error: expression must be a modifiable lvalue
+      return exec != nullptr && exec->indexed_rope_bf16_input == nullptr &&
+             ^
+
+  /tmp/riley-g01-native-260910/kernels/src/graph.cu(1128): warning #174-D: expression has no effect
+      exec->indexed_rope_bf16_active_row_count == 0 &&
+      ^
+
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+  2 errors detected in the compilation of "/tmp/riley-g01-native-260910/kernels/src/graph.cu".
+  gmake[3]: *** [CMakeFiles/riley_cuda_native.dir/build.make:215: CMakeFiles/riley_cuda_native.dir/src/graph.cu.o] Error 2
+  gmake[2]: *** [CMakeFiles/Makefile2:90: CMakeFiles/riley_cuda_native.dir/all] Error 2
+  gmake[1]: *** [CMakeFiles/Makefile2:97: CMakeFiles/riley_cuda_native.dir/rule] Error 2
+  gmake: *** [Makefile:169: riley_cuda_native] Error 2
+  error: riley-cuda native build failed: could not compile the native CUDA library: "/data/cmake-3.31.12/bin/cmake" "--build" "/tmp/riley-g01-native-260910-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-build" "--config" "Debug" "--target" "riley_cuda_native" "--parallel" exited with exit status: 2

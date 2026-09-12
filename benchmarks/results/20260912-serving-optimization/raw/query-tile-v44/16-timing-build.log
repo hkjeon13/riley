@@ -1,0 +1,10 @@
+/tmp/riley-opt-260912/query-tile-v44/timing.cu(91): warning #177-D: variable "end" was declared but never referenced
+   const int context=4096,blocks=256,end=start+rows;std::vector<unsigned short>q(rows*576),k(context*192),v(k.size()),a(q.size()),b(q.size());std::vector<unsigned>pages(blocks);
+                                     ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/query-tile-v44/timing.cu(93): warning #177-D: variable "at" was declared but never referenced
+   auto at=[&](int p,int h,int d){return ((pages[p/16]*3+h)*16+p%16)*64+d;};
+        ^
+

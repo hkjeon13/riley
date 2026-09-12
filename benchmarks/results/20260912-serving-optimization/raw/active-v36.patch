@@ -1,0 +1,116 @@
+commit 562fa77305f09f2ccfbf1c0fc0c459e3d7b963e7
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 01:34:26 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 01:34:26 2026 +0900
+
+    Separate V3 admission capacity from eight-row GPU dispatch with 32-owner parity test
+
+diff --git a/crates/riley-scheduler/src/scheduler.rs b/crates/riley-scheduler/src/scheduler.rs
+index 2453522..9ac4fd6 100644
+--- a/crates/riley-scheduler/src/scheduler.rs
++++ b/crates/riley-scheduler/src/scheduler.rs
+@@ -1603,7 +1603,11 @@ impl Scheduler {
+                     token_count: item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(self.config.iteration_token_budget),
+                 });
+             } else {
+-                for item in decode {
++                // Admission capacity is independent of the eight-row V3 wire.
++                // Ready timestamps already rotate committed decode work and roll
++                // back on NotDispatched, preserving fairness across batches.
++                let limit=if self.execution_shape_policy==ExecutionShapePolicy::VariablePrefillDecodeN {8}else{self.config.max_active_sequences};
++                for item in decode.into_iter().take(limit) {
+                     selected.push(Candidate {
+                         request_id: item.request_id,
+                         kind: WorkKind::Decode,
+@@ -2726,7 +2730,7 @@ fn validate_execution_shape_config(
+     }
+     if policy == ExecutionShapePolicy::VariablePrefillDecodeN {
+         for (valid,field,reason) in [
+-            (matches!(config.max_active_sequences,1|2|4|8),"max_active_sequences","V3 supports capacities 1, 2, 4 or 8"),
++            (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
+             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
+             ((1..=1024).contains(&config.max_prefill_chunk_tokens),"max_prefill_chunk_tokens","V3 chunks must fit 1024 tokens"),
+             (config.max_sequence_tokens<=4096,"max_sequence_tokens","V3 context limit is 4096"),
+diff --git a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+index 19dde49..620ed43 100644
+--- a/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
++++ b/crates/riley-scheduler/tests/v3_shared_owned_gpu.rs
+@@ -8,16 +8,22 @@ fn read32(f:&mut File)->std::io::Result<u32>{let mut b=[0;4];f.read_exact(&mut b
+ #[test]
+ #[ignore="requires pinned checkpoint and GPU; owned shared scheduler"]
+ fn loaded_shared_scheduler_matches_every_logit()->Result<(),Box<dyn std::error::Error>>{
++run_shared(4,3,64)
++}
++#[test]
++#[ignore="requires pinned checkpoint and GPU; 32 active owners over 8-row dispatch"]
++fn loaded_32_active_owners_match_every_logit()->Result<(),Box<dyn std::error::Error>>{run_shared(32,32,2048)}
++fn run_shared(active:usize,request_count:usize,physical:usize)->Result<(),Box<dyn std::error::Error>>{
+ let root=PathBuf::from(std::env::var_os("RILEY_V3_MODEL_FIXTURE").ok_or("fixture missing")?);let model=LoadedModel::load(PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?).as_path(),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
+ let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let mut requests=vec![];for _ in 0..count{let n=read32(&mut f)?;let mut tokens=vec![];for _ in 0..n{tokens.push(read32(&mut f)?);}requests.push(tokens);}
+ let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
+-let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,64)?,PreparedLlamaForwardConfig::default());
++let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,physical as usize)?,PreparedLlamaForwardConfig::default());
+ let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=executor.into_owned_variable_shared_session(&context,128)?;
+-let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:8,max_waiting_prompt_tokens:4096,max_active_sequences:4,max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:64,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,64,3,64)?,riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN)?;
+-let mut refs=std::collections::BTreeMap::new();for prompt in requests {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
+-let(mut iteration,mut widest,mut checked)=(0u64,0usize,0usize);
++let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:73,max_prefill_chunk_tokens:73,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN)?;
++let mut refs=std::collections::BTreeMap::new();for prompt in requests.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
++let(mut iteration,mut widest,mut checked)=(0u64,0usize,0usize);let mut peak_active=0;
+ loop {
+- iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};widest=widest.max(plan.decode_items().len());
++ iteration+=1;let Some(plan)=scheduler.plan_iteration(iteration*2)?.into_parts().0 else{break};peak_active=peak_active.max(scheduler.metrics_snapshot()?.gauges.active_sequences);widest=widest.max(plan.decode_items().len());assert!(plan.decode_items().len()<=8);
+  let slots:std::collections::BTreeMap<_,_>=plan.prefill_items().iter().chain(plan.decode_items()).filter_map(|w|w.output_slot().map(|slot|(slot.get(),w.request_id()))).collect();
+  let authority=scheduler.authorize_execution(&plan)?;let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session).unwrap();
+  assert!(session.issue_rows(1).is_err());assert!(session.confirm_scheduler_commit(plan.iteration_id().get()+1).is_err());
+@@ -28,7 +34,7 @@ loop {
+  }
+  drop(authority);let result=downloaded.into_result(&samples,IterationTiming::new(0,0)).unwrap();assert!(scheduler.complete_iteration(&result,iteration*2+1)?.settlement_failures().is_empty());session.confirm_scheduler_commit(plan.iteration_id().get()).unwrap();
+ }
+-assert!(widest>=3);for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
++assert_eq!(peak_active,active.min(request_count));assert!(widest>=request_count.min(8));for(_,(_,generated,limit))in refs{assert_eq!(generated,limit);}
+ scheduler.submit(RequestDescriptor::new(vec![17;128],4),iteration*2+1)?;
+ let plan=scheduler.plan_iteration(iteration*2+2)?.into_parts().0.unwrap();let authority=scheduler.authorize_execution(&plan)?;
+ let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,&mut session).unwrap();assert_eq!(downloaded.output_count(),0);drop(authority);drop(downloaded);assert!(session.issue_rows(2).is_err());
+diff --git a/crates/riley-server/src/engine.rs b/crates/riley-server/src/engine.rs
+index 46e8a30..568488c 100644
+--- a/crates/riley-server/src/engine.rs
++++ b/crates/riley-server/src/engine.rs
+@@ -2181,7 +2181,7 @@ mod cuda_backend {
+             model: LoadedModel,
+             config: CudaBackendConfig,
+         ) -> Result<Self, BackendError> {
+-            if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8)
++            if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8|16|32)
+                 || config.scheduler.iteration_token_budget>1024 || config.scheduler.max_prefill_chunk_tokens>1024
+                 || config.scheduler.max_sequence_tokens>4096 || config.executor.metadata().max_rows()!=1
+                 || config.executor.metadata().max_input_tokens()!=1 || config.gpu_greedy) {
+@@ -2541,8 +2541,8 @@ mod cuda_backend {
+             }
+             let use_variable=resources.executor.config().variable_graph();
+             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
+-                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8) || resources.gpu_greedy) {
+-                return Err(internal("V3 requires graph policy require, capacity1/2/4/8 and CPU sampling"));
++                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || resources.gpu_greedy) {
++                return Err(internal("V3 requires graph policy require, capacity1/2/4/8/16/32 and CPU sampling"));
+             }
+             let supported = use_variable || resources.executor.supports_owned_decode_graph();
+             if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {
+diff --git a/crates/riley-server/src/main.rs b/crates/riley-server/src/main.rs
+index 31c1055..2939677 100644
+--- a/crates/riley-server/src/main.rs
++++ b/crates/riley-server/src/main.rs
+@@ -920,10 +920,10 @@ fn run_serve(
+     if options.prefill_chunk_tokens > options.batch_token_budget {
+         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
+     }
+-    if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
++    if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
+         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
+         || options.sampling_backend!=SamplingBackendMode::Cpu) {
+-        return Err("variable-smol-v3 requires capacity1/2/4/8, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
++        return Err("variable-smol-v3 requires capacity1/2/4/8/16/32, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
+     }
+     if options.vllm_smol_p128_graph
+         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)

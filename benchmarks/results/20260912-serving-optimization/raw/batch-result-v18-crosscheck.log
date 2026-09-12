@@ -1,0 +1,13 @@
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/prefill-shapes-source-v11/crates/riley-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.95s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/prefill-shapes-target-v11/debug/deps/riley_runtime-c5c3438158af577d)
+
+running 5 tests
+test llama::multi_descriptor::variable_wire::tests::rejects_stale_replay_foreign_page_and_overlapping_reservations_without_writes ... ok
+test llama::multi_descriptor::variable_wire::tests::single_decode_completion_is_bound_to_its_generated_index ... ok
+test llama::multi_descriptor::variable_wire::tests::result_binds_replay_and_suppresses_partial_output ... ok
+test llama::multi_descriptor::variable_wire::tests::variable_shapes_and_partial_output_round_trip_with_every_byte_bound ... ok
+test llama::multi_descriptor::variable_wire::tests::batch_results_bind_all_rows_before_publication ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 287 filtered out; finished in 5.94s
+

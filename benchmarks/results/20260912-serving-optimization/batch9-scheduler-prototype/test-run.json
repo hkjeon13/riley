@@ -1,0 +1,46 @@
+{
+  "schema_version": "riley.batch9-scheduler-local-tests.v1",
+  "argv": [
+    "cargo",
+    "+1.85.0",
+    "test",
+    "-p",
+    "riley-scheduler",
+    "--no-default-features",
+    "--offline",
+    "--target-dir",
+    "/tmp/riley-batch9-local-scheduler-20260912/target-cpu",
+    "--lib",
+    "--test",
+    "simulation",
+    "--test",
+    "complete_prefill_policy"
+  ],
+  "cwd": "/tmp/riley-batch9-local-scheduler-20260912",
+  "returncode": 0,
+  "source_files": {
+    "crates/riley-scheduler/src/config.rs": "d223cf667c91c07cc6693f950610503c416096968d60a32c8d77eb8f50187f0d",
+    "crates/riley-scheduler/src/lib.rs": "8037b3b3080c65aec591ba5f9cccd3de63fb639e8c0c90540a350b4f8933a6c6",
+    "crates/riley-scheduler/src/scheduler.rs": "bbc2879b57e33a41de193e42db4a6627df28becada3a3f073938f0450226ec33",
+    "crates/riley-scheduler/tests/complete_prefill_policy.rs": "2035b929b2041ae45357df72981f9c4cfda7407ea82ba80a88c5f7ae043603b6"
+  },
+  "source_unchanged_during_tests": true,
+  "rustfmt_argv": [
+    "rustfmt",
+    "+1.85.0",
+    "--check",
+    "--edition",
+    "2024",
+    "--config",
+    "skip_children=true",
+    "crates/riley-scheduler/src/config.rs",
+    "crates/riley-scheduler/src/lib.rs",
+    "crates/riley-scheduler/src/scheduler.rs",
+    "crates/riley-scheduler/tests/complete_prefill_policy.rs"
+  ],
+  "rustfmt_returncode": 0,
+  "patch_applies_to_exact_before": true,
+  "gpu_executed": false,
+  "remote_executed": false,
+  "finished_at_utc": "2026-09-12T02:29:15.740538+00:00"
+}

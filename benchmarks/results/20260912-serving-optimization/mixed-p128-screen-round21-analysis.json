@@ -1,0 +1,207 @@
+{
+  "scope": "synthetic fixed P128, mixed O8/16/24/32; two repeats240 requests each; descriptive only",
+  "lanes": {
+    "1": {
+      "baseline": {
+        "output_tokens_per_second": 854.7305398924823,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 5.265841,
+          "p95": 5.450658499999999,
+          "p99": 5.536372999999999
+        },
+        "token_tpot_ms": {
+          "median": 0.9435972318172712,
+          "p95": 0.9520563870967742,
+          "p99": 0.9637406376344086
+        },
+        "e2e_ms": {
+          "median": 23.310361999999998,
+          "p95": 34.767013500000004,
+          "p99": 35.179873
+        }
+      },
+      "new": {
+        "output_tokens_per_second": 940.8068644241173,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 5.2479629999999995,
+          "p95": 5.4062695000000005,
+          "p99": 5.679515
+        },
+        "token_tpot_ms": {
+          "median": 0.8296422101449274,
+          "p95": 0.8478053870967741,
+          "p99": 0.8542179347826087
+        },
+        "e2e_ms": {
+          "median": 21.214442,
+          "p95": 31.455166,
+          "p99": 31.7631665
+        }
+      },
+      "vllm": {
+        "output_tokens_per_second": 803.5759636420571,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 7.337289500000001,
+          "p95": 9.300215,
+          "p99": 15.934969500000001
+        },
+        "token_tpot_ms": {
+          "median": 0.8869636552594671,
+          "p95": 0.978243338095238,
+          "p99": 1.0829876451612903
+        },
+        "e2e_ms": {
+          "median": 27.011936,
+          "p95": 36.1720875,
+          "p99": 40.141973
+        }
+      },
+      "candidate_vs_vllm_output_tokens_per_second_percent": 17.07752682896175,
+      "candidate_vs_vllm_token_ttft_ms_percent": -28.47545404880101,
+      "candidate_vs_vllm_token_tpot_ms_percent": -6.462659971988494
+    },
+    "4": {
+      "baseline": {
+        "output_tokens_per_second": 870.3110303301812,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 69.9557505,
+          "p95": 85.785681,
+          "p99": 86.3173925
+        },
+        "token_tpot_ms": {
+          "median": 0.9595242478962132,
+          "p95": 0.9685933666666666,
+          "p99": 0.9848464405797102
+        },
+        "e2e_ms": {
+          "median": 91.70519775,
+          "p95": 91.9206155,
+          "p99": 92.894502
+        }
+      },
+      "new": {
+        "output_tokens_per_second": 1560.2987763095357,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 6.31395425,
+          "p95": 11.451995,
+          "p99": 12.109081
+        },
+        "token_tpot_ms": {
+          "median": 2.2718675357142857,
+          "p95": 2.4333554347826087,
+          "p99": 2.4572718695652176
+        },
+        "e2e_ms": {
+          "median": 44.323693,
+          "p95": 84.4302705,
+          "p99": 85.4440245
+        }
+      },
+      "vllm": {
+        "output_tokens_per_second": 1642.9901975541736,
+        "strict_matches": 464,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 14.36057525,
+          "p95": 21.3617695,
+          "p99": 31.541613
+        },
+        "token_tpot_ms": {
+          "median": 1.7399093369565217,
+          "p95": 2.1679138688172044,
+          "p99": 2.7047552999999995
+        },
+        "e2e_ms": {
+          "median": 49.87101,
+          "p95": 75.75873200000001,
+          "p99": 87.338848
+        }
+      },
+      "candidate_vs_vllm_output_tokens_per_second_percent": -5.032983237984978,
+      "candidate_vs_vllm_token_ttft_ms_percent": -56.032720555536244,
+      "candidate_vs_vllm_token_tpot_ms_percent": 30.57390333270318
+    },
+    "8": {
+      "baseline": {
+        "output_tokens_per_second": 869.5175332551765,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 161.95984075,
+          "p95": 176.874822,
+          "p99": 178.315596
+        },
+        "token_tpot_ms": {
+          "median": 0.9633318637681159,
+          "p95": 1.001289357142857,
+          "p99": 1.0265609285714286
+        },
+        "e2e_ms": {
+          "median": 183.71271775,
+          "p95": 184.9842715,
+          "p99": 186.3148595
+        }
+      },
+      "new": {
+        "output_tokens_per_second": 1606.8008440119422,
+        "strict_matches": 480,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 53.3316855,
+          "p95": 59.307323499999995,
+          "p99": 63.963944
+        },
+        "token_tpot_ms": {
+          "median": 2.3377260967741935,
+          "p95": 2.4700739304347827,
+          "p99": 2.5908368751753157
+        },
+        "e2e_ms": {
+          "median": 92.564252,
+          "p95": 130.680395,
+          "p99": 132.285614
+        }
+      },
+      "vllm": {
+        "output_tokens_per_second": 2375.5692384898557,
+        "strict_matches": 458,
+        "responses": 480,
+        "token_ttft_ms": {
+          "median": 19.046234249999998,
+          "p95": 29.057959,
+          "p99": 43.575349
+        },
+        "token_tpot_ms": {
+          "median": 2.419900764516129,
+          "p95": 2.9748858387096773,
+          "p99": 3.660302676811594
+        },
+        "e2e_ms": {
+          "median": 67.13383425,
+          "p95": 104.224681,
+          "p99": 122.1254485
+        }
+      },
+      "candidate_vs_vllm_output_tokens_per_second_percent": -32.36143918779728,
+      "candidate_vs_vllm_token_ttft_ms_percent": 180.01170625106644,
+      "candidate_vs_vllm_token_tpot_ms_percent": -3.3957866763336675
+    }
+  },
+  "performance_qualified": false,
+  "engine_capacity": {
+    "baseline": 1,
+    "candidate": "1 at C1,4 at C4/C8",
+    "vllm": "equal to offered concurrency1/4/8"
+  },
+  "numerical_observation_warning": "vLLM C4/C8 differ from references; ratios are diagnostic observations, not accepted matched-correctness performance."
+}

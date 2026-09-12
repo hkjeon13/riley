@@ -1,0 +1,137 @@
+{
+  "label": "c4-vllm-budget128",
+  "argv": [
+    "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+    "serve",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--tokenizer",
+    "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "--served-model-name",
+    "g04-smol",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "19342",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "160",
+    "--max-num-seqs",
+    "4",
+    "--max-num-batched-tokens",
+    "128",
+    "--gpu-memory-utilization",
+    "0.3",
+    "--no-enable-prefix-caching",
+    "--seed",
+    "0"
+  ],
+  "environment": {
+    "HOME": "/home/psyche",
+    "PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "LC_CTYPE": "C.UTF-8",
+    "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "DO_NOT_TRACK": "1",
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu"
+  },
+  "cwd": "/tmp/riley-opt-260912/batch7-source",
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "fresh_process": true,
+  "active_capacity": 4,
+  "token_budget": 128,
+  "offered_concurrency": 4,
+  "gpu_before": {
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "driver_version": "580.173.02",
+    "temperature_c": 41,
+    "memory_used_mib": 695,
+    "compute_pids": [
+      "4177823",
+      "4177821",
+      "4177822"
+    ],
+    "diagnostic_only": true,
+    "blender_retained": true
+  },
+  "blender_before": [
+    {
+      "pid": 4177821,
+      "start": "80934230",
+      "port": 9876,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "/home/psyche/lotte-tower/output/lotte_world_tower.blend",
+        "--window-geometry",
+        "0",
+        "0",
+        "1620",
+        "810",
+        "--python",
+        "/home/psyche/lotte-tower/output/scripts/start_blender_mcp.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177822,
+      "start": "80934233",
+      "port": 9911,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "/home/psyche/lotte-tower-comparison/claude_fable51_20260908_1410/output/lotte_world_tower.blend",
+        "--window-geometry",
+        "2000",
+        "1100",
+        "1620",
+        "810",
+        "--python",
+        "/home/psyche/lotte-tower-comparison/claude_fable51_20260908_1410/output/scripts/start_blender_mcp_gui.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    },
+    {
+      "pid": 4177823,
+      "start": "80934238",
+      "port": 9887,
+      "argv": [
+        "/home/psyche/lotte-tower/runtime/blender-4.5.13-linux-x64/blender",
+        "--window-geometry",
+        "2100",
+        "1274",
+        "1620",
+        "810",
+        "/home/psyche/lotte-tower-comparison/codex_gpt5_20260908_132327/output/lotte_world_tower.blend",
+        "--python",
+        "/home/psyche/lotte-tower-comparison/codex_gpt5_20260908_132327/output/scripts/start_isolated_blender_mcp.py"
+      ],
+      "cwd": "/home/psyche",
+      "gui_env": {
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority"
+      }
+    }
+  ],
+  "diagnostic_only": true,
+  "performance_claim": false
+}

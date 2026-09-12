@@ -1,0 +1,65 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/cuda-12.8.1 nvcc=/data/cuda-12.8.1/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/cuda-12.8.1/lib64/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/cuda-12.8.1/lib64/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/cuda-12.8.1/targets/x86_64-linux/lib/stubs/libcuda.so
+   Compiling riley-cuda v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-cuda)
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1541:8
+     |
+1541 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+   Compiling riley-tensor v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-model)
+warning: `riley-cuda` (lib) generated 1 warning
+   Compiling riley-runtime v0.1.0 (/tmp/riley-g01-native-260910/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+
+running 2 tests
+test llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_canonical_all_layers_and_continuation ... warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.71s
+     Running unittests src/lib.rs (/tmp/riley-g01-native-260910-target/debug/deps/riley_runtime-37b6549c31f0f56a)
+G02B plan canonical=true name=hidden m=1 n=64 k=64 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=true name=hidden metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 70, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 64, k: 64 }
+G02B plan canonical=true name=key_value m=1 n=64 k=64 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=true name=key_value metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 70, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 64, k: 64 }
+G02B plan canonical=true name=intermediate m=1 n=128 k=64 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=true name=intermediate metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 70, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 128, k: 64 }
+G02B plan canonical=true name=down m=1 n=64 k=128 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=true name=down metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 70, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 64, k: 128 }
+G02B plan canonical=true name=lm_head m=1 n=49152 k=64 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=true name=lm_head metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 21, tile_id: 5, stages_id: 13, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 0, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131586, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 49152, k: 64 }
+FAILED
+test llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_hf_all_layers_and_continuation ... Error: Cuda { site: ExecutionSite { layer: None, op: OutputGather }, source: CudaError { kind: InvalidState, domain: Validation, stage: Validation, native_code: 0, operation: "launch CUDA Graph exec", message: "launch CUDA Graph exec: graph exec has invalid fixed-operation replay state" } }
+G02B plan canonical=false name=hidden m=1 n=576 k=576 policy=allow-in-place-and-output-type-split-k-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=false name=hidden metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 74, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 576, k: 576 }
+G02B plan canonical=false name=key_value m=1 n=192 k=576 policy=allow-in-place-and-output-type-split-k-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=false name=key_value metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 74, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 192, k: 576 }
+G02B plan canonical=false name=intermediate m=1 n=1536 k=576 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=false name=intermediate metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 74, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 1536, k: 576 }
+G02B plan canonical=false name=down m=1 n=576 k=1536 policy=allow-in-place-and-output-type-split-k-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=false name=down metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 75, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 576, k: 1536 }
+G02B plan canonical=false name=lm_head m=1 n=49152 k=576 policy=strict-no-split-v1 workspace=0 shared_workspace=None
+G02B algorithm canonical=false name=lm_head metadata=CudaGemmAlgorithmMetadata { backend_id: 1, algorithm_id: 13, tile_id: 0, stages_id: 0, split_k: 1, reduction_scheme: 0, cta_swizzling: 0, custom_option: 89, deterministic: true, workspace_bytes: 0, numerical_implementation_flags: 131585, compute_capability_major: 8, compute_capability_minor: 9, runtime_version: 12080, cublaslt_version: 120804, m: 1, n: 49152, k: 576 }
+FAILED
+
+failures:
+
+failures:
+    llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_canonical_all_layers_and_continuation
+    llama::batch_executor::final_norm_model_gpu_tests::c07_layer_norm_model_hf_all_layers_and_continuation
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 285 filtered out; finished in 25.02s
+
+Error: Cuda { site: ExecutionSite { layer: None, op: OutputGather }, source: CudaError { kind: InvalidState, domain: Validation, stage: Validation, native_code: 0, operation: "launch CUDA Graph exec", message: "launch CUDA Graph exec: graph exec has invalid fixed-operation replay state" } }
+error: test failed, to rerun pass `-p riley-runtime --lib`

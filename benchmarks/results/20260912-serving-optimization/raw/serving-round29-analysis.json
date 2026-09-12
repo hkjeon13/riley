@@ -1,0 +1,150 @@
+{
+  "scope": "single-active C1 serving screen, two reversed orders, not model-quality or high-concurrency/stability qualification",
+  "medians": {
+    "fixed": {
+      "new": {
+        "throughput": 391.33024373309127,
+        "ttft_ms": 5.539219,
+        "tpot_ms": 2.3813076532258064,
+        "e2e_p95_ms": 79.998587,
+        "e2e_p99_ms": 80.62490600000001
+      },
+      "previous": {
+        "throughput": 184.18668278115547,
+        "ttft_ms": 5.584713,
+        "tpot_ms": 5.387458743478261,
+        "e2e_p95_ms": 174.761705,
+        "e2e_p99_ms": 175.2682255
+      },
+      "vllm": {
+        "throughput": 804.2525709311295,
+        "ttft_ms": 7.41973175,
+        "tpot_ms": 0.8871085717625058,
+        "e2e_p95_ms": 36.3716965,
+        "e2e_p99_ms": 37.881997
+      }
+    },
+    "natural": {
+      "new": {
+        "throughput": 358.9208335764554,
+        "ttft_ms": 5.618388250000001,
+        "tpot_ms": 2.417247869047619,
+        "e2e_p95_ms": 392.478782,
+        "e2e_p99_ms": 393.5768315
+      },
+      "previous": {
+        "throughput": 131.7790358523547,
+        "ttft_ms": 5.581892,
+        "tpot_ms": 5.626712321428571,
+        "e2e_p95_ms": 1208.741569,
+        "e2e_p99_ms": 1210.7143569999998
+      },
+      "vllm": {
+        "throughput": 850.2008580845456,
+        "ttft_ms": 7.9383855,
+        "tpot_ms": 1.012172515873016,
+        "e2e_p95_ms": 153.7886665,
+        "e2e_p99_ms": 156.6095505
+      }
+    }
+  },
+  "new_relative_change_percent": {
+    "fixed": {
+      "previous": {
+        "throughput": 112.46391857659815,
+        "ttft_ms": -0.8146166150346468,
+        "tpot_ms": -55.799055424628975,
+        "e2e_p95_ms": -54.224189446995844,
+        "e2e_p99_ms": -53.99913146265065
+      },
+      "vllm": {
+        "throughput": -51.342369564324095,
+        "ttft_ms": -25.344753871998137,
+        "tpot_ms": 168.43474733815594,
+        "e2e_p95_ms": 119.94736209238961,
+        "e2e_p99_ms": 112.83172056636826
+      }
+    },
+    "natural": {
+      "previous": {
+        "throughput": 172.36565456328768,
+        "ttft_ms": 0.6538329655966235,
+        "tpot_ms": -57.03978218609368,
+        "e2e_p95_ms": -67.52996735896984,
+        "e2e_p99_ms": -67.49218102317423
+      },
+      "vllm": {
+        "throughput": -57.78399537433029,
+        "ttft_ms": -29.225051491893396,
+        "tpot_ms": 138.817773762875,
+        "e2e_p95_ms": 155.20657076508303,
+        "e2e_p99_ms": 151.3108748754119
+      }
+    }
+  },
+  "requests": 1440,
+  "reference_observations": [
+    {
+      "case": "fixed-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p0-vllm",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "fixed-p1-vllm",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p0-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p0-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p0-vllm",
+      "reference_matches": 80,
+      "requests": 120
+    },
+    {
+      "case": "natural-p1-new",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p1-previous",
+      "reference_matches": 120,
+      "requests": 120
+    },
+    {
+      "case": "natural-p1-vllm",
+      "reference_matches": 80,
+      "requests": 120
+    }
+  ],
+  "goal_achieved": false,
+  "decision": "Assess dedicated decode batch against previous V3 and vLLM; high concurrency remains unqualified"
+}

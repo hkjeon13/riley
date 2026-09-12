@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::artifact::{ArtifactBytes, VerifiedArtifactSession};
 use crate::safetensors::{ParsedShard, ParsedTensor};
 use crate::shard_index::ShardIndex;
-use crate::{LoadLimits, ModelError, ModelResult, PROVENANCE_FILENAME};
+use crate::{LoadLimits, ModelError, ModelResult};
 
 pub(crate) const SINGLE_SHARD_FILENAME: &str = "model.safetensors";
 pub(crate) const SHARD_INDEX_FILENAME: &str = "model.safetensors.index.json";
@@ -25,11 +25,11 @@ impl PhysicalCheckpoint {
         let index_declared = files.contains_key(Path::new(SHARD_INDEX_FILENAME));
         match (single_declared, index_declared) {
             (true, true) => Err(ModelError::InvalidArtifact {
-                artifact: PROVENANCE_FILENAME.to_owned(),
+                artifact: session.provenance().manifest_filename().to_owned(),
                 reason: "both single-file and sharded checkpoint layouts are declared".to_owned(),
             }),
             (false, false) => Err(ModelError::InvalidArtifact {
-                artifact: PROVENANCE_FILENAME.to_owned(),
+                artifact: session.provenance().manifest_filename().to_owned(),
                 reason: "neither model.safetensors nor model.safetensors.index.json is declared"
                     .to_owned(),
             }),

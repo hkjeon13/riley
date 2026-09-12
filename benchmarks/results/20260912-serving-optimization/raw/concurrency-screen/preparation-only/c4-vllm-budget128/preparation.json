@@ -1,0 +1,49 @@
+{
+  "schema_version": "riley.serving-concurrency-result.v1",
+  "measurement_started": false,
+  "workload": {
+    "id": "queued-c1-c4-vllm-budget128-screen-v1",
+    "offered_concurrency": 4,
+    "arrival_policy": "closed-loop-refill",
+    "retained_requests_per_process": 256,
+    "warmups_per_worker_per_transport": 5,
+    "pairs": 1,
+    "purpose": "screening"
+  },
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "condition": {
+    "condition_id": "serving-gui-retained-512mib-cool48-v1",
+    "gui_retained": true,
+    "idle_memory_limit_mib": 512,
+    "start_temperature_limit_c": 48,
+    "canonical_idle_memory_limit_mib": 256,
+    "canonical_qualification": false,
+    "scope": "closed-loop offered HTTP concurrency; Riley active capacity one",
+    "host_environment_id": "rtx4090-ubuntu22-driver580-20260911-v2"
+  },
+  "inputs": {
+    "/tmp/riley-opt-260912/concurrency-screen-plans/c4-vllm-budget128.json": "225b6d6e22d44b0462811f55ea582547269e4d0eabc86a35e39fde62dd1a7869",
+    "/tmp/riley-g04-vllm-profile-260911/request.json": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5",
+    "/tmp/riley-opt-260912/batch7-binding.json": "9a623763436d7eb16b693c41a4d7cbc5625f4821d510edbf9a09ce882dbd2277"
+  },
+  "runner": {
+    "path": "/tmp/riley-opt-260912/run_serving_concurrency.py",
+    "sha256": "73f8fb3fa09d623dbeb36616ebe0ee7d45e291ca3da6e515e3b56ddf45f27a6f"
+  },
+  "shared_runner": {
+    "path": "/tmp/riley-opt-260912/run_serving_optimization.py",
+    "sha256": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8"
+  },
+  "parent_c1_plan": {
+    "path": "/tmp/riley-opt-260912/batch7-http-plan.json",
+    "sha256": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6"
+  },
+  "parent_qualification_use": "c1 source/token reference only; no concurrency evidence",
+  "reference_input_token_ids_sha256": "9c517926bf0e7df0c944a4a02da912a0541c060b7a9995ca863bedb3fe9ba372",
+  "reference_generated_token_ids_sha256": "be8cb5992ba0d835b7c1a518448cab1aa858934bbc99726270ce29f3e02c78f9",
+  "http_generated_token_ids_verified": false,
+  "high_concurrency_stability_claim": false,
+  "tail_estimator": "nearest rank per process; screening or tail-study counts do not alone establish stability",
+  "load_boundary": "closed-loop clients; no open-loop arrival-rate or overload claim",
+  "created_at_utc": "2026-09-11T18:41:17.324805+00:00"
+}

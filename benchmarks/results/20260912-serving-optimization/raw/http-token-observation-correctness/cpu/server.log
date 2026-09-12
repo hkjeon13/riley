@@ -1,0 +1,33 @@
+riley: vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts
+
+usage:
+  riley --version
+  riley serve --model PATH [options]
+
+serve options:
+  --model-id ID                  public model ID (default: checkpoint source model)
+  --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
+  --device ORDINAL               CUDA device ordinal (default: 0)
+  --max-active-sequences N       active scheduler capacity (default: 8)
+  --max-waiting-requests N       waiting scheduler capacity (default: 64)
+  --max-sequence-tokens N        context bound (default: checkpoint maximum)
+  --max-output-tokens N          API output bound (default: min(1024, context-1))
+  --batch-token-budget N         tokens per CUDA iteration (default: 512)
+  --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
+  --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
+  --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
+  --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
+  --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
+  --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+  --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+  --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
+  --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+  --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
+  --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+  --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+  --c02-candidate-id ID          release candidate identity for C02 evidence mode
+  --c02-configuration-profile ID stable-default or max-performance-exact
+  --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
+  --c02-audit-dir PATH           absolute C02 generation-audit output directory
+  --c02-shutdown-artifact PATH   direct-child C02 shutdown-v2 JSON artifact in audit dir
+  --shutdown-on-stdin            gracefully stop after one input line or EOF

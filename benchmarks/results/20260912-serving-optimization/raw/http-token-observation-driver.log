@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/http_token_observation_check.py", line 793, in <module>
+    main()
+    ~~~~^^
+  File "/tmp/riley-opt-260912/http_token_observation_check.py", line 744, in main
+    require(stop_text == '', 'stop case must exercise blank committed text')
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/http_token_observation_check.py", line 43, in require
+    raise ValueError(message)
+ValueError: stop case must exercise blank committed text

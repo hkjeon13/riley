@@ -1,0 +1,62 @@
+   Compiling riley-tensor v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-tensor)
+   Compiling riley-model v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-model)
+   Compiling riley-runtime v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-runtime)
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-scheduler)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.66s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/multisequence-integration-target-v1/release/deps/riley_scheduler-88ba5eedd4e631b8)
+
+running 31 tests
+test config::tests::chunk_must_fit_iteration_budget ... ok
+test config::tests::default_configuration_is_valid ... ok
+test config::tests::timeout_requires_wait_policy ... ok
+test execution::tests::commit_failure_retains_download_and_safe_abort_data ... ok
+test execution::tests::downloaded_greedy_allocation_returns_to_empty_execution_placeholder ... ok
+test execution::tests::downloaded_greedy_tokens_map_dense_slots_without_logits ... ok
+test execution::tests::downloaded_rows_map_dense_slots_to_commit_results_without_reallocation ... ok
+test execution::tests::executor_bounds_are_rechecked_without_device_work ... ok
+test execution::tests::greedy_workspace_restore_failure_preserves_both_allocations ... ok
+test execution::tests::physical_blocks_must_be_exclusive_across_rows ... ok
+test execution::tests::plan_boundary_rejects_nondense_slots_and_decode_without_output ... ok
+test execution::tests::plan_is_adapted_in_prefill_then_decode_order_without_copying_payloads ... ok
+test execution::tests::post_validation_test_fault_retains_unpublished_download_and_is_one_shot ... ok
+test execution::tests::reusable_greedy_workspace_is_bounded_and_never_reallocated ... ok
+test metrics::tests::iteration_metrics_are_recorded_together ... ok
+test metrics::tests::rolling_p95_uses_nearest_rank_and_stays_bounded ... ok
+test plan::tests::iteration_accepts_permuted_exactly_once_block_table_references ... ok
+test plan::tests::iteration_rejects_duplicate_block_table_references ... ok
+test plan::tests::iteration_rejects_physical_block_aliases_across_requests ... ok
+test plan::tests::iteration_requires_a_sampled_output_for_decode_work ... ok
+test plan::tests::iteration_requires_dense_zero_based_output_slots ... ok
+test plan::tests::iteration_requires_one_block_table_per_work_item ... ok
+test plan::tests::mixed_stage_output_slots_are_canonicalized_for_sampling ... ok
+test plan::tests::owned_v1_table_requires_canonical_full_and_tail_counts ... ok
+test plan::tests::result_rejects_duplicate_output_slots ... ok
+test plan::tests::zero_is_reserved_for_scheduler_ids ... ok
+test scheduler::tests::consuming_close_returns_a_typed_post_cleanup_metrics_snapshot ... ok
+test scheduler::tests::contained_publication_failure_is_not_a_completed_metric_sample ... ok
+test scheduler::tests::failed_tick_preserves_timeout_completion_until_exactly_once_recovery ... ok
+test scheduler::tests::post_validation_commit_fault_after_one_commit_is_contained ... ok
+test scheduler::tests::successful_commit_returns_its_exact_raw_metric_sample ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/complete_prefill_policy.rs (/tmp/riley-opt-260912/multisequence-integration-target-v1/release/deps/complete_prefill_policy-2032504c0b6c0668)
+
+running 14 tests
+test aged_prefill_pressure_alternates_whole_prompts_and_immediate_decode_buckets ... ok
+test cancellation_of_one_inflight_decoder_keeps_other_rows_and_reuses_capacity ... ok
+test default_constructor_retains_mixed_127_token_prefill_behavior ... ok
+test execution_authority_checks_actual_tables_and_off_batch_owners ... ok
+test execution_authority_rejects_forged_tokens_and_stale_plan ... ok
+test invalid_requests_never_take_promises_ids_or_waiting_capacity ... ok
+test continuous_short_prefills_cannot_starve_an_aged_ready_decoder ... ok
+test policy_rejects_incompatible_configuration_before_pool_construction ... ok
+test output_limit32_never_plans_low_level_position159_or_output33 ... ok
+test possibly_dispatched_prefill_failure_does_not_delay_a_healthy_decoder_again ... ok
+test quiesced_failed_dispatch_poisons_only_its_rows_then_allows_survivors ... ok
+test rejected_output_vocabulary_cannot_enter_the_next_decode ... ok
+test undispatched_retry_and_rejected_results_do_not_advance_class_progress ... ok
+test waiting_short_request_still_reserves_ten_blocks_after_admission ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

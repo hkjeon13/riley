@@ -1,0 +1,69 @@
+{
+  "completed": true,
+  "diagnostic_runtime_only": true,
+  "host_packages_modified": false,
+  "host_restart_performed": false,
+  "snapshot": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/",
+  "kernel_version": "NVRM version: NVIDIA UNIX x86_64 Kernel Module  580.173.02  Tue Jun 23 08:38:17 UTC 2026\nGCC version:  gcc version 12.3.0 (Ubuntu 12.3.0-1ubuntu1~22.04.3) \n",
+  "archive_signature_verified": true,
+  "release_sha256": "71d1dffc988712cc667ad95a90e1cc8b74b64f00340b70d2fce51695dcef9168",
+  "index_sha256": "77b087b1d8fa1feb512e97e944c9c807bcaf6d84c79f976ee9dda3153eb237bc",
+  "packages": [
+    {
+      "package": "libnvidia-compute-580",
+      "version": "580.173.02-0ubuntu0.22.04.1",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/pool/restricted/n/nvidia-graphics-drivers-580/libnvidia-compute-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/libnvidia-compute-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "sha256": "01327514a8fde543dc092b79016f92a51dc7d72aa59db193c2405bde7d371503",
+      "size": 60012044
+    },
+    {
+      "package": "nvidia-utils-580",
+      "version": "580.173.02-0ubuntu0.22.04.1",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260901T000000Z/pool/restricted/n/nvidia-graphics-drivers-580/nvidia-utils-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/nvidia-utils-580_580.173.02-0ubuntu0.22.04.1_amd64.deb",
+      "sha256": "18410c6d9970350c0331f23318cc4ac4cf83a11a9dda8f1a4cc9c66fb53c4764",
+      "size": 610230
+    }
+  ],
+  "library_path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+  "nvidia_smi_path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin/nvidia-smi",
+  "gpu_query": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.173.02, NVIDIA GeForce RTX 4090, 695",
+  "files": {
+    "etc/OpenCL/vendors/nvidia.icd": "4ad07f8afc189894374aecb91023e6ff16bbceedf82496c04c0fdb0e2fe81e73",
+    "usr/bin/nvidia-bug-report.sh": "7a0ce47c62c0145ca4378e21cf87028d672fe69d330b3a5ff9d9437aeb14da90",
+    "usr/bin/nvidia-debugdump": "90229837a786ad63c3b0edb32bbc7e9d6bab1f763ec8aa0b26c4eaac2bb6a791",
+    "usr/bin/nvidia-smi": "22964713c1701fb62b4dd10b26b0dd25d174e100af5bda20c65e0b0fcc32b3be",
+    "usr/bin/nvidia-xconfig": "8cc2580de33095e4831f6c7ef4aead931041cfb6d75169d820b31ab5f70ef5d3",
+    "usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4",
+    "usr/lib/x86_64-linux-gnu/libcudadebugger.so.580.173.02": "0e89f0ac8c1f8ee9b1e078fae8ac77b6572f3e847c4ed8626286335ca4cf4052",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ml.so.580.173.02": "82d7b58d3f870b0635e8999c56eb8fd2d795c920daa2661e628ca523eee5f557",
+    "usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so.580.173.02": "e1af0a510cbdc3f267694e7e8efa23b836656be2657d6938cfc74389d513ec19",
+    "usr/lib/x86_64-linux-gnu/libnvidia-nvvm70.so.4": "64e62bd2f763c575418bb7d660e8715c57d49ef66640a2385896324238896acd",
+    "usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.580.173.02": "5ac86eb642b1220daeaca904a70477cac6b9c70ad7d3ac75572e4257f0144a41",
+    "usr/lib/x86_64-linux-gnu/libnvidia-pkcs11-openssl3.so.580.173.02": "8d18d95a6c1862bbe2ae54d8faf894eb3c0d256ab0bddc2bd6a41640bfeedacf",
+    "usr/lib/x86_64-linux-gnu/libnvidia-pkcs11.so.580.173.02": "ab8bff5e9afc6445d87cb8a65d113a50b1bda1379541c046ca543b69ef58ad74",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.580.173.02": "338d27084175dd855fc07fdf79b0692ddd61d57b994a2a133fc83139e4833b41",
+    "usr/share/doc/libnvidia-compute-580/changelog.Debian.gz": "160c83ce45411972e3733267b0a72029e64eb9aac3ba970b53b7700b59d87a16",
+    "usr/share/doc/libnvidia-compute-580/copyright": "d088d505751b1a2246744d16bdb5846d0df1a804700ab8d09330b6e79165edef",
+    "usr/share/doc/nvidia-utils-580/changelog.Debian.gz": "160c83ce45411972e3733267b0a72029e64eb9aac3ba970b53b7700b59d87a16",
+    "usr/share/doc/nvidia-utils-580/copyright": "d088d505751b1a2246744d16bdb5846d0df1a804700ab8d09330b6e79165edef",
+    "usr/share/doc/nvidia-utils-580/nvidia-debugdump.html": "209ad7a00352ff7b97114a9d57ffea128e6f5671e357a1831022312dd9af766b",
+    "usr/share/doc/nvidia-utils-580/nvidia-smi.html": "872125eb1b3ab10c8454c3098c945e13def5a13bc8b397295f4d3257bef593b7",
+    "usr/share/man/man1/nvidia-smi.1.gz": "e5f5f513f1eadb502934bc98dff8443e9786e097f0f0c30c5787e1cf2e8425d5",
+    "usr/share/man/man1/nvidia-xconfig.1.gz": "fcebf68859eaa5759c7914c3df765dac82e79703bf1f44c1ffb200ca29b2c2e0"
+  },
+  "symlinks": {
+    "usr/lib/x86_64-linux-gnu/libcuda.so": "libcuda.so.1",
+    "usr/lib/x86_64-linux-gnu/libcuda.so.1": "libcuda.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libcudadebugger.so.1": "libcudadebugger.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ml.so": "libnvidia-ml.so.1",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1": "libnvidia-ml.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so": "libnvidia-nvvm.so.4",
+    "usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so.4": "libnvidia-nvvm.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-nvvm70.so": "libnvidia-nvvm70.so.4",
+    "usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.1": "libnvidia-opencl.so.580.173.02",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so": "libnvidia-ptxjitcompiler.so.1",
+    "usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.1": "libnvidia-ptxjitcompiler.so.580.173.02"
+  }
+}

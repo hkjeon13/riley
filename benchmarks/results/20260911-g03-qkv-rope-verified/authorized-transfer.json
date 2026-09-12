@@ -1,0 +1,54 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "fc41375e61ebbdce2937c87f0685160c842a1c674bb999189a0a3f70aa9242db",
+      "current_sha256": "0adbf247a76d6e4d4b8ba5899b0b064a771fd8e9790d078fb16ab3618f0bee94"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "7a0b4cabc68aaf79494015c06461059c99180f9da60ebb272602953cf719c7d1",
+      "current_sha256": "1cf31091e030b02d1bcbfcccedc05792e0310b51c1b27a5beb6094cacef685df"
+    },
+    {
+      "path": "kernels/src/batch_primitives.cu",
+      "previous_sha256": "25c25446a07e29a6d605803968e73453ec7ace43fc6ad244ada2c9dfb743dc84",
+      "current_sha256": "5e9fbb11b254f3e2fcce5b398e4094e06c9f00db00c56c49db68900b181b5845"
+    },
+    {
+      "path": "kernels/src/ffi_internal.hpp",
+      "previous_sha256": "828548b6798a63538485ad87ba16b38d70a91aeafe051de9736dc8bb34f1ff46",
+      "current_sha256": "5836704445f487bcf0498afab60957c3c16f28f3f33541df2d3842a8740b9bfe"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "4efea0da835de1fa7c29923a22b814b40aff397f2345998e29a2e587b706cdb1",
+      "current_sha256": "d6cb6c86625d819cfc8c0bc1bdc55e5887aa53d0219840e87e5ade987ae9d783"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "6aa9a3c718b28989a611a4eb39fbe2a2befcae85063d5dc5ff3cecb293c2c88f",
+      "current_sha256": "8ca26156822841ca32d8e717fa1a20c0ed62dc308d4d241fe94087c5fcf06165"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "8811201f34beef1603e5da327da77708a8a1730000e741922afed5cce53d5a8e",
+      "current_sha256": "8a09a90a7aec5878a2670eff9e93cddbbbe9c42eff32d0020437e2ccf4da1207"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_qkv_audit.rs",
+      "previous_sha256": "4c30494ad23d09a130d3d5b0e792d15a3c655ac4648115dae39cd7b2cfc087ac",
+      "current_sha256": "0de5d9febbf9590940952f06e00b950cc8bd443496e664d2ce1e8926a852d771"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "bddbc06f17050c41d127673d2617f9ffaf9deecd32093403f57934c90c5977ad",
+      "current_sha256": "e473a3d8974a11d463f39ec5ffcaa3dffcd98f20e36cb3e066048c719fa1f798"
+    }
+  ],
+  "status": "authorized_transferred_and_gpu_verified",
+  "remote_write_performed": true,
+  "approval": "User agreed in direct reply to the nine-source transfer, CUDA tests and scoped fixes/retransfer request.",
+  "additional_source_edits": false
+}

@@ -1,0 +1,43 @@
+{
+  "destination": "ai-assistant:/tmp/riley-g01-native-260910",
+  "files": [
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "previous_sha256": "f7bd560e5f21a757e3eb7f8e84457512a5c4ac326f6598ea8d834e9cbe98cee0",
+      "current_sha256": "7b6e957549c2c6b6b699228e503653fd8fe85f9481d65c0123022d54baf14de8"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "previous_sha256": "ee8880457b34b23f28db7226e50377b0e545b2826d5230902de9065b0ee4243b",
+      "current_sha256": "197697b5adf91a8e379c32cab164987836049effc90da6c0e18f6d1a7c560b05"
+    },
+    {
+      "path": "kernels/tests/abi_layout.c",
+      "previous_sha256": "21fbba5763be2422f28fa088898ba6dcf1f05f0345b55db12e615059f67eb1b1",
+      "current_sha256": "5d8c05c1be05d1e02ea1b4f67f7c9374f6d39a5a0815999588ab9cf29c127751"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "previous_sha256": "970bbceb7f51d860efd95c9e23ab154b5b3222b9a0847a5652ee181c9fb6ab70",
+      "current_sha256": "6b3326c6102e9bc49aba765ddf493cfd28a61af99ddc273ca74995b3f7ea499a"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "previous_sha256": "b6241ac4acade8be105b37b954c02674b984580e1a873a420a29618a0121548a",
+      "current_sha256": "3e081b881e538467332a36ddf001130decb1150ab2d668fa1b3c5279abe260fa"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_mlp_audit.rs",
+      "previous_sha256": "8e4c27e7c7912ecda4e57524d16f3e9a8bdcf02880d3d81bf766915021a6fb11",
+      "current_sha256": "4a02473e61ab7032fb28843867d09dbd3618c17701688c6dd3686f50d0adfad6"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_final_norm_model_gpu.rs",
+      "previous_sha256": "3d73d41b8ab31801fbffadac05a1a2e52e60515df75e9bc7e4b6551607409f5e",
+      "current_sha256": "0f0f4d7937a2f1581c11ef6bc7678bc2fce5e61831ac96a3e75b997ac8403fb1"
+    }
+  ],
+  "status": "blocked_pending_explicit_payload_approval",
+  "remote_write_performed": false,
+  "reason": "Automatic approval review rejected new layer-tail seven-source payload transfer; prior nine-file approval and broad continuation request were not accepted as explicit approval for this payload and destination."
+}

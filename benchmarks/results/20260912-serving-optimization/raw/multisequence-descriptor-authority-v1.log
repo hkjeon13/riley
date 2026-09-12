@@ -1,0 +1,62 @@
+   Compiling riley-scheduler v0.1.0 (/tmp/riley-opt-260912/multisequence-integration-source-v1/crates/riley-scheduler)
+    Finished `release` profile [optimized + debuginfo] target(s) in 4.05s
+     Running unittests src/lib.rs (/tmp/riley-opt-260912/multisequence-integration-target-v1/release/deps/riley_scheduler-88ba5eedd4e631b8)
+
+running 54 tests
+test config::tests::chunk_must_fit_iteration_budget ... ok
+test authority::tests::live_scheduler_authority_encodes_exact_request_and_rejects_foreign_geometry ... ok
+test config::tests::default_configuration_is_valid ... ok
+test config::tests::timeout_requires_wait_policy ... ok
+test descriptor::tests::checked_overflow_and_no_catalog_fallback ... ok
+test descriptor::tests::canonical_target_table_and_generation_bounds ... ok
+test descriptor::tests::duplicate_physical_tags_cookies_slots_and_sparse_output_rejected ... ok
+test descriptor::tests::any_repeated_result_attempt_invalidates_ready_output ... ok
+test descriptor::tests::explicit_ownership_blocks_forged_off_batch_reassignment ... ok
+test descriptor::tests::greedy_tokens_scatter_independently_from_execution_rows ... ok
+test descriptor::tests::caller_changes_cannot_rewrite_admitted_snapshot ... ok
+test descriptor::tests::prefill_then_decode_requires_new_binding_and_respects_o1_terminal ... ok
+test descriptor::tests::unknown_completion_retains_snapshot_no_late_publication ... ok
+test descriptor::tests::all_exact_bucket_and_output_mode_sizes ... ok
+test execution::tests::commit_failure_retains_download_and_safe_abort_data ... ok
+test descriptor::tests::shrinking_and_growing_buckets_need_fresh_replay_and_result_shape ... ok
+test execution::tests::downloaded_greedy_tokens_map_dense_slots_without_logits ... ok
+test descriptor::tests::p128_compatibility_view_and_all_prompt_tokens ... ok
+test execution::tests::downloaded_greedy_allocation_returns_to_empty_execution_placeholder ... ok
+test descriptor::tests::bf16_bits_preserved_and_nonfinite_rejected ... ok
+test descriptor::tests::two_row_owner_has_exact_catalog_capacity_and_pool_bounds ... ok
+test execution::tests::executor_bounds_are_rechecked_without_device_work ... ok
+test execution::tests::greedy_workspace_restore_failure_preserves_both_allocations ... ok
+test descriptor::tests::independent_golden_request_exact_and_result_scatter ... ok
+test descriptor::tests::owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter ... ok
+test descriptor::tests::malformed_last_row_never_exposes_earlier_rows ... ok
+test execution::tests::reusable_greedy_workspace_is_bounded_and_never_reallocated ... ok
+test execution::tests::physical_blocks_must_be_exclusive_across_rows ... ok
+test execution::tests::plan_is_adapted_in_prefill_then_decode_order_without_copying_payloads ... ok
+test execution::tests::downloaded_rows_map_dense_slots_to_commit_results_without_reallocation ... ok
+test metrics::tests::iteration_metrics_are_recorded_together ... ok
+test metrics::tests::rolling_p95_uses_nearest_rank_and_stays_bounded ... ok
+test descriptor::tests::unknown_stage_mode_version_and_lengths_rejected ... ok
+test plan::tests::iteration_accepts_permuted_exactly_once_block_table_references ... ok
+test plan::tests::iteration_rejects_duplicate_block_table_references ... ok
+test plan::tests::iteration_rejects_physical_block_aliases_across_requests ... ok
+test plan::tests::iteration_requires_a_sampled_output_for_decode_work ... ok
+test plan::tests::iteration_requires_one_block_table_per_work_item ... ok
+test plan::tests::iteration_requires_dense_zero_based_output_slots ... ok
+test execution::tests::post_validation_test_fault_retains_unpublished_download_and_is_one_shot ... ok
+test plan::tests::mixed_stage_output_slots_are_canonicalized_for_sampling ... ok
+test plan::tests::owned_v1_table_requires_canonical_full_and_tail_counts ... ok
+test execution::tests::plan_boundary_rejects_nondense_slots_and_decode_without_output ... ok
+test plan::tests::result_rejects_duplicate_output_slots ... ok
+test plan::tests::zero_is_reserved_for_scheduler_ids ... ok
+test scheduler::tests::consuming_close_returns_a_typed_post_cleanup_metrics_snapshot ... ok
+test scheduler::tests::contained_publication_failure_is_not_a_completed_metric_sample ... ok
+test scheduler::tests::failed_tick_preserves_timeout_completion_until_exactly_once_recovery ... ok
+test scheduler::tests::post_validation_commit_fault_after_one_commit_is_contained ... ok
+test scheduler::tests::successful_commit_returns_its_exact_raw_metric_sample ... ok
+test descriptor::tests::inactive_rows_logits_and_arbitrary_spans_rejected ... ok
+test descriptor::tests::unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt ... ok
+test descriptor::tests::every_request_byte_is_bound_in_both_stages ... ok
+test descriptor::tests::result_header_every_byte_and_row_identity_rejected ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

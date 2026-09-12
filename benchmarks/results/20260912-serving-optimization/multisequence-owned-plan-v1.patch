@@ -1,0 +1,117 @@
+diff --git a/kernels/include/riley_cuda.h b/kernels/include/riley_cuda.h
+index aa73467..71c6144 100644
+--- a/kernels/include/riley_cuda.h
++++ b/kernels/include/riley_cuda.h
+@@ -2439,6 +2439,14 @@ riley_cuda_fixed37_ragged_paged_attention_two_pass_execute(
+ 
+ // Plan creation performs all cuBLASLt descriptor construction and heuristic
+ // selection. A successful plan owns one context-child lease and is immutable.
++/* Qualified BF16 M1 strided batches. Strides are BF16 elements, not bytes.
++ * Metadata retains per-matrix M=1. Execute spans cover batch_count * stride.
++ * This plan is not accepted by existing single-matrix graph binders. */
++RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
++    RileyCudaContext* context, const RileyCudaGemmConfig* config,
++    uint32_t batch_count, uint64_t input_stride, uint64_t output_stride,
++    RileyCudaGemmPlan** out_plan, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
++
+ RileyCudaStatus riley_cuda_gemm_plan_create(
+     RileyCudaContext* context,
+     const RileyCudaGemmConfig* config,
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 971e720..58d7d0b 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -49,6 +49,7 @@ struct RileyCudaGemmPlan {
+         input_bytes(lengths.input),
+         weight_bytes(lengths.weight),
+         output_bytes(lengths.output),
++        batch_count(1),
+         algorithm_ready(false),
+         active_uses(0),
+         deferred_close() {
+@@ -68,6 +69,7 @@ struct RileyCudaGemmPlan {
+   uint64_t input_bytes;
+   uint64_t weight_bytes;
+   uint64_t output_bytes;
++  uint32_t batch_count;
+   bool algorithm_ready;
+   std::atomic<uint32_t> active_uses;
+   RileyCudaDeferredCloseNode deferred_close;
+@@ -1074,7 +1076,7 @@ namespace {
+ 
+ bool canonical_gemm_bf16_plan_is_ready(
+     const RileyCudaGemmPlan* plan) noexcept {
+-  if (plan == nullptr || plan->owner == nullptr || !plan->algorithm_ready ||
++  if (plan == nullptr || plan->owner == nullptr || plan->batch_count != 1 || !plan->algorithm_ready ||
+       plan->handle == nullptr || plan->operation == nullptr ||
+       plan->weight_layout == nullptr || plan->input_layout == nullptr ||
+       plan->output_layout == nullptr || plan->preference == nullptr ||
+@@ -1842,3 +1844,68 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_defer_to_active_capture(
+   return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                         "the active capture rejected the deferred GEMM-plan node");
+ }
++
++// A strided plan preserves per-matrix M=1 metadata. Its byte extents span the
++// whole batch. Existing single-matrix graph admission deliberately rejects it.
++extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
++    RileyCudaContext* context, const RileyCudaGemmConfig* config,
++    uint32_t batch_count, uint64_t input_stride, uint64_t output_stride,
++    RileyCudaGemmPlan** out_plan, RileyCudaErrorInfo* error) noexcept {
++  clear_error(error);
++  if (out_plan == nullptr) return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
++      RILEY_CUDA_ERROR_STAGE_VALIDATION, "prepare strided M1", "null output");
++  *out_plan = nullptr;
++  GemmByteLengths lengths{};
++  RileyCudaStatus status = validate_config(config, &lengths, error);
++  if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
++  const bool shape = (config->k == 576 && (config->n == 960 || config->n == 3072 || config->n == 576 || config->n == 49152))
++      || (config->k == 1536 && config->n == 576);
++  if (!shape || config->m != 1 || config->flags != 0 || (batch_count != 2 && batch_count != 4)
++      || (input_stride != config->k && input_stride != ((config->k + 127) / 128) * 128)
++      || (output_stride != config->n && output_stride != ((config->n + 127) / 128) * 128))
++    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT, RILEY_CUDA_ERROR_STAGE_VALIDATION,
++        "prepare strided M1", "unsupported shape, batch, reduction policy or stride");
++  RileyCudaGemmPlan* plan = nullptr;
++  status = riley_cuda_gemm_plan_create(context, config, &plan, error);
++  if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
++  const auto& info = plan->algorithm_info;
++  const uint32_t custom = config->n == 49152 ? 89 : config->k == 1536 ? 75 : 74;
++  if (info.algorithm_id != 13 || info.custom_option != custom || info.workspace_bytes != 0
++      || info.numerical_implementation_flags != 131585 || info.cublaslt_version != 130101
++      || info.compute_capability_major != 8 || info.compute_capability_minor != 9
++      || info.split_k != 1 || info.reduction_scheme != 0 || info.tile_id != 0 || info.stages_id != 0)
++    status = validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, RILEY_CUDA_ERROR_STAGE_PREPARE,
++        "prepare strided M1", "M1 algorithm differs from qualified topology");
++  CurrentContext scope(context);
++  if (status == RILEY_CUDA_STATUS_SUCCESS) status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
++  if (status == RILEY_CUDA_STATUS_SUCCESS) {
++    cublasLtMatrixLayout_t layouts[] = {plan->weight_layout, plan->input_layout, plan->output_layout};
++    int32_t count = static_cast<int32_t>(batch_count);
++    int64_t strides[] = {0, static_cast<int64_t>(input_stride), static_cast<int64_t>(output_stride)};
++    for (size_t index = 0; index < 3 && status == RILEY_CUDA_STATUS_SUCCESS; ++index) {
++      status = cublaslt_error(cublasLtMatrixLayoutSetAttribute(layouts[index], CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
++          &count, sizeof(count)), error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
++      if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatrixLayoutSetAttribute(layouts[index],
++          CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &strides[index], sizeof(strides[index])),
++          error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
++    }
++    cublasLtMatmulHeuristicResult_t checked{};
++    if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatmulAlgoCheck(plan->handle,
++        plan->operation, plan->weight_layout, plan->input_layout, plan->output_layout, plan->output_layout,
++        &plan->algorithm, &checked), error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
++    if (status == RILEY_CUDA_STATUS_SUCCESS && (checked.state != CUBLAS_STATUS_SUCCESS || checked.workspaceSize != 0))
++      status = validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, RILEY_CUDA_ERROR_STAGE_PREPARE,
++          "prepare strided M1", "strided algorithm admission failed");
++  }
++  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
++  if (status != RILEY_CUDA_STATUS_SUCCESS) {
++    RileyCudaErrorInfo cleanup{}; cleanup.struct_size = sizeof(cleanup);
++    (void)riley_cuda_gemm_plan_close(&plan, &cleanup);
++    return status;
++  }
++  plan->batch_count = batch_count;
++  plan->input_bytes = input_stride * batch_count * 2;
++  plan->output_bytes = output_stride * batch_count * 2;
++  *out_plan = plan;
++  return RILEY_CUDA_STATUS_SUCCESS;
++}

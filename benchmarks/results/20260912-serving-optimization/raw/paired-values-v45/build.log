@@ -1,0 +1,136 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN21riley_shared16_paired6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_' for 'sm_89'
+ptxas info    : Function properties for _ZN21riley_shared16_paired6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 55 registers, used 0 barriers, 1536 bytes smem, 400 bytes cmem[0]
+ptxas info    : Compile time = 31.852 ms
+ptxas info    : Compiling entry function '_ZN24riley_shared16_attention6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_shared16_attention6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_S7_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 40 registers, used 0 barriers, 768 bytes smem, 400 bytes cmem[0]
+ptxas info    : Compile time = 21.578 ms
+ptxas info    : Compiling entry function '_ZN24riley_shared16_attention6scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_shared16_attention6scoresEPK13__nv_bfloat16S2_PfPKjS5_S5_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 39 registers, used 0 barriers, 400 bytes cmem[0]
+ptxas info    : Compile time = 4.063 ms
+ptxas info    : Compiling entry function '_ZN18riley_decode_shape6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_' for 'sm_89'
+ptxas info    : Function properties for _ZN18riley_decode_shape6valuesEPKfPK13__nv_bfloat16PS2_PKjS7_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 40 registers, used 0 barriers, 256 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 20.121 ms
+ptxas info    : Compiling entry function '_ZN18riley_decode_shape6scoresEPK13__nv_bfloat16S2_PfPKjS5_' for 'sm_89'
+ptxas info    : Function properties for _ZN18riley_decode_shape6scoresEPK13__nv_bfloat16S2_PfPKjS5_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 3.598 ms
+ptxas info    : Compiling entry function '_ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_' for 'sm_89'
+ptxas info    : Function properties for _ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 0 barriers, 3840 bytes smem, 416 bytes cmem[0]
+ptxas info    : Compile time = 25.722 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_mergeILi576ELi1536ELi320EEvPKfP13__nv_bfloat16PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_mergeILi576ELi1536ELi320EEvPKfP13__nv_bfloat16PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 14 registers, used 0 barriers, 376 bytes cmem[0]
+ptxas info    : Compile time = 0.912 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_partsILi576ELi1536ELi320ELb1EEvPK13__nv_bfloat16S2_PfPS0_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_partsILi576ELi1536ELi320ELb1EEvPK13__nv_bfloat16S2_PfPS0_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.358 ms
+ptxas info    : Compiling entry function '_Z21tile_projection_mergeILi576ELi1536ELi320EEvPKfP13__nv_bfloat16' for 'sm_89'
+ptxas info    : Function properties for _Z21tile_projection_mergeILi576ELi1536ELi320EEvPKfP13__nv_bfloat16
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 14 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.660 ms
+ptxas info    : Compiling entry function '_Z21tile_projection_partsILi576ELi1536ELi320EEvPK13__nv_bfloat16S2_PfPS0_' for 'sm_89'
+ptxas info    : Function properties for _Z21tile_projection_partsILi576ELi1536ELi320EEvPK13__nv_bfloat16S2_PfPS0_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 30 registers, used 0 barriers, 384 bytes cmem[0]
+ptxas info    : Compile time = 6.452 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_partsILi1536ELi576ELi0ELb1EEvPK13__nv_bfloat16S2_PfPS0_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_partsILi1536ELi576ELi0ELb1EEvPK13__nv_bfloat16S2_PfPS0_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.307 ms
+ptxas info    : Compiling entry function '_Z21tile_projection_partsILi1536ELi576ELi0EEvPK13__nv_bfloat16S2_PfPS0_' for 'sm_89'
+ptxas info    : Function properties for _Z21tile_projection_partsILi1536ELi576ELi0EEvPK13__nv_bfloat16S2_PfPS0_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 0 barriers, 384 bytes cmem[0]
+ptxas info    : Compile time = 10.304 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_mergeILi576ELi576ELi128EEvPKfP13__nv_bfloat16PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_mergeILi576ELi576ELi128EEvPKfP13__nv_bfloat16PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 14 registers, used 0 barriers, 376 bytes cmem[0]
+ptxas info    : Compile time = 0.769 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_partsILi576ELi576ELi128ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_partsILi576ELi576ELi128ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.186 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_mergeILi576ELi576ELi128EEvPKfP13__nv_bfloat16' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_mergeILi576ELi576ELi128EEvPKfP13__nv_bfloat16
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 14 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.652 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_partsILi576ELi576ELi128EEvPK13__nv_bfloat16S2_PfPS0_' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_partsILi576ELi576ELi128EEvPK13__nv_bfloat16S2_PfPS0_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 28 registers, used 0 barriers, 384 bytes cmem[0]
+ptxas info    : Compile time = 2.516 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_mergeILi192ELi576ELi192EEvPKfP13__nv_bfloat16PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_mergeILi192ELi576ELi192EEvPKfP13__nv_bfloat16PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 376 bytes cmem[0]
+ptxas info    : Compile time = 0.709 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_partsILi192ELi576ELi192ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_partsILi192ELi576ELi192ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.155 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_mergeILi192ELi576ELi192EEvPKfP13__nv_bfloat16' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_mergeILi192ELi576ELi192EEvPKfP13__nv_bfloat16
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.605 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_partsILi192ELi576ELi192EEvPK13__nv_bfloat16S2_PfPS0_' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_partsILi192ELi576ELi192EEvPK13__nv_bfloat16S2_PfPS0_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 0 barriers, 384 bytes cmem[0]
+ptxas info    : Compile time = 3.137 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_mergeILi576ELi576ELi192EEvPKfP13__nv_bfloat16PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_mergeILi576ELi576ELi192EEvPKfP13__nv_bfloat16PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 376 bytes cmem[0]
+ptxas info    : Compile time = 0.716 ms
+ptxas info    : Compiling entry function '_Z25shared16_projection_partsILi576ELi576ELi192ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z25shared16_projection_partsILi576ELi576ELi192ELb0EEvPK13__nv_bfloat16S2_PfPS0_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.187 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_mergeILi576ELi576ELi192EEvPKfP13__nv_bfloat16' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_mergeILi576ELi576ELi192EEvPKfP13__nv_bfloat16
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.604 ms
+ptxas info    : Compiling entry function '_Z23decode_projection_partsILi576ELi576ELi192EEvPK13__nv_bfloat16S2_PfPS0_' for 'sm_89'
+ptxas info    : Function properties for _Z23decode_projection_partsILi576ELi576ELi192EEvPK13__nv_bfloat16S2_PfPS0_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 28 registers, used 0 barriers, 384 bytes cmem[0]
+ptxas info    : Compile time = 3.169 ms
+ptxas info    : Compiling entry function '_Z18shared16_qkv_mergePKfP13__nv_bfloat16S2_S2_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z18shared16_qkv_mergePKfP13__nv_bfloat16S2_S2_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 14 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 1.120 ms
+ptxas info    : Compiling entry function '_Z18shared16_qkv_partsPK13__nv_bfloat16S1_S1_S1_PfPKj' for 'sm_89'
+ptxas info    : Function properties for _Z18shared16_qkv_partsPK13__nv_bfloat16S1_S1_S1_PfPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 0 barriers, 400 bytes cmem[0]
+ptxas info    : Compile time = 8.388 ms
+ptxas info    : Compiling entry function '_Z16shared16_gate_upPK13__nv_bfloat16S1_S1_PS_S2_PKj' for 'sm_89'
+ptxas info    : Function properties for _Z16shared16_gate_upPK13__nv_bfloat16S1_S1_PS_S2_PKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 32 registers, used 0 barriers, 400 bytes cmem[0]
+ptxas info    : Compile time = 3.283 ms

@@ -1,0 +1,183 @@
+commit 44ccb8d0535e80e2f4b7fd09b84b770848ad4678
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 08:01:46 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 08:01:46 2026 +0900
+
+    Group decode QK heads and pack value warps for mixed serving
+
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index 6c182cd..815bc52 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -208,6 +208,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+         kernels_dir.join("src/decode_shared16.cuh"),
+         kernels_dir.join("src/decode_shared32.cuh"),
+         kernels_dir.join("src/decode_shared32_attention.cuh"),
++        kernels_dir.join("src/decode_gqa_attention_v50.cuh"),
+         kernels_dir.join("src/decode_shared32_model.cuh"),
+         kernels_dir.join("src/decode_shared32_result.cuh"),
+ 
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 5b263fd..43ff8ee 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2091,6 +2091,7 @@ include_bytes!("../../../../kernels/src/decode_shared_result.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
++include_bytes!("../../../../kernels/src/decode_gqa_attention_v50.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
+ include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
+ 
+diff --git a/kernels/src/decode_gqa_attention_v50.cuh b/kernels/src/decode_gqa_attention_v50.cuh
+new file mode 100644
+index 0000000..16023a1
+--- /dev/null
++++ b/kernels/src/decode_gqa_attention_v50.cuh
+@@ -0,0 +1,75 @@
++#pragma once
++#include "decode_shape.cuh"
++namespace riley_gqa50_attention {
++
++// Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
++__global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/3;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ q+=row*576;result+=row*9*4096;
++ int count=shape[1]+1,token=blockIdx.x*8,kvhead=blockIdx.y%3;
++ if(count<1 || count>4096)return;
++ int lane=threadIdx.x,g=lane/4,t=lane%4,head=kvhead*3+g;
++ uint32_t query[4],query_hi[4];
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){auto* qp=q+(g<3?head:0)*64+depth*16;query[depth]=g<3?riley_prefill_shape::pair(qp[2*t],qp[2*t+1]):0;query_hi[depth]=g<3?riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]):0;}
++ for(;token<count;token+=gridDim.x*8){
++ float d[4]={};uint32_t key[4],key_hi[4];
++ bool valid=token+g<count;int kb=valid?riley_prefill_shape::cache_index(token+g,kvhead,0,pages):0;
++ #pragma unroll
++ for(int depth=0;depth<4;++depth){key[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
++ #pragma unroll
++ for(int depth=0;depth<4;++depth)riley_prefill_shape::mma(d,query[depth],0,query_hi[depth],0,key[depth],key_hi[depth]);
++ if(g<3)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
++ }
++}
++
++__global__ void independent_values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16* out,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
++ int row=blockIdx.y/3;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
++ shape+=row*416;pages+=row*416;
++ scores+=row*9*4096;out+=row*576;
++ int count=shape[1]+1,warp=threadIdx.x/32,head=(blockIdx.y%3)*3+warp,block=blockIdx.x,lane=threadIdx.x%32,g=lane/4,t=lane%4;
++ if(count<1||count>4096)return;
++ __shared__ __nv_bfloat16 all_probs[3][128];auto* probs=all_probs[warp];
++ __shared__ float all_exponentials[3][128];auto* exponentials=all_exponentials[warp];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
++ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
++ for(int tile=(count-1)/128;tile>=0;--tile){
++  int begin=tile*128,end=min(begin+128,count);float mx=maximum;
++  for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[head*4096+begin+i]);
++  for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
++  float alpha=exp2f((maximum-mx)*1.4426950408889634F);
++  // Preserve unrounded exponentials for the original lane-local sum order.
++  for(int i=lane;i<128;i+=32){float value=i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.;exponentials[i]=value;probs[i]=__float2bfloat16_rn(value);}
++  __syncwarp();
++  float local_den=den*alpha;
++  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
++  den=local_den;maximum=mx;__syncwarp();
++  for(int j=0;j<4;++j)accum[j]*=alpha;
++  #pragma unroll 1
++  for(int token=begin;token<end;token+=64){
++   uint32_t pa[4],paa[4],vb[4],vbb[4];
++   #pragma unroll
++   for(int part=0;part<4;++part){
++    int at=token+part*16,pi=at-begin;bool live=at<end;
++    pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
++    paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
++    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
++    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
++    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
++    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
++   }
++   #pragma unroll
++   for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
++  }
++  __syncwarp();
++ }
++ den+=__shfl_xor_sync(0xffffffff,den,2);den+=__shfl_xor_sync(0xffffffff,den,1);float inverse=1.0F/den;
++ if(g==0)for(int j=0;j<2;++j)out[head*64+block*8+2*t+j]=__float2bfloat16_rn(accum[j]*inverse);
++}
++
++
++inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context){
++ scores<<<dim3(min((context+7)/8,32u),96),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
++ independent_values<<<dim3(8,96),96,0,stream>>>(scratch,v,out,shape,pages,live_rows);
++}
++}
+diff --git a/kernels/src/decode_shared32_model.cuh b/kernels/src/decode_shared32_model.cuh
+index 1a60d0c..b6ab76e 100644
+--- a/kernels/src/decode_shared32_model.cuh
++++ b/kernels/src/decode_shared32_model.cuh
+@@ -2,6 +2,7 @@
+ #include "prefill_shape_model.cuh"
+ #include "decode_shared32.cuh"
+ #include "decode_shared32_attention.cuh"
++#include "decode_gqa_attention_v50.cuh"
+ // Internal model sequence: caller validates all row identities, context/page
+ // ownership and buffer extents before enqueue. Final hidden rows stay in b(1).
+ namespace riley_shared32_model {
+@@ -49,7 +50,7 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
+  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
+  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
+ }
+-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false){
++inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false){
+  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
+  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
+  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
+@@ -65,7 +66,8 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
+  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
+  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
+  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+- riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
++ if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
++ else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
+  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
+  if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index d2876fe..2aacd55 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2410,6 +2410,7 @@ cudaError_t enqueue_compiled_v4_shared_result(cudaStream_t,const void*,const voi
+ cudaError_t enqueue_compiled_v4_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v4_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
+ cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v6_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+ cudaError_t enqueue_compiled_v7_shared_result(cudaStream_t,const void*,const void*,const void*,void*) noexcept;
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index d936434..36e2cd9 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -354,6 +354,9 @@ cudaError_t enqueue_compiled_v5_result_header(cudaStream_t stream,const void* me
+ cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
+  return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled);
+ }
++cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
++ return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
++}
+ cudaError_t enqueue_compiled_v5_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
+  return riley_shared32_result::enqueue<0x35524d52>(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);
+ }
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index a7337d2..a2c0c22 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1262,7 +1262,7 @@ static RileyCudaStatus record_variable_shared(
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+   auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
+   if(row_capacity==1){
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:enqueue_compiled_v5_shared_model))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:(Mixed?enqueue_compiled_v7_gqa_shared_model:enqueue_compiled_v5_shared_model)))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+    if(compact){

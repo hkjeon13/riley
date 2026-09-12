@@ -1,0 +1,38 @@
+{
+  "gpu": {
+    "timestamp_ns": 840789041240405,
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "driver_version": "580.173.02",
+    "temperature_c": 46,
+    "memory_used_mib": 1178,
+    "utilization_percent": 7,
+    "compute_processes": [
+      {
+        "pid": 2725824,
+        "used_memory_mib": "860"
+      }
+    ]
+  },
+  "process_maps": {
+    "2725824": {
+      "ready": false,
+      "private_vendor_files": {
+        "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02": {
+          "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4",
+          "device": "103:02",
+          "inode": 10647861
+        }
+      },
+      "driver_mappings": [
+        "7a6be7000000-7a6be7166000 r--p 00000000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "7a6be7166000-7a6be80ea000 r-xp 00166000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "7a6be80ea000-7a6beca95000 r--p 010ea000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "7a6beca95000-7a6beca96000 ---p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "7a6beca96000-7a6becbcb000 r--p 05a95000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02",
+        "7a6becbcb000-7a6becbd4000 rw-p 05bca000 103:02 10647861                  /tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.580.173.02"
+      ],
+      "compute_loaded": true,
+      "all_observed_vendor_mappings_pinned": true
+    }
+  }
+}

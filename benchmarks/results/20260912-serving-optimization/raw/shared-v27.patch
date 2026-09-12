@@ -1,0 +1,102 @@
+commit 7f0865f07433f9af53931df1e308f9e8b94692f7
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 00:01:43 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 00:01:43 2026 +0900
+
+    Reuse packed prefill weights and unroll projection depth
+
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 4bbf304..6040509 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1168,12 +1168,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+  constexpr uint64_t transfer=98432;
+  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
+  auto record_shape=[&](uint32_t row_capacity) noexcept {
+-  if(row_capacity==1&&weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)weights[3+l*9+6+j]=w[273+l*3+j]->device_data;
++  if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)weights[3+l*9+6+j]=w[273+l*3+j]->device_data;
+   return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
+   auto* host=static_cast<uint8_t*>(staging->host_data);
+   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
+   auto result=copy(d[16]->device_data,host,17536,cudaMemcpyHostToDevice);
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363&&row_capacity==1),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+@@ -1219,6 +1219,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+  RileyCudaCanonicalGemmBf16GraphState state{};
+  status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
++ const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];
++ if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
+  constexpr uint64_t transfer=787456;
+  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
+  auto record_shape=[&](uint32_t row_capacity) noexcept {
+@@ -1235,7 +1237,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
+    return result;
+   }
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
+-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363&&row_capacity==1),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
++  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+diff --git a/kernels/src/prefill_shape_model.cuh b/kernels/src/prefill_shape_model.cuh
+index 03677a7..47297ee 100644
+--- a/kernels/src/prefill_shape_model.cuh
++++ b/kernels/src/prefill_shape_model.cuh
+@@ -38,13 +38,16 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
+   if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
+   else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
+   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
+   if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
+   else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
+   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
+   if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
+   else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
++  else if(tiled)gemm_prefill_shape_vector<576,1536,320,2,true><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+   else gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,shape,capacity);
+  }
+diff --git a/kernels/src/prefill_shape_projection.cuh b/kernels/src/prefill_shape_projection.cuh
+index 413643d..cc14b2f 100644
+--- a/kernels/src/prefill_shape_projection.cuh
++++ b/kernels/src/prefill_shape_projection.cuh
+@@ -1,11 +1,11 @@
+-// Internal primitive for a future variable-prefill owner. Not wired into serving.
++// Internal projection primitive used by the variable-prefill owner.
+ // Rows are validated by the launcher; inactive tail rows do not read or write memory.
+ // Each active row preserves the fixed kernel MMA and intermediate BF16 recurrence.
+ #pragma once
+ #include <cuda_runtime.h>
+ #include <cuda_bf16.h>
+ #include <stdint.h>
+-template<int N,int K,int Interval,int Warps>
++template<int N,int K,int Interval,int Warps,bool Tiled=false>
+ __global__ void gemm_prefill_shape_vector(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,uint32_t rows,const uint32_t* live_rows=nullptr){
+  if(live_rows){uint32_t live=*live_rows;if(!live||live>rows)return;rows=live;}
+  if(blockIdx.y*16>=rows)return;
+@@ -15,13 +15,15 @@ __global__ void gemm_prefill_shape_vector(const __nv_bfloat16* x,const __nv_bflo
+  const int row=blockIdx.y*16+g,next_row=row+8,base=(blockIdx.x*Warps+warp)*8;
+  float d[4]={},total[4]={};
+  // Keep the depth recurrence compact; MMA and BF16 chunk-round order are unchanged.
+- #pragma unroll 1
++ #pragma unroll 4
+  for(int depth=0;depth<K;depth+=16){
+   uint32_t a0=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t)):0;
+   uint32_t a1=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t)):0;
+   uint32_t a2=row<rows?*reinterpret_cast<const uint32_t*>(x+(row*K+depth+2*t+8)):0;
+   uint32_t a3=next_row<rows?*reinterpret_cast<const uint32_t*>(x+(next_row*K+depth+2*t+8)):0;
+-  uint32_t b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t)),bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));
++  uint32_t b,bb;
++  if constexpr(Tiled){const auto* tile=w+((base/8)*(K/16)+depth/16)*128;b=*reinterpret_cast<const uint32_t*>(tile+lane*2);bb=*reinterpret_cast<const uint32_t*>(tile+64+lane*2);}
++  else {b=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t));bb=*reinterpret_cast<const uint32_t*>(w+((base+g)*K+depth+2*t+8));}
+   asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};": "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3]):"r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b),"r"(bb));
+   if constexpr(Interval>0){
+    if((depth+16)%Interval==0||depth+16==K){for(int j=0;j<4;++j){total[j]+=__bfloat162float(__float2bfloat16_rn(d[j]));d[j]=0.;}}

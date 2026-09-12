@@ -1,0 +1,15 @@
+{
+  "responses_per_backend": 22,
+  "exact_match": true,
+  "request_ids_exact": true,
+  "sequential": 6,
+  "overlapping": 16,
+  "temperatures": [
+    0,
+    0.7
+  ],
+  "top_p": 0.9,
+  "seeds": "1234 + request index",
+  "admission": "wait for SSE response headers before dispatching next request; bodies remain concurrent",
+  "earlier_unordered_attempt": "concurrent stochastic outputs not comparable because generation RNG derives from request ID and seed"
+}

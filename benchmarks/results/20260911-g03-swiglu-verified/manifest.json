@@ -1,0 +1,28 @@
+{
+  "scope": "authorized SwiGLU chain GPU validation; full model graph pending",
+  "cuda_build_passed": true,
+  "gpu": {
+    "swiglu": 2,
+    "aggregate_regression": 3,
+    "c07": 14,
+    "total": 19,
+    "all_exit_codes": 0,
+    "fixture_replays": 192,
+    "model_replays": 640
+  },
+  "source_hashes_match": true,
+  "model_parity_matches_prior": true,
+  "full_model_graph_complete": false,
+  "artifacts": {
+    "README.md": "a1b118825f2d7b6a931d48d0a60081db4ed6ac2c580deb36af4a67b80a038c9e",
+    "authorized-transfer.json": "9853e600e51b9a77ab01877a5c0a92cfbf04cad42c5a9a005db0165dd38d993a",
+    "environment.txt": "cf208f3ddefa929eea96cc54069e5ab9e12788e43a135e11e98ae535c8cb6330",
+    "gpu-aggregate.log": "9c40e32a8c2bd4f022d905ec571b282c35cf226a0cd6370d25071f62263fbc6a",
+    "gpu-model.log": "000783698eef13551ae32c368c36c1544998c0ce9d2b6557cffd4b41fc017b9e",
+    "gpu-swiglu.log": "cfe7e2303dc412c73a8d6bb1afc1f32953526f20a5592d357fd32394fdf2dbef",
+    "model-parity.json": "8c26f09a1ca0609f3b9247e0e1f162864bb47b3290858f4f22aa042ace0bd55a",
+    "model-preservation.json": "e9fbe79fb3d96adfcd2424a214c3846671ac3552ab2364e7fd437d4622862b01",
+    "remote-hashes.txt": "3f7df632871035cb029304e528e200f08d1d928d5baeb0a74d98682e2710754e",
+    "runtime-identities.txt": "4af3cdc971f62b8827383c56d45e71100ae6b4021986c0f171ea929cbf6f3ce7"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "scope": "G03 native resource reservation; full aggregate capture/exec pending",
+  "gpu": {
+    "native_ledger": 2,
+    "c07": 14,
+    "passed": 16,
+    "exit_code": 0,
+    "actual_model_reservations": 20
+  },
+  "cpu": {
+    "cuda_library": 84,
+    "cuda_graph_contracts": 32,
+    "runtime_library": 259,
+    "architecture": 15,
+    "inventory": 1,
+    "passed": 391
+  },
+  "abi_fmt_diff_exit_code": 0,
+  "clippy_cpu_exit_code": 0,
+  "clippy_cuda_exit_code": 0,
+  "full_graph_complete": false,
+  "artifacts": {
+    "README.md": "9216eae59a33954707ba50d452bec0d2c79c6685539734653ddfe2e23b0686c8",
+    "clippy-cpu.log": "716069c34f4a2ff34498ab1a850b93c0b7b47fe7f60db5ee7843206bfcc3b492",
+    "clippy-gpu.log": "d0383c1a69042b133764c93338371afec9361874fa10952d7a5775317d1a9593",
+    "cpu-check.log": "3b1c3b70e68ad66b45c6be5e43d1c06047e6d304ed1ecae3e54b07057d999383",
+    "cuda-cpu.log": "ef1caf16f674720b49604b4492ccf91e39426b669117d3ea3cdce4be2d1b82f1",
+    "format-diff.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gpu-ledger-final.log": "c48eceecf2c425550d33ff1a4c807a6b8284b9b0df05caa63eb3549c451eaf60",
+    "gpu-ledger.log": "620bc71e6cbdb3e630272dbd1b2e7c4e8d360dc8fce7957fffd44e115ed506f8",
+    "gpu-model.log": "d5bdb386fcc5e9c7d9ed98db08b2283aa5b03c6c80f57be70ba5ca5ec60c2aa1",
+    "initial-link-error.log": "810e7e6d6ea8fffd8352fb78e87988bd94d813c94942cbc19f5bc2129bffca48",
+    "initial-stale-native-archive.log": "e3c63b99e466accca4ec4e0fd5c61299171872025c299a49689b9fc2bfc2e968",
+    "model-parity.json": "a179aca00e2e19148c47b8f37435a87ef3d89a10f32dc926b672a544dc54fd0c",
+    "model-preservation.json": "f82828ab304c4acc177a244cb0dcc41787580f6ceb9b1c38e5dee75667420b44",
+    "model-run-stopped-for-serialization.log": "13c0251ba8511e741ac4c8740da8dc4e05d65900a8d20c1412da94f546a5b6db",
+    "remote-source-verification.json": "bc17ac7d778267b636ba7963d1acb4e014d1fd41d970ecdb088131bd1d6e651f",
+    "runtime-cpu.log": "468f9495f3fed73f460b02fafd8bbe632192596d7534a16fbb7a3faa140bf684",
+    "runtime-identities.json": "108e1546fa5fb4f2e8f1db83c6612cd67917e5c02ed5d5244641974225c06b21",
+    "source-hashes.json": "0eea854b2beda7261eeaa76206a0216a8c3728643fb3d4f8b500dfc305deef59",
+    "source-overlay.tar.gz": "80af4b5555ad6c62d78abbd757faed8f3ea41db8766c17ae2fcec7437d0af1b5"
+  }
+}

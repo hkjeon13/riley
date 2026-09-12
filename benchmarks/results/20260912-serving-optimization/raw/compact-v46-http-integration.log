@@ -1,0 +1,5 @@
+SERVER_EXIT 1
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_v4_http_v46_c32.py", line 27, in <module>
+    if p.poll() is not None:raise RuntimeError('server stopped during startup')
+RuntimeError: server stopped during startup

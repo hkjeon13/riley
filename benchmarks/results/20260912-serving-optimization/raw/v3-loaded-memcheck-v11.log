@@ -1,0 +1,13 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+V3_LOADED_SCHEDULER prompt=16 output=32 iterations=32 logits_reference_exact=true
+V3_LOADED_SCHEDULER prompt=128 output=64 iterations=65 logits_reference_exact=true
+test loaded_variable_scheduler_gpu_completion_and_settlement has been running for over 60 seconds
+V3_LOADED_SCHEDULER prompt=398 output=128 iterations=133 logits_reference_exact=true
+V3_LOADED_SCHEDULER replays=230 allocation_zero=true
+test loaded_variable_scheduler_gpu_completion_and_settlement ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 61.17s
+
+========= ERROR SUMMARY: 0 errors

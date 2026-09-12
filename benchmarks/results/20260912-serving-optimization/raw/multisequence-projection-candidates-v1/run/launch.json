@@ -1,0 +1,31 @@
+{
+  "argv": [
+    "/tmp/riley-opt-260912/multisequence-projection-candidates-v1/build/multisequence_projection_candidates",
+    "--cases",
+    "/tmp/riley-opt-260912/multisequence-projection-candidates-v1/cases.tsv",
+    "--device",
+    "0"
+  ],
+  "cwd": "/tmp/riley-opt-260912/multisequence-projection-candidates-v1",
+  "runtime": {
+    "receipt": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/receipt.json",
+      "sha256": "36dba27991800124660e8f07274ffde21b79ebef14bb365d37a610f9a0802d70"
+    },
+    "library_directory": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu",
+    "libcuda": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu/libcuda.so.1",
+      "sha256": "266916dac6c5e7e4655526570cf303a6cc017880d2552960abc66017a7c98cf4"
+    },
+    "nvidia_smi": {
+      "path": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/bin/nvidia-smi",
+      "sha256": "22964713c1701fb62b4dd10b26b0dd25d174e100af5bda20c65e0b0fcc32b3be"
+    }
+  },
+  "environment_sha256": "73717dbfdbc4c581b7a49e16e0a2a5c653f576d7ea5b4eae561968d0612682ce",
+  "selected_environment": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "LD_LIBRARY_PATH": "/tmp/riley-opt-260912/driver580173-runtime-20260901/extracted/usr/lib/x86_64-linux-gnu:/data/riley-g04-cuda13/lib:/usr/lib/x86_64-linux-gnu"
+  },
+  "timeout_seconds": 1800
+}

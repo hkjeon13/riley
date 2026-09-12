@@ -1,0 +1,19 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+V3_DECODE prompt=16 phase=0 generated=32 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=16 phase=1 generated=32 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=16 phase=2 generated=32 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=128 phase=0 generated=64 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=128 phase=1 generated=64 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=128 phase=2 generated=64 logits_exact=true full_kv_exact=true
+test checkpoint_variable_decode_matches_full_prefix_recompute has been running for over 60 seconds
+V3_DECODE prompt=398 phase=0 generated=128 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=398 phase=1 generated=128 logits_exact=true full_kv_exact=true
+V3_DECODE prompt=398 phase=2 generated=128 logits_exact=true full_kv_exact=true
+V3_DECODE cases=3 replays=678 allocation_zero=true
+test checkpoint_variable_decode_matches_full_prefix_recompute ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 270.45s
+
+========= ERROR SUMMARY: 0 errors

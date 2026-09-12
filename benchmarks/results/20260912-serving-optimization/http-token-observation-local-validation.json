@@ -1,0 +1,16 @@
+{
+  "schema_version": "riley.http-token-observation-local-validation.v1",
+  "completed": true,
+  "cpu_tests": 15,
+  "gpu_tests_executed": false,
+  "remote_actions": false,
+  "performance_claim": false,
+  "files": {
+    "benchmarks/results/20260912-serving-optimization/http_token_observation_check.py": "d0531b6af5873e490c6c77cd49b32c58e5c2c6aa7e5d03dc72701fc4f07e9962",
+    "benchmarks/results/20260912-serving-optimization/test_http_token_observation_check.py": "cd530f24e7974aad51ffce67846c54bee4261d49cbbe31b29251bc31aef001a3",
+    "benchmarks/results/20260912-serving-optimization/http_token_observation_check.md": "ba8fb6cb49b3ec2423570608d0baa7764d72de71117e604f5bf4f9eade061346",
+    "benchmarks/scripts/serving_token_client.py": "a2a4a35569d6b892542097c119e2be8a6402beb60ab1565aa95658794c364766"
+  },
+  "test_command": "python3 benchmarks/results/20260912-serving-optimization/test_http_token_observation_check.py -v",
+  "test_output": "test_owned_child_termination_and_forced_fallback (__main__.LifecycleContracts) ... ok\ntest_remaining_owned_member_fails_closed (__main__.LifecycleContracts) ... ok\ntest_shutdown_complete_exact_zero_gauges (__main__.LifecycleContracts) ... ok\ntest_all_twelve_formats_for_both_samplers_reconstruct_and_audit (__main__.ProtocolContracts) ... ok\ntest_audit_mutations_rejected_even_with_valid_hash_marker (__main__.ProtocolContracts) ... ok\ntest_both_disconnect_boundaries_followed_by_exact_reuse (__main__.ProtocolContracts) ... ok\ntest_frozen_client_and_source_delivery_name (__main__.ProtocolContracts) ... ok\ntest_header_timeout_is_bounded (__main__.ProtocolContracts) ... ok\ntest_json_duplicate_and_nonfinite_rejected (__main__.ProtocolContracts) ... ok\ntest_mixed_c8_overlap_and_unique_audits (__main__.ProtocolContracts) ... ok\ntest_mixed_failure_joins_workers_and_records_failure (__main__.ProtocolContracts) ... ok\ntest_timeout_bounds_http10_and_http11_trickle_with_partial_bytes (__main__.ProtocolContracts) ... ok\ntest_wire_cleanup_error_is_preserved (__main__.ProtocolContracts) ... ok\ntest_complete_92_check_receipt_reconstructs_then_rejects_changed_token (__main__.ReceiptValidation) ... ok\ntest_complete_sampler_and_injected_request_failure_cleanup (__main__.SamplerLifecycle) ... ok\n\n----------------------------------------------------------------------\nRan 15 tests in 9.549s\n\nOK\n"
+}

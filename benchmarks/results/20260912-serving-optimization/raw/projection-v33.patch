@@ -1,0 +1,53 @@
+commit 214c8ed7309d00ea908c7e29e3c2ed962f8f945d
+Author:     Codex <codex@local>
+AuthorDate: Sun Sep 13 01:08:54 2026 +0900
+Commit:     Codex <codex@local>
+CommitDate: Sun Sep 13 01:08:54 2026 +0900
+
+    Pipeline shared projection loads and bound MMA loop code size
+
+diff --git a/kernels/src/decode_shared.cuh b/kernels/src/decode_shared.cuh
+index 590c819..ede4a34 100644
+--- a/kernels/src/decode_shared.cuh
++++ b/kernels/src/decode_shared.cuh
+@@ -8,17 +8,30 @@ __device__ __forceinline__ void shared_projection_compute(const __nv_bfloat16* x
+  const int lane=threadIdx.x%32,g=lane/4,t=lane%4,base=column*8;
+  constexpr int Chunk=Interval>0?Interval:K;
+  int begin=chunk_index*Chunk,end=min(begin+Chunk,K);float d[4]={};
+- #pragma unroll
+- for(int depth=0;depth<Chunk;depth+=16){
+-  if(begin+depth>=end)break;
+-  int k=begin+depth;
+-  uint32_t a=g<rows?*reinterpret_cast<const uint32_t*>(x+g*K+k+2*t):0,aa=g<rows?*reinterpret_cast<const uint32_t*>(x+g*K+k+2*t+8):0;
+-  const auto* tile=w+((base/8)*(K/16)+k/16)*128;
+-  uint32_t b,bb;
+-  if constexpr(Tiled){b=*reinterpret_cast<const uint32_t*>(tile+lane*2);bb=*reinterpret_cast<const uint32_t*>(tile+64+lane*2);}
+-  else {b=*reinterpret_cast<const uint32_t*>(w+(base+g)*K+k+2*t);bb=*reinterpret_cast<const uint32_t*>(w+(base+g)*K+k+2*t+8);}
+-  riley_prefill_shape::mma(d,a,0,aa,0,b,bb);
++ // Hoist row/tile bases and issue four independent load groups before the
++ // ordered MMA recurrence. Bound code size instead of fully unrolling K.
++ const auto* xp=x+g*K+begin+2*t;
++ const auto* wp=Tiled?w+column*(K/16)*128+(begin/16)*128+lane*2:w+(base+g)*K+begin+2*t;
++ #pragma unroll 1
++ for(int depth=0;depth<Chunk;depth+=64){
++  uint32_t a[4],aa[4],b[4],bb[4];
++  #pragma unroll
++  for(int step=0;step<4;++step){
++   int offset=depth+step*16;bool valid=begin+offset<end;
++   a[step]=valid&&g<rows?*reinterpret_cast<const uint32_t*>(xp+offset):0;
++   aa[step]=valid&&g<rows?*reinterpret_cast<const uint32_t*>(xp+offset+8):0;
++   if constexpr(Tiled){
++    b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128):0;
++    bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+(offset/16)*128+64):0;
++   }else{
++    b[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset):0;
++    bb[step]=valid?*reinterpret_cast<const uint32_t*>(wp+offset+8):0;
++   }
++  }
++  #pragma unroll
++  for(int step=0;step<4;++step)if(begin+depth+step*16<end)riley_prefill_shape::mma(d,a[step],0,aa[step],0,b[step],bb[step]);
+  }
++
+  if(g<rows)for(int j=0;j<2;++j){
+   auto v=__float2bfloat16_rn(d[j]);
+   if constexpr(Interval>0)parts[(chunk_index*8+g)*N+base+2*t+j]=__bfloat162float(v);

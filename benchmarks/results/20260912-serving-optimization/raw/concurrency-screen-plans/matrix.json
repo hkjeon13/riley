@@ -1,0 +1,70 @@
+{
+  "schema_version": "riley.concurrency-screen-matrix.v1",
+  "source_commit": "1a2be0df01fe49daa4d4db155ad5c44f34ead6df",
+  "plans": [
+    {
+      "label": "c1-vllm-budget128",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c1-vllm-budget128.json",
+        "sha256": "d3af2c776840b1fba921747a4da43bee4421296e3d9a27eec78b49dc8c04dda5"
+      }
+    },
+    {
+      "label": "c2-vllm-budget128",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c2-vllm-budget128.json",
+        "sha256": "623d8e4d04b6f302f1e4834a1558c39659fa3e5f0c4ac26652ae24ad2798017f"
+      }
+    },
+    {
+      "label": "c2-vllm-budget256",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c2-vllm-budget256.json",
+        "sha256": "b2b3f1b51591fd69e399da5a6a369c4b868c2c325018f31b9438afc5ab9b4942"
+      }
+    },
+    {
+      "label": "c4-vllm-budget128",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c4-vllm-budget128.json",
+        "sha256": "225b6d6e22d44b0462811f55ea582547269e4d0eabc86a35e39fde62dd1a7869"
+      }
+    },
+    {
+      "label": "c4-vllm-budget512",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c4-vllm-budget512.json",
+        "sha256": "7e2a753ece8873c44e7362a673caa6716a9487ad49c6d9c9484f57750c5fbbfc"
+      }
+    },
+    {
+      "label": "c8-vllm-budget128",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c8-vllm-budget128.json",
+        "sha256": "ceca7978d898d02ac4f99420fca676a2add3d3fc72375f7bf8c767d592a3397f"
+      }
+    },
+    {
+      "label": "c8-vllm-budget1024",
+      "plan": {
+        "path": "/tmp/riley-opt-260912/concurrency-screen-plans/c8-vllm-budget1024.json",
+        "sha256": "23d8f93b1e9dc14b493a06f360288191f9320a05684a4e4e1bd38c19c9fd7209"
+      }
+    }
+  ],
+  "request": {
+    "path": "/tmp/riley-g04-vllm-profile-260911/request.json",
+    "sha256": "7a72c3dc39b90ee7c5eeccf0f8ae1574af3df398471ae0c27981108ea6352ad5"
+  },
+  "binding": {
+    "path": "/tmp/riley-opt-260912/batch7-binding.json",
+    "sha256": "9a623763436d7eb16b693c41a4d7cbc5625f4821d510edbf9a09ce882dbd2277"
+  },
+  "screening_only": true,
+  "requests_per_process": 256,
+  "pairs_per_configuration": 1,
+  "tail_stability_claim": false,
+  "measurement_started": false,
+  "purpose": "Explore queued-c1 throughput and vLLM active/token-budget settings; no statistical winner or P99 stability claim.",
+  "next_step": "Repeat viable settings with at least 1000 requests per process and fresh paired processes before a concurrency baseline decision."
+}

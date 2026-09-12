@@ -64,6 +64,172 @@ pub(in crate::llama) struct PreparedLlamaBatchOwner {
 }
 
 impl PreparedLlamaBatchOwner {
+    /// Cold opt-in bridge for the existing per-operation metadata transport.
+    /// The returned graph borrows actual executor storage, including both full
+    /// KV parents. Packed-slab metadata and inventory promotion remain blocked.
+    #[allow(dead_code)] // Admission remains disabled until complete C07 evidence.
+    pub(in crate::llama) fn prepare_parent_attention_graph<'a>(
+        &'a mut self,
+        stream: &'a mut CudaStream,
+        layer_index: usize,
+        batch: riley_cuda::PackedBatchHostV1<'_>,
+        query_heads: u64,
+        output_rows: u64,
+    ) -> LlamaBatchExecutorResult<riley_cuda::ParentAttentionGraph<'a>> {
+        let site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
+        if self.poisoned || self.layout.head_dimension() != 64 {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "attention graph parent binding",
+                reason: "owner is poisoned or not D64",
+            });
+        }
+        let layer = riley_cuda::AttentionParentLayer::new(
+            self.layout.layer_count() as u64,
+            layer_index as u64,
+            self.layout.physical_block_count() as u64,
+            self.layout.key_value_head_count() as u64,
+        )
+        .map_err(|source| owner_cuda(site, source))?;
+        if self.layout.layer_byte_offset(layer_index) != Some(layer.byte_offset())
+            || self.layout.layer_stride_bytes() != layer.byte_len()
+            || self.layout.bytes_per_kind() != layer.parent_byte_len()
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "attention graph parent binding",
+                reason: "KV layout differs from native layer geometry",
+            });
+        }
+        let BatchDeviceInput::PerOperation(metadata) = &mut self.device_input else {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "attention graph parent binding",
+                reason: "packed metadata slab binding is not admitted",
+            });
+        };
+        riley_cuda::ParentAttentionGraph::prepare(
+            riley_cuda::ParentAttentionResources {
+                stream,
+                query: &mut self.forward.buffers.hidden_rotary,
+                key_parent: &mut self.key_cache,
+                value_parent: &mut self.value_cache,
+                output: &mut self.forward.buffers.hidden_context,
+                sequence_block_offsets: &mut metadata.sequence_block_offsets,
+                block_ids: &mut metadata.physical_block_ids,
+                valid_tokens: &mut metadata.valid_tokens,
+                row_sequence_slots: &mut metadata.row_sequence_slots,
+                row_positions: &mut metadata.row_positions,
+            },
+            layer,
+            batch,
+            query_heads,
+            output_rows,
+            0.125,
+        )
+        .map_err(|source| owner_cuda(site, source))
+    }
+
+    /// Captures canonical C07 metadata using actual model-owned query and KV.
+    /// This cold API measures same-owner parity before exposing any evidence.
+    #[cfg(feature = "cuda")]
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(in crate::llama) fn prepare_c07_attention_graph<'a>(
+        &'a mut self,
+        stream: &'a mut CudaStream,
+        device: &'a mut crate::llama::graph_decode_exact_device_slab::PureDecodeGraphV1ExactDeviceSlab,
+        staging: &mut riley_cuda::CudaPinnedHostBuffer,
+        source: crate::llama::graph_decode_exact_host_slab::PureDecodeGraphV1ExactHostSlabLease<'_>,
+        expected: crate::llama::graph_decode_layout::PureDecodeGraphMetadataLayout,
+        layer_index: usize,
+        batch: riley_cuda::PackedBatchHostV1<'_>,
+    ) -> LlamaBatchExecutorResult<
+        crate::llama::graph_decode_attention_owner::C07AttentionGraphOwner<'a>,
+    > {
+        if self.poisoned {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "C07 attention owner",
+                reason: "executor is poisoned",
+            });
+        }
+        let query_heads = self.forward.plan.dimensions().query_heads() as u64;
+        crate::llama::graph_decode_attention_owner::C07AttentionGraphOwner::prepare(
+            stream,
+            &mut self.forward.buffers.hidden_rotary,
+            &mut self.key_cache,
+            &mut self.value_cache,
+            &mut self.forward.buffers.hidden_context,
+            device,
+            staging,
+            source,
+            expected,
+            self.layout,
+            layer_index,
+            batch,
+            query_heads,
+            &mut self.poisoned,
+        )
+    }
+
+    /// G02C cold M=1 capture of the actual final norm workspace and weight.
+    /// Profile rejection happens before CUDA work; per-layer Norm evidence is
+    /// never substituted for this final normalization operation.
+    #[cfg(feature = "cuda")]
+    #[allow(dead_code)]
+    pub(in crate::llama) fn prepare_c07_final_norm_graph<'a>(
+        &'a mut self,
+        stream: &'a mut CudaStream,
+    ) -> LlamaBatchExecutorResult<
+        crate::llama::graph_decode_final_norm_owner::C07FinalNormGraphOwner<'a>,
+    > {
+        use crate::llama::graph_decode_final_norm_owner::{
+            C07FinalNormGraphOwner, FinalNormBinding,
+        };
+        let rejected = |reason| LlamaBatchExecutorError::InvalidConfiguration {
+            field: "C07 final norm owner",
+            reason,
+        };
+        if self.poisoned || self.forward.is_poisoned() {
+            return Err(rejected("executor is poisoned"));
+        }
+        let plan = &self.forward.plan;
+        if plan.sequence_length() != 1 {
+            return Err(rejected("initial final norm owner requires exact M=1"));
+        }
+        let hidden = plan.dimensions().hidden_size();
+        let weight_id = plan.final_norm_weight();
+        let binding = FinalNormBinding::new(
+            self.forward.rms_norm_profile(),
+            1,
+            hidden as u64,
+            plan.final_norm_epsilon(),
+            weight_id,
+        )
+        .map_err(|_| rejected("final norm profile or geometry has no exact capture evidence"))?;
+        let metadata = self
+            .forward
+            .weights
+            .physical_metadata(weight_id)
+            .ok_or_else(|| rejected("final norm weight belongs to a different uploaded owner"))?;
+        if metadata.dtype != riley_tensor::DType::BF16
+            || metadata.shape != [hidden]
+            || metadata.byte_len != hidden as u64 * 2
+        {
+            return Err(rejected("final norm weight dtype or shape differs"));
+        }
+        let weight = self
+            .forward
+            .weights
+            .borrow_graph_weight(weight_id)
+            .map_err(|_| rejected("final norm weight cannot be borrowed"))?;
+        C07FinalNormGraphOwner::prepare(
+            stream,
+            &mut self.forward.buffers.hidden_current,
+            weight,
+            &mut self.forward.buffers.hidden_norm,
+            &mut self.forward.io_staging,
+            binding,
+            &mut self.poisoned,
+        )
+    }
+
     /// Uploads weights and reserves every CUDA and host resource reused by a
     /// prepared continuous-batch executor.
     ///
@@ -94,6 +260,16 @@ impl PreparedLlamaBatchOwner {
             });
         }
         let bounds = config.metadata();
+        if config.vllm_smol_p128_graph()
+            && (bounds.max_rows() != 1
+                || !matches!(bounds.max_input_tokens(), 1 | 128)
+                || config.shape_policy() != super::shape::LlamaBatchShapePolicy::FixedMaximum)
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1 metadata",
+                reason: "owned profile requires fixed maximum, one sequence and a 1 or 128 token budget",
+            });
+        }
         if bounds.max_input_tokens() > spec.max_sequence_length() {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "max_input_tokens",
@@ -102,13 +278,23 @@ impl PreparedLlamaBatchOwner {
         }
 
         let metadata = PreparedLlamaBatchMetadata::prepare(bounds)?;
-        let mut forward = PreparedLlamaForward::prepare(
-            model,
-            context,
-            stream,
-            bounds.max_input_tokens(),
-            config.forward(),
-        )?;
+        // The batch dispatcher uses paged attention exclusively; the dense
+        // forward owner's prefill plan is never dispatched. For M=1 reserve
+        // the native reference plan explicitly, avoiding an unused cuBLASLt
+        // prefill dependency (and its separate CUDA-version qualification).
+        // This does not change the paged attention reduction implementation.
+        let forward_rows = if config.vllm_smol_p128_batched_prefill() {
+            1
+        } else {
+            bounds.max_input_tokens()
+        };
+        let forward_config = if forward_rows == 1 {
+            config.forward().with_reference_attention()
+        } else {
+            config.forward()
+        };
+        let mut forward =
+            PreparedLlamaForward::prepare(model, context, stream, forward_rows, forward_config)?;
         let shape_variants = match prepare_shape_variants(
             model,
             context,

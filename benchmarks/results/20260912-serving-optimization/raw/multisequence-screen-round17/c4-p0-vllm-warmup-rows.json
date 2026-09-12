@@ -1,0 +1,2111 @@
+[
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "strict",
+    "streaming": true,
+    "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+    "started_ns": 852541653478347,
+    "finished_ns": 852541727548898,
+    "response_identity": {
+      "id": "cmpl-a1387cc2b874e66c",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789195388
+    },
+    "frames": [
+      {
+        "arrived_ns": 852541689319798,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":[19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556],\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541690227451,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541691506554,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541692588467,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541693836109,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" little\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1838]}]}"
+      },
+      {
+        "arrived_ns": 852541695047638,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" bit\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3241]}]}"
+      },
+      {
+        "arrived_ns": 852541696484576,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541697679640,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541698846125,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" lot\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2341]}]}"
+      },
+      {
+        "arrived_ns": 852541700156853,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541701405313,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" the\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 852541702681401,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541703944473,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541705188293,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"The\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 852541706449864,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" first\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[808]}]}"
+      },
+      {
+        "arrived_ns": 852541707719273,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" thing\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2775]}]}"
+      },
+      {
+        "arrived_ns": 852541708945259,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541710300698,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" do\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[536]}]}"
+      },
+      {
+        "arrived_ns": 852541711605361,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" is\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 852541712959396,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541714319894,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" use\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[722]}]}"
+      },
+      {
+        "arrived_ns": 852541715627837,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" the\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 852541716912054,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" following\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1695]}]}"
+      },
+      {
+        "arrived_ns": 852541718436218,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" code\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2909]}]}"
+      },
+      {
+        "arrived_ns": 852541719459534,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541720274078,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" get\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[820]}]}"
+      },
+      {
+        "arrived_ns": 852541721554607,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" the\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 852541723112686,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" same\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1142]}]}"
+      },
+      {
+        "arrived_ns": 852541724087682,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" result\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[966]}]}"
+      },
+      {
+        "arrived_ns": 852541725379946,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\".\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[30]}]}"
+      },
+      {
+        "arrived_ns": 852541726755699,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541727500169,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":\"length\",\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541727525862,
+        "data": "{\"id\":\"cmpl-a1387cc2b874e66c\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32},\"system_fingerprint\":\"vllm-0.27.1-331b3ebe\"}"
+      },
+      {
+        "arrived_ns": 852541727548898,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      852541689319798,
+      852541690227451,
+      852541691506554,
+      852541692588467,
+      852541693836109,
+      852541695047638,
+      852541696484576,
+      852541697679640,
+      852541698846125,
+      852541700156853,
+      852541701405313,
+      852541702681401,
+      852541703944473,
+      852541705188293,
+      852541706449864,
+      852541707719273,
+      852541708945259,
+      852541710300698,
+      852541711605361,
+      852541712959396,
+      852541714319894,
+      852541715627837,
+      852541716912054,
+      852541718436218,
+      852541719459534,
+      852541720274078,
+      852541721554607,
+      852541723112686,
+      852541724087682,
+      852541725379946,
+      852541726755699,
+      852541727500169
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      852541689319798,
+      852541690227451,
+      852541691506554,
+      852541692588467,
+      852541693836109,
+      852541695047638,
+      852541696484576,
+      852541697679640,
+      852541698846125,
+      852541700156853,
+      852541701405313,
+      852541702681401,
+      852541703944473,
+      852541705188293,
+      852541706449864,
+      852541707719273,
+      852541708945259,
+      852541710300698,
+      852541711605361,
+      852541712959396,
+      852541714319894,
+      852541715627837,
+      852541716912054,
+      852541718436218,
+      852541719459534,
+      852541720274078,
+      852541721554607,
+      852541723112686,
+      852541724087682,
+      852541725379946,
+      852541726755699,
+      852541727500169
+    ],
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      2341,
+      282,
+      260,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      288,
+      536,
+      314,
+      288,
+      722,
+      260,
+      1695,
+      2909,
+      288,
+      820,
+      260,
+      1142,
+      966,
+      30,
+      198,
+      198
+    ],
+    "text": ", I'm a little bit of a lot of the\n\nThe first thing to do is to use the following code to get the same result.\n\n",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "total_tokens": 160,
+      "completion_tokens": 32
+    },
+    "done_ns": 852541727548898,
+    "protocol_valid": true,
+    "reference_match": false,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": false,
+        "first_mismatch_index": 8
+      },
+      "text": {
+        "matches": false
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": false,
+    "metrics": {
+      "e2e_ns": 74070551,
+      "token_ttft_ns": 35841451,
+      "token_tpot_ns": 1231624.8709677418,
+      "token_itl_ns": [
+        907653,
+        1279103,
+        1081913,
+        1247642,
+        1211529,
+        1436938,
+        1195064,
+        1166485,
+        1310728,
+        1248460,
+        1276088,
+        1263072,
+        1243820,
+        1261571,
+        1269409,
+        1225986,
+        1355439,
+        1304663,
+        1354035,
+        1360498,
+        1307943,
+        1284217,
+        1524164,
+        1023316,
+        814544,
+        1280529,
+        1558079,
+        974996,
+        1292264,
+        1375753,
+        744470
+      ],
+      "first_text_ns": 35841451
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "failed",
+    "error": {
+      "type": "ReferenceMismatch",
+      "message": "complete response differs from explicit token/text reference"
+    },
+    "http_status": 200,
+    "headers_received_ns": 852541666932165,
+    "call_finished_ns": 852541727641870,
+    "raw_body_bytes": 8723,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "5a31c72d4dfa9bc8beb32820682f28ae9e5164ecf470851c3deac84d3f3572c8",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "failure_read_base64": "",
+    "non_sse_body_base64": "",
+    "unfinished_payload_base64": "",
+    "unfinished_sse_data_base64": [],
+    "index": 0,
+    "worker_id": 0,
+    "phase": "warmup",
+    "warmup": true,
+    "call_started_ns": 852541653443573
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "strict",
+    "streaming": true,
+    "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+    "started_ns": 852541653529107,
+    "finished_ns": 852541723222636,
+    "response_identity": {
+      "id": "cmpl-82ee370b2a812b53",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789195388
+    },
+    "frames": [
+      {
+        "arrived_ns": 852541677183417,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":[19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556],\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541681637407,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541686187875,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541688580347,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541689395687,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" little\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1838]}]}"
+      },
+      {
+        "arrived_ns": 852541690270669,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" bit\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3241]}]}"
+      },
+      {
+        "arrived_ns": 852541691588017,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541692626251,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541693869977,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" few\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1443]}]}"
+      },
+      {
+        "arrived_ns": 852541695077622,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" years\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[929]}]}"
+      },
+      {
+        "arrived_ns": 852541696516428,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" ago\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3156]}]}"
+      },
+      {
+        "arrived_ns": 852541697709630,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541698878212,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541700189452,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541701436197,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"The\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 852541702709900,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" first\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[808]}]}"
+      },
+      {
+        "arrived_ns": 852541703998713,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" thing\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2775]}]}"
+      },
+      {
+        "arrived_ns": 852541705240268,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541706489517,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" want\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1277]}]}"
+      },
+      {
+        "arrived_ns": 852541707757313,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541708915076,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" say\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1643]}]}"
+      },
+      {
+        "arrived_ns": 852541710283056,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" is\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 852541711632809,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" that\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[338]}]}"
+      },
+      {
+        "arrived_ns": 852541712990984,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541714359773,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541715700130,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" going\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2045]}]}"
+      },
+      {
+        "arrived_ns": 852541716942979,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541718486478,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" show\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1138]}]}"
+      },
+      {
+        "arrived_ns": 852541719502711,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" you\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[346]}]}"
+      },
+      {
+        "arrived_ns": 852541720312669,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" how\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[638]}]}"
+      },
+      {
+        "arrived_ns": 852541721590035,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541723168637,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" create\",\"logprobs\":null,\"finish_reason\":\"length\",\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1464]}]}"
+      },
+      {
+        "arrived_ns": 852541723198277,
+        "data": "{\"id\":\"cmpl-82ee370b2a812b53\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32},\"system_fingerprint\":\"vllm-0.27.1-331b3ebe\"}"
+      },
+      {
+        "arrived_ns": 852541723222636,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      852541677183417,
+      852541681637407,
+      852541686187875,
+      852541688580347,
+      852541689395687,
+      852541690270669,
+      852541691588017,
+      852541692626251,
+      852541693869977,
+      852541695077622,
+      852541696516428,
+      852541697709630,
+      852541698878212,
+      852541700189452,
+      852541701436197,
+      852541702709900,
+      852541703998713,
+      852541705240268,
+      852541706489517,
+      852541707757313,
+      852541708915076,
+      852541710283056,
+      852541711632809,
+      852541712990984,
+      852541714359773,
+      852541715700130,
+      852541716942979,
+      852541718486478,
+      852541719502711,
+      852541720312669,
+      852541721590035,
+      852541723168637
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      852541677183417,
+      852541681637407,
+      852541686187875,
+      852541688580347,
+      852541689395687,
+      852541690270669,
+      852541691588017,
+      852541692626251,
+      852541693869977,
+      852541695077622,
+      852541696516428,
+      852541697709630,
+      852541698878212,
+      852541700189452,
+      852541701436197,
+      852541702709900,
+      852541703998713,
+      852541705240268,
+      852541706489517,
+      852541707757313,
+      852541708915076,
+      852541710283056,
+      852541711632809,
+      852541712990984,
+      852541714359773,
+      852541715700130,
+      852541716942979,
+      852541718486478,
+      852541719502711,
+      852541720312669,
+      852541721590035,
+      852541723168637
+    ],
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      1443,
+      929,
+      3156,
+      28,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      339,
+      1277,
+      288,
+      1643,
+      314,
+      338,
+      339,
+      5248,
+      2045,
+      288,
+      1138,
+      346,
+      638,
+      288,
+      1464
+    ],
+    "text": ", I'm a little bit of a few years ago,\n\nThe first thing I want to say is that I'm going to show you how to create",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "total_tokens": 160,
+      "completion_tokens": 32
+    },
+    "done_ns": 852541723222636,
+    "protocol_valid": true,
+    "reference_match": false,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": false,
+        "first_mismatch_index": 29
+      },
+      "text": {
+        "matches": false
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": false,
+    "metrics": {
+      "e2e_ns": 69693529,
+      "token_ttft_ns": 23654310,
+      "token_tpot_ns": 1483394.1935483871,
+      "token_itl_ns": [
+        4453990,
+        4550468,
+        2392472,
+        815340,
+        874982,
+        1317348,
+        1038234,
+        1243726,
+        1207645,
+        1438806,
+        1193202,
+        1168582,
+        1311240,
+        1246745,
+        1273703,
+        1288813,
+        1241555,
+        1249249,
+        1267796,
+        1157763,
+        1367980,
+        1349753,
+        1358175,
+        1368789,
+        1340357,
+        1242849,
+        1543499,
+        1016233,
+        809958,
+        1277366,
+        1578602
+      ],
+      "first_text_ns": 23654310
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "failed",
+    "error": {
+      "type": "ReferenceMismatch",
+      "message": "complete response differs from explicit token/text reference"
+    },
+    "http_status": 200,
+    "headers_received_ns": 852541665965082,
+    "call_finished_ns": 852541723392649,
+    "raw_body_bytes": 8726,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "5a31c72d4dfa9bc8beb32820682f28ae9e5164ecf470851c3deac84d3f3572c8",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "failure_read_base64": "",
+    "non_sse_body_base64": "",
+    "unfinished_payload_base64": "",
+    "unfinished_sse_data_base64": [],
+    "index": 1,
+    "worker_id": 1,
+    "phase": "warmup",
+    "warmup": true,
+    "call_started_ns": 852541653508748
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "strict",
+    "streaming": true,
+    "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+    "started_ns": 852541653610301,
+    "finished_ns": 852541726837049,
+    "response_identity": {
+      "id": "cmpl-a1e606aae04cf0ec",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789195388
+    },
+    "frames": [
+      {
+        "arrived_ns": 852541688669693,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":[19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556],\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541689439242,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541690314375,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541691629865,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541692664489,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" little\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1838]}]}"
+      },
+      {
+        "arrived_ns": 852541693901575,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" bit\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3241]}]}"
+      },
+      {
+        "arrived_ns": 852541695102209,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541696547074,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541697761394,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" lot\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2341]}]}"
+      },
+      {
+        "arrived_ns": 852541698924201,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541700211852,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" the\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 852541701458086,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541702730692,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541704019699,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"The\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 852541705258972,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" first\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[808]}]}"
+      },
+      {
+        "arrived_ns": 852541706515731,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" thing\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2775]}]}"
+      },
+      {
+        "arrived_ns": 852541707813634,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541709010839,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" want\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1277]}]}"
+      },
+      {
+        "arrived_ns": 852541710372023,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541711669579,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" say\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1643]}]}"
+      },
+      {
+        "arrived_ns": 852541713015912,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" is\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 852541714434634,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" that\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[338]}]}"
+      },
+      {
+        "arrived_ns": 852541715759228,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541716968801,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541718576771,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" going\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2045]}]}"
+      },
+      {
+        "arrived_ns": 852541719554296,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541720391903,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" show\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1138]}]}"
+      },
+      {
+        "arrived_ns": 852541721666582,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" you\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[346]}]}"
+      },
+      {
+        "arrived_ns": 852541723280589,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541724159321,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" few\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1443]}]}"
+      },
+      {
+        "arrived_ns": 852541725491118,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541726789933,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" the\",\"logprobs\":null,\"finish_reason\":\"length\",\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[260]}]}"
+      },
+      {
+        "arrived_ns": 852541726815791,
+        "data": "{\"id\":\"cmpl-a1e606aae04cf0ec\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32},\"system_fingerprint\":\"vllm-0.27.1-331b3ebe\"}"
+      },
+      {
+        "arrived_ns": 852541726837049,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      852541688669693,
+      852541689439242,
+      852541690314375,
+      852541691629865,
+      852541692664489,
+      852541693901575,
+      852541695102209,
+      852541696547074,
+      852541697761394,
+      852541698924201,
+      852541700211852,
+      852541701458086,
+      852541702730692,
+      852541704019699,
+      852541705258972,
+      852541706515731,
+      852541707813634,
+      852541709010839,
+      852541710372023,
+      852541711669579,
+      852541713015912,
+      852541714434634,
+      852541715759228,
+      852541716968801,
+      852541718576771,
+      852541719554296,
+      852541720391903,
+      852541721666582,
+      852541723280589,
+      852541724159321,
+      852541725491118,
+      852541726789933
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      852541688669693,
+      852541689439242,
+      852541690314375,
+      852541691629865,
+      852541692664489,
+      852541693901575,
+      852541695102209,
+      852541696547074,
+      852541697761394,
+      852541698924201,
+      852541700211852,
+      852541701458086,
+      852541702730692,
+      852541704019699,
+      852541705258972,
+      852541706515731,
+      852541707813634,
+      852541709010839,
+      852541710372023,
+      852541711669579,
+      852541713015912,
+      852541714434634,
+      852541715759228,
+      852541716968801,
+      852541718576771,
+      852541719554296,
+      852541720391903,
+      852541721666582,
+      852541723280589,
+      852541724159321,
+      852541725491118,
+      852541726789933
+    ],
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      2341,
+      282,
+      260,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      339,
+      1277,
+      288,
+      1643,
+      314,
+      338,
+      339,
+      5248,
+      2045,
+      288,
+      1138,
+      346,
+      253,
+      1443,
+      282,
+      260
+    ],
+    "text": ", I'm a little bit of a lot of the\n\nThe first thing I want to say is that I'm going to show you a few of the",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "total_tokens": 160,
+      "completion_tokens": 32
+    },
+    "done_ns": 852541726837049,
+    "protocol_valid": true,
+    "reference_match": false,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": false,
+        "first_mismatch_index": 8
+      },
+      "text": {
+        "matches": false
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": false,
+    "metrics": {
+      "e2e_ns": 73226748,
+      "token_ttft_ns": 35059392,
+      "token_tpot_ns": 1229685.1612903227,
+      "token_itl_ns": [
+        769549,
+        875133,
+        1315490,
+        1034624,
+        1237086,
+        1200634,
+        1444865,
+        1214320,
+        1162807,
+        1287651,
+        1246234,
+        1272606,
+        1289007,
+        1239273,
+        1256759,
+        1297903,
+        1197205,
+        1361184,
+        1297556,
+        1346333,
+        1418722,
+        1324594,
+        1209573,
+        1607970,
+        977525,
+        837607,
+        1274679,
+        1614007,
+        878732,
+        1331797,
+        1298815
+      ],
+      "first_text_ns": 35059392
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "failed",
+    "error": {
+      "type": "ReferenceMismatch",
+      "message": "complete response differs from explicit token/text reference"
+    },
+    "http_status": 200,
+    "headers_received_ns": 852541667106377,
+    "call_finished_ns": 852541726929449,
+    "raw_body_bytes": 8721,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "5a31c72d4dfa9bc8beb32820682f28ae9e5164ecf470851c3deac84d3f3572c8",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "failure_read_base64": "",
+    "non_sse_body_base64": "",
+    "unfinished_payload_base64": "",
+    "unfinished_sse_data_base64": [],
+    "index": 2,
+    "worker_id": 3,
+    "phase": "warmup",
+    "warmup": true,
+    "call_started_ns": 852541653583784
+  },
+  {
+    "schema_version": "riley.http-token-observation.v2",
+    "mode": "strict",
+    "streaming": true,
+    "reference_sha256": "2020ba907bf7685f1bb9ee263d0723ce8bd95669f7326b1dfea5c79e1dc6d664",
+    "started_ns": 852541653665416,
+    "finished_ns": 852541725474575,
+    "response_identity": {
+      "id": "cmpl-8024bb8a56c6a782",
+      "model": "g04-smol",
+      "object": "text_completion",
+      "created": 1789195388
+    },
+    "frames": [
+      {
+        "arrived_ns": 852541686270037,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":[19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556,19556],\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541688625726,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541689476547,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541690349588,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541691548125,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" little\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1838]}]}"
+      },
+      {
+        "arrived_ns": 852541692706959,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" bit\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3241]}]}"
+      },
+      {
+        "arrived_ns": 852541693944135,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541695139391,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541696596159,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" few\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1443]}]}"
+      },
+      {
+        "arrived_ns": 852541697733363,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" years\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[929]}]}"
+      },
+      {
+        "arrived_ns": 852541698899962,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" ago\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[3156]}]}"
+      },
+      {
+        "arrived_ns": 852541700245790,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\",\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[28]}]}"
+      },
+      {
+        "arrived_ns": 852541701491219,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541702761485,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"\\n\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[198]}]}"
+      },
+      {
+        "arrived_ns": 852541703977401,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"The\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[504]}]}"
+      },
+      {
+        "arrived_ns": 852541705222329,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" first\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[808]}]}"
+      },
+      {
+        "arrived_ns": 852541706557604,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" thing\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2775]}]}"
+      },
+      {
+        "arrived_ns": 852541707780162,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541708976960,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" want\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1277]}]}"
+      },
+      {
+        "arrived_ns": 852541710332164,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541711648416,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" say\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1643]}]}"
+      },
+      {
+        "arrived_ns": 852541713039663,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" is\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[314]}]}"
+      },
+      {
+        "arrived_ns": 852541714392233,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" that\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[338]}]}"
+      },
+      {
+        "arrived_ns": 852541715665325,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" I\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[339]}]}"
+      },
+      {
+        "arrived_ns": 852541716989506,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\"'m\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[5248]}]}"
+      },
+      {
+        "arrived_ns": 852541718529249,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" going\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[2045]}]}"
+      },
+      {
+        "arrived_ns": 852541719595831,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" to\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[288]}]}"
+      },
+      {
+        "arrived_ns": 852541720352400,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" show\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1138]}]}"
+      },
+      {
+        "arrived_ns": 852541721628121,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" you\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[346]}]}"
+      },
+      {
+        "arrived_ns": 852541723243388,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" a\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[253]}]}"
+      },
+      {
+        "arrived_ns": 852541724124185,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" few\",\"logprobs\":null,\"finish_reason\":null,\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[1443]}]}"
+      },
+      {
+        "arrived_ns": 852541725422606,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[{\"index\":0,\"text\":\" of\",\"logprobs\":null,\"finish_reason\":\"length\",\"stop_reason\":null,\"prompt_token_ids\":null,\"token_ids\":[282]}]}"
+      },
+      {
+        "arrived_ns": 852541725451033,
+        "data": "{\"id\":\"cmpl-8024bb8a56c6a782\",\"object\":\"text_completion\",\"created\":1789195388,\"model\":\"g04-smol\",\"choices\":[],\"usage\":{\"prompt_tokens\":128,\"total_tokens\":160,\"completion_tokens\":32},\"system_fingerprint\":\"vllm-0.27.1-331b3ebe\"}"
+      },
+      {
+        "arrived_ns": 852541725474575,
+        "data": "[DONE]"
+      }
+    ],
+    "token_arrival_ns": [
+      852541686270037,
+      852541688625726,
+      852541689476547,
+      852541690349588,
+      852541691548125,
+      852541692706959,
+      852541693944135,
+      852541695139391,
+      852541696596159,
+      852541697733363,
+      852541698899962,
+      852541700245790,
+      852541701491219,
+      852541702761485,
+      852541703977401,
+      852541705222329,
+      852541706557604,
+      852541707780162,
+      852541708976960,
+      852541710332164,
+      852541711648416,
+      852541713039663,
+      852541714392233,
+      852541715665325,
+      852541716989506,
+      852541718529249,
+      852541719595831,
+      852541720352400,
+      852541721628121,
+      852541723243388,
+      852541724124185,
+      852541725422606
+    ],
+    "token_delivery_groups": {
+      "frame_token_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "generated_frame_count": 32,
+      "multi_token_frame_count": 0,
+      "tokens_in_multi_token_frames": 0,
+      "within_frame_zero_itl_count": 0,
+      "max_frame_token_count": 1
+    },
+    "text_arrival_ns": [
+      852541686270037,
+      852541688625726,
+      852541689476547,
+      852541690349588,
+      852541691548125,
+      852541692706959,
+      852541693944135,
+      852541695139391,
+      852541696596159,
+      852541697733363,
+      852541698899962,
+      852541700245790,
+      852541701491219,
+      852541702761485,
+      852541703977401,
+      852541705222329,
+      852541706557604,
+      852541707780162,
+      852541708976960,
+      852541710332164,
+      852541711648416,
+      852541713039663,
+      852541714392233,
+      852541715665325,
+      852541716989506,
+      852541718529249,
+      852541719595831,
+      852541720352400,
+      852541721628121,
+      852541723243388,
+      852541724124185,
+      852541725422606
+    ],
+    "prompt_token_ids": [
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556,
+      19556
+    ],
+    "token_ids": [
+      28,
+      339,
+      5248,
+      253,
+      1838,
+      3241,
+      282,
+      253,
+      1443,
+      929,
+      3156,
+      28,
+      198,
+      198,
+      504,
+      808,
+      2775,
+      339,
+      1277,
+      288,
+      1643,
+      314,
+      338,
+      339,
+      5248,
+      2045,
+      288,
+      1138,
+      346,
+      253,
+      1443,
+      282
+    ],
+    "text": ", I'm a little bit of a few years ago,\n\nThe first thing I want to say is that I'm going to show you a few of",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 128,
+      "total_tokens": 160,
+      "completion_tokens": 32
+    },
+    "done_ns": 852541725474575,
+    "protocol_valid": true,
+    "reference_match": true,
+    "reference_comparison": {
+      "prompt_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "output_token_ids": {
+        "matches": true,
+        "first_mismatch_index": null
+      },
+      "text": {
+        "matches": true
+      },
+      "finish_reason": {
+        "matches": true
+      }
+    },
+    "correctness_qualified": false,
+    "performance_qualified": false,
+    "observation_only": false,
+    "metrics": {
+      "e2e_ns": 71809159,
+      "token_ttft_ns": 32604621,
+      "token_tpot_ns": 1262986.0967741935,
+      "token_itl_ns": [
+        2355689,
+        850821,
+        873041,
+        1198537,
+        1158834,
+        1237176,
+        1195256,
+        1456768,
+        1137204,
+        1166599,
+        1345828,
+        1245429,
+        1270266,
+        1215916,
+        1244928,
+        1335275,
+        1222558,
+        1196798,
+        1355204,
+        1316252,
+        1391247,
+        1352570,
+        1273092,
+        1324181,
+        1539743,
+        1066582,
+        756569,
+        1275721,
+        1615267,
+        880797,
+        1298421
+      ],
+      "first_text_ns": 32604621
+    },
+    "timing_scope": "client-observed complete SSE payloads; all IDs in a frame share arrival time; no interpolation or engine/CUDA token times",
+    "status": "success",
+    "error": null,
+    "http_status": 200,
+    "headers_received_ns": 852541667033687,
+    "call_finished_ns": 852541725557715,
+    "raw_body_bytes": 8721,
+    "total_deadline_seconds": 120,
+    "owned_connection_closed": true,
+    "cleanup_errors": [],
+    "request": {
+      "model": "g04-smol",
+      "prompt": "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello",
+      "max_tokens": 32,
+      "temperature": 0,
+      "stream": true,
+      "return_token_ids": true,
+      "stream_options": {
+        "include_usage": true
+      }
+    },
+    "request_body_sha256": "5a31c72d4dfa9bc8beb32820682f28ae9e5164ecf470851c3deac84d3f3572c8",
+    "parser_protocol_valid": true,
+    "transport_complete": true,
+    "index": 3,
+    "worker_id": 2,
+    "phase": "warmup",
+    "warmup": true,
+    "call_started_ns": 852541653646533
+  }
+]

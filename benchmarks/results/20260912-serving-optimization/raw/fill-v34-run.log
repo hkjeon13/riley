@@ -1,0 +1,15 @@
+PASS fill-v34-release.log
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/run_fill_v34.py", line 37, in <module>
+    rows,accounting,_=mixed_phase(client,one,concurrency=concurrency,count=384,phase='diagnostic',corpus_ids=[x['id'] for x in corpus])
+                      ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/riley-opt-260912/mixed_phase_v1.py", line 5, in mixed_phase
+    assert count % len(corpus_ids) == 0 and 1 <= concurrency <= 8
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+Traceback (most recent call last):
+  File "/tmp/riley-opt-260912/prepare_fill_v34.py", line 16, in <module>
+    subprocess.run(['/data/riley-vllm-interim.CfrT9T/venv/bin/python',str(r/'run_fill_v34.py')],check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/data/riley-vllm-interim.CfrT9T/venv/bin/python', '/tmp/riley-opt-260912/run_fill_v34.py']' returned non-zero exit status 1.

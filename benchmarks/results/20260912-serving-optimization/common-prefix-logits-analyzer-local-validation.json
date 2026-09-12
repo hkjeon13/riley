@@ -1,0 +1,59 @@
+{
+  "schema": "riley.common-prefix-logits-analyzer.local-validation.v1",
+  "completed": true,
+  "recorded_at_utc": "2026-09-12T02:42:47.792219+00:00",
+  "scope": "stdlib-only analyzer; full-size synthetic CPU captures plus actual frozen case manifest",
+  "gpu_executed": false,
+  "remote_executed": false,
+  "production_modified": false,
+  "performance_claim": false,
+  "accuracy_acceptance_decision": null,
+  "checks": [
+    {
+      "command": "python3 -m unittest benchmarks/scripts/tests/test_analyze_common_prefix_logits.py -v",
+      "exit_code": 0,
+      "tests_passed": 16
+    },
+    {
+      "command": "python3 -m py_compile benchmarks/results/20260912-serving-optimization/analyze_common_prefix_logits.py",
+      "exit_code": 0
+    }
+  ],
+  "independent_review": {
+    "scope": "read-only capture schema/hash-chain/raw dtype/descriptive scope review",
+    "concrete_blockers": 0,
+    "tests_rerun_by_reviewer": false
+  },
+  "frozen_inputs": {
+    "capture_common_prefix_logits.py": {
+      "path": "benchmarks/results/20260912-serving-optimization/capture_common_prefix_logits.py",
+      "sha256": "413fa06c6e86bee1b2b525854b837c25e19f650ffc5dd38f74040d56a95b129a"
+    },
+    "numerical-divergence-cases.json": {
+      "path": "benchmarks/results/20260912-serving-optimization/numerical-divergence-cases.json",
+      "sha256": "e8acc4dac75b97a3a3820cbf8dbddb3903c4e6af440ea3ed08b9c8052685e9f6"
+    },
+    "common-prefix-reference-source.json": {
+      "path": "benchmarks/results/20260912-serving-optimization/common-prefix-reference-source.json",
+      "sha256": "8a8b46e0eb6071356a2452c3e029e8276fbc0b2409357ec248645324374dfa03"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "benchmarks/results/20260912-serving-optimization/analyze_common_prefix_logits.py",
+      "sha256": "94403ee85ad5c12922eaaf5ec2414f9e23938686f25c9e573f2878b90f69d718",
+      "bytes": 25526
+    },
+    {
+      "path": "benchmarks/scripts/tests/test_analyze_common_prefix_logits.py",
+      "sha256": "c28d034091019341fa11fe84a4f29c0026721761cf1467701742af037f389102",
+      "bytes": 17013
+    },
+    {
+      "path": "benchmarks/results/20260912-serving-optimization/COMMON_PREFIX_LOGITS_ANALYSIS.md",
+      "sha256": "ff0d4590eaf129b448b0a3f6d26ae41ba17ac64ea6b6b234ad67c567c19b4c15",
+      "bytes": 6507
+    }
+  ],
+  "remaining": "Real FP32/BF16 capture receipt analysis after parent executes the frozen capture runner."
+}

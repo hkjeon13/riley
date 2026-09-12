@@ -1,0 +1,12 @@
+from pathlib import Path
+r=Path('/tmp/riley-opt-260912');p=r/'prefill-shapes-source-v11/kernels/src/decode_shared_attention.cuh';s=p.read_text();(r/'decode_shared_attention_v30_reference.cuh').write_text(s.replace('namespace riley_shared_attention {','namespace riley_shared_attention_v30 {'))
+s=s.replace(' for(;token<count;token+=gridDim.x*8){',' int lane=threadIdx.x,g=lane/4,t=lane%4;uint32_t qa[4],qb[4];\n #pragma unroll\n for(int d=0;d<4;++d){auto* qp=q+head*64+d*16;qa[d]=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);qb[d]=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);}\n for(;token<count;token+=gridDim.x*8){')
+s=s.replace(' int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};',' float d[4]={};')
+s=s.replace('  auto* qp=q+head*64+depth;\n  uint32_t a=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);\n  uint32_t aa=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);','  uint32_t a=qa[depth/16],aa=qb[depth/16];')
+s=s.replace('block=blockIdx.x,lane=threadIdx.x,g=lane/4,t=lane%4','block=blockIdx.x*4+threadIdx.x/32,lane=threadIdx.x%32,g=lane/4,t=lane%4')
+s=s.replace('__shared__ float exponentials[128];float maximum','__shared__ float exponentials[128];\n __shared__ float normalization[2];float maximum')
+s=s.replace('  for(int i=lane;i<end-begin;i+=32)mx=', '  if(threadIdx.x<32){\n  for(int i=lane;i<end-begin;i+=32)mx=')
+s=s.replace('  __syncwarp();\n  float local_den=den*alpha;','  if(lane==0){normalization[0]=mx;normalization[1]=alpha;}\n  }\n  __syncthreads();\n  mx=normalization[0];float alpha=normalization[1];\n  float local_den=den*alpha;')
+s=s.replace('  __syncwarp();\n }','  __syncthreads();\n }')
+s=s.replace('values<<<dim3(8,72),32,0,stream>>>','values<<<dim3(2,72),128,0,stream>>>')
+p.write_text(s)

@@ -360,6 +360,27 @@ impl CudaUploadedWeights {
         Ok(CudaPhysicalWeight { tensor, span })
     }
 
+    /// Unique physical parents for a cold aggregate lease reservation. Tied
+    /// logical slots already resolve to the same entry in this owner.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn borrow_graph_weight_parents(
+        &mut self,
+    ) -> impl Iterator<Item = &mut CudaDeviceBuffer> {
+        self.physical.iter_mut().map(|tensor| &mut tensor.buffer)
+    }
+
+    /// Cold graph binding of one actual physical weight. The exclusive borrow
+    /// prevents the uploaded owner or tied aliases from being used during capture.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn borrow_graph_weight(
+        &mut self,
+        id: PhysicalWeightId,
+    ) -> CudaWeightUploadResult<&mut CudaDeviceBuffer> {
+        // Preserve the existing owner-ID check and dtype/span validation.
+        self.view_physical(id)?;
+        Ok(&mut self.physical[id.index()].buffer)
+    }
+
     /// Resolves a canonical slot into its immutable whole-allocation span.
     ///
     /// # Errors

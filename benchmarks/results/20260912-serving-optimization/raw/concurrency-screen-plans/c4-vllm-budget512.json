@@ -1,0 +1,129 @@
+{
+  "schema_version": "riley.serving-concurrency-plan.v1",
+  "parent_c1_plan": {
+    "path": "/tmp/riley-opt-260912/batch7-http-plan.json",
+    "sha256": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6"
+  },
+  "immutable_files": {
+    "/tmp/riley-opt-260912/batch7-http-plan.json": "06b1120d979932b0ac156ff2291aa8de386c7da2b220e9d7f5640a024ca519e6",
+    "/tmp/riley-opt-260912/run_serving_concurrency.py": "73f8fb3fa09d623dbeb36616ebe0ee7d45e291ca3da6e515e3b56ddf45f27a6f",
+    "/tmp/riley-opt-260912/run_serving_optimization.py": "e1d0f34c11d58a577232738d645cf5821fc6d71132757269d1d02429965deee8",
+    "/tmp/riley-opt-260912/prepare_concurrency_screen.py": "a17696eec93ba1fd4ea2d2a936aa726f9d05a797e6cc5e2ae4857765d19484dc"
+  },
+  "workload": {
+    "id": "queued-c1-c4-vllm-budget512-screen-v1",
+    "offered_concurrency": 4,
+    "arrival_policy": "closed-loop-refill",
+    "retained_requests_per_process": 256,
+    "warmups_per_worker_per_transport": 5,
+    "pairs": 1,
+    "purpose": "screening"
+  },
+  "base_environment": {
+    "HOME": "/home/psyche",
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "LC_CTYPE": "C.UTF-8"
+  },
+  "http_lanes": {
+    "riley": {
+      "argv": [
+        "/tmp/riley-opt-260912/batch7-target/release/riley",
+        "serve",
+        "--model",
+        "/data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+        "--model-id",
+        "g04-smol",
+        "--bind",
+        "127.0.0.1:19341",
+        "--max-active-sequences",
+        "1",
+        "--batch-token-budget",
+        "128",
+        "--prefill-chunk-tokens",
+        "128",
+        "--max-sequence-tokens",
+        "160",
+        "--max-output-tokens",
+        "32",
+        "--kv-blocks",
+        "10",
+        "--residual-rmsnorm",
+        "separate",
+        "--execution-completion",
+        "iteration-batch",
+        "--metadata-transport",
+        "packed-async",
+        "--execution-graph-policy",
+        "require",
+        "--sampling-backend",
+        "gpu-greedy",
+        "--graph-numerics",
+        "vllm-smol-p128-v1",
+        "--max-waiting-requests",
+        "64"
+      ],
+      "env": {
+        "LD_LIBRARY_PATH": "/data/riley-g04-cuda13/lib"
+      },
+      "port": 19341,
+      "expected_output_text": ", I'm a little bit of a few years ago,\n\nThe first thing I want to say is that I'm going to show you a few of",
+      "active_capacity": 1,
+      "waiting_capacity": 64,
+      "http_workers": 8,
+      "token_budget": 128
+    },
+    "vllm": {
+      "argv": [
+        "/data/riley-vllm-interim.CfrT9T/venv/bin/vllm",
+        "serve",
+        "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+        "--tokenizer",
+        "/data/riley-vllm-interim.CfrT9T/hf/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+        "--served-model-name",
+        "g04-smol",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19342",
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        "160",
+        "--max-num-seqs",
+        "4",
+        "--max-num-batched-tokens",
+        "512",
+        "--gpu-memory-utilization",
+        "0.3",
+        "--no-enable-prefix-caching",
+        "--seed",
+        "0"
+      ],
+      "env": {
+        "HF_HOME": "/data/riley-vllm-interim.CfrT9T/hf",
+        "HF_HUB_OFFLINE": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "VLLM_DO_NOT_TRACK": "1",
+        "VLLM_NO_USAGE_STATS": "1",
+        "VLLM_USE_FLASHINFER_SAMPLER": "0",
+        "DO_NOT_TRACK": "1"
+      },
+      "port": 19342,
+      "expected_output_text": ", I'm a little bit of a few years ago,\n\nThe first thing I want to say is that I'm going to show you a few of",
+      "active_capacity": 4,
+      "token_budget": 512
+    }
+  },
+  "vllm_runtime": {
+    "engine_version": "0.27.1",
+    "enforce_eager": false,
+    "enable_chunked_prefill": true,
+    "compilation_mode": "VLLM_COMPILE",
+    "cudagraph_mode": "FULL_AND_PIECEWISE"
+  },
+  "startup_timeout_seconds": 180,
+  "request_timeout_seconds": 120
+}

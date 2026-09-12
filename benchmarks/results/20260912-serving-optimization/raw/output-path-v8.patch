@@ -1,0 +1,275 @@
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index e26ecc0..5fa8804 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -274,6 +274,10 @@ impl PreparedLlamaBatchExecutor {
+                         true,
+                     )
+                     .map_err(cuda)?;
++                graph.append_multisequence_decode(
++                    indices, &multi_weights, &std::array::from_fn(|i| index * 5 + i),
++                    index + 4, [2, 4, 8][index], geometry[1] as u32, false,
++                ).map_err(cuda)?;
+             }
+         }
+         Ok(graph)
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs b/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
+index ae64b02..271b097 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_multi_parents.rs
+@@ -54,6 +54,9 @@ impl MultiDecodeParents {
+                 );
+             }
+         }
++        for _ in 0..3 {
++            staging.push(context.allocate_pinned_host_buffer(2 * 1792).map_err(cuda)?);
++        }
+         Ok(Self {
+             scratch,
+             plans,
+diff --git a/crates/riley-runtime/src/llama/graph_decode_multi_session.rs b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+index b3f38e5..c22e8e2 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_multi_session.rs
+@@ -38,7 +38,7 @@ impl PreparedLlamaBatchExecutor {
+             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
+             .map_err(|_| rejected("multi owner generation exhausted"))?;
+         let mut hash = Sha256::new();
+-        hash.update(b"riley.multi-catalog.full-logits.v2\0");
++        hash.update(b"riley.multi-catalog.dual-output.v2\0");
+         hash.update(wire::CONTRACT_SHA256.as_bytes());
+         hash.update(include_bytes!("../../../../kernels/src/graph_multisequence_packet.inc"));
+         hash.update(include_bytes!("../../../../kernels/src/graph_resources.cu"));
+@@ -84,6 +84,8 @@ impl PreparedLlamaBatchExecutor {
+             },
+             CatalogEntry { stage: Stage::Decode, bucket: 8, mode: ResultMode::FullLogits },
+         ];
++        let greedy: Vec<_> = catalog.iter().map(|e| CatalogEntry { mode: ResultMode::Greedy, ..*e }).collect();
++        catalog.extend(greedy);
+         catalog.retain(|entry| entry.bucket <= max_active_rows);
+         let codec = CodecOwner::new(OwnerExpectation {
+             generation,
+@@ -171,7 +173,7 @@ impl OwnedLlamaMultiDecodeExecutor {
+         self.codec.admit(&packet, e.clone()).map_err(wire_error)?;
+         self.issued.clear();
+         let bytes =
+-            wire::result_bytes(decoded.bucket, ResultMode::FullLogits).map_err(wire_error)?;
++            wire::result_bytes(decoded.bucket, e.mode).map_err(wire_error)?;
+         self.output[..bytes].fill(0);
+         self.started = true;
+         let executed: LlamaBatchExecutorResult<()> = if decoded.bucket == 1 {
+@@ -199,7 +201,7 @@ impl OwnedLlamaMultiDecodeExecutor {
+                 put32(&mut self.output, 0, 0x314f4d52);
+                 put32(&mut self.output, 8, bytes as u32);
+                 put32(&mut self.output, 108, 0);
+-                put32(&mut self.output, 112, 1);
++                put32(&mut self.output, 112, e.mode as u32);
+                 self.output[128..144].copy_from_slice(&packet[208..224]);
+                 self.output[144..160].copy_from_slice(&packet[56..72]);
+                 put32(&mut self.output, 164, row.output_slot);
+@@ -207,21 +209,25 @@ impl OwnedLlamaMultiDecodeExecutor {
+                 put32(&mut self.output, 172, row.generated_index);
+                 self.output[176..216].copy_from_slice(&self.inner.output[98304..98344]);
+                 put32(&mut self.output, 216, 1);
++                if e.mode == ResultMode::FullLogits {
+                 put32(&mut self.output, 224, 1152);
+                 put32(&mut self.output, 232, 98304);
+                 self.output[1152..bytes].copy_from_slice(&self.inner.output[..98304]);
++                }
+             })
+         } else {
+-            self.input[..bytes].fill(0);
++            let transfer = bytes.max(wire::REQUEST_BYTES);
++            self.input[..transfer].fill(0);
+             self.input[..1792].copy_from_slice(&packet);
+-            let index = if decoded.bucket == 2 { 1 } else if decoded.bucket == 4 { 2 } else { 3 };
++            let mut index = if decoded.bucket == 2 { 1 } else if decoded.bucket == 4 { 2 } else { 3 };
++            if e.mode == ResultMode::Greedy { index += 3; }
+             self.inner
+                 .graph
+-                .replay_catalog(index, &self.input[..bytes])
++                .replay_catalog(index, &self.input[..transfer])
+                 .and_then(|()| {
+                     self.inner
+                         .graph
+-                        .read_catalog(index, &mut self.output[..bytes])
++                        .read_catalog(index, &mut self.output[..transfer])
+                 })
+                 .map_err(|e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e))
+         };
+diff --git a/crates/riley-scheduler/src/authority.rs b/crates/riley-scheduler/src/authority.rs
+index b10d76f..0a8593a 100644
+--- a/crates/riley-scheduler/src/authority.rs
++++ b/crates/riley-scheduler/src/authority.rs
+@@ -61,9 +61,15 @@ impl AuthorizedExecution<'_> {
+         owner: crate::descriptor::OwnerExpectation,
+         replay: u64,
+         cookies: &[u64],
++    ) -> crate::descriptor::Result<crate::descriptor::SubmissionExpectation> {
++        self.descriptor_expectation_with_mode(owner, replay, cookies, crate::descriptor::ResultMode::FullLogits)
++    }
++    pub(crate) fn descriptor_expectation_with_mode(
++        &self, owner: crate::descriptor::OwnerExpectation, replay: u64, cookies: &[u64],
++        mode: crate::descriptor::ResultMode,
+     ) -> crate::descriptor::Result<crate::descriptor::SubmissionExpectation> {
+         use crate::descriptor::{
+-            BlockOwnership, Error, ReservationExpectation, ResultMode, Stage, SubmissionExpectation,
++            BlockOwnership, Error, ReservationExpectation, Stage, SubmissionExpectation,
+         };
+         let bad = || Error {
+             field: "scheduler authority",
+@@ -111,7 +117,7 @@ impl AuthorizedExecution<'_> {
+             replay_id: replay,
+             iteration_id: self.plan.iteration_id().get(),
+             stage,
+-            mode: ResultMode::FullLogits,
++            mode,
+             rows,
+             block_ownership: self
+                 .block_owners
+diff --git a/crates/riley-scheduler/src/execution.rs b/crates/riley-scheduler/src/execution.rs
+index 922efe6..45b9c27 100644
+--- a/crates/riley-scheduler/src/execution.rs
++++ b/crates/riley-scheduler/src/execution.rs
+@@ -2062,7 +2062,7 @@ pub fn execute_llama_iteration_multi_graph(
+     let (owner, replay, cookies) = executor
+         .issue_submission(authority.rows().len())
+         .map_err(|error| before(runtime(error)))?;
+-    let expectation = match authority.descriptor_expectation(owner, replay, &cookies) {
++    let expectation = match authority.descriptor_expectation_with_mode(owner, replay, &cookies, if greedy_workspace.is_some() { crate::descriptor::ResultMode::Greedy } else { crate::descriptor::ResultMode::FullLogits }) {
+         Ok(value) => value,
+         Err(error) => {
+             executor
+diff --git a/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs b/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs
+index 02d8559..ddc4c7f 100644
+--- a/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs
++++ b/crates/riley-scheduler/tests/multi_graph_authority_gpu.rs
+@@ -41,7 +41,11 @@ fn eight_requests_match_m1_and_commit() -> Result { run(false, 8) }
+ #[test]
+ #[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
+ fn eight_requests_cancel_and_reuse_kv() -> Result { run(true, 8) }
+-fn run(cancel_and_replace: bool, capacity: usize) -> Result {
++#[test]
++#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
++fn eight_requests_alternate_output_modes_and_reuse_kv() -> Result { run_mode(true, 8, true) }
++fn run(cancel_and_replace: bool, capacity: usize) -> Result { run_mode(cancel_and_replace, capacity, false) }
++fn run_mode(cancel_and_replace: bool, capacity: usize, alternate: bool) -> Result {
+     let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
+     let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
+     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
+@@ -81,7 +85,9 @@ fn run(cancel_and_replace: bool, capacity: usize) -> Result {
+             break;
+         };
+         let authority = scheduler.authorize_execution(&plan)?;
+-        let downloaded = execute_llama_iteration_multi_graph(&authority, &mut owner, None)
++        let greedy = alternate && now % 2 == 0;
++        let mut workspace = Vec::with_capacity(capacity);
++        let downloaded = execute_llama_iteration_multi_graph(&authority, &mut owner, greedy.then_some(&mut workspace))
+             .map_err(|e| format!("execution failed: {e:?}"))?;
+         let mut samples = vec![SampledIterationToken::new(0, false); downloaded.output_count()];
+         for work in plan.prefill_items().iter().chain(plan.decode_items()) {
+@@ -111,12 +117,13 @@ fn run(cancel_and_replace: bool, capacity: usize) -> Result {
+             );
+             let expected = oracle.execute(&[row])?;
+             let slot = work.output_slot().unwrap().get() as usize;
+-            assert_eq!(
++            if !greedy { assert_eq!(
+                 &downloaded.logits_bf16_native()[slot * 98304..(slot + 1) * 98304],
+                 expected,
+                 "iteration {now}, request {}",
+                 work.request_id().get()
+             );
++            } else { assert_eq!(downloaded.greedy_token_ids()[slot], oracle.greedy_token()?); }
+             samples[slot] = SampledIterationToken::new(oracle.greedy_token()?, false);
+             rows += 1;
+         }
+diff --git a/kernels/src/gemm.cu b/kernels/src/gemm.cu
+index 97266ef..1d19eb2 100644
+--- a/kernels/src/gemm.cu
++++ b/kernels/src/gemm.cu
+@@ -1937,11 +1937,11 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
+     // Partition only the qualified strided head. Public byte extents and batch
+     // strides still cover the complete logical matrix; layouts cover one slice.
+     if(status==RILEY_CUDA_STATUS_SUCCESS && config->n==49152){
+-      const uint64_t width=config->n/16;const int64_t ld=static_cast<int64_t>(width);
++      const uint64_t width=config->n;const int64_t ld=static_cast<int64_t>(width);
+       status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->weight_layout,CUBLASLT_MATRIX_LAYOUT_COLS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition columns");
+       if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_ROWS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition rows");
+       if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_LD,&ld,sizeof(ld)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition stride");
+-      if(status==RILEY_CUDA_STATUS_SUCCESS)plan->column_chunks=16;
++      if(status==RILEY_CUDA_STATUS_SUCCESS)plan->column_chunks=1;
+     }
+     cublasLtMatmulHeuristicResult_t checked{};
+     if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatmulAlgoCheck(plan->handle,
+diff --git a/kernels/src/graph_multisequence_catalog.inc b/kernels/src/graph_multisequence_catalog.inc
+index 32b5427..94d5a01 100644
+--- a/kernels/src/graph_multisequence_catalog.inc
++++ b/kernels/src/graph_multisequence_catalog.inc
+@@ -42,9 +42,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decod
+     RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,RileyCudaErrorInfo* error)noexcept{
+   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+   // Cold-only: never invalidate an already published completion to grow a catalog.
+-  if((bucket!=2&&bucket!=4&&bucket!=8)||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
++  if((bucket!=2&&bucket!=4&&bucket!=8)||full>1||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
+     return reject(error,"catalog append requires a distinct cold decode bucket",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+-  auto& entry=r->catalog[bucket==2?0:bucket==4?1:2];
++  auto& entry=r->catalog[(full?0:3)+(bucket==2?0:bucket==4?1:2)];
+   if(entry.graph||entry.exec)return reject(error,"catalog entry already recorded",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   SavedGraphBinding saved(r);select_catalog_binding(r,{});
+   status=riley_cuda_graph_resources_record_multisequence_decode(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,error);
+@@ -59,7 +59,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
+   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+   r->completion_visible=false;
+   if(index==0)return riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
+-  if(index>3||!r->catalog[index-1].exec)return reject(error,"catalog entry absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
++  if(index>6||!r->catalog[index-1].exec)return reject(error,"catalog entry absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);
+   status=riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
+   saved.restore(r);r->last_catalog=index;
+@@ -68,7 +68,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
+ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_catalog(
+     RileyCudaGraphResources* r,uint32_t index,uint8_t* output,uint64_t bytes,RileyCudaErrorInfo* error)noexcept{
+   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+-  if(index!=r->last_catalog||index>3||!r->completion_visible)return reject(error,"catalog completion is stale",RILEY_CUDA_STATUS_INVALID_STATE);
++  if(index!=r->last_catalog||index>6||!r->completion_visible)return reject(error,"catalog completion is stale",RILEY_CUDA_STATUS_INVALID_STATE);
+   if(index==0)return riley_cuda_graph_resources_read_transfer(r,output,bytes,error);
+   SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);r->last_catalog=0;
+   status=riley_cuda_graph_resources_read_transfer(r,output,bytes,error);
+diff --git a/kernels/src/graph_multisequence_record.inc b/kernels/src/graph_multisequence_record.inc
+index 4094eea..994fc97 100644
+--- a/kernels/src/graph_multisequence_record.inc
++++ b/kernels/src/graph_multisequence_record.inc
+@@ -21,7 +21,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
+       384ULL*16*physical*30,384ULL*16*physical*30,160*128,160*128};
+   if(staging->byte_len!=2*transfer)return reject(error,"multi staging extent invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t i=0;i<18;++i){
+-    if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses)||(i<16?d[i]->byte_len!=sizes[i]:(d[i]->byte_len<160*128||d[i]->byte_len%128!=0)))
++    if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses)||(i<16?(i==12?(d[i]->byte_len!=sizes[i]&&d[i]->byte_len!=1152+uint64_t(bucket)*98304):d[i]->byte_len!=sizes[i]):(d[i]->byte_len<160*128||d[i]->byte_len%128!=0)))
+       return reject(error,"multi device geometry or membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+     for(size_t j=0;j<i;++j)if(d[i]==d[j])return reject(error,"multi device alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   }
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index 43122e5..22743d8 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -17,7 +17,7 @@ struct RileyCudaGraphResources {
+     uint64_t transfer=0;
+     uint32_t bucket=0,physical=0,full=0;
+   };
+-  CatalogEntry catalog[3]{};
++  CatalogEntry catalog[6]{};
+   uint32_t last_catalog=0;
+   bool catalog_sealed=false;
+   enum class Kind { Counter, Plan };
+@@ -198,7 +198,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
+       (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
+       (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
+       (*resources)->catalog[1].graph || (*resources)->catalog[1].exec ||
+-      (*resources)->catalog[2].graph || (*resources)->catalog[2].exec) {
++      (*resources)->catalog[2].graph || (*resources)->catalog[2].exec ||
++      (*resources)->catalog[3].graph || (*resources)->catalog[3].exec ||
++      (*resources)->catalog[4].graph || (*resources)->catalog[4].exec ||
++      (*resources)->catalog[5].graph || (*resources)->catalog[5].exec) {
+     CaptureDomainControlLease admission((*resources)->owner->capture_domain);
+     if (!admission.active())
+       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,

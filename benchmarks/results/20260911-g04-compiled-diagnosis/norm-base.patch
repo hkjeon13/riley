@@ -1,0 +1,214 @@
+diff --git a/benchmarks/competitive/scripts/competitive_common.py b/benchmarks/competitive/scripts/competitive_common.py
+index d707dfc..91bfae3 100644
+--- a/benchmarks/competitive/scripts/competitive_common.py
++++ b/benchmarks/competitive/scripts/competitive_common.py
+@@ -53,7 +53,7 @@ CANONICAL_ASSET_SHA256: dict[str, str] = {
+     "benchmarks/competitive/lanes/riley.json": "9035fa499d6dec60a29668199d754ff7d677b2c4794900a2fd98be0dbd4623fa",
+     "benchmarks/competitive/lanes/vllm-current.json": "8b1ce0ac66c7a8f7631f126c59b33a4a13d48b9d5ffa332fafcb76e6056b1047",
+ }
+-CANONICAL_PREFLIGHT_SHA256 = "2371a6291b6b47b89e960867a1c3ae814ffc1e10115ea74eb02e0792db9f42e4"
++CANONICAL_PREFLIGHT_SHA256 = "442c5e8a65b1cf9a0abb5c20c375aa6b022f8766a347bda5f12b83dbfd9553df"
+ 
+ # `benchmarks/scripts/preflight.sh` emits this closed receipt.  C01 accepts
+ # the complete snapshot only: accepting a hand-selected subset would let a
+@@ -108,6 +108,14 @@ PREFLIGHT_EXACT_VALUES = {
+     "clock_synchronized": "yes",
+     "staging_minimum_bytes": str(20 * 1024**3),
+ }
++PREFLIGHT_ENVIRONMENTS = {
++    PREFLIGHT_EXACT_VALUES["environment_id"]: PREFLIGHT_EXACT_VALUES,
++    "rtx4090-ubuntu22-driver580-20260911-v2": {
++        **PREFLIGHT_EXACT_VALUES,
++        "environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
++        "ram_bytes": "67185594368",
++    },
++}
+ 
+ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+ GIT_REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
+@@ -471,7 +479,10 @@ def load_preflight_receipt(path: Path, source: Mapping[str, Any]) -> dict[str, s
+         raise ContractError("preflight source receipt must contain a full lowercase Git revision")
+     if values["git_revision"] != revision:
+         raise ContractError(f"{path}: preflight Git revision differs from campaign source")
+-    for key, expected in PREFLIGHT_EXACT_VALUES.items():
++    expected_environment = PREFLIGHT_ENVIRONMENTS.get(values["environment_id"])
++    if expected_environment is None:
++        raise ContractError(f"{path}: unsupported preflight environment ID")
++    for key, expected in expected_environment.items():
+         if values[key] != expected:
+             raise ContractError(f"{path}: preflight {key} must be {expected!r}")
+     integer_limits = {
+diff --git a/benchmarks/competitive/scripts/tests/test_campaign_contract.py b/benchmarks/competitive/scripts/tests/test_campaign_contract.py
+index e73bf0b..ab030e5 100644
+--- a/benchmarks/competitive/scripts/tests/test_campaign_contract.py
++++ b/benchmarks/competitive/scripts/tests/test_campaign_contract.py
+@@ -667,6 +667,19 @@ class CampaignCheckerTests(unittest.TestCase):
+                 {"git_revision": "d" * 40},
+             )
+ 
++    def test_september_preflight_identity_does_not_accept_v1_ram(self) -> None:
++        original = self.fixture.preflight_path.read_text()
++        updated = original.replace("rtx4090-ubuntu22-driver580-v1",
++                                    "rtx4090-ubuntu22-driver580-20260911-v2")
++        self.fixture.preflight_path.write_text(updated)
++        with self.assertRaisesRegex(competitive_common.ContractError, "ram_bytes"):
++            competitive_common.load_preflight_receipt(
++                self.fixture.preflight_path, {"git_revision": "d" * 40})
++        self.fixture.preflight_path.write_text(updated.replace("67185598464", "67185594368"))
++        values = competitive_common.load_preflight_receipt(
++            self.fixture.preflight_path, {"git_revision": "d" * 40})
++        self.assertEqual(values["ram_bytes"], "67185594368")
++
+     def _write_plan_and_rebind_raw(self, plan: dict[str, object]) -> None:
+         self.fixture.plan = plan
+         _write_json(self.fixture.plan_path, plan)
+diff --git a/benchmarks/environment.md b/benchmarks/environment.md
+index 95a2ffd..416270c 100644
+--- a/benchmarks/environment.md
++++ b/benchmarks/environment.md
+@@ -1,5 +1,17 @@
+ # Baseline environment v1
+ 
++## September 11 host snapshot
++
++The explicit `RILEY_PREFLIGHT_ENVIRONMENT_ID=rtx4090-ubuntu22-driver580-20260911-v2`
++profile records the same hardware/OS/driver with `/proc/meminfo` MemTotal
++`65610932` KiB (`67185594368` bytes), one OS-visible page below v1. The reason
++for that boot-time accounting difference has not been established. This is a
++new exact snapshot, not a RAM tolerance or a claim that v1 passed. v1 remains
++the default. Both profiles retain all GPU exclusivity, memory, temperature,
++clock, disk, source cleanliness and driver checks. A campaign must use one
++environment identity throughout; historical v1 and new v2 receipts cannot be
++mixed in a matched comparison.
++
+ 이 문서는 첫 release까지 비교 기준으로 사용하는 primary 환경을 고정한다. 실제 측정 row는 이 문서의 값과 실행 직전 `nvidia-smi` snapshot을 함께 기록한다.
+ 
+ ## Gate A 상태 출처
+diff --git a/benchmarks/scripts/preflight.sh b/benchmarks/scripts/preflight.sh
+index 20183b2..0230baa 100755
+--- a/benchmarks/scripts/preflight.sh
++++ b/benchmarks/scripts/preflight.sh
+@@ -21,6 +21,20 @@ expected_physical_cpu_cores='16'
+ expected_logical_cpu_threads='24'
+ expected_mem_total_kib='65610936'
+ expected_ram_bytes='67185598464'
++# Keep the original environment reproducible. The September host snapshot
++# reports one fewer OS-visible page; it gets a distinct, exact identity.
++case "${RILEY_PREFLIGHT_ENVIRONMENT_ID:-rtx4090-ubuntu22-driver580-v1}" in
++  rtx4090-ubuntu22-driver580-v1) ;;
++  rtx4090-ubuntu22-driver580-20260911-v2)
++    expected_environment_id='rtx4090-ubuntu22-driver580-20260911-v2'
++    expected_mem_total_kib='65610932'
++    expected_ram_bytes='67185594368'
++    ;;
++  *)
++    echo "preflight: unsupported environment ID" >&2
++    exit 2
++    ;;
++esac
+ minimum_staging_available_bytes=21474836480
+ cpu_governor_root="${RILEY_CPU_GOVERNOR_ROOT:-/sys/devices/system/cpu/cpufreq}"
+ host_root="${RILEY_HOST_ROOT:-}"
+diff --git a/benchmarks/scripts/tests/test_preflight.py b/benchmarks/scripts/tests/test_preflight.py
+index 48b8ee8..12c1384 100644
+--- a/benchmarks/scripts/tests/test_preflight.py
++++ b/benchmarks/scripts/tests/test_preflight.py
+@@ -90,6 +90,7 @@ class PreflightTests(unittest.TestCase):
+         kernel_release: str = "6.8.0-138-generic",
+         ram_kib: int = 65_610_936,
+         compute_query_ok: bool = True,
++        environment_id: str = "rtx4090-ubuntu22-driver580-v1",
+     ) -> subprocess.CompletedProcess[str]:
+         tools = root / "fake-bin"
+         tools.mkdir()
+@@ -153,6 +154,7 @@ class PreflightTests(unittest.TestCase):
+                 "RILEY_CPU_GOVERNOR_ROOT": str(governor_root),
+                 "RILEY_HOST_ROOT": str(host_root),
+                 "RILEY_PREFLIGHT_OUTPUT_ROOT": str(staging),
++                "RILEY_PREFLIGHT_ENVIRONMENT_ID": environment_id,
+             }
+         )
+         return subprocess.run(
+@@ -190,6 +192,20 @@ class PreflightTests(unittest.TestCase):
+         self.assertEqual(values["staging_available_bytes"], str(30 * 1024**3))
+         self.assertEqual(values["staging_minimum_bytes"], str(20 * 1024**3))
+ 
++    def test_september_snapshot_requires_its_exact_identity(self) -> None:
++        snapshot = "rtx4090-ubuntu22-driver580-20260911-v2"
++        with tempfile.TemporaryDirectory() as directory:
++            result = self._run(Path(directory), environment_id=snapshot, ram_kib=65_610_932)
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertIn("environment_id=" + snapshot, result.stdout)
++        self.assertIn("ram_bytes=67185594368", result.stdout)
++        for identity, ram in [(snapshot, 65_610_936), (snapshot, 65_610_931),
++                              ("rtx4090-ubuntu22-driver580-v1", 65_610_932),
++                              ("arbitrary-host", 65_610_932)]:
++            with self.subTest(identity=identity, ram=ram), tempfile.TemporaryDirectory() as directory:
++                result = self._run(Path(directory), environment_id=identity, ram_kib=ram)
++                self.assertNotEqual(result.returncode, 0)
++
+     def test_primary_environment_checks_fail_closed(self) -> None:
+         cases = {
+             "clock": {"clock": "no"},
+diff --git a/crates/riley-cuda/build.rs b/crates/riley-cuda/build.rs
+index f99d9cc..a83b564 100644
+--- a/crates/riley-cuda/build.rs
++++ b/crates/riley-cuda/build.rs
+@@ -137,6 +137,12 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
+     // symbols; the release environment must provide cudart.
+     println!("cargo:rustc-link-lib=dylib=cudart");
+     println!("cargo:rustc-link-lib=dylib=cuda");
++    // CUDA 13 emits C++ guarded static registration in its host stubs. Rust's
++    // final linker does not add the C++ runtime as nvcc would. The native
++    // Linux build uses the host GNU C++ ABI, including these guard symbols.
++    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
++        println!("cargo:rustc-link-lib=dylib=stdc++");
++    }
+     // The probe links the toolkit-selected NVML development library (the
+     // toolkit stub is valid at build time). GPU execution must resolve the
+     // driver's real versioned NVML library supplied by the host.
+diff --git a/crates/riley-runtime/src/llama/executor/owner.rs b/crates/riley-runtime/src/llama/executor/owner.rs
+index e36f11a..d8a0cdd 100644
+--- a/crates/riley-runtime/src/llama/executor/owner.rs
++++ b/crates/riley-runtime/src/llama/executor/owner.rs
+@@ -268,12 +268,22 @@ impl PreparedLlamaBatchOwner {
+         }
+ 
+         let metadata = PreparedLlamaBatchMetadata::prepare(bounds)?;
++        // The batch dispatcher uses paged attention exclusively; the dense
++        // forward owner's prefill plan is never dispatched. For M=1 reserve
++        // the native reference plan explicitly, avoiding an unused cuBLASLt
++        // prefill dependency (and its separate CUDA-version qualification).
++        // This does not change the paged attention reduction implementation.
++        let forward_config = if bounds.max_input_tokens() == 1 {
++            config.forward().with_reference_attention()
++        } else {
++            config.forward()
++        };
+         let mut forward = PreparedLlamaForward::prepare(
+             model,
+             context,
+             stream,
+             bounds.max_input_tokens(),
+-            config.forward(),
++            forward_config,
+         )?;
+         let shape_variants = match prepare_shape_variants(
+             model,
+diff --git a/kernels/src/primitives.cu b/kernels/src/primitives.cu
+index 58a9526..b9d7f48 100644
+--- a/kernels/src/primitives.cu
++++ b/kernels/src/primitives.cu
+@@ -610,10 +610,9 @@ __global__ void hugging_face_smollm2_rms_norm_kernel(
+     } else {
+       value = __bfloat162float(left[index]);
+     }
+-    const __nv_bfloat16 staged =
+-        __float2bfloat16_rn(__fmul_rn(value, inverse_rms));
++    const float staged = __fmul_rn(value, inverse_rms);
+     normalized_output[index] = __float2bfloat16_rn(__fmul_rn(
+-        __bfloat162float(weight[column]), __bfloat162float(staged)));
++        __bfloat162float(weight[column]), staged));
+   }
+ }
+ 

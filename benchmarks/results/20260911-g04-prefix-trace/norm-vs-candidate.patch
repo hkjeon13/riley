@@ -1,0 +1,15 @@
+--- /tmp/riley-g04-followup-source-260911/kernels/src/primitives.cu	2026-09-11 15:57:51.126978447 +0900
++++ /tmp/riley-g04-norm-experiment-260911/kernels/src/primitives.cu	2026-09-11 16:05:57.048880878 +0900
+@@ -610,10 +610,9 @@
+     } else {
+       value = __bfloat162float(left[index]);
+     }
+-    const __nv_bfloat16 staged =
+-        __float2bfloat16_rn(__fmul_rn(value, inverse_rms));
++    const float staged = __fmul_rn(value, inverse_rms);
+     normalized_output[index] = __float2bfloat16_rn(__fmul_rn(
+-        __bfloat162float(weight[column]), __bfloat162float(staged)));
++        __bfloat162float(weight[column]), staged));
+   }
+ }
+ 

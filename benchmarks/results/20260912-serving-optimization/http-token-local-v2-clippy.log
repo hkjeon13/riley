@@ -1,0 +1,117 @@
+    Checking riley-server v0.1.0 (/Users/psyche/PycharmProjects/riley/crates/riley-server)
+warning: docs for function returning `Result` missing `# Errors` section
+   --> crates/riley-server/src/engine.rs:656:5
+    |
+656 |     fn write_record(&self, record: C02GenerationAuditRecord) -> Result<(), String>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#missing_errors_doc
+    = note: `-W clippy::missing-errors-doc` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::missing_errors_doc)]`
+
+warning: strict comparison of `f32` or `f64`
+   --> crates/riley-server/src/engine.rs:673:15
+    |
+673 |     } else if repetition_penalty != 1.0 {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider comparing them within some margin of error: `(repetition_penalty - 1.0).abs() > error_margin`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#float_cmp
+    = note: `-W clippy::float-cmp` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::float_cmp)]`
+
+warning: `riley-server` (lib) generated 1 warning
+warning: this function has too many arguments (9/7)
+    --> crates/riley-server/src/main.rs:1606:1
+     |
+1606 | / fn c02_native_fallback_event_bytes(
+1607 | |     candidate_id: &str,
+1608 | |     configuration_profile: C02ConfigurationProfile,
+1609 | |     configuration_sha256: &str,
+...    |
+1615 | |     events: &[riley_server::engine::C02CommittedSamplingSelection],
+1616 | | ) -> Result<Vec<u8>, String> {
+     | |____________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+     = note: `-W clippy::too-many-arguments` implied by `-W clippy::all`
+     = help: to override `-W clippy::all` add `#[allow(clippy::too_many_arguments)]`
+
+warning: this function has too many lines (136/100)
+    --> crates/riley-server/src/main.rs:1606:1
+     |
+1606 | / fn c02_native_fallback_event_bytes(
+1607 | |     candidate_id: &str,
+1608 | |     configuration_profile: C02ConfigurationProfile,
+1609 | |     configuration_sha256: &str,
+...    |
+1753 | |     c02_canonical_json_bytes(&document)
+1754 | | }
+     | |_^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+     = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: this function has too many lines (199/100)
+    --> crates/riley-server/src/main.rs:2099:5
+     |
+2099 | /     fn write_record(
+2100 | |         &self,
+2101 | |         record: riley_server::engine::C02GenerationAuditRecord,
+2102 | |     ) -> Result<(), String> {
+...    |
+2313 | |         Ok(())
+2314 | |     }
+     | |_____^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: called `map(<f>).unwrap_or(<a>)` on an `Option` value
+    --> crates/riley-server/src/main.rs:2179:25
+     |
+2179 | /                         selection
+2180 | |                             .ineligibility_reason
+2181 | |                             .map(|reason| serde_json::Value::String(reason.as_str().to_owned()))
+2182 | |                             .unwrap_or(serde_json::Value::Null),
+     | |_______________________________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#map_unwrap_or
+     = note: `-W clippy::map-unwrap-or` implied by `-W clippy::pedantic`
+     = help: to override `-W clippy::pedantic` add `#[allow(clippy::map_unwrap_or)]`
+help: use `map_or(<a>, <f>)` instead
+     |
+2181 -                             .map(|reason| serde_json::Value::String(reason.as_str().to_owned()))
+2181 +                             .map_or(serde_json::Value::Null, |reason| serde_json::Value::String(reason.as_str().to_owned())),
+     |
+
+warning: this function has too many lines (264/100)
+    --> crates/riley-server/src/main.rs:2983:5
+     |
+2983 | /     fn c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection() {
+2984 | |         use riley_server::engine::{
+2985 | |             C02CommittedSamplingSelection, C02GpuGreedyIneligibility, C02SamplingBackend,
+2986 | |         };
+...    |
+3253 | |         );
+3254 | |     }
+     | |_____^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: this function has too many lines (205/100)
+    --> crates/riley-server/src/main.rs:3466:5
+     |
+3466 | /     fn c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once() {
+3467 | |         use riley_server::domain::{FinishReason, TokenUsage};
+3468 | |         use riley_server::engine::{
+3469 | |             C02CommittedSamplingSelection, C02GenerationAuditDeliveryMode,
+...    |
+3672 | |         std::fs::remove_dir_all(&outer).expect("remove exact C02 writer test directory");
+3673 | |     }
+     | |_____^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_lines
+
+warning: `riley-server` (lib test) generated 2 warnings (1 duplicate)
+warning: `riley-server` (bin "riley" test) generated 6 warnings (run `cargo clippy --fix --bin "riley" --tests` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s

@@ -1,0 +1,39 @@
+{
+  "schema": "riley.multisequence-common-owner.v1",
+  "status": "passed-scoped-parity",
+  "source_commit": "fb22505950dab470fb0090e9525f040219f9214c",
+  "single_cold_owner": true,
+  "stages": [
+    "P128",
+    "M1",
+    "N2",
+    "N4"
+  ],
+  "decode_replays": 62,
+  "prefill_replays": 8,
+  "decode_rows": 126,
+  "full_logits_and_physical_kv_exact": true,
+  "final_allocation_stats_zero": true,
+  "scheduler_authority_integrated": false,
+  "serving_benchmark": false,
+  "logs": [
+    {
+      "path": "raw/multisequence-common-owner-v1.log",
+      "commit": "dcfb838abf4370711022ff81266cf8bd39957ce7",
+      "sha256": "6bdc4a1912c7958df74807655d459a319b27b36b534af2d8040445171c0db9bb",
+      "status": "passed"
+    },
+    {
+      "path": "raw/multisequence-common-owner-v2.log",
+      "commit": "b61667df07bd22134c7635566c27ceb7dc90b3bb",
+      "sha256": "5b482bcd24ed8a07af98b161a99179ee2ff2ea3bba9613e03ff3541cab79989f",
+      "status": "compile-failed"
+    },
+    {
+      "path": "raw/multisequence-common-owner-v3.log",
+      "commit": "fb22505950dab470fb0090e9525f040219f9214c",
+      "sha256": "e9c2322b17f0bdce13ed36e40f64094f738de0fa010a19d3564d0e7ed8119243",
+      "status": "passed"
+    }
+  ]
+}

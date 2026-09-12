@@ -1,0 +1,33 @@
+{
+  "checked_at_utc": "2026-09-11T14:23:17.246758+00:00",
+  "blender_stopped_pids": [
+    4007728,
+    201778,
+    501891
+  ],
+  "stop_signal": "SIGTERM",
+  "restart_commands_remote": "/tmp/riley-blender-resume-260911.json",
+  "compute_processes": [],
+  "gpu_memory_mib": 318,
+  "max_idle_memory_mib": 256,
+  "preflight_exit_code": 2,
+  "graphics_processes": [
+    {
+      "pid": 2152851,
+      "name": "Xorg",
+      "memory_mib": 266
+    },
+    {
+      "pid": 2153116,
+      "name": "gnome-shell",
+      "memory_mib": 12
+    },
+    {
+      "pid": 2154378,
+      "name": "snapd-desktop-integration",
+      "memory_mib": 6
+    }
+  ],
+  "measurement_started": false,
+  "blocker": "Desktop graphics session remains above the fixed idle-memory threshold"
+}
