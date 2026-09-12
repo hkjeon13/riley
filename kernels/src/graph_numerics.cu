@@ -334,61 +334,52 @@ __device__ __forceinline__ float fused_rope_fma(float a,float b,float c){
 __device__ __forceinline__ float fused_rope_negate(float value){
  return __uint_as_float(__float_as_uint(value)^0x80000000u);
 }
-__global__ void attention_packed_decode_rope(
- const __nv_bfloat16* raw_q,const __nv_bfloat16* raw_k,const __nv_bfloat16* raw_v,
- __nv_bfloat16* qo,__nv_bfloat16* k,__nv_bfloat16* v,__nv_bfloat16* out,
- const float* cos,const float* sin,const uint32_t* metadata){
- const uint32_t position=metadata[1];
- const int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
- const int qh=blockIdx.x,kvh=qh/3,first_block=blockIdx.y*4+warp*2,qb=qh*64;
- if(position<128||position>=160){
-  if(warp==0)out[qb+blockIdx.y*32+lane]=__float2bfloat16_rn(CUDART_NAN_F);
-  return;
- }
- const int count=static_cast<int>(position)+1;
- const uint32_t* blocks=metadata+4;
- __shared__ float scores[128];
- __shared__ __nv_bfloat16 probs[128];
- __shared__ float alpha_by_lane[32],inverse_by_lane[32];
- __shared__ __nv_bfloat16 local_q[64],local_k[64];
- // Each CTA has its own rounded current Q/K. No CTA reads the cache slot
- // another CTA is publishing during this launch, so no grid barrier is needed.
- const float c=fused_rope_table(cos[position*32+lane]);
- const float s=fused_rope_table(sin[position*32+lane]);
- const int source_base=warp==0?qb:kvh*64;
- const __nv_bfloat16* source=warp==0?raw_q:raw_k;
- const float ra=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane]))<<16);
- const float rb=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane+32]))<<16);
- const float first=fused_rope_fma(ra,c,fused_rope_negate(fused_rope_mul(rb,s)));
- const float second=fused_rope_fma(ra,s,fused_rope_mul(rb,c));
- const __nv_bfloat16 x=fused_rope_round(first),y=fused_rope_round(second);
- __nv_bfloat16* local=warp==0?local_q:local_k;
- local[lane]=x;local[lane+32]=y;
- // Preserve the original rotary-Q scratch and publish K/V exactly once per
- // KV head. Every current-token attention load below uses local/raw data.
- if(warp==0&&blockIdx.y==0){qo[qb+lane]=x;qo[qb+lane+32]=y;}
- if(warp==1&&qh%3==0&&blockIdx.y==0){
-  const int destination=cache_index(static_cast<int>(position),kvh,lane,blocks);
-  k[destination]=x;k[destination+32]=y;
-  v[destination]=raw_v[kvh*64+lane];v[destination+32]=raw_v[kvh*64+lane+32];
- }
- __syncthreads(); // Publish both local heads, including warp1's rounded K.
- float maximum=-CUDART_INF_F,den=0.;float accum[2][4]={};
+// All callers below prove four-byte alignment and preserve adjacent BF16 bits.
+__device__ __forceinline__ uint32_t fused_history_shared_pair(const __nv_bfloat16* p){
+ const uint32_t address=static_cast<uint32_t>(__cvta_generic_to_shared(p));
+ uint32_t bits;asm volatile("ld.shared.b32 %0, [%1];" : "=r"(bits) : "r"(address) : "memory");return bits;
+}
+__device__ __forceinline__ uint32_t fused_history_global_pair(const __nv_bfloat16* p){
+ const uint64_t address=static_cast<uint64_t>(__cvta_generic_to_global(p));
+ uint32_t bits;asm volatile("ld.global.b32 %0, [%1];" : "=r"(bits) : "l"(address) : "memory");return bits;
+}
+// Exactly two tiles for positions128..159: tail first, then full history.
+// History specialization has no current-token test, raw-V bypass or tail mask.
+template<bool History>
+__device__ __forceinline__ void fused_history_tile(
+ const __nv_bfloat16* local_q,const __nv_bfloat16* local_k,const __nv_bfloat16* raw_v,
+ const __nv_bfloat16* k,const __nv_bfloat16* v,const uint32_t* blocks,uint32_t position,
+ float* scores,__nv_bfloat16* probs,float* alpha_by_lane,
+ int lane,int warp,int group,int t,int kvh,int first_block,
+ float& maximum,float& den,float (&accum)[2][4]){
+ const int begin=History?0:128,end=History?128:static_cast<int>(position)+1;
  const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
- for(int tile=(count-1)/128;tile>=0;--tile){
-  int begin=tile*128,end=min(begin+128,count);
   for(int token=begin+8*warp;token<end;token+=16){
    float d[4]={};
+   const int key_token=token+group;
+   int key_base=0;bool current=false;
+   if constexpr(History){
+    key_base=((blocks[token/16]*3+kvh)*16+token%16+group)*64;
+   }else{
+    current=key_token==static_cast<int>(position);
+    if(key_token<end&&!current)key_base=cache_index(key_token,kvh,0,blocks);
+   }
    for(int depth=0;depth<64;depth+=16){
-    uint32_t a=pair(local_q[depth+2*t],local_q[depth+2*t+1]);
-    uint32_t aa=pair(local_q[depth+2*t+8],local_q[depth+2*t+9]);
-    const int key_token=token+group;
-    const bool current=key_token==static_cast<int>(position);
-    const int kb=key_token<end&&!current?cache_index(key_token,kvh,depth,blocks):0;
-    const __nv_bfloat16* key=current?local_k:k;
-    const int base=current?depth:kb;
-    uint32_t b=key_token<end?pair(key[base+2*t],key[base+2*t+1]):0;
-    uint32_t bb=key_token<end?pair(key[base+2*t+8],key[base+2*t+9]):0;
+    uint32_t a=fused_history_shared_pair(local_q+depth+2*t);
+    uint32_t aa=fused_history_shared_pair(local_q+depth+2*t+8);
+    uint32_t b=0,bb=0;
+    if constexpr(History){
+     b=fused_history_global_pair(k+key_base+depth+2*t);
+     bb=fused_history_global_pair(k+key_base+depth+2*t+8);
+    }else if(key_token<end){
+     if(current){
+      b=fused_history_shared_pair(local_k+depth+2*t);
+      bb=fused_history_shared_pair(local_k+depth+2*t+8);
+     }else{
+      b=fused_history_global_pair(k+key_base+depth+2*t);
+      bb=fused_history_global_pair(k+key_base+depth+2*t+8);
+     }
+    }
     mma(d,a,a,aa,aa,b,bb);
    }
    if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[token-begin+2*t+j]=d[j]*.125F;}
@@ -419,22 +410,75 @@ __global__ void attention_packed_decode_rope(
   const float alpha=alpha_by_lane[lane];
   for(int block=0;block<2;++block){
    for(int j=0;j<4;++j)accum[block][j]*=alpha;
+   const int dim=(first_block+block)*8+group;
    for(int token=begin;token<end;token+=16){
     int pi=token-begin;
-    uint32_t a=pair(probs[pi+2*t],probs[pi+2*t+1]);
-    uint32_t aa=pair(probs[pi+2*t+8],probs[pi+2*t+9]);
-    int dim=(first_block+block)*8+group;
-    auto val=[&](int pos){
-     if(pos>=end)return zero;
-     return pos==static_cast<int>(position)?raw_v[kvh*64+dim]:v[cache_index(pos,kvh,dim,blocks)];
-    };
-    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
-    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
+    uint32_t a=fused_history_shared_pair(probs+pi+2*t);
+    uint32_t aa=fused_history_shared_pair(probs+pi+2*t+8);
+    uint32_t b,bb;
+    if constexpr(History){
+     // Every 16-token historical iteration stays within one physical page.
+     const int page=((blocks[token/16]*3+kvh)*16)*64+dim;
+     b=pair(v[page+(2*t)*64],v[page+(2*t+1)*64]);
+     bb=pair(v[page+(2*t+8)*64],v[page+(2*t+9)*64]);
+    }else{
+     auto val=[&](int pos){
+      if(pos>=end)return zero;
+      return pos==static_cast<int>(position)?raw_v[kvh*64+dim]:v[cache_index(pos,kvh,dim,blocks)];
+     };
+     b=pair(val(token+2*t),val(token+2*t+1));
+     bb=pair(val(token+2*t+8),val(token+2*t+9));
+    }
     mma(accum[block],a,a,aa,aa,b,bb);
    }
   }
   __syncthreads(); // Finish both PV readers before reusing scores/probabilities.
+}
+__global__ void attention_packed_decode_rope(
+ const __nv_bfloat16* raw_q,const __nv_bfloat16* raw_k,const __nv_bfloat16* raw_v,
+ __nv_bfloat16* qo,__nv_bfloat16* k,__nv_bfloat16* v,__nv_bfloat16* out,
+ const float* cos,const float* sin,const uint32_t* metadata){
+ const uint32_t position=metadata[1];
+ const int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
+ const int qh=blockIdx.x,kvh=qh/3,first_block=blockIdx.y*4+warp*2,qb=qh*64;
+ if(position<128||position>=160){
+  if(warp==0)out[qb+blockIdx.y*32+lane]=__float2bfloat16_rn(CUDART_NAN_F);
+  return;
  }
+ const uint32_t* blocks=metadata+4;
+ __shared__ float scores[128];
+ __shared__ __align__(4) __nv_bfloat16 probs[128];
+ __shared__ float alpha_by_lane[32],inverse_by_lane[32];
+ __shared__ __align__(4) __nv_bfloat16 local_q[64],local_k[64];
+ // Each CTA has its own rounded current Q/K. No CTA reads the cache slot
+ // another CTA is publishing during this launch, so no grid barrier is needed.
+ const float c=fused_rope_table(cos[position*32+lane]);
+ const float s=fused_rope_table(sin[position*32+lane]);
+ const int source_base=warp==0?qb:kvh*64;
+ const __nv_bfloat16* source=warp==0?raw_q:raw_k;
+ const float ra=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane]))<<16);
+ const float rb=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane+32]))<<16);
+ const float first=fused_rope_fma(ra,c,fused_rope_negate(fused_rope_mul(rb,s)));
+ const float second=fused_rope_fma(ra,s,fused_rope_mul(rb,c));
+ const __nv_bfloat16 x=fused_rope_round(first),y=fused_rope_round(second);
+ __nv_bfloat16* local=warp==0?local_q:local_k;
+ local[lane]=x;local[lane+32]=y;
+ // Preserve the original rotary-Q scratch and publish K/V exactly once per
+ // KV head. Every current-token attention load below uses local/raw data.
+ if(warp==0&&blockIdx.y==0){qo[qb+lane]=x;qo[qb+lane+32]=y;}
+ if(warp==1&&qh%3==0&&blockIdx.y==0){
+  const int destination=cache_index(static_cast<int>(position),kvh,lane,blocks);
+  k[destination]=x;k[destination+32]=y;
+  v[destination]=raw_v[kvh*64+lane];v[destination+32]=raw_v[kvh*64+lane+32];
+ }
+ __syncthreads(); // Publish both local heads, including warp1's rounded K.
+ float maximum=-CUDART_INF_F,den=0.;float accum[2][4]={};
+ // The validated range guarantees tail128..position followed by history0..127.
+ fused_history_tile<false>(local_q,local_k,raw_v,k,v,blocks,position,scores,probs,alpha_by_lane,
+     lane,warp,group,t,kvh,first_block,maximum,den,accum);
+ fused_history_tile<true>(local_q,local_k,raw_v,k,v,blocks,position,scores,probs,alpha_by_lane,
+     lane,warp,group,t,kvh,first_block,maximum,den,accum);
+
  if(warp==0){
   den+=__shfl_xor_sync(0xffffffff,den,2);
   den+=__shfl_xor_sync(0xffffffff,den,1);
