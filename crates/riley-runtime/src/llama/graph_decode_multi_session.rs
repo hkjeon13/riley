@@ -53,7 +53,8 @@ impl PreparedLlamaBatchExecutor {
         hash.update(include_bytes!(
             "../../../../kernels/src/graph_multisequence_io.cu"
         ));
-        let catalog = vec![
+        let max_active_rows = if physical >= 40 { 4 } else { 2 };
+        let mut catalog = vec![
             CatalogEntry {
                 stage: Stage::Prefill128,
                 bucket: 1,
@@ -75,11 +76,12 @@ impl PreparedLlamaBatchExecutor {
                 mode: ResultMode::FullLogits,
             },
         ];
+        catalog.retain(|entry| entry.bucket <= max_active_rows);
         let codec = CodecOwner::new(OwnerExpectation {
             generation,
             last_accepted_replay: 0,
             catalog_digest: hash.finalize().into(),
-            max_active_rows: 4,
+            max_active_rows,
             physical_block_count: physical,
             catalog,
         });

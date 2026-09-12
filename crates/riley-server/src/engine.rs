@@ -2562,9 +2562,14 @@ mod cuda_backend {
                 resources.execution_graph_policy,
                 !use_graph,
                 !use_graph,
-                decode_graph
-                    .as_ref()
-                    .map_or("existing", |graph| graph.numerical_profile_id())
+                decode_graph.as_ref().map_or(
+                    if use_multi {
+                        "vllm-smol-p128-multi-v1"
+                    } else {
+                        "existing"
+                    },
+                    |graph| graph.numerical_profile_id()
+                )
             );
             Ok(Self {
                 metadata: resources.metadata,
