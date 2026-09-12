@@ -6,6 +6,7 @@
 
 pub mod shape_progress;
 pub mod variable_wire;
+pub mod variable_wire16;
 
 use std::collections::BTreeSet;
 use std::fmt;
