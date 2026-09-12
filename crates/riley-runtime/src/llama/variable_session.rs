@@ -62,3 +62,28 @@ impl<'a> BorrowedVariableSession<'a> {
     /// Native destruction remains the authority for GPU parent release.
     pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
 }
+
+/// Cold scratch for the fixed SmolLM2 V3 implementation. KV and weights remain
+/// in the loaded model owner and are exclusively borrowed during the session.
+pub struct VariableGraphBuffers {
+    pub(crate) devices:Vec<riley_cuda::CudaDeviceBuffer>,
+    pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
+    pub(crate) head:riley_cuda::CudaPreparedGemm,
+    pub(crate) capacity:u32,
+}
+impl VariableGraphBuffers {
+    pub fn prepare(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self> {
+        // Invalid capacity is rejected again by the native recorder; allocating
+        // zero/oversized geometry is prevented with the GEMM config validator.
+        let checked=if (1..=1024).contains(&capacity) {capacity}else{0};
+        let config=riley_cuda::CudaGemmConfig::new(checked as u64,49152,576,0)?;
+        let _=config;
+        let sizes=[1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072];
+        let mut devices=Vec::with_capacity(18);
+        for bytes in sizes {devices.push(context.allocate_device_buffer(bytes*capacity as u64)?);}
+        for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
+        Ok(Self{devices,staging:context.allocate_pinned_host_buffer(196864)?,
+            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
+    }
+    pub fn close(self)->riley_cuda::CudaResult<()> {self.head.close()}
+}
