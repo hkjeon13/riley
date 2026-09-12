@@ -2125,9 +2125,9 @@ pub fn execute_llama_iteration_multi_graph(
 /// Executes V3 single-request work on a prepared retained reservation. Caller
 /// must confirm the runtime commit after successful scheduler settlement.
 #[cfg(feature = "cuda")]
-pub fn execute_llama_iteration_variable_graph(
+pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_session::VariableGraph>(
     authority:&crate::AuthorizedExecution<'_>,
-    executor:&mut riley_runtime::llama::variable_session::BorrowedVariableSession<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G>,
 ) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
     let id=authority.plan().iteration_id();
     let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,

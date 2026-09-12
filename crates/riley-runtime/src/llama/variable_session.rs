@@ -10,16 +10,16 @@ pub struct VariableSessionIdentity {
 }
 /// Owns the prepared reservation; no mutable native handle escapes while active.
 /// A result remains outstanding until scheduler commit is explicitly confirmed.
-pub struct BorrowedVariableSession<'a> {
-    graph:BorrowedGraphResourceReservation<'a>, identity:VariableSessionIdentity,
+pub struct VariableSession<G: VariableGraph> {
+    graph:G, identity:VariableSessionIdentity,
     issued:Option<u64>, next_cookie:u64, retained:Option<wire::Expectation>,
     started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
-impl<'a> BorrowedVariableSession<'a> {
+impl<G: VariableGraph> VariableSession<G> {
     /// The caller must have recorded the V3 model and bound the digest to its
     /// actual prepared model/kernel catalog. This constructor does not create it.
-    pub fn new(graph:BorrowedGraphResourceReservation<'a>,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
+    pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
         if catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens},
@@ -59,8 +59,7 @@ impl<'a> BorrowedVariableSession<'a> {
         if self.poisoned || !self.completed || self.retained.as_ref().map(|e|e.iteration_id)!=Some(iteration) {return Err(bad("commit differs from completed iteration"));}
         self.identity.last_accepted_replay=self.retained.take().unwrap().replay_id;self.completed=false;Ok(())
     }
-    /// Native destruction remains the authority for GPU parent release.
-    pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
+    pub(crate) fn into_recorded_parts(self)->(G,VariableSessionIdentity) {(self.graph,self.identity)}
 }
 
 /// Cold scratch for the fixed SmolLM2 V3 implementation. KV and weights remain
@@ -86,4 +85,60 @@ impl VariableGraphBuffers {
             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
     }
     pub fn close(self)->riley_cuda::CudaResult<()> {self.head.close()}
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for riley_cuda::BorrowedGraphResourceReservation<'_> {}
+    impl Sealed for riley_cuda::OwnedGraphResourceReservation<super::VariableModelParents> {}
+}
+/// Native reservation operations; sealed so a caller cannot fabricate completion.
+pub trait VariableGraph: sealed::Sealed {
+    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
+    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()>;
+}
+impl VariableGraph for BorrowedGraphResourceReservation<'_> {
+    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::replay_transfer(self,input)}
+    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_transfer(self,output)}
+}
+impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelParents> {
+    fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::replay_transfer(self,input)}
+    fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_transfer(self,output)}
+}
+pub type BorrowedVariableSession<'a> = VariableSession<BorrowedGraphResourceReservation<'a>>;
+pub type OwnedVariableSession = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>>;
+/// No fields are exposed while the native graph owns parent leases.
+pub struct VariableModelParents {
+    executor:super::PreparedLlamaBatchExecutor,
+    stream:riley_cuda::CudaStream,
+    scratch:VariableGraphBuffers,
+}
+impl VariableSession<BorrowedGraphResourceReservation<'_>> {
+    pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
+}
+impl OwnedVariableSession {
+    pub fn close(self)->super::LlamaBatchExecutorResult<()> {
+        let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+        let parents=self.graph.close().map_err(cuda)?;
+        let scratch=parents.scratch.close().map_err(cuda);
+        let executor=parents.executor.close();
+        let stream=parents.stream.close().map_err(cuda);
+        scratch.and(executor).and(stream)
+    }
+}
+impl super::PreparedLlamaBatchExecutor {
+    /// Moves the loaded model and every graph parent into an owned session.
+    /// The native reservation is destroyed before model/stream/scratch release.
+    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {
+        let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
+        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:VariableGraphBuffers::prepare(context,capacity).map_err(cuda)?};
+        let mut identity=None;
+        let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
+            let session=p.executor.prepare_variable_session(&mut p.stream,&mut p.scratch)?;
+            let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
+        })?;
+        let i=identity.expect("successful recording provides identity");
+        OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)
+            .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})
+    }
 }
