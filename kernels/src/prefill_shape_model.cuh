@@ -1,3 +1,4 @@
+#include "prefill_query_tile_attention.cuh"
 #pragma once
 #include "prefill_shape_projection.cuh"
 #include "prefill_shape_rope_kv.cuh"
@@ -34,7 +35,7 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
   auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
   prefill_shape_rope_kv<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),pages,0,capacity,shape);
   if(capacity==1)riley_decode_shape::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,physical);
-  else riley_prefill_shape::attention_shape<<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,0,reinterpret_cast<const int*>(shape+1),pages,shape+2);
+  else riley_prefill_query_tile::attention<8><<<dim3(max((capacity+7)/8,min(capacity,31U)),9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,0,reinterpret_cast<const int*>(shape+1),pages,shape+2);
   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
