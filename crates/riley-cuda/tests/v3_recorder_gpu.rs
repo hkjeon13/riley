@@ -9,16 +9,31 @@ for i in 0..live{p32(&mut p,256+i as usize*4,(i*3+1)%4);let valid=if i+1<live{16
 for i in 0..count{p32(&mut p,13440+i as usize*4,33);}p}
 #[test]
 #[ignore="requires CUDA; zero-weight recorder/head/ledger lifecycle, not model quality"]
-fn v3_recorder_head_and_partial_completion()->Result<(),Box<dyn std::error::Error>>{
+fn v3_recorder_head_and_partial_completion()->Result<(),Box<dyn std::error::Error>>{verify_recorder(false)}
+#[test]
+#[ignore="requires CUDA; tiled parent extent/alias and lifecycle"]
+fn v3_tiled_recorder_parent_lifecycle()->Result<(),Box<dyn std::error::Error>>{verify_recorder(true)}
+fn verify_recorder(tiled:bool)->Result<(),Box<dyn std::error::Error>>{
+// Native graph instantiation is exclusive across this test process.
+static CAPTURE:std::sync::Mutex<()>=std::sync::Mutex::new(());
+let _capture=CAPTURE.lock().unwrap();
 let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;let mut upload=context.allocate_pinned_host_buffer(1<<20)?;
 let mut sizes=vec![1152*32;5];sizes.extend([384*32,384*32,384*32,3072*32,3072*32,2304*32,3072*32]);sizes.extend([30*4*16*384,30*4*16*384,64*128,64*128,17536,1152,128,4,98304,8,56623104,1152,663552,221184,1769472]);
 sizes[7]=sizes[7].max(9*4096*4);
+if tiled {sizes.extend([1769472;90]);}
 let mut buffers=vec![];for size in sizes{let mut b=context.allocate_device_buffer(size)?;b.upload_from_slice(0,&vec![0;size as usize],&mut upload,&mut stream)?;buffers.push(b);}
 let mut weights=vec![22,23,22];for _ in 0..30{weights.extend([23,24,25,25,24,23,26,26,26]);}
+if tiled {weights.extend(27..117);}
 let mut head=context.prepare_gemm(CudaGemmConfig::new(1,49152,576,0)?)?;let mut staging=context.allocate_pinned_host_buffer(196864)?;
 let mut owner=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream:&mut stream,devices:buffers.iter_mut().collect(),pinned:vec![&mut staging],plans:vec![&mut head]})?;
 let devices=std::array::from_fn(|i|i);let mut bad=devices;bad[1]=0;assert!(owner.record_v3_prefill(&bad,None,&weights,0,0,32,4).is_err());
 let mut wrong=weights.clone();wrong[3]=24;assert!(owner.record_v3_prefill(&devices,None,&wrong,0,0,32,4).is_err());
+if tiled {
+ let mut alias=weights.clone();alias[273]=26;assert!(owner.record_v3_prefill(&devices,None,&alias,0,0,32,4).is_err());
+ let mut extent=weights.clone();extent[273]=24;assert!(owner.record_v3_prefill(&devices,None,&extent,0,0,32,4).is_err());
+ let mut duplicate=weights.clone();duplicate[274]=duplicate[273];assert!(owner.record_v3_prefill(&devices,None,&duplicate,0,0,32,4).is_err());
+ assert!(owner.record_v3_prefill(&devices,None,&weights[..362],0,0,32,4).is_err());
+}
 owner.record_v3_prefill(&devices,None,&weights,0,0,32,4)?;
 for (i,(start,count,prompt)) in [(0,17,33),(17,16,33),(0,1,1)].into_iter().enumerate(){let p=packet(start,count,prompt,i as u64+1);let mut out=vec![255;98432];owner.replay_transfer(&p)?;owner.read_transfer(&mut out)?;assert_eq!(&out[..4],&0u32.to_le_bytes());assert_eq!(&out[4..8],&u32::from(start+count==prompt).to_le_bytes());assert!(out[8..16].iter().all(|&x|x==0));assert!(out[128..].iter().all(|&x|x==0));assert_eq!(&out[24..32],&((i as u64)+1).to_le_bytes());assert_eq!(&out[40..48],&1u64.to_le_bytes());assert_eq!(&out[124..128],&0x33524d52u32.to_le_bytes());let mut bad=p.clone();p32(&mut bad,256,4);assert!(owner.replay_transfer(&bad).is_err());assert!(owner.read_transfer(&mut out).is_err());}
-owner.close()?;head.close()?;drop(buffers);drop(staging);drop(upload);stream.close()?;assert!(context.allocation_stats()?.is_zero());eprintln!("V3_RECORDER replays=3 cold_rejections=2 malformed_rejections=3 partial_publish_suppressed=true head_zero_logits=true allocation_zero=true");Ok(())}
+owner.close()?;head.close()?;drop(buffers);drop(staging);drop(upload);stream.close()?;assert!(context.allocation_stats()?.is_zero());eprintln!("V3_RECORDER tiled={} extra_parent_rejections={} replays=3 cold_rejections=2 malformed_rejections=3 partial_publish_suppressed=true head_zero_logits=true allocation_zero=true",tiled,if tiled {4}else{0});Ok(())}
