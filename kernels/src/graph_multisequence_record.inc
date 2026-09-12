@@ -21,10 +21,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
       384ULL*16*physical*30,384ULL*16*physical*30,160*128,160*128};
   if(staging->byte_len!=2*transfer)return reject(error,"multi staging extent invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<18;++i){
-    if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses)||d[i]->byte_len!=sizes[i])
+    if(!d[i]||!same_context(d[i]->owner,r->owner)||!holds_counter(r,&d[i]->active_uses)||(i<16?d[i]->byte_len!=sizes[i]:(d[i]->byte_len<160*128||d[i]->byte_len%128!=0)))
       return reject(error,"multi device geometry or membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
     for(size_t j=0;j<i;++j)if(d[i]==d[j])return reject(error,"multi device alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   }
+  if(d[16]->byte_len!=d[17]->byte_len)return reject(error,"multi RoPE table geometry differs",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<333;++i){
     if(!w[i]||!same_context(w[i]->owner,r->owner)||!holds_counter(r,&w[i]->active_uses))
       return reject(error,"multi weight membership invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
