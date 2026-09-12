@@ -274,6 +274,10 @@ impl PreparedLlamaBatchExecutor {
                         true,
                     )
                     .map_err(cuda)?;
+                graph.append_multisequence_decode(
+                    indices, &multi_weights, &std::array::from_fn(|i| index * 5 + i),
+                    index + 4, [2, 4, 8][index], geometry[1] as u32, false,
+                ).map_err(cuda)?;
             }
         }
         Ok(graph)

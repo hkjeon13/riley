@@ -2062,7 +2062,7 @@ pub fn execute_llama_iteration_multi_graph(
     let (owner, replay, cookies) = executor
         .issue_submission(authority.rows().len())
         .map_err(|error| before(runtime(error)))?;
-    let expectation = match authority.descriptor_expectation(owner, replay, &cookies) {
+    let expectation = match authority.descriptor_expectation_with_mode(owner, replay, &cookies, if greedy_workspace.is_some() { crate::descriptor::ResultMode::Greedy } else { crate::descriptor::ResultMode::FullLogits }) {
         Ok(value) => value,
         Err(error) => {
             executor

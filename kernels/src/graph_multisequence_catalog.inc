@@ -42,9 +42,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decod
     RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,RileyCudaErrorInfo* error)noexcept{
   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
   // Cold-only: never invalidate an already published completion to grow a catalog.
-  if((bucket!=2&&bucket!=4&&bucket!=8)||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
+  if((bucket!=2&&bucket!=4&&bucket!=8)||full>1||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
     return reject(error,"catalog append requires a distinct cold decode bucket",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
-  auto& entry=r->catalog[bucket==2?0:bucket==4?1:2];
+  auto& entry=r->catalog[(full?0:3)+(bucket==2?0:bucket==4?1:2)];
   if(entry.graph||entry.exec)return reject(error,"catalog entry already recorded",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   SavedGraphBinding saved(r);select_catalog_binding(r,{});
   status=riley_cuda_graph_resources_record_multisequence_decode(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,error);
@@ -59,7 +59,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
   r->completion_visible=false;
   if(index==0)return riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
-  if(index>3||!r->catalog[index-1].exec)return reject(error,"catalog entry absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(index>6||!r->catalog[index-1].exec)return reject(error,"catalog entry absent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);
   status=riley_cuda_graph_resources_replay_transfer(r,source,bytes,error);
   saved.restore(r);r->last_catalog=index;
@@ -68,7 +68,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
 extern "C" RileyCudaStatus riley_cuda_graph_resources_read_catalog(
     RileyCudaGraphResources* r,uint32_t index,uint8_t* output,uint64_t bytes,RileyCudaErrorInfo* error)noexcept{
   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
-  if(index!=r->last_catalog||index>3||!r->completion_visible)return reject(error,"catalog completion is stale",RILEY_CUDA_STATUS_INVALID_STATE);
+  if(index!=r->last_catalog||index>6||!r->completion_visible)return reject(error,"catalog completion is stale",RILEY_CUDA_STATUS_INVALID_STATE);
   if(index==0)return riley_cuda_graph_resources_read_transfer(r,output,bytes,error);
   SavedGraphBinding saved(r);select_catalog_binding(r,r->catalog[index-1]);r->last_catalog=0;
   status=riley_cuda_graph_resources_read_transfer(r,output,bytes,error);

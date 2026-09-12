@@ -62,8 +62,14 @@ impl AuthorizedExecution<'_> {
         replay: u64,
         cookies: &[u64],
     ) -> crate::descriptor::Result<crate::descriptor::SubmissionExpectation> {
+        self.descriptor_expectation_with_mode(owner, replay, cookies, crate::descriptor::ResultMode::FullLogits)
+    }
+    pub(crate) fn descriptor_expectation_with_mode(
+        &self, owner: crate::descriptor::OwnerExpectation, replay: u64, cookies: &[u64],
+        mode: crate::descriptor::ResultMode,
+    ) -> crate::descriptor::Result<crate::descriptor::SubmissionExpectation> {
         use crate::descriptor::{
-            BlockOwnership, Error, ReservationExpectation, ResultMode, Stage, SubmissionExpectation,
+            BlockOwnership, Error, ReservationExpectation, Stage, SubmissionExpectation,
         };
         let bad = || Error {
             field: "scheduler authority",
@@ -111,7 +117,7 @@ impl AuthorizedExecution<'_> {
             replay_id: replay,
             iteration_id: self.plan.iteration_id().get(),
             stage,
-            mode: ResultMode::FullLogits,
+            mode,
             rows,
             block_ownership: self
                 .block_owners

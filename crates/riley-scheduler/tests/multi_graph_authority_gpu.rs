@@ -41,7 +41,11 @@ fn eight_requests_match_m1_and_commit() -> Result { run(false, 8) }
 #[test]
 #[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
 fn eight_requests_cancel_and_reuse_kv() -> Result { run(true, 8) }
-fn run(cancel_and_replace: bool, capacity: usize) -> Result {
+#[test]
+#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
+fn eight_requests_alternate_output_modes_and_reuse_kv() -> Result { run_mode(true, 8, true) }
+fn run(cancel_and_replace: bool, capacity: usize) -> Result { run_mode(cancel_and_replace, capacity, false) }
+fn run_mode(cancel_and_replace: bool, capacity: usize, alternate: bool) -> Result {
     let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
     let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -81,7 +85,9 @@ fn run(cancel_and_replace: bool, capacity: usize) -> Result {
             break;
         };
         let authority = scheduler.authorize_execution(&plan)?;
-        let downloaded = execute_llama_iteration_multi_graph(&authority, &mut owner, None)
+        let greedy = alternate && now % 2 == 0;
+        let mut workspace = Vec::with_capacity(capacity);
+        let downloaded = execute_llama_iteration_multi_graph(&authority, &mut owner, greedy.then_some(&mut workspace))
             .map_err(|e| format!("execution failed: {e:?}"))?;
         let mut samples = vec![SampledIterationToken::new(0, false); downloaded.output_count()];
         for work in plan.prefill_items().iter().chain(plan.decode_items()) {
@@ -111,12 +117,13 @@ fn run(cancel_and_replace: bool, capacity: usize) -> Result {
             );
             let expected = oracle.execute(&[row])?;
             let slot = work.output_slot().unwrap().get() as usize;
-            assert_eq!(
+            if !greedy { assert_eq!(
                 &downloaded.logits_bf16_native()[slot * 98304..(slot + 1) * 98304],
                 expected,
                 "iteration {now}, request {}",
                 work.request_id().get()
             );
+            } else { assert_eq!(downloaded.greedy_token_ids()[slot], oracle.greedy_token()?); }
             samples[slot] = SampledIterationToken::new(oracle.greedy_token()?, false);
             rows += 1;
         }

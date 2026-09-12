@@ -1937,11 +1937,11 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
     // Partition only the qualified strided head. Public byte extents and batch
     // strides still cover the complete logical matrix; layouts cover one slice.
     if(status==RILEY_CUDA_STATUS_SUCCESS && config->n==49152){
-      const uint64_t width=config->n/16;const int64_t ld=static_cast<int64_t>(width);
+      const uint64_t width=config->n;const int64_t ld=static_cast<int64_t>(width);
       status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->weight_layout,CUBLASLT_MATRIX_LAYOUT_COLS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition columns");
       if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_ROWS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition rows");
       if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_LD,&ld,sizeof(ld)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition stride");
-      if(status==RILEY_CUDA_STATUS_SUCCESS)plan->column_chunks=16;
+      if(status==RILEY_CUDA_STATUS_SUCCESS)plan->column_chunks=1;
     }
     cublasLtMatmulHeuristicResult_t checked{};
     if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatmulAlgoCheck(plan->handle,

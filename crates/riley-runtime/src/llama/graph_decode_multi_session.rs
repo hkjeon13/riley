@@ -38,7 +38,7 @@ impl PreparedLlamaBatchExecutor {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
             .map_err(|_| rejected("multi owner generation exhausted"))?;
         let mut hash = Sha256::new();
-        hash.update(b"riley.multi-catalog.full-logits.v2\0");
+        hash.update(b"riley.multi-catalog.dual-output.v2\0");
         hash.update(wire::CONTRACT_SHA256.as_bytes());
         hash.update(include_bytes!("../../../../kernels/src/graph_multisequence_packet.inc"));
         hash.update(include_bytes!("../../../../kernels/src/graph_resources.cu"));
@@ -84,6 +84,8 @@ impl PreparedLlamaBatchExecutor {
             },
             CatalogEntry { stage: Stage::Decode, bucket: 8, mode: ResultMode::FullLogits },
         ];
+        let greedy: Vec<_> = catalog.iter().map(|e| CatalogEntry { mode: ResultMode::Greedy, ..*e }).collect();
+        catalog.extend(greedy);
         catalog.retain(|entry| entry.bucket <= max_active_rows);
         let codec = CodecOwner::new(OwnerExpectation {
             generation,
@@ -171,7 +173,7 @@ impl OwnedLlamaMultiDecodeExecutor {
         self.codec.admit(&packet, e.clone()).map_err(wire_error)?;
         self.issued.clear();
         let bytes =
-            wire::result_bytes(decoded.bucket, ResultMode::FullLogits).map_err(wire_error)?;
+            wire::result_bytes(decoded.bucket, e.mode).map_err(wire_error)?;
         self.output[..bytes].fill(0);
         self.started = true;
         let executed: LlamaBatchExecutorResult<()> = if decoded.bucket == 1 {
@@ -199,7 +201,7 @@ impl OwnedLlamaMultiDecodeExecutor {
                 put32(&mut self.output, 0, 0x314f4d52);
                 put32(&mut self.output, 8, bytes as u32);
                 put32(&mut self.output, 108, 0);
-                put32(&mut self.output, 112, 1);
+                put32(&mut self.output, 112, e.mode as u32);
                 self.output[128..144].copy_from_slice(&packet[208..224]);
                 self.output[144..160].copy_from_slice(&packet[56..72]);
                 put32(&mut self.output, 164, row.output_slot);
@@ -207,21 +209,25 @@ impl OwnedLlamaMultiDecodeExecutor {
                 put32(&mut self.output, 172, row.generated_index);
                 self.output[176..216].copy_from_slice(&self.inner.output[98304..98344]);
                 put32(&mut self.output, 216, 1);
+                if e.mode == ResultMode::FullLogits {
                 put32(&mut self.output, 224, 1152);
                 put32(&mut self.output, 232, 98304);
                 self.output[1152..bytes].copy_from_slice(&self.inner.output[..98304]);
+                }
             })
         } else {
-            self.input[..bytes].fill(0);
+            let transfer = bytes.max(wire::REQUEST_BYTES);
+            self.input[..transfer].fill(0);
             self.input[..1792].copy_from_slice(&packet);
-            let index = if decoded.bucket == 2 { 1 } else if decoded.bucket == 4 { 2 } else { 3 };
+            let mut index = if decoded.bucket == 2 { 1 } else if decoded.bucket == 4 { 2 } else { 3 };
+            if e.mode == ResultMode::Greedy { index += 3; }
             self.inner
                 .graph
-                .replay_catalog(index, &self.input[..bytes])
+                .replay_catalog(index, &self.input[..transfer])
                 .and_then(|()| {
                     self.inner
                         .graph
-                        .read_catalog(index, &mut self.output[..bytes])
+                        .read_catalog(index, &mut self.output[..transfer])
                 })
                 .map_err(|e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e))
         };

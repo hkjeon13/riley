@@ -54,6 +54,9 @@ impl MultiDecodeParents {
                 );
             }
         }
+        for _ in 0..3 {
+            staging.push(context.allocate_pinned_host_buffer(2 * 1792).map_err(cuda)?);
+        }
         Ok(Self {
             scratch,
             plans,
