@@ -2707,12 +2707,60 @@ cudaError_t riley_cuda_internal::enqueue_decode_kv_attention(cudaStream_t stream
   return cudaGetLastError();
 }
 
+namespace {
+// BF16 numeric order plus reversed token ID implements the existing exact tie
+// rule. Both zeros share a key. Any nonfinite input dominates as an error key.
+__global__ void partitioned_argmax(const uint16_t* logits,unsigned long long* result) {
+  constexpr unsigned parts=32, vocabulary=49152;
+  __shared__ unsigned long long warps[8];
+  const unsigned row=blockIdx.y;
+  unsigned long long best=0;
+  for(unsigned col=blockIdx.x*blockDim.x+threadIdx.x;col<vocabulary;col+=parts*blockDim.x){
+    unsigned bits=logits[row*vocabulary+col];
+    unsigned long long key;
+    if((bits&0x7f80)==0x7f80)key=~0ULL;
+    else {
+      if((bits&0x7fff)==0)bits=0;
+      const unsigned ordered=(bits&0x8000)?((~bits)&0xffff):(bits^0x8000);
+      key=(static_cast<unsigned long long>(ordered)<<32)|static_cast<uint32_t>(~col);
+    }
+    best=best>key?best:key;
+  }
+  for(unsigned offset=16;offset;offset/=2){
+    auto other=__shfl_down_sync(0xffffffff,best,offset);best=best>other?best:other;
+  }
+  if(threadIdx.x%32==0)warps[threadIdx.x/32]=best;
+  __syncthreads();
+  if(threadIdx.x<32){
+    best=threadIdx.x<8?warps[threadIdx.x]:0;
+    for(unsigned offset=16;offset;offset/=2){
+      auto other=__shfl_down_sync(0xffffffff,best,offset);best=best>other?best:other;
+    }
+    if(threadIdx.x==0)atomicMax(result+row,best);
+  }
+}
+__global__ void finish_partitioned_argmax(unsigned long long* result,unsigned rows){
+  const unsigned row=threadIdx.x;
+  if(row>=rows)return;
+  const auto key=result[row];auto* out=reinterpret_cast<RileyCudaBf16ArgmaxResult*>(result)+row;
+  const bool invalid=key==0 || key==~0ULL;
+  out->token_id=invalid?RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID:~static_cast<uint32_t>(key);
+  out->status=invalid?RILEY_CUDA_BF16_ARGMAX_STATUS_NON_FINITE:RILEY_CUDA_BF16_ARGMAX_STATUS_SUCCESS;
+}
+cudaError_t enqueue_partitioned_argmax(cudaStream_t stream,const void* logits,void* output,unsigned rows){
+  auto status=cudaMemsetAsync(output,0,rows*8,stream);
+  if(status!=cudaSuccess)return status;
+  partitioned_argmax<<<dim3(32,rows),256,0,stream>>>(static_cast<const uint16_t*>(logits),static_cast<unsigned long long*>(output));
+  status=cudaGetLastError();if(status!=cudaSuccess)return status;
+  finish_partitioned_argmax<<<1,32,0,stream>>>(static_cast<unsigned long long*>(output),rows);
+  return cudaGetLastError();
+}
+}
 cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const void* logits,void* output,uint64_t vocab) noexcept {
+  if(vocab==49152)return enqueue_partitioned_argmax(stream,logits,output,1);
   bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab);
   return cudaGetLastError();
 }
-
 cudaError_t riley_cuda_internal::enqueue_multi_argmax(cudaStream_t stream,const void* logits,void* output,uint32_t rows) noexcept {
-  bf16_argmax_kernel<<<rows,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),rows,49152);
-  return cudaGetLastError();
+  return enqueue_partitioned_argmax(stream,logits,output,rows);
 }
