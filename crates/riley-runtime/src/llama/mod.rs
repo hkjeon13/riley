@@ -1102,3 +1102,6 @@ mod source_contract_tests {
 
 /// Versioned multi-request input and completion validation.
 pub mod multi_descriptor;
+
+#[cfg(feature = "cuda")]
+pub mod variable_session;

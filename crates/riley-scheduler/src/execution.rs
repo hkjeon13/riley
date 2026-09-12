@@ -2121,3 +2121,29 @@ pub fn execute_llama_iteration_multi_graph(
         commit_outputs: prepared.commit_outputs,
     })
 }
+
+/// Executes V3 single-request work on a prepared retained reservation. Caller
+/// must confirm the runtime commit after successful scheduler settlement.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_variable_graph(
+    authority:&crate::AuthorizedExecution<'_>,
+    executor:&mut riley_runtime::llama::variable_session::BorrowedVariableSession<'_>,
+) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+    let id=authority.plan().iteration_id();
+    let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,
+        IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
+    let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+    let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+    let (identity,replay,cookie)=executor.issue().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+    let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+        catalog_digest:identity.catalog_digest,max_active_rows:8,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+    let expectation=match authority.variable_descriptor_expectation(&owner,replay,&[cookie],crate::descriptor::ResultMode::FullLogits) {
+        Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
+    };
+    // Allocate before admission so allocation failure cannot follow GPU mutation.
+    let (token,bytes)=executor.execute(expectation).map_err(|e|fail(e,None))?;
+    if usize::from(token.is_some())!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
+    if token.is_some() {logits.copy_from_slice(bytes);}
+    Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
+        output:DownloadedLlamaOutput::Logits(logits),commit_outputs:prepared.commit_outputs})
+}
