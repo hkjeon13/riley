@@ -109,8 +109,9 @@ pub use batch_executor::{
     BatchMetadataTransport, ExecutionCompletionImplementation, LlamaBatchExecutorError,
     LlamaBatchExecutorResource, LlamaBatchExecutorResult, LlamaBatchShapeBucketHit,
     LlamaBatchShapeObservation, LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS,
-    OwnedLlamaDecodeExecutor, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
-    PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation, ResidualNormImplementation,
+    OwnedLlamaDecodeExecutor, OwnedLlamaMultiDecodeExecutor, PreparedLlamaBatchAllocationReport,
+    PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation,
+    ResidualNormImplementation,
 };
 
 pub use error::{
@@ -1098,3 +1099,6 @@ mod source_contract_tests {
         assert!(guard.contains("LlamaOp::IterationCompletion"));
     }
 }
+
+/// Versioned multi-request input and completion validation.
+pub mod multi_descriptor;

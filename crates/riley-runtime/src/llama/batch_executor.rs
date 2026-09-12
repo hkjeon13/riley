@@ -1607,4 +1607,4 @@ mod qkv_audit;
 mod full_decode;
 
 #[cfg(feature = "cuda")]
-pub use full_decode::OwnedLlamaDecodeExecutor;
+pub use full_decode::{OwnedLlamaDecodeExecutor, OwnedLlamaMultiDecodeExecutor};

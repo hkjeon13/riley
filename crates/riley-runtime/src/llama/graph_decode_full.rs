@@ -2038,3 +2038,7 @@ mod owned_tests {
 #[cfg(all(test, feature = "cuda"))]
 #[path = "graph_decode_multisequence_model_gpu.rs"]
 mod multisequence_model_gpu;
+
+#[path = "graph_decode_multi_session.rs"]
+mod multi_session;
+pub use multi_session::OwnedLlamaMultiDecodeExecutor;
