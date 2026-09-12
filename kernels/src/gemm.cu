@@ -50,6 +50,7 @@ struct RileyCudaGemmPlan {
         weight_bytes(lengths.weight),
         output_bytes(lengths.output),
         batch_count(1),
+        column_chunks(1),
         algorithm_ready(false),
         active_uses(0),
         deferred_close() {
@@ -70,6 +71,7 @@ struct RileyCudaGemmPlan {
   uint64_t weight_bytes;
   uint64_t output_bytes;
   uint32_t batch_count;
+  uint32_t column_chunks;
   bool algorithm_ready;
   std::atomic<uint32_t> active_uses;
   RileyCudaDeferredCloseNode deferred_close;
@@ -1077,6 +1079,7 @@ namespace {
 bool gemm_bf16_plan_is_ready(
     const RileyCudaGemmPlan* plan, bool strided_m1) noexcept {
   if (plan == nullptr || plan->owner == nullptr || (strided_m1 ? (plan->batch_count != 2 && plan->batch_count != 4) : plan->batch_count != 1) || !plan->algorithm_ready ||
+      (plan->column_chunks != 1 && !(strided_m1 && plan->column_chunks == 16 && plan->config.n == 49152 && plan->config.k == 576)) ||
       plan->handle == nullptr || plan->operation == nullptr ||
       plan->weight_layout == nullptr || plan->input_layout == nullptr ||
       plan->output_layout == nullptr || plan->preference == nullptr ||
@@ -1325,15 +1328,20 @@ RileyCudaStatus enqueue_canonical_gemm_bf16_graph_matmul(
   const float beta = 0.0F;
   void* const workspace_data =
       state.workspace_byte_len == 0 ? nullptr : state.workspace->device_data;
-  return cublaslt_error(
-      cublasLtMatmul(
-          state.plan->handle, state.plan->operation, &alpha,
-          state.weight->device_data, state.plan->weight_layout,
-          state.input->device_data, state.plan->input_layout, &beta,
-          output->device_data, state.plan->output_layout, output->device_data,
-          state.plan->output_layout, &state.plan->algorithm, workspace_data,
-          static_cast<size_t>(state.workspace_byte_len), stream->stream),
-      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, operation);
+  const auto* plan=state.plan;
+  const uint64_t width=plan->config.n/plan->column_chunks;
+  for(uint32_t chunk=0;chunk<plan->column_chunks;++chunk){
+    const auto status=cublaslt_error(cublasLtMatmul(
+      plan->handle,plan->operation,&alpha,
+      static_cast<const uint8_t*>(state.weight->device_data)+chunk*width*plan->config.k*2,plan->weight_layout,
+      state.input->device_data,plan->input_layout,&beta,
+      static_cast<uint8_t*>(output->device_data)+chunk*width*2,plan->output_layout,
+      static_cast<uint8_t*>(output->device_data)+chunk*width*2,plan->output_layout,
+      &plan->algorithm,workspace_data,static_cast<size_t>(state.workspace_byte_len),stream->stream),
+      error,RILEY_CUDA_ERROR_STAGE_LAUNCH,operation);
+    if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
@@ -1726,16 +1734,16 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_execute(
                                ? nullptr
                                : spans[3].data;
     matmul_attempted = true;
-    status = cublaslt_error(
-        cublasLtMatmul(
-            plan->handle, plan->operation, &alpha, spans[1].data,
-            plan->weight_layout, spans[0].data, plan->input_layout, &beta,
-            spans[2].data, plan->output_layout, spans[2].data,
-            plan->output_layout, &plan->algorithm, workspace_data,
-            static_cast<size_t>(plan->algorithm_info.workspace_bytes),
-            stream->stream),
-        error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
-        "execute cuBLASLt GEMM");
+    const uint64_t width=plan->config.n/plan->column_chunks;
+    for(uint32_t chunk=0;chunk<plan->column_chunks && status==RILEY_CUDA_STATUS_SUCCESS;++chunk)
+      status=cublaslt_error(cublasLtMatmul(
+        plan->handle,plan->operation,&alpha,
+        static_cast<const uint8_t*>(spans[1].data)+chunk*width*plan->config.k*2,plan->weight_layout,
+        spans[0].data,plan->input_layout,&beta,
+        static_cast<uint8_t*>(spans[2].data)+chunk*width*2,plan->output_layout,
+        static_cast<uint8_t*>(spans[2].data)+chunk*width*2,plan->output_layout,
+        &plan->algorithm,workspace_data,static_cast<size_t>(plan->algorithm_info.workspace_bytes),stream->stream),
+        error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"execute cuBLASLt GEMM");
   }
   return complete_execution(&uses, &scope, stream, status,
                             matmul_attempted, error);
@@ -1925,6 +1933,15 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
       if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatrixLayoutSetAttribute(layouts[index],
           CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &strides[index], sizeof(strides[index])),
           error, RILEY_CUDA_ERROR_STAGE_PREPARE, "prepare strided M1");
+    }
+    // Partition only the qualified strided head. Public byte extents and batch
+    // strides still cover the complete logical matrix; layouts cover one slice.
+    if(status==RILEY_CUDA_STATUS_SUCCESS && config->n==49152){
+      const uint64_t width=config->n/16;const int64_t ld=static_cast<int64_t>(width);
+      status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->weight_layout,CUBLASLT_MATRIX_LAYOUT_COLS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition columns");
+      if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_ROWS,&width,sizeof(width)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition rows");
+      if(status==RILEY_CUDA_STATUS_SUCCESS)status=cublaslt_error(cublasLtMatrixLayoutSetAttribute(plan->output_layout,CUBLASLT_MATRIX_LAYOUT_LD,&ld,sizeof(ld)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"head partition stride");
+      if(status==RILEY_CUDA_STATUS_SUCCESS)plan->column_chunks=16;
     }
     cublasLtMatmulHeuristicResult_t checked{};
     if (status == RILEY_CUDA_STATUS_SUCCESS) status = cublaslt_error(cublasLtMatmulAlgoCheck(plan->handle,
