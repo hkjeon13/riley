@@ -1192,3 +1192,20 @@ impl BorrowedGraphResourceReservation<'_> {
         }
     }
 }
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records V3 prefill and its canonical head under this retained ledger.
+    /// This does not authorize scheduler publication of the returned result.
+    pub fn record_v3_prefill(&mut self,devices:&[usize;22],workspace:Option<usize>,weights:&[usize],head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
+        #[cfg(feature="cuda")]{
+            let bad=||crate::CudaError::invalid_argument("record V3 prefill","parent index out of range");
+            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
+            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
+            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
+            self.native.record_v3_prefill(&devices,workspace,&weights,head,staging,capacity,physical)
+        }
+        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V3 prefill"))}
+    }
+}

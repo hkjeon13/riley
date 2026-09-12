@@ -2734,6 +2734,12 @@ RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128(
 // packed_plans[2] are selected strict no-split, zero-workspace M1 plans for
 // N960/K576 and N3072/K576, with the explicitly qualified SM89/CUDA13 identity.
 // All parents and plans must already belong to the same aggregate reservation.
+/* V3 borrowed prefill recorder: 23 device parents, 273 weights, canonical head. */
+RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan* const*, RileyCudaPinnedHostBuffer*, const uint64_t*,

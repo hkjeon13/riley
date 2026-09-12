@@ -291,3 +291,9 @@ cudaError_t enqueue_shape_prefill_rope_kv(cudaStream_t stream,const void* q,cons
 }
 
 #include "prefill_shape_model.cuh"
+
+namespace riley_cuda_internal {
+cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical) noexcept {
+ return enqueue_v3_prefill_model(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical);
+}
+}

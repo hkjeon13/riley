@@ -11245,3 +11245,17 @@ impl GraphResourcesHandle {
         status_result(status, "read graph catalog", &error)
     }
 }
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_v3_prefill(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_v3_prefill(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {
+        if devices.len()!=22||weights.len()!=273 {return Err(CudaError::invalid_argument("record V3 prefill","parent count mismatch"));}
+        let mut raw=[ptr::null_mut();23];for (i,d) in devices.iter().enumerate(){raw[i]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
+        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
+        let status=unsafe{riley_cuda_graph_resources_record_v3_prefill(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),273,head.as_ptr(),staging.as_ptr(),capacity,physical,&mut error)};
+        status_result(status,"record V3 prefill",&error)
+    }
+}
