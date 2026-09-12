@@ -920,10 +920,10 @@ fn run_serve(
     if options.prefill_chunk_tokens > options.batch_token_budget {
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
-    if options.variable_graph && (options.max_active_sequences!=1 || options.prefill_chunk_tokens>1024
+    if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
         || options.sampling_backend!=SamplingBackendMode::Cpu) {
-        return Err("variable-smol-v3 currently requires one active sequence, CPU sampling, fixed-max shape and token/chunk budgets at most1024".to_owned());
+        return Err("variable-smol-v3 requires capacity1/2/4/8, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
     }
     if options.vllm_smol_p128_graph
         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
@@ -1015,14 +1015,14 @@ fn run_serve(
         return Err("multi graph requires context 160 and output limit at most 32".to_owned());
     }
     let batch_metadata = LlamaBatchMetadataConfig::new(
-        if multi_graph {
+        if multi_graph || options.variable_graph {
             1
         } else {
             options.max_active_sequences
         },
         if options.variable_graph {1} else {options.batch_token_budget},
         if multi_graph { 10 } else { physical_kv_blocks },
-        if multi_graph {
+        if multi_graph || options.variable_graph {
             1
         } else {
             options.max_active_sequences
@@ -4658,6 +4658,13 @@ mod graph_policy_cli_tests {
 
 #[cfg(test)]
 mod graph_numerics_cli_tests {
+    #[test]
+    fn variable_profile_accepts_supported_shared_capacities() {
+        for capacity in ["1","2","4","8"] {
+            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v3","--execution-graph-policy","require","--max-active-sequences",capacity,"--batch-token-budget","128","--prefill-chunk-tokens","128"].map(std::ffi::OsString::from));
+            let super::CliCommand::Serve(options)=result.unwrap() else {panic!("serve")};assert!(options.variable_graph);assert_eq!(options.max_active_sequences,capacity.parse::<usize>().unwrap());
+        }
+    }
     #[test]
     fn variable_profile_is_explicit_and_requires_graph_policy() {
         for policy in ["disabled","auto","require"] {
