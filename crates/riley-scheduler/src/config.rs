@@ -31,6 +31,8 @@ pub enum ExecutionShapePolicy {
     /// Alternates ready classes after dispatch; never mixes them in one plan.
     /// This is a host contract only; GPU support must be checked separately.
     VariablePrefillDecodeN,
+    /// Variable prefill and up to sixteen decode rows on a prepared V4 session.
+    VariablePrefillDecode16,
 }
 
 /// All host-memory, work, and KV promises enforced by one scheduler.

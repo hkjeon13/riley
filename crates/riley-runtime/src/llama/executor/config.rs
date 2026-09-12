@@ -133,6 +133,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     vllm_smol_p128_graph: bool,
     shared_rows_graph: bool,
     variable_graph: bool,
+    variable_graph_rows: usize,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
 }
@@ -154,6 +155,7 @@ impl PreparedLlamaBatchExecutorConfig {
             vllm_smol_p128_graph: false,
             shared_rows_graph: false,
             variable_graph: false,
+            variable_graph_rows: 8,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
         }
@@ -169,7 +171,9 @@ impl PreparedLlamaBatchExecutorConfig {
     }
     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
     #[must_use]
-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+    pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
+    pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
     pub const fn variable_graph(self)->bool {self.variable_graph}
     /// Opt-in arithmetic-changing QKV/gate-up/head graph; bounded P128 geometry.
     #[must_use]
@@ -445,6 +449,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         vllm_smol_p128_graph: config.vllm_smol_p128_graph,
         shared_rows_graph: config.shared_rows_graph,
         variable_graph: config.variable_graph,
+        variable_graph_rows: config.variable_graph_rows,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
     }

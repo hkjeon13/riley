@@ -10,25 +10,25 @@ pub struct VariableSessionIdentity {
 }
 /// Owns the prepared reservation; no mutable native handle escapes while active.
 /// A result remains outstanding until scheduler commit is explicitly confirmed.
-pub struct VariableSession<G: VariableGraph> {
+pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
-    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation>,
+    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
     shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
-impl<G: VariableGraph> VariableSession<G> {
+impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// The caller must have recorded the V3 model and bound the digest to its
     /// actual prepared model/kernel catalog. This constructor does not create it.
     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
-        if catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
+        if !matches!(ROWS,8|16) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens},
-            shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+            shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
-    pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::BATCH_RESULT_BYTES];Ok(s)}
+    pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
     pub fn issue(&mut self)->Result<(VariableSessionIdentity,u64,u64)>{let(i,r,c)=self.issue_rows(1)?;Ok((i,r,c[0]))}
     pub fn issue_rows(&mut self,rows:usize)->Result<(VariableSessionIdentity,u64,Vec<u64>)> {
-        if rows==0||rows>if self.shared{8}else{1}{return Err(bad("unsupported row count"));}
+        if rows==0||rows>if self.shared{ROWS}else{1}{return Err(bad("unsupported row count"));}
         if self.poisoned || self.retained.is_some() || self.issued.is_some() {return Err(bad("session busy or poisoned"));}
         let replay=self.identity.last_accepted_replay.checked_add(1).ok_or_else(||bad("replay exhausted"))?;
         let cookie=self.next_cookie;self.next_cookie=cookie.checked_add(rows as u64).ok_or_else(||bad("cookie exhausted"))?;
@@ -39,14 +39,14 @@ impl<G: VariableGraph> VariableSession<G> {
         self.issued=None;Ok(())
     }
     pub fn submission_started(&self)->bool {self.started}
-    pub fn execute(&mut self,e:wire::Expectation)->Result<(Option<u32>,&[u8])> {
+    pub fn execute(&mut self,e:wire::Expectation<ROWS>)->Result<(Option<u32>,&[u8])> {
         if e.rows.len()!=1{return Err(bad("single result requires one row"));}
         let rows=self.execute_rows(e)?;Ok((rows[0].token,rows[0].logits))
     }
-    pub fn execute_rows(&mut self,e:wire::Expectation)->Result<Vec<wire::RowResult<'_>>> {
+    pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
         let i=self.identity;
-        if e.rows.is_empty() || e.rows.len()>if self.shared{8}else{1} || e.max_active_rows!=8 || e.owner_generation!=i.generation
+        if e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
@@ -79,6 +79,7 @@ pub struct VariableGraphBuffers {
     pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
     pub(crate) head:riley_cuda::CudaPreparedGemm,
     pub(crate) capacity:u32,
+    pub(crate) wire_rows:usize,
 }
 impl VariableGraphBuffers {
     pub fn prepare(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self> {Self::prepare_base(context,capacity,true)}
@@ -94,14 +95,18 @@ impl VariableGraphBuffers {
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
         Ok(Self{devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
-            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
+            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8})
     }
-    pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
-        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},true)?;
-        s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(8*9*4096*4))?;
-        s.staging=context.allocate_pinned_host_buffer(2*wire::BATCH_RESULT_BYTES as u64)?;
-        for bytes in [8*1152,8*98304,wire::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}
-        s.shared_head=Some(context.prepare_gemm(riley_cuda::CudaGemmConfig::new(8,49152,576,0)?)?);Ok(s)
+    pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
+    pub fn prepare_shared16(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<16>(context,capacity)}
+    fn prepare_shared_rows<const ROWS:usize>(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
+        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(ROWS as u32)},true)?;
+        s.wire_rows=ROWS;
+        s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(ROWS as u64*9*4096*4))?;
+        s.devices[12]=context.allocate_device_buffer(wire::Layout::<ROWS>::REQUEST_BYTES as u64)?;
+        s.staging=context.allocate_pinned_host_buffer(wire::Layout::<ROWS>::STAGING_BYTES as u64)?;
+        for bytes in [ROWS as u64*1152,ROWS as u64*98304,wire::Layout::<ROWS>::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}
+        s.shared_head=Some(context.prepare_gemm(riley_cuda::CudaGemmConfig::new(ROWS as u64,49152,576,0)?)?);Ok(s)
     }
     pub fn close(self)->riley_cuda::CudaResult<()> {let a=self.head.close();let b=self.shared_head.map_or(Ok(()),|h|h.close());a.and(b)}
 }
@@ -124,18 +129,18 @@ impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelPa
     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::replay_transfer(self,input)}
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_transfer(self,output)}
 }
-pub type BorrowedVariableSession<'a> = VariableSession<BorrowedGraphResourceReservation<'a>>;
-pub type OwnedVariableSession = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>>;
+pub type BorrowedVariableSession<'a,const ROWS:usize=8> = VariableSession<BorrowedGraphResourceReservation<'a>,ROWS>;
+pub type OwnedVariableSession<const ROWS:usize=8> = VariableSession<riley_cuda::OwnedGraphResourceReservation<VariableModelParents>,ROWS>;
 /// No fields are exposed while the native graph owns parent leases.
 pub struct VariableModelParents {
     executor:super::PreparedLlamaBatchExecutor,
     stream:riley_cuda::CudaStream,
     scratch:VariableGraphBuffers,
 }
-impl VariableSession<BorrowedGraphResourceReservation<'_>> {
+impl<const ROWS:usize> VariableSession<BorrowedGraphResourceReservation<'_>,ROWS> {
     pub fn close(self)->riley_cuda::CudaResult<()> {self.graph.close()}
 }
-impl OwnedVariableSession {
+impl<const ROWS:usize> OwnedVariableSession<ROWS> {
     pub fn close(self)->super::LlamaBatchExecutorResult<()> {
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         let parents=self.graph.close().map_err(cuda)?;
@@ -148,14 +153,17 @@ impl OwnedVariableSession {
 impl super::PreparedLlamaBatchExecutor {
     /// Moves the loaded model and every graph parent into an owned session.
     /// The native reservation is destroyed before model/stream/scratch release.
-    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session(context,capacity,false)}
-    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session(context,capacity,true)}
-    fn into_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession>{
+    pub fn into_owned_variable_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession> {self.into_variable_session::<8>(context,capacity,false)}
+    pub fn into_owned_variable_shared_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession>{self.into_variable_session::<8>(context,capacity,true)}
+    pub fn into_owned_variable_shared_session_rows<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{self.into_variable_session::<ROWS>(context,capacity,true)}
+    pub fn into_owned_variable_shared16_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true)}
+    fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
-        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
+        if !matches!(ROWS,8|16) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
+        let parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
         let mut identity=None;
         let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
-            let session=p.executor.prepare_variable_session(&mut p.stream,&mut p.scratch)?;
+            let session=p.executor.prepare_variable_session_rows::<ROWS>(&mut p.stream,&mut p.scratch)?;
             let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
         })?;
         let i=identity.expect("successful recording provides identity");

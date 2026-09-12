@@ -157,10 +157,11 @@ pub(crate) struct VariableOwnerGeometry {
 }
 impl AuthorizedExecution<'_> {
     #[allow(dead_code)]
-    pub(crate) fn variable_descriptor_expectation(
+    pub(crate) fn variable_descriptor_expectation(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64],mode:crate::descriptor::ResultMode)->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation>{self.variable_descriptor_expectation_rows::<8>(owner,replay,cookies,mode)}
+    pub(crate) fn variable_descriptor_expectation_rows<const ROWS:usize>(
         &self, owner: &VariableOwnerGeometry, replay: u64, cookies: &[u64],
         mode: crate::descriptor::ResultMode,
-    ) -> crate::descriptor::Result<crate::descriptor::variable_wire::Expectation> {
+    ) -> crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<ROWS>> {
         use crate::descriptor::{Error, BlockOwnership, shape_progress::{Progress, InputStage}, variable_wire::{self, Row, Expectation}};
         let bad = || Error { field: "scheduler V3 authority", reason: "incompatible live reservation or owner geometry" };
         let prefill = self.plan.prefill_items();

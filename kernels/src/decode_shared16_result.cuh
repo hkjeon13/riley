@@ -6,6 +6,7 @@
 namespace riley_shared16_result {
 constexpr uint32_t record_bytes=98432,batch_bytes=16*record_bytes;
 // Each record follows descriptor row order; its output slot is explicit.
+template<uint32_t Magic>
 __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint32_t* status,uint8_t* bytes){
  uint32_t row=blockIdx.x,active=m[5];if(active<1||active>16||row>=active)return;
  auto* shape=m+32+row*416;auto* result=reinterpret_cast<uint32_t*>(bytes+row*record_bytes);
@@ -22,12 +23,13 @@ __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint3
  for(int i=0;i<4;++i)result[10+i]=shape[12+i];
  result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
  for(int i=0;i<8;++i)result[20+i]=m[16+i];
- result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=0x33524d52;
+ result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=Magic;
  }
 }
+template<uint32_t Magic=0x33524d52>
 inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const __nv_bfloat16* logits,const uint32_t* status,void* result){
  if(!metadata||!logits||!status||!result)return cudaErrorInvalidValue;
  auto e=cudaMemsetAsync(result,0,batch_bytes,stream);if(e!=cudaSuccess)return e;
- finish<<<16,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
+ finish<Magic><<<16,256,0,stream>>>(static_cast<const uint32_t*>(metadata),logits,status,static_cast<uint8_t*>(result));return cudaGetLastError();
 }
 }

@@ -46,7 +46,7 @@ serve options:
   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
-  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3
+  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
@@ -89,6 +89,7 @@ struct ServeOptions {
     vllm_smol_p128_graph: bool,
     shared_rows_graph: bool,
     variable_graph: bool,
+    variable_graph16: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -366,13 +367,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--graph-numerics" => {
                 let value = next_value(&mut arguments, "--graph-numerics")?;
                 let enabled = match value.to_str() {
-                    Some("existing") => (false, false, false),
-                    Some("vllm-smol-p128-v1") => (true, false, false),
-                    Some("shared-smol-p128-v1") => (true, true, false),
-                    Some("variable-smol-v3") => (false, false, true),
+                    Some("existing") => (false, false, false, false),
+                    Some("vllm-smol-p128-v1") => (true, false, false, false),
+                    Some("shared-smol-p128-v1") => (true, true, false, false),
+                    Some("variable-smol-v3") => (false, false, true, false),
+                    Some("variable-smol-v4") => (false, false, true, true),
                     _ => {
                         return Err(
-                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 or variable-smol-v3".to_owned()
+                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3 or variable-smol-v4".to_owned()
                         );
                     }
                 };
@@ -504,7 +506,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
-    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph) = graph_numerics.unwrap_or((false, false, false));
+    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16) = graph_numerics.unwrap_or((false, false, false, false));
     if (vllm_smol_p128_graph || variable_graph)
         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
     {
@@ -537,6 +539,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         vllm_smol_p128_graph,
         shared_rows_graph,
         variable_graph,
+        variable_graph16,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -1063,7 +1066,9 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.variable_graph {
+    let executor = if options.variable_graph16 {
+        executor.with_variable_graph16()
+    } else if options.variable_graph {
         executor.with_variable_graph()
     } else if options.shared_rows_graph {
         executor.with_shared_rows_graph()
@@ -2931,6 +2936,13 @@ mod tests {
     }
 
     #[test]
+    fn variable_v4_cli_selects_sixteen_row_profile_explicitly(){
+        for capacity in ["1","4","8","16","32"] {
+            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v4","--execution-graph-policy","require","--max-active-sequences",capacity,"--batch-token-budget","512","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
+            let super::CliCommand::Serve(options)=result else{panic!("serve")};assert!(options.variable_graph&&options.variable_graph16);
+        }
+    }
+    #[test]
     fn c02_generation_audit_v2_schema_is_narrow_and_canonical() {
         let schema: serde_json::Value = serde_json::from_str(include_str!(
             "../../../benchmarks/release/candidates/c02-generation-audit-v2.schema.json"
@@ -3868,6 +3880,7 @@ mod tests {
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
                 variable_graph: false,
+                variable_graph16: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4257,6 +4270,7 @@ mod tests {
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
                 variable_graph: false,
+                variable_graph16: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4413,6 +4427,7 @@ mod tests {
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
                 variable_graph: false,
+                variable_graph16: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4536,6 +4551,7 @@ mod tests {
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
                 variable_graph: false,
+                variable_graph16: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,

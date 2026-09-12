@@ -7,9 +7,11 @@
 // Borrowed 30-layer SmolLM2 BF16 prefill sequence. Caller must validate V3 packet,
 // all allocation extents/aliases and hold the resource ledger until completion.
 // This enqueues work; it does not authorize scheduler settlement or serving output.
+template<uint32_t WireRows=8>
 inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
+ static_assert(WireRows==8||WireRows==16,"wire capacity");
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!publish||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
@@ -17,7 +19,7 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
  auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
  auto shape=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+128);
  auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
- auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+13440);
+ auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+(128+WireRows*1664));
  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
  riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,reinterpret_cast<const uint32_t*>(metadata)+4);
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
