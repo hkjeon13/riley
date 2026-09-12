@@ -2080,7 +2080,10 @@ impl PreparedLlamaBatchExecutor {
         }
         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
-        for source in [include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
+        for source in [include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+            include_bytes!("variable_session.rs").as_slice(),
+            include_bytes!("graph_decode_full.rs").as_slice(),
+            include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh").as_slice(),
@@ -2105,10 +2108,34 @@ impl PreparedLlamaBatchExecutor {
                 buffer.download_to_slice(offset,&mut chunk[..n],&mut f.io_staging,stream).map_err(cuda)?;
                 hash.update(&chunk[..n]);offset+=n as u64;}
         }
+        // Pack immutable gate/up/down weights once before capture. The buffers
+        // remain explicit reservation parents and are dropped after graph close.
+        for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
+            for layer in 0..30 { for part in 0..3 {
+                if weights[3+layer*9+6+part]!=index {continue;}
+                let (n,k)=if part==2 {(576usize,1536usize)}else{(1536usize,576usize)};
+                let mut source=vec![0u8;n*k*2];
+                for (i,bytes) in source.chunks_mut(chunk.len()).enumerate() {
+                    buffer.download_to_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
+                }
+                let mut packed=vec![0u8;source.len()];
+                for row in (0..n).step_by(8) {for depth in (0..k).step_by(16) {for lane in 0..32 {for hi in 0..2 {
+                    let from=((row+lane/4)*k+depth+2*(lane%4)+hi*8)*2;
+                    let to=(((row/8)*(k/16)+depth/16)*128+hi*64+lane*2)*2;
+                    packed[to..to+4].copy_from_slice(&source[from..from+4]);
+                }}}}
+                hash.update(&packed);
+                for (i,bytes) in packed.chunks(chunk.len()).enumerate() {
+                    scratch.tiled[layer*3+part].upload_from_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
+                }
+            }}
+        }
         let mut devices:Vec<_>=f.weights.borrow_graph_weight_parents().collect();let base=devices.len();
         let (rows,tail)=scratch.devices.split_at_mut(12);devices.extend(rows);
         devices.extend([&mut self.owner.key_cache,&mut self.owner.value_cache,&mut self.owner.absolute_rope_cos,&mut self.owner.absolute_rope_sin]);
         devices.extend(tail);
+        weights.extend(devices.len()..devices.len()+scratch.tiled.len());
+        devices.extend(scratch.tiled.iter_mut());
         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
             pinned:vec![&mut scratch.staging],plans:vec![&mut scratch.head]}).map_err(cuda)?;
         graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32).map_err(cuda)?;

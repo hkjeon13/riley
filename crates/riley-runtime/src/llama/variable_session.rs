@@ -66,6 +66,7 @@ impl<G: VariableGraph> VariableSession<G> {
 /// in the loaded model owner and are exclusively borrowed during the session.
 pub struct VariableGraphBuffers {
     pub(crate) devices:Vec<riley_cuda::CudaDeviceBuffer>,
+    pub(crate) tiled:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
     pub(crate) head:riley_cuda::CudaPreparedGemm,
     pub(crate) capacity:u32,
@@ -81,7 +82,8 @@ impl VariableGraphBuffers {
         let mut devices=Vec::with_capacity(18);
         for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
-        Ok(Self{devices,staging:context.allocate_pinned_host_buffer(196864)?,
+        let tiled=(0..90).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
+        Ok(Self{devices,tiled,staging:context.allocate_pinned_host_buffer(196864)?,
             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
     }
     pub fn close(self)->riley_cuda::CudaResult<()> {self.head.close()}
