@@ -5,6 +5,7 @@
 //! ownership or quiescence. GPU dispatch wiring is separate; no performance claim.
 
 pub mod shape_progress;
+pub mod variable_wire;
 
 use std::collections::BTreeSet;
 use std::fmt;
