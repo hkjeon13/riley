@@ -23,6 +23,10 @@ The native parser is structural only. `valid_prefill_shape_packet` retains V3; `
 
 Run `cargo test -p riley-runtime --lib variable_wire` with `RILEY_V39_WIRE_FIXTURES` set to an output directory. This exports eleven old/new Rust packets. Compile `variable_wire16_packet_test.cpp` with C++17, `-Ikernels/src -fsanitize=address,undefined -fno-omit-frame-pointer`, then pass all eleven fixture paths. Tests include all-byte mutation safety, upper-row aliases, unused records/descriptors, wrong versions/extents, and a maximum1024-token prefill with no descriptor overlap.
 
-## Pending integration; no serving performance claim
+## V40 integration and remaining performance work
 
-The native16 model/result prototype still uses the old single-reference prefill offset/result magic. It is deliberately not connected to this new wire. Production V3 recorder and runtime remain eight-row. Before V4 dispatch, connect canonical token offset26752, result magic0x34524d52, retained transfer sizes/offsets, M16 head and scratch allocation, source digest, scheduler selection, and output slot capacity together. Then rerun native/Rust-owned GPU parity, cleanup/cancellation, and matched serving benchmarks. Do not use V39 CPU evidence as GPU completion or throughput evidence.
+V40 connects the canonical token offset26752, result magic0x34524d52, exact graph extents/aliases, retained transfers, M16 head, source digest, scheduler selection and sixteen output slots. Select it explicitly with `--graph-numerics variable-smol-v4`; V3 remains available. See `README_shared16.md` for GPU/HTTP receipts and the scope of Round48 serving comparisons.
+
+The standalone native16 probe deliberately retains its old reference packet/result format. Its default result template uses the old magic; the compiled V4 serving wrapper explicitly chooses0x34524d52. Do not feed its standalone reference setup into V4 serving.
+
+Round48 found high-concurrency gains but low-concurrency regressions and a remaining vLLM throughput/TPOT gap. V40 is not a completed performance goal. Runtime native intervals include GPU execution, synchronization and host readback; they must not be labeled GPU-only timing. Profile these costs and preserve full correctness/ownership checks in subsequent changes.
