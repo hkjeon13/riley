@@ -101,3 +101,6 @@ pub fn runtime_build_info() -> riley_core::Result<riley_runtime::BuildInfo> {
 
 mod authority;
 pub use authority::{AuthorizedExecution, AuthorizedExecutionRow};
+
+#[allow(dead_code)] // Runtime dispatch integration is assembled with the scoped authority adapter.
+mod descriptor;
