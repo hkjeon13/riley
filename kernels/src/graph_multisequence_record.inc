@@ -62,8 +62,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
       auto* keys=static_cast<uint8_t*>(d[14]->device_data)+l*384*16*physical;
       auto* values=static_cast<uint8_t*>(d[15]->device_data)+l*384*16*physical;
       s=gemm(4*l,2);
-      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(riley_multisequence_precise::enqueue_rope_rows(stream,d[2]->device_data,d[3]->device_data,keys,values,d[16]->device_data,d[17]->device_data,d[11]->device_data,bucket));
-      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(riley_multisequence_attention::enqueue_rows(stream,d[3]->device_data,keys,values,d[4]->device_data,d[11]->device_data,bucket));
+      if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_packed_multisequence_rope_attention(stream,d[2]->device_data,d[3]->device_data,keys,values,d[4]->device_data,d[16]->device_data,d[17]->device_data,d[11]->device_data,bucket));
       if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(4*l+1,5);
       if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[5]->device_data,d[0]->device_data,w[8+9*l]->device_data,d[6]->device_data,d[1]->device_data,1,bucket));
       if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(4*l+2,7);

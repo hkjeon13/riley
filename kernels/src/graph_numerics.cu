@@ -434,6 +434,69 @@ __device__ __forceinline__ void fused_history_tile(
   }
   __syncthreads(); // Finish both PV readers before reusing scores/probabilities.
 }
+__global__ void attention_packed_multisequence_rope(
+ const __nv_bfloat16* raw_q,const __nv_bfloat16* raw_k,const __nv_bfloat16* raw_v,
+ __nv_bfloat16* qo,__nv_bfloat16* k,__nv_bfloat16* v,__nv_bfloat16* out,
+ const float* cos,const float* sin,const uint32_t* metadata){
+ const uint32_t row=blockIdx.z;
+ if(row>=metadata[6]){
+  if(threadIdx.x<32){const uint32_t at=row*576+blockIdx.x*64+blockIdx.y*32+threadIdx.x;qo[at]=__ushort_as_bfloat16(0);out[at]=__ushort_as_bfloat16(0);}
+  return;
+ }
+ raw_q+=row*960;raw_k+=row*960;raw_v+=row*960;qo+=row*576;out+=row*576;
+ metadata+=32+row*32;
+ const uint32_t position=metadata[1];
+ const int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
+ const int qh=blockIdx.x,kvh=qh/3,first_block=blockIdx.y*4+warp*2,qb=qh*64;
+ if(position<128||position>=160){
+  if(warp==0)out[qb+blockIdx.y*32+lane]=__float2bfloat16_rn(CUDART_NAN_F);
+  return;
+ }
+ const uint32_t* blocks=metadata+4;
+ __shared__ float scores[128];
+ __shared__ __align__(4) __nv_bfloat16 probs[128];
+ __shared__ float alpha_by_lane[32],inverse_by_lane[32];
+ __shared__ __align__(4) __nv_bfloat16 local_q[64],local_k[64];
+ // Each CTA has its own rounded current Q/K. No CTA reads the cache slot
+ // another CTA is publishing during this launch, so no grid barrier is needed.
+ const float c=fused_rope_table(cos[position*32+lane]);
+ const float s=fused_rope_table(sin[position*32+lane]);
+ const int source_base=warp==0?qb:kvh*64;
+ const __nv_bfloat16* source=warp==0?raw_q:raw_k;
+ const float ra=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane]))<<16);
+ const float rb=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane+32]))<<16);
+ const float first=fused_rope_fma(ra,c,fused_rope_negate(fused_rope_mul(rb,s)));
+ const float second=fused_rope_fma(ra,s,fused_rope_mul(rb,c));
+ const __nv_bfloat16 x=fused_rope_round(first),y=fused_rope_round(second);
+ __nv_bfloat16* local=warp==0?local_q:local_k;
+ local[lane]=x;local[lane+32]=y;
+ // Preserve the original rotary-Q scratch and publish K/V exactly once per
+ // KV head. Every current-token attention load below uses local/raw data.
+ if(warp==0&&blockIdx.y==0){qo[qb+lane]=x;qo[qb+lane+32]=y;}
+ if(warp==1&&qh%3==0&&blockIdx.y==0){
+  const int destination=cache_index(static_cast<int>(position),kvh,lane,blocks);
+  k[destination]=x;k[destination+32]=y;
+  v[destination]=raw_v[kvh*64+lane];v[destination+32]=raw_v[kvh*64+lane+32];
+ }
+ __syncthreads(); // Publish both local heads, including warp1's rounded K.
+ float maximum=-CUDART_INF_F,den=0.;float accum[2][4]={};
+ // The validated range guarantees tail128..position followed by history0..127.
+ fused_history_tile<false>(local_q,local_k,raw_v,k,v,blocks,position,scores,probs,alpha_by_lane,
+     lane,warp,group,t,kvh,first_block,maximum,den,accum);
+ fused_history_tile<true>(local_q,local_k,raw_v,k,v,blocks,position,scores,probs,alpha_by_lane,
+     lane,warp,group,t,kvh,first_block,maximum,den,accum);
+
+ if(warp==0){
+  den+=__shfl_xor_sync(0xffffffff,den,2);
+  den+=__shfl_xor_sync(0xffffffff,den,1);
+  inverse_by_lane[lane]=1.0F/den;
+ }
+ __syncthreads();
+ const float inverse=inverse_by_lane[lane];
+ if(group==0)for(int block=0;block<2;++block)for(int j=0;j<2;++j)
+  out[qb+(first_block+block)*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
+}
+
 __global__ void attention_packed_decode_rope(
  const __nv_bfloat16* raw_q,const __nv_bfloat16* raw_k,const __nv_bfloat16* raw_v,
  __nv_bfloat16* qo,__nv_bfloat16* k,__nv_bfloat16* v,__nv_bfloat16* out,
@@ -492,6 +555,18 @@ __global__ void attention_packed_decode_rope(
 #endif
 
 namespace riley_cuda_internal {
+cudaError_t enqueue_compiled_packed_multisequence_rope_attention(cudaStream_t stream,
+ const void* packed,void* qo,void* key,void* value,void* out,const void* cos,const void* sin,const void* packet,uint32_t bucket) noexcept {
+#if MODE == 6
+ const auto* q=static_cast<const __nv_bfloat16*>(packed);
+ attention_packed_multisequence_rope<<<dim3(9,2,bucket),64,0,stream>>>(q,q+576,q+768,
+  static_cast<__nv_bfloat16*>(qo),static_cast<__nv_bfloat16*>(key),static_cast<__nv_bfloat16*>(value),static_cast<__nv_bfloat16*>(out),
+  static_cast<const float*>(cos),static_cast<const float*>(sin),static_cast<const uint32_t*>(packet));
+ return cudaGetLastError();
+#else
+ return cudaErrorNotSupported;
+#endif
+}
 cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t s,
  const void* q,const void* k,const void* v,void* qo,void* keys,void* values,void* out,
  const void* cos,const void* sin,const void* metadata) noexcept {
