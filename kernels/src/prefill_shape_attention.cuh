@@ -37,14 +37,12 @@ __global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,co
   int begin=tile*128,end=min(begin+128,count);
   for(int token=begin;token<end;token+=8){
    float d[4]={};
-   for(int depth=0;depth<64;depth+=16){
-    uint32_t a=query[depth/16];
-    uint32_t aa=query_hi[depth/16];
-    int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
-    uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
-    uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
-    mma(d,a,a,aa,aa,b,bb);
-   }
+   uint32_t key[4],key_hi[4];bool valid=token+group<end;
+   int kb=valid?cache_index(token+group,kvh,0,blocks):0;
+   #pragma unroll
+   for(int depth=0;depth<4;++depth){key[depth]=valid?pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
+   #pragma unroll
+   for(int depth=0;depth<4;++depth)mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
    if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[warp][token-begin+2*t+j]=d[j]*.125F;}
   }
   __syncwarp();

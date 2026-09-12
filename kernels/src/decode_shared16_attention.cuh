@@ -9,18 +9,17 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
  q+=row*576;result+=row*9*4096;
  int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
  if(count<1 || count>4096)return;
- for(;token<count;token+=gridDim.x*8){
- int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
+ int lane=threadIdx.x,g=lane/4,t=lane%4;
+ uint32_t query[4],query_hi[4];
  #pragma unroll
- for(int depth=0;depth<64;depth+=16){
-  auto* qp=q+head*64+depth;
-  uint32_t a=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);
-  uint32_t aa=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);
-  int kb=token+g<count?riley_prefill_shape::cache_index(token+g,head/3,depth,pages):0;
-  uint32_t b=token+g<count?riley_prefill_shape::pair(k[kb+2*t],k[kb+2*t+1]):0;
-  uint32_t bb=token+g<count?riley_prefill_shape::pair(k[kb+2*t+8],k[kb+2*t+9]):0;
-  riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
- }
+ for(int depth=0;depth<4;++depth){auto* qp=q+head*64+depth*16;query[depth]=riley_prefill_shape::pair(qp[2*t],qp[2*t+1]);query_hi[depth]=riley_prefill_shape::pair(qp[2*t+8],qp[2*t+9]);}
+ for(;token<count;token+=gridDim.x*8){
+ float d[4]={};uint32_t key[4],key_hi[4];
+ bool valid=token+g<count;int kb=valid?riley_prefill_shape::cache_index(token+g,head/3,0,pages):0;
+ #pragma unroll
+ for(int depth=0;depth<4;++depth){key[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t],k[kb+depth*16+2*t+1]):0;key_hi[depth]=valid?riley_prefill_shape::pair(k[kb+depth*16+2*t+8],k[kb+depth*16+2*t+9]):0;}
+ #pragma unroll
+ for(int depth=0;depth<4;++depth)riley_prefill_shape::mma(d,query[depth],query[depth],query_hi[depth],query_hi[depth],key[depth],key_hi[depth]);
  if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
  }
 }
@@ -47,15 +46,21 @@ __global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16*
   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
   den=local_den;maximum=mx;__syncwarp();
   for(int j=0;j<4;++j)accum[j]*=alpha;
-  for(int token=begin;token<end;token+=16){
-   int pi=token-begin;uint32_t a=riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]);
-   uint32_t aa=riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]);
-   // Each aligned K16 tile lies entirely in one physical KV page.
-   int dim=block*8+g;int value_base=((pages[token/16]*3+head/3)*16)*64+dim;
-   auto val=[&](int pos){return pos<end?v[value_base+(pos-token)*64]:zero;};
-   uint32_t b=riley_prefill_shape::pair(val(token+2*t),val(token+2*t+1));
-   uint32_t bb=riley_prefill_shape::pair(val(token+2*t+8),val(token+2*t+9));
-   riley_prefill_shape::mma(accum,a,a,aa,aa,b,bb);
+  #pragma unroll 1
+  for(int token=begin;token<end;token+=64){
+   uint32_t pa[4],paa[4],vb[4],vbb[4];
+   #pragma unroll
+   for(int part=0;part<4;++part){
+    int at=token+part*16,pi=at-begin;bool live=at<end;
+    pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
+    paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
+    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
+    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
+    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
+    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
+   }
+   #pragma unroll
+   for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
   }
   __syncwarp();
  }

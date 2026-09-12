@@ -24,7 +24,7 @@ __global__ void attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __
  int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
  int row=blockIdx.x,kvh=blockIdx.y,qh=kvh*3+warp,count=n-rows+row+1;
  int qb=(row*9+qh)*64;
- if(n<rows || n>160){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
+ if(n<rows || n>4096){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
  __shared__ float scores[3][128];
  __shared__ __nv_bfloat16 probs[3][128];
  float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
@@ -94,7 +94,7 @@ void run(int rows,int start){
  unsigned rng=start+rows+131;for(auto* xs:{&q,&k,&v})for(auto& x:*xs){rng=rng*1664525+1013904223;x=__bfloat16_as_ushort(__float2bfloat16_rn(float(int(rng%2049)-1024)/2048.f));}
  auto dq=upload(q),dk=upload(k),dv=upload(v),da=upload(a),db=upload(b);auto dp=upload(pages);
  ck(riley_prefill_shape::launch(0,(__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)da,dp,start,rows,context));ck(cudaDeviceSynchronize());ck(cudaMemcpy(a.data(),da,a.size()*2,cudaMemcpyDeviceToHost));
- if(end<=160){oracle::attention<<<dim3(rows,3),96>>>((__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,rows,end,nullptr,dp);ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,b.size()*2,cudaMemcpyDeviceToHost));if(a!=b)exit(3);}
+ if(end<=4096){oracle::attention<<<dim3(rows,3),96>>>((__nv_bfloat16*)dq,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,rows,end,nullptr,dp);ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,b.size()*2,cudaMemcpyDeviceToHost));if(a!=b)exit(3);}
  // Independent FP64 softmax/dot diagnostic, not full-model numerical qualification.
  // Predeclared absolute bound0.005 for bounded inputs in[-0.5,0.5].
  double maxerr=0.;int sampled=0;
@@ -109,6 +109,6 @@ void run(int rows,int start){
   ck(cudaMemcpy(dk,pk.data(),pk.size()*2,cudaMemcpyHostToDevice));ck(cudaMemcpy(dv,pv.data(),pv.size()*2,cudaMemcpyHostToDevice));ck(riley_prefill_shape::launch(0,(__nv_bfloat16*)dq+row*576,(__nv_bfloat16*)dk,(__nv_bfloat16*)dv,(__nv_bfloat16*)db,dp,count-1,1,context));ck(cudaDeviceSynchronize());ck(cudaMemcpy(b.data(),db,576*2,cudaMemcpyDeviceToHost));for(int i=0;i<576;++i)if(a[row*576+i]!=b[i])exit(6);
  }
  for(void* p:{(void*)dq,(void*)dk,(void*)dv,(void*)da,(void*)db,(void*)dp})ck(cudaFree(p));
- printf("{\"rows\":%d,\"start\":%d,\"old_exact_checked\":%s,\"fp64_sampled_elements\":%d,\"max_abs_error\":%.9g,\"causal_suffix_nan_exact\":true}\n",rows,start,end<=160?"true":"false",sampled,maxerr);
+ printf("{\"rows\":%d,\"start\":%d,\"old_exact_checked\":%s,\"fp64_sampled_elements\":%d,\"max_abs_error\":%.9g,\"causal_suffix_nan_exact\":true}\n",rows,start,end<=4096?"true":"false",sampled,maxerr);
 }
 int main(){for(int start:{0,13,128,1024})for(int rows:{1,17,127,129,398})run(rows,start);run(1,4095);run(1024,3072);}
