@@ -56,6 +56,10 @@ impl PreparedLlamaBatchExecutor {
         hash.update(include_bytes!("graph_decode_multi_parents.rs"));
         hash.update(include_bytes!("../../../../kernels/src/graph_numerics.cu"));
         hash.update(include_bytes!("../../../../kernels/src/graph_numerics_precise.cu"));
+        hash.update(include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh"));
+        hash.update(include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh"));
+        hash.update(include_bytes!("../../../../kernels/src/prefill_shape_attention.cuh"));
+
         hash.update(include_bytes!("../../../../kernels/src/gemm.cu"));
         hash.update(include_bytes!(
             "../../../../kernels/src/graph_multisequence_record.inc"
