@@ -81,6 +81,7 @@ fn plan(scheduler: &mut Scheduler, now: u64) -> IterationPlan {
             table.logical_length()
         );
     }
+    scheduler.authorize_execution(&plan).unwrap();
     plan
 }
 
@@ -352,6 +353,7 @@ fn cancellation_of_one_inflight_decoder_keeps_other_rows_and_reuses_capacity() {
             .deferred_until_iteration_settles()
     );
     assert_eq!(scheduler.pool_stats().allocated_block_count(), before);
+    assert_eq!(scheduler.authorize_execution(&p).unwrap().rows().len(), 4);
     let updates = scheduler
         .complete_iteration(&result(&p, None), now + 2)
         .unwrap();
