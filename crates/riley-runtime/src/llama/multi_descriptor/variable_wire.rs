@@ -80,11 +80,14 @@ pub const RESULT_BYTES:usize=128+49152*2;
 pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
     validate(e)?;
     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
+    validate_result_row(bytes,e,0)
+}
+fn validate_result_row<'a>(bytes:&'a[u8],e:&Expectation,index:usize)->Result<(Option<u32>,&'a[u8])>{
     let u32_at=|at:usize|u32::from_le_bytes(bytes[at..at+4].try_into().unwrap());
     check(u32_at(0)==0 && u32_at(12)==0,"status","GPU execution or argmax failed")?;
-    let row=&e.rows[0];let progress=row.progress.validate()?;let published=progress.logits_input_row.is_some();
+    let row=&e.rows[index];let progress=row.progress.validate()?;let published=progress.logits_input_row.is_some();
     let token=u32_at(8);check(token<49152,"argmax","token out of vocabulary")?;
-    let mut expected=[0u8;128];result_identity_into(&mut expected,e,token)?;
+    let mut expected=[0u8;128];result_row_identity_into(&mut expected,e,index,token)?;
     check(bytes[..128]==expected,"result_identity","completion differs from outstanding expectation")?;
     let logits=&bytes[128..];
     if !published {check(logits.iter().all(|&v|v==0) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
@@ -94,12 +97,32 @@ pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'
     check(token==host_token,"argmax","token differs from published logits")?;
     Ok((Some(token),logits))
 }
-fn result_identity_into(out:&mut[u8;128],e:&Expectation,token:u32)->Result<()>{
-    let row=&e.rows[0];let p=row.progress;let v=p.validate()?;out.fill(0);
+#[cfg(test)]
+fn result_identity_into(out:&mut[u8;128],e:&Expectation,token:u32)->Result<()>{result_row_identity_into(out,e,0,token)}
+fn result_row_identity_into(out:&mut[u8;128],e:&Expectation,index:usize,token:u32)->Result<()>{
+    let row=&e.rows[index];let p=row.progress;let v=p.validate()?;out.fill(0);
     for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,if e.stage==InputStage::Prefill{0}else{1}),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,0x33524d52)]{u32_at(out,at,x);}
     for(at,x)in[(16,e.owner_generation),(24,e.replay_id),(32,e.iteration_id),(40,row.sequence_tag),(48,row.cookie)]{u64_at(out,at,x);}
     out[80..112].copy_from_slice(&e.catalog_digest);Ok(())
 }
+/// Fixed-capacity readback. Unused records must be zero, and no record is
+/// returned until every active identity/status/logit row has validated.
+pub const BATCH_RESULT_BYTES:usize=8*RESULT_BYTES;
+#[derive(Debug)]
+pub struct RowResult<'a>{pub output_slot:u32,pub token:Option<u32>,pub logits:&'a[u8]}
+pub fn validate_batch_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<Vec<RowResult<'a>>>{
+    validate(e)?;
+    check(bytes.len()==BATCH_RESULT_BYTES,"result","exact eight-record extent required")?;
+    let mut result=Vec::with_capacity(e.rows.len());
+    for (index,row) in e.rows.iter().enumerate(){
+        let record=&bytes[index*RESULT_BYTES..(index+1)*RESULT_BYTES];
+        let (token,logits)=validate_result_row(record,e,index)?;
+        result.push(RowResult{output_slot:row.output_slot,token,logits});
+    }
+    check(bytes[e.rows.len()*RESULT_BYTES..].iter().all(|&v|v==0),"inactive_result","inactive record published bytes")?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,6 +168,26 @@ mod tests {
         assert_eq!(validate_result(&bytes,&e).unwrap().0,Some(0));
         e.rows[0].progress.generated_index+=1;e.rows[0].progress.committed_tokens+=1;*e.rows[0].valid_tokens.last_mut().unwrap()+=1;
         assert!(validate_result(&bytes,&e).is_err());
+    }
+
+    #[test] fn batch_results_bind_all_rows_before_publication(){
+        for active in [1,2,4,8]{
+            let e=fixture(InputStage::Decode,active);let mut bytes=vec![0;BATCH_RESULT_BYTES];
+            for i in 0..active as usize {let mut h=[0;128];result_row_identity_into(&mut h,&e,i,i as u32+7).unwrap();let b=i*RESULT_BYTES;bytes[b..b+128].copy_from_slice(&h);bytes[b+128+(i+7)*2..b+130+(i+7)*2].copy_from_slice(&0x3f80u16.to_le_bytes());}
+            if let Some(dir)=std::env::var_os("RILEY_V18_FIXTURES") {
+                let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();let mut packet=vec![0;REQUEST_BYTES];encode_into(&mut packet,&e).unwrap();
+                std::fs::write(dir.join(format!("request-{active}.bin")),packet).unwrap();std::fs::write(dir.join(format!("result-{active}.bin")),&bytes).unwrap();
+            }
+            if let Some(dir)=std::env::var_os("RILEY_V18_GPU_RESULTS") {
+                let gpu=std::fs::read(std::path::PathBuf::from(dir).join(format!("gpu-result-{active}.bin"))).unwrap();
+                assert_eq!(gpu,bytes);assert_eq!(validate_batch_result(&gpu,&e).unwrap().len(),active as usize);
+            }
+            let rows=validate_batch_result(&bytes,&e).unwrap();assert_eq!(rows.len(),active as usize);
+            for(i,row)in rows.iter().enumerate(){assert_eq!(row.output_slot,active-1-i as u32);assert_eq!(row.token,Some(i as u32+7));}
+            for row in 0..active as usize {for offset in 0..128 {let at=row*RESULT_BYTES+offset;bytes[at]^=1;assert!(validate_batch_result(&bytes,&e).is_err());bytes[at]^=1;}}
+            if active<8 {let at=active as usize*RESULT_BYTES;bytes[at]=1;assert!(validate_batch_result(&bytes,&e).is_err());bytes[at]=0;}
+            let last=(active as usize-1)*RESULT_BYTES;bytes[last+128..last+130].copy_from_slice(&0x7fc0u16.to_le_bytes());assert!(validate_batch_result(&bytes,&e).is_err());
+        }
     }
 
 }
