@@ -21,7 +21,7 @@ __global__ void finish(const uint32_t* m,const __nv_bfloat16* logits,const uint3
  result[0]=*status;result[1]=published;result[2]=published?tokens[0]:0;result[3]=errors[0];
  for(int i=0;i<6;++i)result[4+i]=m[10+i];
  for(int i=0;i<4;++i)result[10+i]=shape[12+i];
- result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
+ result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=Magic==0x37524d52?shape[18]:m[4];
  for(int i=0;i<8;++i)result[20+i]=m[16+i];
  result[28]=shape[1];result[29]=shape[10];result[30]=m[8];result[31]=Magic;
  }

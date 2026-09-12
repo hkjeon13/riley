@@ -37,6 +37,8 @@ pub enum ExecutionShapePolicy {
     VariablePrefillDecode32,
     /// Up to four ready prefill owners share a token-packed V6 graph.
     PackedPrefillDecode32,
+    /// Ready decode owners and up to four prefill owners share one token budget.
+    MixedPrefillDecode32,
 }
 
 /// All host-memory, work, and KV promises enforced by one scheduler.

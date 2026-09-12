@@ -1582,7 +1582,20 @@ impl Scheduler {
 
         let mut selected = Vec::new();
         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
+        if self.execution_shape_policy==ExecutionShapePolicy::MixedPrefillDecode32 {
+            let mut budget=self.config.iteration_token_budget;
+            for item in decode.iter().take(32) {
+                if budget==0 {break;}
+                selected.push(Candidate{request_id:item.request_id,kind:WorkKind::Decode,token_count:1});budget-=1;
+            }
+            for item in prefill.iter().take(4) {
+                if budget==0 || selected.len()==32 {break;}
+                let token_count=item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(budget);
+                selected.push(Candidate{request_id:item.request_id,kind:WorkKind::Prefill,token_count});budget-=token_count;
+            }
+            return Ok((selected,false));
+        }
+        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
             // Alternate classes immediately when both are ready. Neither aging
             // nor decode subtraction changes the independently bounded prefill chunk.
             // A NotDispatched abort retains the previous class so a retry cannot
@@ -1611,7 +1624,7 @@ impl Scheduler {
                 // Admission capacity is independent of the eight-row V3 wire.
                 // Ready timestamps already rotate committed decode work and roll
                 // back on NotDispatched, preserving fairness across batches.
-                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32=>32,_=>self.config.max_active_sequences};
+                let limit=match self.execution_shape_policy {ExecutionShapePolicy::VariablePrefillDecodeN=>8,ExecutionShapePolicy::VariablePrefillDecode16=>16,ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32=>32,_=>self.config.max_active_sequences};
                 for item in decode.into_iter().take(limit) {
                     selected.push(Candidate {
                         request_id: item.request_id,
@@ -1686,7 +1699,7 @@ impl Scheduler {
     }
 
     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
-        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
+        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
             self.last_dispatched_shape = Some(if inflight.prefill_count > 0 {
                 WorkKind::Prefill
             } else {
@@ -2107,7 +2120,7 @@ impl Scheduler {
             }
         }
         for output in result.outputs() {
-            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32)
+            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN | ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32)
                 && output.token_id() >= 49_152
             {
                 return Err(SchedulerError::InvalidIterationResult {
@@ -2671,7 +2684,7 @@ fn validate_descriptor(
     policy: ExecutionShapePolicy,
     descriptor: &RequestDescriptor,
 ) -> SchedulerResult<usize> {
-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32)
+    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32)
         && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
         return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
     }
@@ -2733,7 +2746,7 @@ fn validate_execution_shape_config(
     if policy == ExecutionShapePolicy::General {
         return Ok(());
     }
-    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32) {
+    if matches!(policy,ExecutionShapePolicy::VariablePrefillDecodeN|ExecutionShapePolicy::VariablePrefillDecode16 | ExecutionShapePolicy::VariablePrefillDecode32 | ExecutionShapePolicy::PackedPrefillDecode32 | ExecutionShapePolicy::MixedPrefillDecode32) {
         for (valid,field,reason) in [
             (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),

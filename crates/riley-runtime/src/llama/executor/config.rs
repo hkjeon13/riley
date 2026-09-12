@@ -135,6 +135,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     variable_graph: bool,
     variable_graph_rows: usize,
     packed_prefill: bool,
+    mixed_execution: bool,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
 }
@@ -158,6 +159,7 @@ impl PreparedLlamaBatchExecutorConfig {
             variable_graph: false,
             variable_graph_rows: 8,
             packed_prefill: false,
+            mixed_execution: false,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
         }
@@ -167,17 +169,19 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;
+        self.packed_prefill = false;self.mixed_execution=false;
         self.vllm_smol_p128_graph = true;
         self.shared_rows_graph = false;
         self
     }
     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
     #[must_use]
-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
     pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
     pub const fn with_packed_prefill(self)->Self {let mut s=self.with_variable_graph32();s.packed_prefill=true;s}
+    pub const fn with_mixed_execution(self)->Self {let mut s=self.with_packed_prefill();s.mixed_execution=true;s}
+    pub const fn mixed_execution(self)->bool {self.mixed_execution}
     pub const fn packed_prefill(self)->bool {self.packed_prefill}
     pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
     pub const fn variable_graph(self)->bool {self.variable_graph}
@@ -185,7 +189,7 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_shared_rows_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;
+        self.packed_prefill = false;self.mixed_execution=false;
         self.vllm_smol_p128_graph = true;self.shared_rows_graph = true;self
     }
     #[must_use]
@@ -458,6 +462,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         variable_graph: config.variable_graph,
         variable_graph_rows: config.variable_graph_rows,
         packed_prefill: config.packed_prefill,
+        mixed_execution: config.mixed_execution,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
     }
