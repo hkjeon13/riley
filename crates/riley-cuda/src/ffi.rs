@@ -11095,3 +11095,56 @@ mod aggregate_replay_fault_tests {
         Ok(())
     }
 }
+
+unsafe extern "C" {
+    fn riley_cuda_graph_resources_record_multisequence_decode(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        device_count: u64,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        plan_count: u64,
+        staging: *mut RawPinnedHostBuffer,
+        bucket: u32,
+        physical: u32,
+        full: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+}
+impl GraphResourcesHandle {
+    pub(super) fn record_multisequence_decode(
+        &mut self,
+        devices: &[&DeviceBufferHandle],
+        weights: &[&DeviceBufferHandle],
+        plans: &[&GemmPlanHandle],
+        staging: &PinnedHostBufferHandle,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+    ) -> CudaResult<()> {
+        let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
+        let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
+        let plans: Vec<_> = plans.iter().map(|v| v.as_ptr()).collect();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the enclosing owner retains all parent borrows. Native validates
+        // explicit counts, exact allocation geometry and ledger membership.
+        let status = unsafe {
+            riley_cuda_graph_resources_record_multisequence_decode(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                devices.as_ptr(),
+                devices.len() as u64,
+                weights.as_ptr(),
+                weights.len() as u64,
+                plans.as_ptr(),
+                plans.len() as u64,
+                staging.as_ptr(),
+                bucket,
+                physical,
+                u32::from(full),
+                &mut error,
+            )
+        };
+        status_result(status, "record multi-sequence decode", &error)
+    }
+}

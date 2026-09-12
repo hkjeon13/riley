@@ -1009,3 +1009,79 @@ impl BorrowedGraphResourceReservation<'_> {
         }
     }
 }
+
+impl BorrowedGraphResourceReservation<'_> {
+    /// Records a fixed SmolLM2 numerical decode DAG for two or four request rows.
+    /// Device roles follow the native recorder's 18-parent contract; weights are
+    /// the 273 legacy weights followed by 60 packed QKV/gate-up parents. This
+    /// low-level owner does not authorize scheduler reservations or KV ownership.
+    /// # Errors
+    /// Rejects invalid indices, parent geometry, unsupported buckets or native failures.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_multisequence_decode(
+        &mut self,
+        devices: &[usize; 18],
+        weights: &[usize],
+        plans: &[usize; 5],
+        staging: usize,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+    ) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let bad = || {
+                crate::CudaError::invalid_argument(
+                    "record multi-sequence decode",
+                    "parent index out of range",
+                )
+            };
+            let devices: Vec<_> = devices
+                .iter()
+                .map(|i| {
+                    self.parents
+                        .devices
+                        .get(*i)
+                        .map(|p| p.native_handle())
+                        .ok_or_else(bad)
+                })
+                .collect::<CudaResult<_>>()?;
+            let weights: Vec<_> = weights
+                .iter()
+                .map(|i| {
+                    self.parents
+                        .devices
+                        .get(*i)
+                        .map(|p| p.native_handle())
+                        .ok_or_else(bad)
+                })
+                .collect::<CudaResult<_>>()?;
+            let plans: Vec<_> = plans
+                .iter()
+                .map(|i| {
+                    self.strided_plans
+                        .get(*i)
+                        .ok_or_else(bad)?
+                        .graph_resource_handle()
+                })
+                .collect::<CudaResult<_>>()?;
+            let staging = self.parents.pinned.get(staging).ok_or_else(bad)?;
+            self.native.record_multisequence_decode(
+                &devices,
+                &weights,
+                &plans,
+                staging.native_handle(),
+                bucket,
+                physical,
+                full,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (devices, weights, plans, staging, bucket, physical, full);
+            Err(crate::CudaError::unavailable(
+                "record multi-sequence decode",
+            ))
+        }
+    }
+}
