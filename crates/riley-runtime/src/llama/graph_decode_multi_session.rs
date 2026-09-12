@@ -53,6 +53,9 @@ impl PreparedLlamaBatchExecutor {
         hash.update(include_bytes!(
             "../../../../kernels/src/graph_multisequence_io.cu"
         ));
+        hash.update(include_bytes!(
+            "../../../../kernels/src/batch_primitives.cu"
+        ));
         let max_active_rows = if physical >= 40 { 4 } else { 2 };
         let mut catalog = vec![
             CatalogEntry {
