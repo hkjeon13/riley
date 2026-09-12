@@ -303,3 +303,160 @@ cudaError_t enqueue_compiled_packed_decode_attention_two_warp(cudaStream_t s,con
 #endif
 }
 } // namespace riley_cuda_internal
+
+// Packed M1 decode only. Fold precise RoPE and current K/V publication into
+// the accepted two-warp attention mapping. The complete preceding kernels
+// remain available as independent numerical oracles and the P128 path.
+#if MODE == 6
+// These explicit non-FTZ operations preserve the precise RoPE SASS order
+// under this translation unit's --use_fast_math flags, including signed zero.
+// Packed table conversion and the mixed FMA pair passed the isolated v2 probe.
+__device__ __forceinline__ float fused_rope_table(float value){
+ uint32_t packed;
+ asm volatile("cvt.rn.bf16x2.f32 %0, 0f00000000, %1;" : "=r"(packed) : "f"(value));
+ return __uint_as_float(packed<<16);
+}
+__device__ __forceinline__ __nv_bfloat16 fused_rope_round(float value){
+ uint16_t bits;
+ asm volatile("cvt.rn.bf16.f32 %0, %1;" : "=h"(bits) : "f"(value));
+ return __ushort_as_bfloat16(bits);
+}
+__device__ __forceinline__ float fused_rope_mul(float a,float b){
+ float value;
+ asm volatile("mul.rn.f32 %0, %1, %2;" : "=f"(value) : "f"(a),"f"(b));
+ return value;
+}
+__device__ __forceinline__ float fused_rope_fma(float a,float b,float c){
+ float value;
+ asm volatile("fma.rn.f32 %0, %1, %2, %3;" : "=f"(value) : "f"(a),"f"(b),"f"(c));
+ return value;
+}
+__device__ __forceinline__ float fused_rope_negate(float value){
+ return __uint_as_float(__float_as_uint(value)^0x80000000u);
+}
+__global__ void attention_packed_decode_rope(
+ const __nv_bfloat16* raw_q,const __nv_bfloat16* raw_k,const __nv_bfloat16* raw_v,
+ __nv_bfloat16* qo,__nv_bfloat16* k,__nv_bfloat16* v,__nv_bfloat16* out,
+ const float* cos,const float* sin,const uint32_t* metadata){
+ const uint32_t position=metadata[1];
+ const int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
+ const int qh=blockIdx.x,kvh=qh/3,first_block=blockIdx.y*4+warp*2,qb=qh*64;
+ if(position<128||position>=160){
+  if(warp==0)out[qb+blockIdx.y*32+lane]=__float2bfloat16_rn(CUDART_NAN_F);
+  return;
+ }
+ const int count=static_cast<int>(position)+1;
+ const uint32_t* blocks=metadata+4;
+ __shared__ float scores[128];
+ __shared__ __nv_bfloat16 probs[128];
+ __shared__ float alpha_by_lane[32],inverse_by_lane[32];
+ __shared__ __nv_bfloat16 local_q[64],local_k[64];
+ // Each CTA has its own rounded current Q/K. No CTA reads the cache slot
+ // another CTA is publishing during this launch, so no grid barrier is needed.
+ const float c=fused_rope_table(cos[position*32+lane]);
+ const float s=fused_rope_table(sin[position*32+lane]);
+ const int source_base=warp==0?qb:kvh*64;
+ const __nv_bfloat16* source=warp==0?raw_q:raw_k;
+ const float ra=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane]))<<16);
+ const float rb=__uint_as_float(uint32_t(__bfloat16_as_ushort(source[source_base+lane+32]))<<16);
+ const float first=fused_rope_fma(ra,c,fused_rope_negate(fused_rope_mul(rb,s)));
+ const float second=fused_rope_fma(ra,s,fused_rope_mul(rb,c));
+ const __nv_bfloat16 x=fused_rope_round(first),y=fused_rope_round(second);
+ __nv_bfloat16* local=warp==0?local_q:local_k;
+ local[lane]=x;local[lane+32]=y;
+ // Preserve the original rotary-Q scratch and publish K/V exactly once per
+ // KV head. Every current-token attention load below uses local/raw data.
+ if(warp==0&&blockIdx.y==0){qo[qb+lane]=x;qo[qb+lane+32]=y;}
+ if(warp==1&&qh%3==0&&blockIdx.y==0){
+  const int destination=cache_index(static_cast<int>(position),kvh,lane,blocks);
+  k[destination]=x;k[destination+32]=y;
+  v[destination]=raw_v[kvh*64+lane];v[destination+32]=raw_v[kvh*64+lane+32];
+ }
+ __syncthreads(); // Publish both local heads, including warp1's rounded K.
+ float maximum=-CUDART_INF_F,den=0.;float accum[2][4]={};
+ const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
+ for(int tile=(count-1)/128;tile>=0;--tile){
+  int begin=tile*128,end=min(begin+128,count);
+  for(int token=begin+8*warp;token<end;token+=16){
+   float d[4]={};
+   for(int depth=0;depth<64;depth+=16){
+    uint32_t a=pair(local_q[depth+2*t],local_q[depth+2*t+1]);
+    uint32_t aa=pair(local_q[depth+2*t+8],local_q[depth+2*t+9]);
+    const int key_token=token+group;
+    const bool current=key_token==static_cast<int>(position);
+    const int kb=key_token<end&&!current?cache_index(key_token,kvh,depth,blocks):0;
+    const __nv_bfloat16* key=current?local_k:k;
+    const int base=current?depth:kb;
+    uint32_t b=key_token<end?pair(key[base+2*t],key[base+2*t+1]):0;
+    uint32_t bb=key_token<end?pair(key[base+2*t+8],key[base+2*t+9]):0;
+    mma(d,a,a,aa,aa,b,bb);
+   }
+   if(group==0){for(int j=0;j<2;++j)if(token+2*t+j<end)scores[token-begin+2*t+j]=d[j]*.125F;}
+  }
+  // Includes the idle second warp when the tail has at most eight tokens.
+  __syncthreads();
+  if(warp==0){
+   float mx=maximum;
+   for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[i]);
+   for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
+   float alpha=exp2f((maximum-mx)*1.4426950408889634F);
+   alpha_by_lane[lane]=alpha;
+   for(int i=lane;i<128;i+=32){
+    float p=i<end-begin?exponential(scores[i],mx):0.;
+    probs[i]=__float2bfloat16_rn(p);
+    scores[i]=p;
+   }
+   __syncwarp();
+   // Warp zero retains the accepted per-lane j/z addition order and keeps
+   // the original FP32 probabilities, not their BF16 PV representation.
+   float local_den=den*alpha;
+   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
+     if(i<end-begin)local_den+=scores[i];}
+   den=local_den;
+   maximum=mx;
+  }
+  __syncthreads(); // Publish probabilities and the corresponding lane's alpha.
+  const float alpha=alpha_by_lane[lane];
+  for(int block=0;block<2;++block){
+   for(int j=0;j<4;++j)accum[block][j]*=alpha;
+   for(int token=begin;token<end;token+=16){
+    int pi=token-begin;
+    uint32_t a=pair(probs[pi+2*t],probs[pi+2*t+1]);
+    uint32_t aa=pair(probs[pi+2*t+8],probs[pi+2*t+9]);
+    int dim=(first_block+block)*8+group;
+    auto val=[&](int pos){
+     if(pos>=end)return zero;
+     return pos==static_cast<int>(position)?raw_v[kvh*64+dim]:v[cache_index(pos,kvh,dim,blocks)];
+    };
+    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
+    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
+    mma(accum[block],a,a,aa,aa,b,bb);
+   }
+  }
+  __syncthreads(); // Finish both PV readers before reusing scores/probabilities.
+ }
+ if(warp==0){
+  den+=__shfl_xor_sync(0xffffffff,den,2);
+  den+=__shfl_xor_sync(0xffffffff,den,1);
+  inverse_by_lane[lane]=1.0F/den;
+ }
+ __syncthreads();
+ const float inverse=inverse_by_lane[lane];
+ if(group==0)for(int block=0;block<2;++block)for(int j=0;j<2;++j)
+  out[qb+(first_block+block)*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
+}
+#endif
+
+namespace riley_cuda_internal {
+cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t s,
+ const void* q,const void* k,const void* v,void* qo,void* keys,void* values,void* out,
+ const void* cos,const void* sin,const void* metadata) noexcept {
+#if MODE == 6
+ attention_packed_decode_rope<<<dim3(9,2),64,0,s>>>((const __nv_bfloat16*)q,(const __nv_bfloat16*)k,(const __nv_bfloat16*)v,
+  (__nv_bfloat16*)qo,(__nv_bfloat16*)keys,(__nv_bfloat16*)values,(__nv_bfloat16*)out,
+  (const float*)cos,(const float*)sin,(const uint32_t*)metadata);return cudaGetLastError();
+#else
+ return cudaErrorInvalidValue;
+#endif
+}
+} // namespace riley_cuda_internal

@@ -2359,6 +2359,11 @@ cudaError_t enqueue_compiled_packed_decode_attention(cudaStream_t,const void*,co
 // Same MODE6 contract; two warps partition independent QK/PV work while
 // retaining each score/output MMA chain and the original denominator order.
 cudaError_t enqueue_compiled_packed_decode_attention_two_warp(cudaStream_t,const void*,const void*,const void*,void*,const void*) noexcept;
+// Fused packed M1 decode. Raw Q[576]/K[192]/V[192] and FP32 tables produce
+// rotary Q[576], current paged K/V and attention[576] at position128..159.
+// Current-token attention reads CTA-local K/raw V; all parent buffers and
+// validated metadata have the same lifetime and nonalias contract as above.
+cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t,const void*,const void*,const void*,void*,void*,void*,void*,const void*,const void*,const void*) noexcept;
 
 }  // namespace riley_cuda_internal
 
