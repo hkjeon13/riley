@@ -2103,6 +2103,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_packet.hpp").as_slice(),
             include_bytes!("../../../../kernels/src/graph_resources.cu").as_slice(),
             include_bytes!("../../../../kernels/src/graph_numerics_precise.cu").as_slice(),
+            include_bytes!("multi_descriptor/result_scan.rs").as_slice(),
             include_bytes!("multi_descriptor/variable_wire.rs").as_slice()] {hash.update((source.len() as u64).to_le_bytes());hash.update(source);}
         for m in std::iter::once(scratch.head.algorithm_metadata()).chain(scratch.shared_head.as_ref().map(|h|h.algorithm_metadata())) {
         let (major,minor)=m.compute_capability();hash.update(major.to_le_bytes());hash.update(minor.to_le_bytes());

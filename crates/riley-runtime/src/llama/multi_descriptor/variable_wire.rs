@@ -91,10 +91,11 @@ pub const RESULT_BYTES:usize=128+49152*2;
 /// Validate a completed read from the caller's one outstanding retained owner.
 /// This cannot prove quiescence or perform scheduler settlement on its own.
 // A reduction permits vectorized scanning while checking every inactive byte.
-fn all_zero(bytes:&[u8])->bool {bytes.iter().fold(0u8,|bits,&value|bits|value)==0}
+fn all_zero(bytes:&[u8])->bool {super::result_scan::all_zero(bytes)}
 // Independent accumulators shorten the maximum dependency chain. All lanes
 // reject nonfinite values; final ties still choose the lowest vocabulary ID.
-fn finite_argmax(logits:&[u8])->Result<u32>{
+fn finite_argmax(logits:&[u8])->Result<u32>{super::result_scan::finite_argmax(logits)}
+pub(super) fn scalar_finite_argmax(logits:&[u8])->Result<u32>{
  let mut maxima=[f32::NEG_INFINITY;8];let mut indices=[0u32;8];
  let mut chunks=logits.chunks_exact(16);
  for (block,chunk) in chunks.by_ref().enumerate(){
