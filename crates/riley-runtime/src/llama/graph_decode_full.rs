@@ -500,12 +500,8 @@ impl PreparedLlamaBatchExecutor {
             )?;
             let (signature, device_bytes) =
                 prepared_signature.ok_or_else(|| rejected("missing prepared signature"))?;
-            let mut registered = RegisteredFullDecode::new(
-                graph,
-                signature,
-                (transfer * 2) as u64 + multi_pinned_bytes,
-                device_bytes,
-            )?;
+            let mut registered =
+                RegisteredFullDecode::new(graph, signature, (transfer * 2) as u64, device_bytes)?;
             for step in 0..steps {
                 let pos = first_decode_position + step;
                 let live = pos as usize / 16 + 1;
@@ -1542,8 +1538,12 @@ impl PreparedLlamaBatchExecutor {
                 p.multi.as_mut(),
             )?;
             // Publish only a captured, instantiated exact-owner registry entry.
-            let registered =
-                RegisteredFullDecode::new(graph, signature, (transfer * 2) as u64, device_bytes)?;
+            let registered = RegisteredFullDecode::new(
+                graph,
+                signature,
+                (transfer * 2) as u64 + multi_pinned_bytes,
+                device_bytes,
+            )?;
             if registered
                 .select(ExecutionGraphPolicy::Require, signature)?
                 .mode()
