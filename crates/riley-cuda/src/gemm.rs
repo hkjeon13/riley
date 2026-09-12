@@ -1703,11 +1703,11 @@ pub struct CudaStridedGemmConfig {
     output_bytes: u64,
 }
 impl CudaStridedGemmConfig {
-    /// Creates a qualified SmolLM2 batch2/4 layout. Strides count BF16 elements.
+    /// Creates a qualified SmolLM2 batch2/4/8 layout. Strides count BF16 elements.
     /// Rejects unqualified shapes and arbitrary padding before CUDA allocation.
     pub fn new(n: u64, k: u64, batch_count: u32, padded: bool) -> CudaResult<Self> {
         const OP: &str = "CudaStridedGemmConfig::new";
-        if !matches!(batch_count, 2 | 4)
+        if !matches!(batch_count, 2 | 4 | 8)
             || !((k == 576 && matches!(n, 576 | 960 | 3072 | 49152)) || (k == 1536 && n == 576))
         {
             return Err(CudaError::invalid_argument(
@@ -1999,7 +1999,7 @@ mod strided_config_tests {
             (576, 1536),
             (49152, 576),
         ] {
-            for batch in [2, 4] {
+            for batch in [2, 4, 8] {
                 for padded in [false, true] {
                     let c = CudaStridedGemmConfig::new(n, k, batch, padded).unwrap();
                     assert_eq!(c.m1_config().m, 1);
@@ -2016,7 +2016,7 @@ mod strided_config_tests {
     }
     #[test]
     fn unsupported_shapes_and_capacities_fail_before_native() {
-        for batch in [0, 1, 3, 8, u32::MAX] {
+        for batch in [0, 1, 3, 5, 6, 7, 9, 16, u32::MAX] {
             assert!(CudaStridedGemmConfig::new(960, 576, batch, false).is_err());
         }
         for (n, k) in [(0, 576), (960, 0), (960, 577), (u64::MAX, u64::MAX)] {

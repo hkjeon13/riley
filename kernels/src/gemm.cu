@@ -1078,7 +1078,7 @@ namespace {
 
 bool gemm_bf16_plan_is_ready(
     const RileyCudaGemmPlan* plan, bool strided_m1) noexcept {
-  if (plan == nullptr || plan->owner == nullptr || (strided_m1 ? (plan->batch_count != 2 && plan->batch_count != 4) : plan->batch_count != 1) || !plan->algorithm_ready ||
+  if (plan == nullptr || plan->owner == nullptr || (strided_m1 ? (plan->batch_count != 2 && plan->batch_count != 4 && plan->batch_count != 8) : plan->batch_count != 1) || !plan->algorithm_ready ||
       (plan->column_chunks != 1 && !(strided_m1 && plan->column_chunks == 16 && plan->config.n == 49152 && plan->config.k == 576)) ||
       plan->handle == nullptr || plan->operation == nullptr ||
       plan->weight_layout == nullptr || plan->input_layout == nullptr ||
@@ -1905,7 +1905,7 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   const bool shape = (config->k == 576 && (config->n == 960 || config->n == 3072 || config->n == 576 || config->n == 49152))
       || (config->k == 1536 && config->n == 576);
-  if (!shape || config->m != 1 || config->flags != 0 || (batch_count != 2 && batch_count != 4)
+  if (!shape || config->m != 1 || config->flags != 0 || (batch_count != 2 && batch_count != 4 && batch_count != 8)
       || (input_stride != config->k && input_stride != ((config->k + 127) / 128) * 128)
       || (output_stride != config->n && output_stride != ((config->n + 127) / 128) * 128))
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT, RILEY_CUDA_ERROR_STAGE_VALIDATION,
