@@ -289,3 +289,5 @@ cudaError_t enqueue_shape_prefill_rope_kv(cudaStream_t stream,const void* q,cons
  return launch_prefill_shape_rope_kv(stream,static_cast<const __nv_bfloat16*>(q),static_cast<const __nv_bfloat16*>(k),static_cast<const __nv_bfloat16*>(v),static_cast<__nv_bfloat16*>(qo),static_cast<__nv_bfloat16*>(keys),static_cast<__nv_bfloat16*>(values),static_cast<const float*>(cos),static_cast<const float*>(sin),reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+16),0,128,160);
 }
 }
+
+#include "prefill_shape_model.cuh"
