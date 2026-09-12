@@ -2,10 +2,10 @@
 #include "decode_tiled.cuh"
 // One MMA shares weights across up to eight independent decode rows.
 // Live rows are supplied by validated metadata; inactive rows never load/store.
-template<int N,int K,int Interval,bool Tiled>
+template<int N,int K,int Interval,bool Tiled,bool Compact=false>
 __device__ __forceinline__ void shared_projection_compute(const __nv_bfloat16* x,const __nv_bfloat16* w,float* parts,__nv_bfloat16* out,const uint32_t* live_rows,int column,int chunk_index){
  const uint32_t rows=*live_rows;if(rows<1||rows>8)return;
- const int lane=threadIdx.x,g=lane/4,t=lane%4,base=column*8;
+ const int lane=threadIdx.x%32,g=lane/4,t=lane%4,base=column*8;
  constexpr int Chunk=Interval>0?Interval:K;
  int begin=chunk_index*Chunk,end=min(begin+Chunk,K);float d[4]={};
  #pragma unroll
@@ -22,6 +22,7 @@ __device__ __forceinline__ void shared_projection_compute(const __nv_bfloat16* x
  if(g<rows)for(int j=0;j<2;++j){
   auto v=__float2bfloat16_rn(d[j]);
   if constexpr(Interval>0)parts[(chunk_index*8+g)*N+base+2*t+j]=__bfloat162float(v);
+  else if constexpr(Compact)out[g*8+2*t+j]=v;
   else out[g*N+base+2*t+j]=v;
  }
 }
@@ -65,4 +66,14 @@ inline void enqueue_shared_projection(cudaStream_t stream,const __nv_bfloat16* x
  constexpr int chunk=Interval>0?Interval:K;
  shared_projection_parts<N,K,Interval,Tiled><<<dim3(N/8,(K+chunk-1)/chunk),32,0,stream>>>(x,w,parts,out,live_rows);
  if constexpr(Interval>0)shared_projection_merge<N,K,Interval><<<(8*N+255)/256,256,0,stream>>>(parts,out,live_rows);
+}
+
+// Two warps compute independent gate/up tiles, then share rounded results.
+template<bool Tiled>
+__global__ void shared_gate_up_swiglu(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,const uint32_t* live){
+ uint32_t rows=*live;if(rows<1||rows>8)return;
+ int warp=threadIdx.x/32;__shared__ __nv_bfloat16 partials[2][64];
+ shared_projection_compute<1536,576,0,Tiled,true>(x,warp?up:gate,nullptr,partials[warp],live,blockIdx.x,0);
+ __syncthreads();
+ int row=threadIdx.x/8,col=threadIdx.x%8;if(row<rows){float g=__bfloat162float(partials[0][threadIdx.x]);out[row*1536+blockIdx.x*8+col]=__float2bfloat16_rn((g/(1.F+expf(-g)))*__bfloat162float(partials[1][threadIdx.x]));}
 }

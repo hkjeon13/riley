@@ -29,6 +29,21 @@ __global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,con
   values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
  }
 }
+
+__device__ __forceinline__ __nv_bfloat16 qkv_rounded(const float* p,int n,int row,int col){
+ float value=0.;for(int chunk=0;chunk<3;++chunk)value+=p[chunk*8*n+row*n+col];return __float2bfloat16_rn(value);
+}
+__global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
+ uint32_t rows=*active,row=blockIdx.y;if(rows<1||rows>8||row>=rows)return;
+ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=384)return;
+ shape+=row*416;pages+=row*416;uint32_t pos=shape[1];int head=i/32,dim=i%32;
+ const float* src=head<9?parts:parts+3*8*576;int n=head<9?576:192,base=(head<9?head:head-9)*64;
+ float a=__bfloat162float(qkv_rounded(src,n,row,base+dim)),b=__bfloat162float(qkv_rounded(src,n,row,base+dim+32));
+ float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
+ auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
+ if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
+ else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*8*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
+}
 // Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
 __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>8||row<rows)return;
@@ -46,19 +61,15 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
  if(layer==0)riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,8);
- enqueue_shared_qkv(stream,b(1),w(base+1),w(base+2),w(base+3),b(2),b(5),b(6),static_cast<float*>(scratch[7]),active);
+ shared_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
- shared_rope_kv<<<dim3(2,8),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,cos,sin,pages,shape,active);
+ qkv_merge_rope<<<dim3(2,8),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
  riley_shared_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  enqueue_shared_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,8);
- if(tiled)shared_gate_up<<<dim3(192,2),32,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(8),b(9),active);
- else {
- enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]),active);
- enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]),active);
- }
- riley_prefill_pointwise::swiglu_rows<<<dim3(6,8),256,0,stream>>>(b(8),b(9),b(11),pointwise,8);
+ if(tiled)shared_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+ else shared_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
  if(tiled)enqueue_shared_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
  else enqueue_shared_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,8);
