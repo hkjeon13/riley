@@ -215,7 +215,11 @@ impl PreparedLlamaBatchExecutor {
         let mut pinned = vec![staging];
         let mut strided = Vec::new();
         let mut multi_indices = Vec::new();
+        let mut shared_indices = Vec::new();
         if let Some(multi) = multi {
+            let first_shared = plans.len();
+            shared_indices.extend((0..multi.shared.len()).map(|i| first_shared + i));
+            plans.extend(multi.shared.iter_mut());
             for scratch in &mut multi.scratch {
                 let first = devices.len();
                 devices.extend(scratch.iter_mut());
@@ -263,21 +267,13 @@ impl PreparedLlamaBatchExecutor {
             let packed = packed_indices.ok_or_else(|| rejected("multi packed indices missing"))?;
             multi_weights.extend_from_slice(&packed[..60]);
             for (index, indices) in multi_indices.iter().enumerate() {
-                graph
-                    .append_multisequence_decode(
-                        indices,
-                        &multi_weights,
-                        &std::array::from_fn(|i| index * 5 + i),
-                        index + 1,
-                        [2, 4, 8][index],
-                        geometry[1] as u32,
-                        true,
-                    )
-                    .map_err(cuda)?;
-                graph.append_multisequence_decode(
-                    indices, &multi_weights, &std::array::from_fn(|i| index * 5 + i),
-                    index + 4, [2, 4, 8][index], geometry[1] as u32, false,
-                ).map_err(cuda)?;
+                let shared = !shared_indices.is_empty();
+                let p = if shared { [shared_indices[index*3], shared_indices[index*3+1], index*5+2, index*5+3, shared_indices[index*3+2]] } else { std::array::from_fn(|i| index*5+i) };
+                for full in [true, false] {
+                    let staging = index + if full {1} else {4};
+                    if shared { graph.append_shared_multisequence_decode(indices, &multi_weights, &p, staging, [2,4,8][index], geometry[1] as u32, full) }
+                    else { graph.append_multisequence_decode(indices, &multi_weights, &p, staging, [2,4,8][index], geometry[1] as u32, full) }.map_err(cuda)?;
+                }
             }
         }
         Ok(graph)
@@ -1407,6 +1403,7 @@ struct FullDecodeParents {
 /// The owner exposes no eager access while CUDA graph leases are active.
 /// Full logits are retained so ordinary CPU sampling and stop masks remain valid.
 pub struct OwnedLlamaDecodeExecutor {
+    multi_plan_identity: Vec<u8>,
     graph: riley_cuda::OwnedGraphResourceReservation<FullDecodeParents>,
     registry: GraphRegistry<1>,
     signature: GraphSignature,
@@ -1441,9 +1438,14 @@ impl PreparedLlamaBatchExecutor {
 
     // Internal until the scheduler/codec adapter supplies live reservation authority.
     pub(crate) fn into_owned_decode_graph_with_catalog(
-        mut self,
+        self,
         context: &riley_cuda::CudaContext,
         catalog: bool,
+    ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
+        self.into_owned_decode_graph_with_catalog_profile(context, catalog, false)
+    }
+    pub(crate) fn into_owned_decode_graph_with_catalog_profile(
+        mut self, context: &riley_cuda::CudaContext, catalog: bool, shared_rows: bool,
     ) -> LlamaBatchExecutorResult<OwnedLlamaDecodeExecutor> {
         if !self.full_decode_supported() {
             return Err(rejected("unsupported owned graph"));
@@ -1456,7 +1458,7 @@ impl PreparedLlamaBatchExecutor {
             return Err(rejected("catalog requires packed P128/C10"));
         }
         let multi = if catalog {
-            Some(MultiDecodeParents::prepare(context)?)
+            Some(MultiDecodeParents::prepare(context, shared_rows)?)
         } else {
             None
         };
@@ -1490,6 +1492,7 @@ impl PreparedLlamaBatchExecutor {
             .checked_add(multi_device_bytes)
             .ok_or_else(|| rejected("catalog device footprint overflow"))?;
 
+        let multi_plan_identity = format!("shared-rows-v1:{}:{:?}", shared_rows, multi.as_ref().map(|m| m.shared.iter().map(|p| p.algorithm_metadata()).collect::<Vec<_>>())).into_bytes();
         let vocabulary_size = self.vocabulary_size();
         let maximum_position_count = self.maximum_position_count()?;
         let config = self.config.metadata();
@@ -1559,6 +1562,7 @@ impl PreparedLlamaBatchExecutor {
             Ok(registered.graph)
         })?;
         Ok(OwnedLlamaDecodeExecutor {
+            multi_plan_identity,
             graph,
             registry: registry.ok_or_else(|| rejected("registry missing"))?,
             signature,

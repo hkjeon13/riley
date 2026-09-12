@@ -1,11 +1,11 @@
 // Fixed SmolLM2 strided decode DAG. Included in the aggregate owner TU so all
 // parent membership, capture rollback and graph destruction use one ledger.
-extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(
+static RileyCudaStatus record_multisequence_decode_impl(
     RileyCudaGraphResources* r, RileyCudaDeviceBuffer* const* d, uint64_t device_count,
     RileyCudaDeviceBuffer* const* w, uint64_t weight_count,
     RileyCudaGemmPlan* const* plans, uint64_t plan_count,
     RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical,
-    uint32_t full, RileyCudaErrorInfo* error) noexcept {
+    uint32_t full, bool shared_rows, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   auto status=transfer_ready(r,error);
   if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
@@ -38,6 +38,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
   using State=RileyCudaCanonicalGemmBf16GraphState;
   State states[121]{};
   auto bind=[&](size_t index,size_t plan,size_t input,size_t weight,size_t output,uint64_t n,uint64_t k){
+    if(shared_rows && (plan==0||plan==1||plan==4))
+      return bind_reserved_shared_row_gemm_state(plans[plan],r->stream,d[input],w[weight],d[output],bucket,n,k,&states[index],error);
     return bind_reserved_strided_gemm_state(plans[plan],r->stream,d[input],w[weight],d[output],bucket,n,k,k,n,&states[index],error);
   };
   for(size_t l=0;l<30&&status==RILEY_CUDA_STATUS_SUCCESS;++l){
@@ -79,3 +81,6 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
   if(status==RILEY_CUDA_STATUS_SUCCESS){r->multi_bucket=bucket;r->multi_physical=physical;r->multi_full=full;}
   return status;
 }
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return record_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,false,e); }
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_shared_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return record_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,true,e); }

@@ -87,6 +87,7 @@ struct ServeOptions {
     execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
     reduction_profile: ReductionProfileMode,
     vllm_smol_p128_graph: bool,
+    shared_rows_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -364,11 +365,12 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--graph-numerics" => {
                 let value = next_value(&mut arguments, "--graph-numerics")?;
                 let enabled = match value.to_str() {
-                    Some("existing") => false,
-                    Some("vllm-smol-p128-v1") => true,
+                    Some("existing") => (false, false),
+                    Some("vllm-smol-p128-v1") => (true, false),
+                    Some("shared-smol-p128-v1") => (true, true),
                     _ => {
                         return Err(
-                            "--graph-numerics requires existing or vllm-smol-p128-v1".to_owned()
+                            "--graph-numerics requires existing, vllm-smol-p128-v1 or shared-smol-p128-v1".to_owned()
                         );
                     }
                 };
@@ -500,7 +502,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
-    let vllm_smol_p128_graph = graph_numerics.unwrap_or(false);
+    let (vllm_smol_p128_graph, shared_rows_graph) = graph_numerics.unwrap_or((false, false));
     if vllm_smol_p128_graph
         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
     {
@@ -531,6 +533,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             .unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled),
         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
         vllm_smol_p128_graph,
+        shared_rows_graph,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -1051,7 +1054,9 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.vllm_smol_p128_graph {
+    let executor = if options.shared_rows_graph {
+        executor.with_shared_rows_graph()
+    } else if options.vllm_smol_p128_graph {
         executor.with_vllm_smol_p128_graph()
     } else {
         executor
@@ -3848,6 +3853,7 @@ mod tests {
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
+                shared_rows_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4235,6 +4241,7 @@ mod tests {
                 sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 vllm_smol_p128_graph: false,
+                shared_rows_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4389,6 +4396,7 @@ mod tests {
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
+                shared_rows_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4510,6 +4518,7 @@ mod tests {
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
+                shared_rows_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4636,6 +4645,15 @@ mod graph_policy_cli_tests {
 mod graph_numerics_cli_tests {
     use super::*;
     #[test]
+    fn shared_profile_is_explicit_and_requires_graph() {
+        for policy in ["auto","disabled","require"] {
+            let result=parse_arguments(["serve","--model","/tmp/model","--graph-numerics","shared-smol-p128-v1","--execution-graph-policy",policy].map(OsString::from));
+            if policy=="require" { let CliCommand::Serve(options)=result.unwrap() else {panic!("serve")};assert!(options.shared_rows_graph&&options.vllm_smol_p128_graph); }
+            else {assert!(result.is_err());}
+        }
+    }
+
+    #[test]
     fn numerical_profile_requires_explicit_required_graph() {
         for policy in ["auto", "disabled"] {
             assert!(
@@ -4670,6 +4688,7 @@ mod graph_numerics_cli_tests {
             panic!("serve")
         };
         assert!(options.vllm_smol_p128_graph);
+        assert!(!options.shared_rows_graph);
         let CliCommand::Serve(default) =
             parse_arguments(["serve", "--model", "/tmp/model"].map(OsString::from))
                 .expect("default")

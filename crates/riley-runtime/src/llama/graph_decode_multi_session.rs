@@ -32,14 +32,23 @@ impl PreparedLlamaBatchExecutor {
         self,
         context: &riley_cuda::CudaContext,
     ) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
+        let shared_rows = self.config.shared_rows_graph();
+        self.into_owned_multi_decode_graph_profile(context, shared_rows)
+    }
+    /// Experimental arithmetic-changing QKV/gate-up/head profile; not model-quality qualified.
+    pub fn into_owned_shared_multi_decode_graph(self, context: &riley_cuda::CudaContext) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
+        self.into_owned_multi_decode_graph_profile(context, true)
+    }
+    fn into_owned_multi_decode_graph_profile(self, context: &riley_cuda::CudaContext, shared_rows: bool) -> LlamaBatchExecutorResult<OwnedLlamaMultiDecodeExecutor> {
         let physical = self.owner.layout.physical_block_count() as u32;
-        let inner = self.into_owned_decode_graph_with_catalog(context, true)?;
+        let inner = self.into_owned_decode_graph_with_catalog_profile(context, true, shared_rows)?;
         let generation = NEXT_GENERATION
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
             .map_err(|_| rejected("multi owner generation exhausted"))?;
         let mut hash = Sha256::new();
         hash.update(b"riley.multi-catalog.dual-output.v2\0");
         hash.update(wire::CONTRACT_SHA256.as_bytes());
+        hash.update(&inner.multi_plan_identity);
         hash.update(include_bytes!("../../../../kernels/src/graph_multisequence_packet.inc"));
         hash.update(include_bytes!("../../../../kernels/src/graph_resources.cu"));
         hash.update(inner.signature.fingerprint().as_bytes());

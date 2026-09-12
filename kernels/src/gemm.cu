@@ -1366,6 +1366,28 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
+  if (state == nullptr || !canonical_gemm_bf16_plan_is_ready(plan) || (rows!=2&&rows!=4&&rows!=8) || plan->config.m != rows || plan->config.n != n || plan->config.k != k || plan->algorithm_info.workspace_bytes != 0 || plan->algorithm_info.algorithm_id != 21 || plan->algorithm_info.split_k != 1)
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "requires shared-row algorithm21 with exact M/N/K and no workspace");
+  *state = RileyCudaCanonicalGemmBf16GraphState{};
+  state->plan = plan; state->input = input; state->weight = weight; state->workspace = nullptr;
+  state->input_byte_len = plan->input_bytes; state->weight_byte_len = plan->weight_bytes;
+  state->output_byte_len = plan->output_bytes; state->workspace_byte_len = plan->algorithm_info.workspace_bytes;
+  state->selected_no_split = true;
+  // These flags describe leases already held by the aggregate ledger. The
+  // aggregate caller independently proves membership for every exact parent.
+  state->plan_lease_held = true; state->input_lease_held = true; state->weight_lease_held = true;
+  state->workspace_lease_held = false;
+  if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, *state, true))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "reserved plan/parent geometry differs");
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,

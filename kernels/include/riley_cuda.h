@@ -2583,6 +2583,19 @@ RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, uint64_t,
     RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaGemmPlan* const*, uint64_t,
     RileyCudaPinnedHostBuffer*, uint32_t, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_record_shared_multisequence_decode(
+    RileyCudaGraphResources* resources, RileyCudaDeviceBuffer* const* devices, uint64_t device_count,
+    RileyCudaDeviceBuffer* const* weights, uint64_t weight_count,
+    RileyCudaGemmPlan* const* plans, uint64_t plan_count,
+    RileyCudaPinnedHostBuffer* staging, uint32_t bucket, uint32_t physical_blocks,
+    uint32_t full_logits, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Add a cold bucket under the same ledger. Catalog index0 is the original DAG,
+// index1 is appended N2 and index2 appended N4; each has fixed output mode.
+RileyCudaStatus riley_cuda_graph_resources_append_shared_multisequence_decode(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, uint64_t,
+    RileyCudaDeviceBuffer* const*, uint64_t, RileyCudaGemmPlan* const*, uint64_t,
+    RileyCudaPinnedHostBuffer*, uint32_t, uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_replay_catalog(
     RileyCudaGraphResources*, uint32_t, const uint8_t*, uint64_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_read_catalog(

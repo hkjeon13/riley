@@ -36,10 +36,10 @@ void select_catalog_binding(RileyCudaGraphResources* r,const RileyCudaGraphResou
   r->kv_write_bound=false;r->bound_attention=false;r->vllm_smol_p128=false;r->prefill128=false;
 }
 }
-extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(
+static RileyCudaStatus append_multisequence_decode_impl(
     RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t device_count,
     RileyCudaDeviceBuffer* const* w,uint64_t weight_count,RileyCudaGemmPlan* const* plans,uint64_t plan_count,
-    RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,RileyCudaErrorInfo* error)noexcept{
+    RileyCudaPinnedHostBuffer* staging,uint32_t bucket,uint32_t physical,uint32_t full,bool shared_rows,RileyCudaErrorInfo* error)noexcept{
   clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
   // Cold-only: never invalidate an already published completion to grow a catalog.
   if((bucket!=2&&bucket!=4&&bucket!=8)||full>1||!r->exec||r->catalog_sealed||r->completion_visible||r->multi_bucket==bucket)
@@ -47,7 +47,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decod
   auto& entry=r->catalog[(full?0:3)+(bucket==2?0:bucket==4?1:2)];
   if(entry.graph||entry.exec)return reject(error,"catalog entry already recorded",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   SavedGraphBinding saved(r);select_catalog_binding(r,{});
-  status=riley_cuda_graph_resources_record_multisequence_decode(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,error);
+  status=record_multisequence_decode_impl(r,d,device_count,w,weight_count,plans,plan_count,staging,bucket,physical,full,shared_rows,error);
   // Retain even a partially constructed graph for aggregate close. Restoring
   // the main binding must never discard native ownership after capture failure.
   entry={r->graph,r->exec,r->input,r->transfer_bytes,r->multi_bucket,r->multi_physical,r->multi_full};
@@ -75,3 +75,6 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_catalog(
   saved.restore(r);r->last_catalog=index;
   return status;
 }
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_append_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return append_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,false,e); }
+extern "C" RileyCudaStatus riley_cuda_graph_resources_append_shared_multisequence_decode(RileyCudaGraphResources* r,RileyCudaDeviceBuffer* const* d,uint64_t dc,RileyCudaDeviceBuffer* const* w,uint64_t wc,RileyCudaGemmPlan* const* p,uint64_t pc,RileyCudaPinnedHostBuffer* h,uint32_t b,uint32_t ph,uint32_t f,RileyCudaErrorInfo* e) noexcept { return append_multisequence_decode_impl(r,d,dc,w,wc,p,pc,h,b,ph,f,true,e); }

@@ -1088,6 +1088,11 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
 // Caller proves exact aggregate membership before binding; this does not acquire leases.
+RileyCudaStatus bind_reserved_shared_row_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, uint32_t rows, uint64_t n, uint64_t k,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
+
 RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,

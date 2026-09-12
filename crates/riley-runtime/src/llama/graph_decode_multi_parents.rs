@@ -1,19 +1,26 @@
 //! Cold storage for N2/N4 captures under the P128/M1 aggregate owner.
 use super::*;
-use riley_cuda::{CudaContext, CudaPreparedStridedGemm, CudaStridedGemmConfig};
+use riley_cuda::{CudaContext, CudaPreparedStridedGemm, CudaStridedGemmConfig, CudaPreparedGemm, CudaGemmConfig};
 pub(super) struct MultiDecodeParents {
     pub(super) scratch: [Vec<CudaDeviceBuffer>; 3],
     pub(super) plans: Vec<CudaPreparedStridedGemm>,
+    pub(super) shared: Vec<CudaPreparedGemm>,
     pub(super) staging: Vec<CudaPinnedHostBuffer>,
 }
 impl MultiDecodeParents {
-    pub(super) fn prepare(context: &CudaContext) -> LlamaBatchExecutorResult<Self> {
+    pub(super) fn prepare(context: &CudaContext, shared_rows: bool) -> LlamaBatchExecutorResult<Self> {
         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
         let mut scratch = [Vec::new(), Vec::new(), Vec::new()];
         let mut plans = Vec::new();
         let mut staging = Vec::new();
+        let mut shared = Vec::new();
         for (index, bucket) in [2u32, 4, 8].into_iter().enumerate() {
             let b = u64::from(bucket);
+            if shared_rows {
+                for n in [960, 3072, 49152] {
+                    shared.push(context.prepare_gemm(CudaGemmConfig::new(b, n, 576, 0).map_err(cuda)?).map_err(cuda)?);
+                }
+            }
             let result = 1152 + 98304 * b;
             for bytes in [
                 1152 * b,
@@ -59,6 +66,7 @@ impl MultiDecodeParents {
         }
         Ok(Self {
             scratch,
+            shared,
             plans,
             staging,
         })

@@ -131,6 +131,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     execution_completion: ExecutionCompletionImplementation,
     metadata_transport: BatchMetadataTransport,
     vllm_smol_p128_graph: bool,
+    shared_rows_graph: bool,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
 }
@@ -150,6 +151,7 @@ impl PreparedLlamaBatchExecutorConfig {
             execution_completion: ExecutionCompletionImplementation::PerOperation,
             metadata_transport: BatchMetadataTransport::Synchronous,
             vllm_smol_p128_graph: false,
+            shared_rows_graph: false,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
         }
@@ -159,8 +161,16 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
         self.vllm_smol_p128_graph = true;
+        self.shared_rows_graph = false;
         self
     }
+    /// Opt-in arithmetic-changing QKV/gate-up/head graph; bounded P128 geometry.
+    #[must_use]
+    pub const fn with_shared_rows_graph(mut self) -> Self {
+        self.vllm_smol_p128_graph = true;self.shared_rows_graph = true;self
+    }
+    #[must_use]
+    pub const fn shared_rows_graph(self) -> bool { self.shared_rows_graph }
     /// Whether the bounded vLLM numerical graph is required.
     #[must_use]
     pub const fn vllm_smol_p128_graph(self) -> bool {
@@ -425,6 +435,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         execution_completion: config.execution_completion,
         metadata_transport: config.metadata_transport,
         vllm_smol_p128_graph: config.vllm_smol_p128_graph,
+        shared_rows_graph: config.shared_rows_graph,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
     }
@@ -440,6 +451,9 @@ mod graph_numerical_profile_tests {
             PreparedLlamaForwardConfig::default(),
         );
         assert!(!normalize_prepared_config(c).vllm_smol_p128_graph());
+        assert!(!normalize_prepared_config(c).shared_rows_graph());
+        assert!(normalize_prepared_config(c.with_shared_rows_graph()).shared_rows_graph());
+        assert!(!normalize_prepared_config(c.with_shared_rows_graph().with_vllm_smol_p128_graph()).shared_rows_graph());
         assert!(normalize_prepared_config(c.with_vllm_smol_p128_graph()).vllm_smol_p128_graph());
     }
 

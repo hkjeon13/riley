@@ -1043,7 +1043,7 @@ impl BorrowedGraphResourceReservation<'_> {
         full: bool,
     ) -> CudaResult<()> {
         self.prepare_multisequence_entry(
-            devices, weights, plans, staging, bucket, physical, full, false,
+            devices, weights, plans, staging, bucket, physical, full, false, false,
         )
     }
     pub fn append_multisequence_decode(
@@ -1057,7 +1057,35 @@ impl BorrowedGraphResourceReservation<'_> {
         full: bool,
     ) -> CudaResult<()> {
         self.prepare_multisequence_entry(
-            devices, weights, plans, staging, bucket, physical, full, true,
+            devices, weights, plans, staging, bucket, physical, full, true, false,
+        )
+    }
+    pub fn append_shared_multisequence_decode(
+        &mut self,
+        devices: &[usize; 18],
+        weights: &[usize],
+        plans: &[usize; 5],
+        staging: usize,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+    ) -> CudaResult<()> {
+        self.prepare_multisequence_entry(
+            devices, weights, plans, staging, bucket, physical, full, true, true,
+        )
+    }
+    pub fn record_shared_multisequence_decode(
+        &mut self,
+        devices: &[usize; 18],
+        weights: &[usize],
+        plans: &[usize; 5],
+        staging: usize,
+        bucket: u32,
+        physical: u32,
+        full: bool,
+    ) -> CudaResult<()> {
+        self.prepare_multisequence_entry(
+            devices, weights, plans, staging, bucket, physical, full, false, true,
         )
     }
     fn prepare_multisequence_entry(
@@ -1070,6 +1098,7 @@ impl BorrowedGraphResourceReservation<'_> {
         physical: u32,
         full: bool,
         append: bool,
+        shared_rows: bool,
     ) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
@@ -1101,7 +1130,11 @@ impl BorrowedGraphResourceReservation<'_> {
                 .collect::<CudaResult<_>>()?;
             let plans: Vec<_> = plans
                 .iter()
-                .map(|i| {
+                .enumerate()
+                .map(|(role, i)| {
+                    if shared_rows && matches!(role, 0 | 1 | 4) {
+                        return self.parents.plans.get(*i).ok_or_else(bad)?.graph_resource_handle();
+                    }
                     self.strided_plans
                         .get(*i)
                         .ok_or_else(bad)?
@@ -1118,12 +1151,13 @@ impl BorrowedGraphResourceReservation<'_> {
                 physical,
                 full,
                 append,
+                shared_rows,
             )
         }
         #[cfg(not(feature = "cuda"))]
         {
             let _ = (
-                devices, weights, plans, staging, bucket, physical, full, append,
+                devices, weights, plans, staging, bucket, physical, full, append, shared_rows,
             );
             Err(crate::CudaError::unavailable(
                 "record multi-sequence decode",

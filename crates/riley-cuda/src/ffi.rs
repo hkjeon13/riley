@@ -11125,6 +11125,34 @@ unsafe extern "C" {
         full: u32,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_record_shared_multisequence_decode(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        device_count: u64,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        plan_count: u64,
+        staging: *mut RawPinnedHostBuffer,
+        bucket: u32,
+        physical: u32,
+        full: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_append_shared_multisequence_decode(
+        resources: *mut RawGraphResources,
+        devices: *const *mut RawDeviceBuffer,
+        device_count: u64,
+        weights: *const *mut RawDeviceBuffer,
+        weight_count: u64,
+        plans: *const *mut RawGemmPlan,
+        plan_count: u64,
+        staging: *mut RawPinnedHostBuffer,
+        bucket: u32,
+        physical: u32,
+        full: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_resources_replay_catalog(
         resources: *mut RawGraphResources,
         index: u32,
@@ -11152,6 +11180,7 @@ impl GraphResourcesHandle {
         physical: u32,
         full: bool,
         append: bool,
+        shared_rows: bool,
     ) -> CudaResult<()> {
         let devices: Vec<_> = devices.iter().map(|v| v.as_ptr()).collect();
         let weights: Vec<_> = weights.iter().map(|v| v.as_ptr()).collect();
@@ -11159,7 +11188,9 @@ impl GraphResourcesHandle {
         let mut error = ErrorInfo::new();
         // SAFETY: the enclosing owner retains all parent borrows. Native validates
         // explicit counts, exact allocation geometry and ledger membership.
-        let call = if append {
+        let call = if shared_rows {
+            if append { riley_cuda_graph_resources_append_shared_multisequence_decode } else { riley_cuda_graph_resources_record_shared_multisequence_decode }
+        } else if append {
             riley_cuda_graph_resources_append_multisequence_decode
         } else {
             riley_cuda_graph_resources_record_multisequence_decode
