@@ -1222,7 +1222,8 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
 
 bool aggregate_gemm_plan_matches_context(
     const RileyCudaGemmPlan* plan, const RileyCudaContext* context) noexcept {
-  return canonical_gemm_bf16_plan_is_ready(plan) &&
+  return (canonical_gemm_bf16_plan_is_ready(plan) ||
+          gemm_bf16_plan_is_ready(plan, true)) &&
          same_context(plan->owner, context);
 }
 
@@ -1354,6 +1355,37 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
   if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, *state, true))
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate GEMM", "reserved plan/parent geometry differs");
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
+    uint64_t input_stride, uint64_t output_stride,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept {
+  if (state == nullptr)
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "null state");
+  *state = RileyCudaCanonicalGemmBf16GraphState{};
+  // The aggregate caller must prove exact ledger membership for all parents.
+  // Require its expected geometry as well: equal allocation sizes alone do not
+  // prove that a bucket's row stride or projection role matches this plan.
+  if (!gemm_bf16_plan_is_ready(plan, true) || plan->config.m != 1 ||
+      plan->batch_count != batch_count || plan->config.n != n || plan->config.k != k ||
+      input_stride != plan->input_bytes / (2 * batch_count) ||
+      output_stride != plan->output_bytes / (2 * batch_count))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "strided bucket geometry differs");
+  RileyCudaCanonicalGemmBf16GraphState candidate{};
+  candidate.plan = plan; candidate.input = input; candidate.weight = weight;
+  candidate.input_byte_len = plan->input_bytes; candidate.weight_byte_len = plan->weight_bytes;
+  candidate.output_byte_len = plan->output_bytes;
+  candidate.selected_no_split = true; candidate.strided_m1 = true;
+  candidate.plan_lease_held = true; candidate.input_lease_held = true; candidate.weight_lease_held = true;
+  if (!canonical_gemm_bf16_graph_state_is_valid(plan->owner, stream, output, candidate, true))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "bind aggregate strided GEMM", "reserved plan/parent geometry differs");
+  *state = candidate;
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 

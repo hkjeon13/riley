@@ -1087,6 +1087,12 @@ RileyCudaStatus bind_reserved_gemm_state(RileyCudaGemmPlan* plan,
     RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
+// Caller proves exact aggregate membership before binding; this does not acquire leases.
+RileyCudaStatus bind_reserved_strided_gemm_state(RileyCudaGemmPlan* plan,
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, uint32_t batch_count, uint64_t n, uint64_t k,
+    uint64_t input_stride, uint64_t output_stride,
+    RileyCudaCanonicalGemmBf16GraphState* state, RileyCudaErrorInfo* error) noexcept;
 cudaError_t enqueue_decode_embedding(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t) noexcept;
 cudaError_t enqueue_decode_embedding_rows(cudaStream_t, const void*, const void*, void*, void*, uint64_t, uint64_t, uint64_t) noexcept;
 cudaError_t enqueue_decode_kv_attention(cudaStream_t, const void*, const void*, const void*, void*, void*, void*, const void*, uint64_t, uint64_t, uint64_t, uint64_t) noexcept;

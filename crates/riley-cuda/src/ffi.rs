@@ -9662,6 +9662,52 @@ mod graph_resource_native_gpu_tests {
 
     #[test]
     #[ignore = "requires CUDA GPU"]
+    fn aggregate_strided_plan_reservation_rollback_and_reuse() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut other = StreamHandle::create(&context)?;
+        let mut buffer = DeviceBufferHandle::create(&context, 128)?;
+        for (n, k) in [
+            (960, 576),
+            (3072, 576),
+            (576, 576),
+            (576, 1536),
+            (49152, 576),
+        ] {
+            for batch in [2, 4] {
+                for padded in [false, true] {
+                    let stride = |v: u64| if padded { v.div_ceil(128) * 128 } else { v };
+                    let mut plan = GemmPlanHandle::create_strided_m1(
+                        &context,
+                        n,
+                        k,
+                        batch,
+                        stride(k),
+                        stride(n),
+                    )?;
+                    let ledger = GraphResourcesHandle::reserve(&stream, &[], &[], &[&plan, &plan])?;
+                    assert!(plan.close().is_err());
+                    assert!(
+                        GraphResourcesHandle::reserve(&other, &[&buffer], &[], &[&plan]).is_err()
+                    );
+                    // Busy-plan failure must roll back the preceding stream/buffer leases.
+                    GraphResourcesHandle::reserve(&other, &[&buffer], &[], &[])?.close()?;
+                    drop(ledger);
+                    GraphResourcesHandle::reserve(&stream, &[], &[], &[&plan])?.close()?;
+                    plan.close()?;
+                }
+            }
+        }
+        buffer.close()?;
+        other.close()?;
+        stream.close()?;
+        context.close()?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires CUDA GPU"]
     fn aggregate_resource_duplicates_busy_rollback_and_drop() -> CudaResult<()> {
         let _runtime = crate::CudaRuntime::initialize()?;
         let mut context = ContextHandle::create(0)?;
