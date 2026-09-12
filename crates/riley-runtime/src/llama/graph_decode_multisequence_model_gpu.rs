@@ -244,7 +244,8 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             40,
             true,
         )?;
-        for step in 0..31 {
+        let mut first_failure = None;
+        'steps: for step in 0..31 {
             let active = if bucket == 4 && step % 3 == 1 {
                 3
             } else {
@@ -266,11 +267,14 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
                     .zip(expected[r][..98304].chunks_exact(2))
                     .filter(|(a, b)| a != b)
                     .count();
-                assert_eq!(
-                    mismatches, 0,
-                    "bucket={bucket} step={step} row={r} position={}",
-                    positions[r]
-                );
+                if mismatches != 0 {
+                    eprintln!(
+                        "MULTI_MISMATCH bucket={bucket} step={step} row={r} position={} words={mismatches}",
+                        positions[r]
+                    );
+                    first_failure = Some((step, r, mismatches));
+                    break 'steps;
+                }
                 assert_eq!(
                     &actual[128 + r * 128 + 48..128 + r * 128 + 52],
                     &tokens[r].to_le_bytes()
@@ -306,12 +310,36 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             let mut e = vec![0; bytes];
             actual.download_to_slice(0, &mut a, &mut io, &mut stream)?;
             expected.download_to_slice(0, &mut e, &mut io, &mut stream)?;
-            assert_eq!(
-                a.iter().zip(&e).filter(|(x, y)| x != y).count(),
-                0,
-                "full physical KV pool differs, bucket={bucket}"
-            );
+            let different = a.iter().zip(&e).filter(|(x, y)| x != y).count();
+            if different != 0 {
+                let layer_bytes = bytes / 30;
+                for layer in 0..30 {
+                    let first = a[layer * layer_bytes..(layer + 1) * layer_bytes]
+                        .chunks_exact(2)
+                        .zip(e[layer * layer_bytes..(layer + 1) * layer_bytes].chunks_exact(2))
+                        .position(|(x, y)| x != y);
+                    if let Some(word) = first {
+                        eprintln!(
+                            "MULTI_KV layer={layer} first_word={word} physical={} head={} position_in_block={} dim={}",
+                            word / (3 * 16 * 64),
+                            (word / (16 * 64)) % 3,
+                            (word / 64) % 16,
+                            word % 64
+                        );
+                    }
+                }
+            }
+            if first_failure.is_none() {
+                assert_eq!(
+                    different, 0,
+                    "full physical KV pool differs, bucket={bucket}"
+                );
+            }
         }
+        assert!(
+            first_failure.is_none(),
+            "real-model logits parity failed: {first_failure:?}"
+        );
     }
     drop(io);
     stream.close()?;
