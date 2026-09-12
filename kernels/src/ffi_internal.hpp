@@ -2399,3 +2399,5 @@ cudaError_t enqueue_compiled_packed_multisequence_rope_attention(cudaStream_t,co
 namespace riley_cuda_internal {
 cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t) noexcept;
 }
+
+namespace riley_cuda_internal { cudaError_t enqueue_compiled_v3_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept; }

@@ -1132,7 +1132,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_test_replay_fault(
 #include "graph_multisequence_catalog.inc"
 
 // Retains all parents through the existing ledger. V3 result: status/publish at
-//0/4, canonical argmax at8, logits at128; unused prefix bytes stay zero.
+//0/4, canonical argmax at8, device-echoed identities at16..128, logits at128.
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaPinnedHostBuffer* staging,
@@ -1151,7 +1151,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  }
  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
  for(size_t i=0;i<12;++i)if(d[i]->byte_len!=capacity*widths[i])return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
- if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>4096*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=17536||d[17]->byte_len!=1152||d[18]->byte_len!=4||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>4096*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=17536||d[17]->byte_len!=1152||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
  for(size_t i=3;i<273;++i)if(w[i]->byte_len!=sizes[(i-3)%9])return reject(error,"V3 layer weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1167,9 +1167,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),capacity,physical),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[18]->device_data,4,cudaMemcpyDeviceToHost);
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer+4,d[19]->device_data,4,cudaMemcpyDeviceToHost);
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer+8,d[21]->device_data,sizeof(RileyCudaBf16ArgmaxResult),cudaMemcpyDeviceToHost);
+  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
+  if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[18]->device_data,128,cudaMemcpyDeviceToHost);
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer+128,d[20]->device_data,98304,cudaMemcpyDeviceToHost);
   return result;
  },error);

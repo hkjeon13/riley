@@ -297,3 +297,18 @@ cudaError_t enqueue_compiled_v3_prefill_model(cudaStream_t s,void*const* d,const
  return enqueue_v3_prefill_model(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical);
 }
 }
+
+__global__ void v3_prefill_result_header(const uint32_t* m,uint32_t* result,const uint32_t* publish,const uint32_t* argmax){
+ if(threadIdx.x)return;
+ result[1]=*publish;result[2]=argmax[0];result[3]=argmax[1];
+ for(int i=0;i<6;++i)result[4+i]=m[10+i]; // generation, replay, iteration
+ for(int i=0;i<4;++i)result[10+i]=m[44+i]; // request and reservation cookie
+ result[14]=m[37];result[15]=m[40];result[16]=m[38];result[17]=m[34];
+ result[18]=m[41];result[19]=m[4];for(int i=0;i<8;++i)result[20+i]=m[16+i];
+ result[28]=m[33];result[29]=m[42];result[30]=m[8];result[31]=0x33524d52;
+}
+namespace riley_cuda_internal {
+cudaError_t enqueue_compiled_v3_result_header(cudaStream_t stream,const void* metadata,void* status,const void* publish,const void* argmax) noexcept {
+ v3_prefill_result_header<<<1,32,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<uint32_t*>(status),static_cast<const uint32_t*>(publish),static_cast<const uint32_t*>(argmax));return cudaGetLastError();
+}
+}
