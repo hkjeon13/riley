@@ -1603,7 +1603,11 @@ impl Scheduler {
                     token_count: item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(self.config.iteration_token_budget),
                 });
             } else {
-                for item in decode {
+                // Admission capacity is independent of the eight-row V3 wire.
+                // Ready timestamps already rotate committed decode work and roll
+                // back on NotDispatched, preserving fairness across batches.
+                let limit=if self.execution_shape_policy==ExecutionShapePolicy::VariablePrefillDecodeN {8}else{self.config.max_active_sequences};
+                for item in decode.into_iter().take(limit) {
                     selected.push(Candidate {
                         request_id: item.request_id,
                         kind: WorkKind::Decode,
@@ -2726,7 +2730,7 @@ fn validate_execution_shape_config(
     }
     if policy == ExecutionShapePolicy::VariablePrefillDecodeN {
         for (valid,field,reason) in [
-            (matches!(config.max_active_sequences,1|2|4|8),"max_active_sequences","V3 supports capacities 1, 2, 4 or 8"),
+            (matches!(config.max_active_sequences,1|2|4|8|16|32),"max_active_sequences","V3 supports active capacities 1, 2, 4, 8, 16 or 32"),
             (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
             ((1..=1024).contains(&config.max_prefill_chunk_tokens),"max_prefill_chunk_tokens","V3 chunks must fit 1024 tokens"),
             (config.max_sequence_tokens<=4096,"max_sequence_tokens","V3 context limit is 4096"),

@@ -2181,7 +2181,7 @@ mod cuda_backend {
             model: LoadedModel,
             config: CudaBackendConfig,
         ) -> Result<Self, BackendError> {
-            if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8)
+            if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8|16|32)
                 || config.scheduler.iteration_token_budget>1024 || config.scheduler.max_prefill_chunk_tokens>1024
                 || config.scheduler.max_sequence_tokens>4096 || config.executor.metadata().max_rows()!=1
                 || config.executor.metadata().max_input_tokens()!=1 || config.gpu_greedy) {
@@ -2541,8 +2541,8 @@ mod cuda_backend {
             }
             let use_variable=resources.executor.config().variable_graph();
             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
-                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8) || resources.gpu_greedy) {
-                return Err(internal("V3 requires graph policy require, capacity1/2/4/8 and CPU sampling"));
+                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || resources.gpu_greedy) {
+                return Err(internal("V3 requires graph policy require, capacity1/2/4/8/16/32 and CPU sampling"));
             }
             let supported = use_variable || resources.executor.supports_owned_decode_graph();
             if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {

@@ -920,10 +920,10 @@ fn run_serve(
     if options.prefill_chunk_tokens > options.batch_token_budget {
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
-    if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
+    if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
         || options.sampling_backend!=SamplingBackendMode::Cpu) {
-        return Err("variable-smol-v3 requires capacity1/2/4/8, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
+        return Err("variable-smol-v3 requires capacity1/2/4/8/16/32, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
     }
     if options.vllm_smol_p128_graph
         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
