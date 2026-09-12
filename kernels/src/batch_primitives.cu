@@ -2711,3 +2711,8 @@ cudaError_t riley_cuda_internal::enqueue_decode_argmax(cudaStream_t stream,const
   bf16_argmax_kernel<<<1,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),1,vocab);
   return cudaGetLastError();
 }
+
+cudaError_t riley_cuda_internal::enqueue_multi_argmax(cudaStream_t stream,const void* logits,void* output,uint32_t rows) noexcept {
+  bf16_argmax_kernel<<<rows,kThreads,0,stream>>>(static_cast<const __nv_bfloat16*>(logits),static_cast<RileyCudaBf16ArgmaxResult*>(output),rows,49152);
+  return cudaGetLastError();
+}

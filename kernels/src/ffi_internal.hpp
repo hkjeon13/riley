@@ -2380,6 +2380,7 @@ namespace riley_multisequence_precise {
 cudaError_t enqueue_swiglu_rows(cudaStream_t,const void*,void*,const void*,uint32_t) noexcept;
 }
 namespace riley_cuda_internal {
+cudaError_t enqueue_multi_argmax(cudaStream_t,const void*,void*,uint32_t) noexcept;
 cudaError_t enqueue_multi_embedding(cudaStream_t,const void*,const void*,void*,uint32_t) noexcept;
 cudaError_t enqueue_multi_completion(cudaStream_t,const void*,const void*,const void*,void*,uint32_t,uint32_t) noexcept;
 }

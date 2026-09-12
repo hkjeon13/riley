@@ -15,7 +15,13 @@ __global__ void multi_completion(const uint32_t* packet, const uint32_t* argmax,
                                 const uint16_t* logits, uint32_t* output,
                                 unsigned bucket, unsigned full) {
   const unsigned bytes=640+(full?bucket*98304:0);
-  for(unsigned i=threadIdx.x;i<bytes/4;i+=blockDim.x)output[i]=0;
+  if(blockIdx.x != 0) {
+    const unsigned word=(blockIdx.x-1)*blockDim.x+threadIdx.x;
+    if(word < bucket*24576)
+      output[160+word]=word < packet[6]*24576 ? reinterpret_cast<const uint32_t*>(logits)[word] : 0;
+    return;
+  }
+  for(unsigned i=threadIdx.x;i<160;i+=blockDim.x)output[i]=0;
   __syncthreads();
   if(threadIdx.x==0){
     for(unsigned i=0;i<32;++i)output[i]=packet[i];
@@ -31,10 +37,7 @@ __global__ void multi_completion(const uint32_t* packet, const uint32_t* argmax,
       if(full){out[24]=640+r*98304;out[26]=98304;}
     }
   }
-  if(full){
-    auto* target=reinterpret_cast<uint16_t*>(output)+320;
-    for(unsigned i=threadIdx.x;i<packet[6]*49152;i+=blockDim.x)target[i]=logits[i];
-  }
+
 }
 }
 cudaError_t enqueue_multi_embedding(cudaStream_t stream,const void* weights,
@@ -45,7 +48,7 @@ cudaError_t enqueue_multi_embedding(cudaStream_t stream,const void* weights,
 }
 cudaError_t enqueue_multi_completion(cudaStream_t stream,const void* packet,
     const void* argmax,const void* logits,void* output,uint32_t bucket,uint32_t full) noexcept {
-  multi_completion<<<1,256,0,stream>>>(static_cast<const uint32_t*>(packet),
+  multi_completion<<<1+(full?bucket*96:0),256,0,stream>>>(static_cast<const uint32_t*>(packet),
       static_cast<const uint32_t*>(argmax),static_cast<const uint16_t*>(logits),
       static_cast<uint32_t*>(output),bucket,full);
   return cudaGetLastError();

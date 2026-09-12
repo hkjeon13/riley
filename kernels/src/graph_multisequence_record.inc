@@ -71,8 +71,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
       if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[9]->device_data,d[6]->device_data,w[l+1<30?3+9*(l+1):1]->device_data,d[0]->device_data,d[1]->device_data,2,bucket));
     }
     if(s==RILEY_CUDA_STATUS_SUCCESS)s=gemm(120,10);
-    for(unsigned row=0;row<bucket&&s==RILEY_CUDA_STATUS_SUCCESS;++row)
-      s=kernel(enqueue_decode_argmax(stream,static_cast<uint8_t*>(d[10]->device_data)+row*98304,static_cast<uint8_t*>(d[13]->device_data)+row*8,49152));
+    if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_multi_argmax(stream,d[10]->device_data,d[13]->device_data,bucket));
     if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_multi_completion(stream,d[11]->device_data,d[13]->device_data,d[10]->device_data,d[12]->device_data,bucket,full));
     if(s==RILEY_CUDA_STATUS_SUCCESS)s=runtime_error(cudaMemcpyAsync(static_cast<uint8_t*>(staging->host_data)+transfer,d[12]->device_data,result,cudaMemcpyDeviceToHost,stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"multi completion download");
     return s;
