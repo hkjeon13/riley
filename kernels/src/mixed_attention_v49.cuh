@@ -76,9 +76,9 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
  static_assert(TileRows==8||TileRows==16,"query tile");
  if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
  if(dynamic_n)n=*dynamic_n+1;
- __shared__ float scores[16][128];
- __shared__ float exps[16][128];
- __shared__ __nv_bfloat16 probs[16][128];
+ __shared__ float scores[TileRows][128];
+ float (*exps)[128]=scores;
+ __shared__ __nv_bfloat16 probs[TileRows][128];
  // A small prefill has insufficient queries to amortize the larger tile state.
  if(rows<32){
   if(query_block<static_cast<uint32_t>(rows))single_query(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
@@ -91,13 +91,13 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
  const bool valid[2]={qr[0]<rows,TileRows==16&&qr[1]<rows};
  const int count[2]={n-rows+qr[0]+1,n-rows+qr[1]+1};
  if(n<rows||n>4096){
-  for(int h=0;h<2;++h)if(valid[h])for(int d=t;d<64;d+=4)out[(qr[h]*9+qh)*64+d]=__float2bfloat16_rn(CUDART_NAN_F);
+  for(int h=0;h<TileRows/8;++h)if(valid[h])for(int d=t;d<64;d+=4)out[(qr[h]*9+qh)*64+d]=__float2bfloat16_rn(CUDART_NAN_F);
   return;
  }
 
- uint32_t query[2][4],query_hi[2][4];
+ uint32_t query[2][4]={},query_hi[2][4]={};
  #pragma unroll
- for(int h=0;h<2;++h){
+ for(int h=0;h<TileRows/8;++h){
   const int base=(qr[h]*9+qh)*64;
   #pragma unroll
   for(int depth=0;depth<4;++depth){
@@ -122,12 +122,12 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
    #pragma unroll
    for(int depth=0;depth<4;++depth)mma(d,query[0][depth],query[1][depth],query_hi[0][depth],query_hi[1][depth],key[depth],key_hi[depth]);
    #pragma unroll
-   for(int h=0;h<2;++h)for(int z=0;z<2;++z)if(token+2*t+z<end)scores[group+h*8][token-begin+2*t+z]=d[h*2+z]*.125F;
+   for(int h=0;h<TileRows/8;++h)for(int z=0;z<2;++z)if(token+2*t+z<end)scores[group+h*8][token-begin+2*t+z]=d[h*2+z]*.125F;
   }
   __syncwarp();
-  float alpha[2];
+  float alpha[2]={1.F,1.F};
   #pragma unroll
-  for(int h=0;h<2;++h){
+  for(int h=0;h<TileRows/8;++h){
    const int own_end=valid[h]?min(end,count[h]):begin;
    const bool active=own_end>begin;
    float mx=maximum[h];
@@ -143,7 +143,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
   }
   __syncwarp();
   #pragma unroll
-  for(int h=0;h<2;++h){
+  for(int h=0;h<TileRows/8;++h){
    const int own_end=valid[h]?min(end,count[h]):begin;
    float local=den[h]*alpha[h];
    for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<own_end-begin)local+=exps[group+h*8][i];}
@@ -153,9 +153,9 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
   for(int b=0;b<8;++b)for(int j=0;j<4;++j)accum[b][j]*=alpha[j/2];
   for(int token=begin;token<end;token+=16){
    const int pi=token-begin;
-   uint32_t a[2],aa[2];
+   uint32_t a[2]={},aa[2]={};
    #pragma unroll
-   for(int h=0;h<2;++h){a[h]=pair(probs[group+h*8][pi+2*t],probs[group+h*8][pi+2*t+1]);aa[h]=pair(probs[group+h*8][pi+2*t+8],probs[group+h*8][pi+2*t+9]);}
+   for(int h=0;h<TileRows/8;++h){a[h]=pair(probs[group+h*8][pi+2*t],probs[group+h*8][pi+2*t+1]);aa[h]=pair(probs[group+h*8][pi+2*t+8],probs[group+h*8][pi+2*t+9]);}
    const int base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
    bool nonfinite_value=false;
    #pragma unroll
@@ -183,7 +183,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
   __syncwarp();
  }
  #pragma unroll
- for(int h=0;h<2;++h){
+ for(int h=0;h<TileRows/8;++h){
   den[h]+=__shfl_xor_sync(0xffffffff,den[h],2,4);
   den[h]+=__shfl_xor_sync(0xffffffff,den[h],1,4);
   const float inverse=1.F/den[h];
