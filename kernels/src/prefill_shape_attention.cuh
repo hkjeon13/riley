@@ -27,6 +27,10 @@ __global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,co
  if(n<rows || n>4096){out[qb+lane]=__float2bfloat16_rn(CUDART_NAN_F);out[qb+lane+32]=__float2bfloat16_rn(CUDART_NAN_F);return;}
  __shared__ float scores[3][128];
  __shared__ __nv_bfloat16 probs[3][128];
+ __shared__ float exponentials[3][128];
+ uint32_t query[4],query_hi[4];
+ #pragma unroll
+ for(int depth=0;depth<4;++depth){query[depth]=pair(q[qb+depth*16+2*t],q[qb+depth*16+2*t+1]);query_hi[depth]=pair(q[qb+depth*16+2*t+8],q[qb+depth*16+2*t+9]);}
  float maximum=-CUDART_INF_F,den=0.;float accum[8][4]={};
  const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
  for(int tile=(count-1)/128;tile>=0;--tile){
@@ -34,8 +38,8 @@ __global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,co
   for(int token=begin;token<end;token+=8){
    float d[4]={};
    for(int depth=0;depth<64;depth+=16){
-    uint32_t a=pair(q[qb+depth+2*t],q[qb+depth+2*t+1]);
-    uint32_t aa=pair(q[qb+depth+2*t+8],q[qb+depth+2*t+9]);
+    uint32_t a=query[depth/16];
+    uint32_t aa=query_hi[depth/16];
     int kb=token+group<end?cache_index(token+group,kvh,depth,blocks):0;
     uint32_t b=token+group<end?pair(k[kb+2*t],k[kb+2*t+1]):0;
     uint32_t bb=token+group<end?pair(k[kb+2*t+8],k[kb+2*t+9]):0;
@@ -48,26 +52,29 @@ __global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,co
   for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[warp][i]);
   for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
   float alpha=exp2f((maximum-mx)*1.4426950408889634F);
-  float local_den=0.;
   for(int i=lane;i<128;i+=32){
    float p=i<end-begin?exponential(scores[warp][i],mx):0.;
-   local_den+=p;probs[warp][i]=__float2bfloat16_rn(p);
+   exponentials[warp][i]=p;probs[warp][i]=__float2bfloat16_rn(p);
   }
-  for(int offset=16;offset>0;offset>>=1)local_den+=__shfl_xor_sync(0xffffffff,local_den,offset);
-  local_den=den*alpha;
+  __syncwarp();
+  float local_den=den*alpha;
   for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;
-    if(i<end-begin)local_den+=exponential(scores[warp][i],mx);}
+    if(i<end-begin)local_den+=exponentials[warp][i];}
   den=local_den;
   maximum=mx;
   __syncwarp();
-  for(int block=0;block<8;++block){
-   for(int j=0;j<4;++j)accum[block][j]*=alpha;
-   for(int token=begin;token<end;token+=16){
-    int pi=token-begin;
-    uint32_t a=pair(probs[warp][pi+2*t],probs[warp][pi+2*t+1]);
-    uint32_t aa=pair(probs[warp][pi+2*t+8],probs[warp][pi+2*t+9]);
+  #pragma unroll
+  for(int block=0;block<8;++block)for(int j=0;j<4;++j)accum[block][j]*=alpha;
+  for(int token=begin;token<end;token+=16){
+   int pi=token-begin;
+   uint32_t a=pair(probs[warp][pi+2*t],probs[warp][pi+2*t+1]);
+   uint32_t aa=pair(probs[warp][pi+2*t+8],probs[warp][pi+2*t+9]);
+   // A K16 tile is aligned to one KV page; reuse its base and probabilities.
+   int page_base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
+   #pragma unroll
+   for(int block=0;block<8;++block){
     int dim=block*8+group;
-    auto val=[&](int pos){return pos<end?v[cache_index(pos,kvh,dim,blocks)]:zero;};
+    auto val=[&](int pos){return pos<end?v[page_base+(pos-token)*(blocks?64:192)+dim]:zero;};
     uint32_t b=pair(val(token+2*t),val(token+2*t+1));
     uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
     mma(accum[block],a,a,aa,aa,b,bb);
