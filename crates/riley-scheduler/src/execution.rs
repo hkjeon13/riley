@@ -2025,3 +2025,99 @@ pub fn execute_llama_iteration_graph(
         commit_outputs: prepared.commit_outputs,
     })
 }
+
+/// Executes only a live, scheduler-authorized reservation on the common graph
+/// catalog. After committing the returned result, the caller must confirm that
+/// commit on the owner before issuing another submission.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_multi_graph(
+    authority: &crate::AuthorizedExecution<'_>,
+    executor: &mut riley_runtime::llama::OwnedLlamaMultiDecodeExecutor,
+    greedy_workspace: Option<&mut Vec<u32>>,
+) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+    let id = authority.plan().iteration_id();
+    let before =
+        |error| IterationExecutionFailure::new(id, Some(ExecutionAbort::NotDispatched), error);
+    let runtime = |source| IterationAdapterError::Runtime(Box::new(source));
+    let prepared = PreparedLlamaIteration::prepare(authority.plan()).map_err(before)?;
+    let vocabulary_size = 49_152;
+    if greedy_workspace
+        .as_ref()
+        .is_some_and(|w| w.capacity() < prepared.output_count)
+    {
+        return Err(before(IterationAdapterError::InvalidRuntimeOutput {
+            field: "multi graph greedy workspace",
+            reason: "insufficient preallocated capacity",
+        }));
+    }
+    let mut logits = if greedy_workspace.is_none() {
+        zeroed_vec(
+            prepared.output_count * vocabulary_size * 2,
+            "multi graph logits",
+        )
+        .map_err(before)?
+    } else {
+        Vec::new()
+    };
+    let (owner, replay, cookies) = executor
+        .issue_submission(authority.rows().len())
+        .map_err(|error| before(runtime(error)))?;
+    let expectation = match authority.descriptor_expectation(owner, replay, &cookies) {
+        Ok(value) => value,
+        Err(error) => {
+            executor
+                .abandon_issued_submission()
+                .map_err(|error| before(runtime(error)))?;
+            return Err(before(IterationAdapterError::InvalidRuntimeOutput {
+                field: error.field,
+                reason: error.reason,
+            }));
+        }
+    };
+    // From admission onward any error is conservatively unsettled. The caller
+    // must close the owner and establish completion before reclaiming KV pages.
+    let bulk = executor
+        .execute_submission(expectation)
+        .map_err(|error| IterationExecutionFailure::new(id, None, runtime(error)))?;
+    if bulk.rows_by_slot().len() != prepared.output_count {
+        return Err(IterationExecutionFailure::new(
+            id,
+            None,
+            IterationAdapterError::InvalidRuntimeOutput {
+                field: "multi graph result",
+                reason: "output count differs from scheduler plan",
+            },
+        ));
+    }
+    let output = if let Some(tokens) = greedy_workspace {
+        tokens.clear();
+        tokens.extend(bulk.rows_by_slot().iter().map(|row| row.token_id()));
+        DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens))
+    } else {
+        for (slot, row) in bulk.rows_by_slot().iter().enumerate() {
+            let bytes = row
+                .logits()
+                .filter(|bytes| bytes.len() == vocabulary_size * 2)
+                .ok_or_else(|| {
+                    IterationExecutionFailure::new(
+                        id,
+                        None,
+                        IterationAdapterError::InvalidRuntimeOutput {
+                            field: "multi graph logits",
+                            reason: "missing full logit row",
+                        },
+                    )
+                })?;
+            logits[slot * vocabulary_size * 2..(slot + 1) * vocabulary_size * 2]
+                .copy_from_slice(bytes);
+        }
+        DownloadedLlamaOutput::Logits(logits)
+    };
+    Ok(DownloadedLlamaIteration {
+        iteration_id: id,
+        vocabulary_size,
+        output_count: prepared.output_count,
+        output,
+        commit_outputs: prepared.commit_outputs,
+    })
+}
