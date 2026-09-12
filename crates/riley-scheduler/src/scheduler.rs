@@ -3229,6 +3229,7 @@ impl Scheduler {
             rows.push(crate::AuthorizedExecutionRow {
                 request_id: item.request_id,
                 committed_length: sequence.logical_length() as usize,
+                prompt_tokens: record.descriptor.prompt_token_ids.len(),
                 generated_index: record.generated_token_ids.len(),
                 max_output_tokens: record.descriptor.max_new_tokens,
                 table: OwnedBlockTable::copy_from_v1(item.request_id, live)?,

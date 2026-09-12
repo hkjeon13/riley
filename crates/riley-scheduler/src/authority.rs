@@ -5,6 +5,7 @@ use crate::{RequestId, Scheduler};
 pub struct AuthorizedExecutionRow {
     pub(crate) request_id: RequestId,
     pub(crate) committed_length: usize,
+    pub(crate) prompt_tokens: usize,
     pub(crate) generated_index: usize,
     pub(crate) max_output_tokens: usize,
     pub(crate) table: OwnedBlockTable,
@@ -13,6 +14,7 @@ impl AuthorizedExecutionRow {
     pub fn request_id(&self) -> RequestId {
         self.request_id
     }
+    pub fn prompt_tokens(&self) -> usize { self.prompt_tokens }
     pub fn committed_length(&self) -> usize {
         self.committed_length
     }
@@ -99,6 +101,14 @@ impl AuthorizedExecution<'_> {
             if work.request_id() != row.request_id {
                 return Err(bad());
             }
+            let progress=crate::descriptor::shape_progress::Progress {
+                prompt_tokens:to32(row.prompt_tokens)?, output_limit:to32(row.max_output_tokens)?, context_tokens:160,
+                committed_tokens:to32(row.committed_length)?, input_tokens:to32(work.input_tokens().len())?, generated_index:to32(row.generated_index)?,
+                stage:if stage==Stage::Prefill128 { crate::descriptor::shape_progress::InputStage::Prefill } else { crate::descriptor::shape_progress::InputStage::Decode },
+            }.validate()?;
+            // v2 has no prompt-length field: keep it restricted until the new wire
+            // and native executor carry this scheduler-owned value end to end.
+            if row.prompt_tokens!=128 || progress.target_tokens!=to32(work.target_logical_length())? || progress.logits_input_row.is_none() { return Err(bad()); }
             rows.push(ReservationExpectation {
                 sequence_tag: row.request_id.get(),
                 cookie: *cookie,

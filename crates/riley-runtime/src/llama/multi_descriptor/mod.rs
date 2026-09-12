@@ -4,6 +4,8 @@
 //! authoritative scheduler/owner adapter; packet bytes never establish live
 //! ownership or quiescence. GPU dispatch wiring is separate; no performance claim.
 
+pub mod shape_progress;
+
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -273,28 +275,17 @@ pub fn validate_expectations(e: &SubmissionExpectation) -> Result<()> {
             "input_tokens",
             "wrong count or vocabulary bound",
         )?;
-        let target = row
-            .committed_length
-            .checked_add(input_count as u32)
-            .ok_or_else(|| overflow("target_length"))?;
-        check(
-            row.target_length == target && target <= 160,
-            "target_length",
-            "target differs from committed prefix plus inputs",
-        )?;
-        let pos = target.checked_sub(1).ok_or_else(|| overflow("position"))?;
-        match e.stage {
-            Stage::Prefill128 => check(
-                row.committed_length == 0 && target == 128 && row.generated_index == 0,
-                "prefill",
-                "requires a fresh complete P128 prompt",
-            )?,
-            Stage::Decode => check(
-                (128..160).contains(&pos) && row.generated_index == pos - 127,
-                "decode",
-                "independent decode position or generated index differs",
-            )?,
-        }
+        // The v2 wire remains deliberately bounded; the logical request-progress
+        // calculation is shared with the variable-shape path being integrated.
+        let progress = shape_progress::Progress {
+            prompt_tokens: 128, output_limit: row.max_output_tokens, context_tokens: 160,
+            committed_tokens: row.committed_length, input_tokens: input_count as u32,
+            generated_index: row.generated_index,
+            stage: if e.stage==Stage::Prefill128 { shape_progress::InputStage::Prefill } else { shape_progress::InputStage::Decode },
+        }.validate()?;
+        let target=progress.target_tokens;
+        check(row.target_length==target,"target_length","target differs from committed prefix plus inputs")?;
+        let pos=progress.last_position;
         let live = target.div_ceil(16) as usize;
         check(
             row.physical_ids.len() == live && row.valid_tokens.len() == live && live <= 10,
