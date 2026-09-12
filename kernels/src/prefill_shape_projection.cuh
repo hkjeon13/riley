@@ -8,6 +8,7 @@
 template<int N,int K,int Interval,int Warps>
 __global__ void gemm_prefill_shape_vector(const __nv_bfloat16* x,const __nv_bfloat16* w,__nv_bfloat16* y,uint32_t rows,const uint32_t* live_rows=nullptr){
  if(live_rows){uint32_t live=*live_rows;if(!live||live>rows)return;rows=live;}
+ if(blockIdx.y*16>=rows)return;
  static_assert(N%(8*Warps)==0&&K%16==0,"fixed M16 projection geometry");
 
  const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;

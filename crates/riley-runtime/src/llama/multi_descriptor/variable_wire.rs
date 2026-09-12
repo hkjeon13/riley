@@ -79,7 +79,7 @@ pub const RESULT_BYTES:usize=128+49152*2;
 /// This cannot prove quiescence or perform scheduler settlement on its own.
 pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
     validate(e)?;
-    check(e.stage==InputStage::Prefill && e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
+    check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
     let u32_at=|at:usize|u32::from_le_bytes(bytes[at..at+4].try_into().unwrap());
     check(u32_at(0)==0 && u32_at(12)==0,"status","GPU execution or argmax failed")?;
     let row=&e.rows[0];let progress=row.progress.validate()?;let published=progress.logits_input_row.is_some();
@@ -138,6 +138,13 @@ mod tests {
         e.rows[0].progress.prompt_tokens=201;result_identity_into(&mut header,&e,7).unwrap();bytes[..128].copy_from_slice(&header);bytes[128+7*2..130+7*2].copy_from_slice(&0x3f80u16.to_le_bytes());
         assert_eq!(validate_result(&bytes,&e).unwrap().0,Some(7));
         e.replay_id+=1;e.last_accepted_replay+=1;assert!(validate_result(&bytes,&e).is_err());
+    }
+
+    #[test] fn single_decode_completion_is_bound_to_its_generated_index(){
+        let mut e=fixture(InputStage::Decode,1);let mut bytes=vec![0;RESULT_BYTES];let mut header=[0;128];result_identity_into(&mut header,&e,0).unwrap();bytes[..128].copy_from_slice(&header);
+        assert_eq!(validate_result(&bytes,&e).unwrap().0,Some(0));
+        e.rows[0].progress.generated_index+=1;e.rows[0].progress.committed_tokens+=1;*e.rows[0].valid_tokens.last_mut().unwrap()+=1;
+        assert!(validate_result(&bytes,&e).is_err());
     }
 
 }

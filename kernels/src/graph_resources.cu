@@ -343,10 +343,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   if(r->v3_prefill_capacity){
     if(!valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
-    if(value(16)!=0||value(20)!=1||value(136)>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
+    if(value(20)!=1||value(136)>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   }
   auto selected_exec = r->exec;
+  if(r->v3_prefill_capacity){uint32_t stage;std::memcpy(&stage,source+16,4);if(stage==0){if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");selected_exec=r->prefill_exec;}}
   if(r->decode_capacity!=0){
     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
     const uint64_t capacity=r->decode_capacity,pos=u32(4),live=pos/16+1;
@@ -1160,18 +1161,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  void* scratch[12];const void* weights[273];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<273;++i)weights[i]=w[i]->device_data;
  constexpr uint64_t transfer=98432;
  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
- status=record_reserved_sequence(r,staging,transfer,[&]() noexcept {
+ auto record_shape=[&](uint32_t row_capacity) noexcept {return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
   auto* host=static_cast<uint8_t*>(staging->host_data);
   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
   auto result=copy(d[16]->device_data,host,17536,cudaMemcpyHostToDevice);
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),capacity,physical),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_prefill_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v3_result_header(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[18]->device_data,128,cudaMemcpyDeviceToHost);
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer+128,d[20]->device_data,98304,cudaMemcpyDeviceToHost);
   return result;
- },error);
+ },error);};
+ status=record_shape(capacity);
+ if(status==RILEY_CUDA_STATUS_SUCCESS){r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;status=record_shape(1);}
  if(status==RILEY_CUDA_STATUS_SUCCESS){r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=d[14]->byte_len/128;}
  return status;
 }

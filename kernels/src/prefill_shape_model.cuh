@@ -18,7 +18,7 @@ inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scra
  auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
  auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+13440);
  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
- riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status);
+ riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,reinterpret_cast<const uint32_t*>(metadata)+4);
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
   if(layer==0)riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,shape,capacity);
   gemm_prefill_shape_vector<576,576,192,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(1),w(base+1),b(2),capacity,shape+2);

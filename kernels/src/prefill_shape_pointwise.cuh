@@ -28,9 +28,10 @@ __global__ void swiglu_rows(const __nv_bfloat16* g,const __nv_bfloat16* u,__nv_b
  int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<1536){float x=__bfloat162float(g[i]);out[i]=__float2bfloat16_rn((x/(1.F+expf(-x)))*__bfloat162float(u[i]));}
 }
 
-__global__ void embedding_rows(const __nv_bfloat16* weights,const uint32_t* tokens,__nv_bfloat16* out,const uint32_t* shape,uint32_t capacity,uint32_t vocabulary,uint32_t* status){
+__global__ void embedding_rows(const __nv_bfloat16* weights,const uint32_t* tokens,__nv_bfloat16* out,const uint32_t* shape,uint32_t capacity,uint32_t vocabulary,uint32_t* status,const uint32_t* stage=nullptr){
  uint32_t row=blockIdx.x,live=shape[2];if(!live||live>capacity){if(threadIdx.x==0)atomicOr(status,2U);return;}if(row>=live)return;
- uint32_t token=tokens[row];if(token>=vocabulary){if(threadIdx.x==0)atomicOr(status,1U);return;}
+ if(stage&&*stage==1&&live!=1){if(threadIdx.x==0)atomicOr(status,2U);return;}
+ uint32_t token=stage&&*stage==1?shape[0]:tokens[row];if(token>=vocabulary){if(threadIdx.x==0)atomicOr(status,1U);return;}
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)out[row*576+i]=weights[token*576+i];
 }
 __global__ void select_hidden(const __nv_bfloat16* rows,__nv_bfloat16* selected,const uint32_t* shape,uint32_t capacity,const uint32_t* status,uint32_t* publish){
