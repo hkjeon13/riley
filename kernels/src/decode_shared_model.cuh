@@ -46,19 +46,18 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
  if(layer==0)riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,pointwise,8);
- enqueue_shared_projection<576,576,192,false>(stream,b(1),w(base+1),b(2),static_cast<float*>(scratch[7]),active);
- enqueue_shared_projection<192,576,192,false>(stream,b(1),w(base+2),b(5),static_cast<float*>(scratch[7]),active);
- enqueue_shared_projection<192,576,192,false>(stream,b(1),w(base+3),b(6),static_cast<float*>(scratch[7]),active);
+ enqueue_shared_qkv(stream,b(1),w(base+1),w(base+2),w(base+3),b(2),b(5),b(6),static_cast<float*>(scratch[7]),active);
  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
  shared_rope_kv<<<dim3(2,8),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,cos,sin,pages,shape,active);
  riley_shared_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  enqueue_shared_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,8);
- if(tiled)enqueue_shared_projection<1536,576,0,true>(stream,b(1),w(273+layer*3+0),b(8),static_cast<float*>(scratch[7]),active);
- else enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]),active);
- if(tiled)enqueue_shared_projection<1536,576,0,true>(stream,b(1),w(273+layer*3+1),b(9),static_cast<float*>(scratch[7]),active);
- else enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]),active);
+ if(tiled)shared_gate_up<<<dim3(192,2),32,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(8),b(9),active);
+ else {
+ enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]),active);
+ enqueue_shared_projection<1536,576,0,false>(stream,b(1),w(base+7),b(9),static_cast<float*>(scratch[7]),active);
+ }
  riley_prefill_pointwise::swiglu_rows<<<dim3(6,8),256,0,stream>>>(b(8),b(9),b(11),pointwise,8);
  if(tiled)enqueue_shared_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
  else enqueue_shared_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
