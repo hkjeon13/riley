@@ -64,7 +64,7 @@ pub mod metrics;
 pub mod plan;
 mod scheduler;
 
-pub use config::{OverloadPolicy, SchedulerConfig};
+pub use config::{ExecutionShapePolicy, OverloadPolicy, SchedulerConfig};
 pub use error::{SchedulerError, SchedulerResult};
 pub use execution::{
     DownloadedLlamaIteration, IterationAdapterError, IterationAdapterResult,
@@ -98,3 +98,6 @@ pub use scheduler::{
 pub fn runtime_build_info() -> riley_core::Result<riley_runtime::BuildInfo> {
     riley_runtime::build_info()
 }
+
+mod authority;
+pub use authority::{AuthorizedExecution, AuthorizedExecutionRow};

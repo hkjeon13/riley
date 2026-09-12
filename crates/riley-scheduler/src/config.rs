@@ -11,6 +11,24 @@ pub enum OverloadPolicy {
     Wait,
 }
 
+/// Opt-in iteration shapes supported by the executor prepared with a scheduler.
+///
+/// This is separate from [`SchedulerConfig`] so existing configuration literals
+/// and [`crate::Scheduler::new`] keep the general scheduling policy unchanged.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ExecutionShapePolicy {
+    /// Existing decode-first, chunked-prefill scheduling with aging.
+    #[default]
+    General,
+    /// One complete P128 prefill or independent decode rows, never mixed.
+    ///
+    /// Requires active capacity 2 or 4, token/chunk budget 128, sequence capacity 160
+    /// and at least ten promised/physical KV blocks per active request. Inputs
+    /// are limited to vocabulary 49152 and output limits 1..=32. This policy only
+    /// constrains host plans; it does not qualify a multi-sequence GPU executor.
+    CompletePrefill128DecodeN,
+}
+
 /// All host-memory, work, and KV promises enforced by one scheduler.
 ///
 /// The fields are public to make deployment configuration explicit. Call
