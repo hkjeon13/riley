@@ -2207,6 +2207,15 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_gemm_plan_create_strided_m1(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        batch_count: u32,
+        input_stride: u64,
+        output_stride: u64,
+        out_plan: *mut *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_gemm_plan_create(
         context: *mut RawContext,
         config: *const RawGemmConfig,
@@ -8395,6 +8404,38 @@ pub(super) struct GemmPlanHandle {
 unsafe impl Send for GemmPlanHandle {}
 
 impl GemmPlanHandle {
+    pub(super) fn create_strided_m1(
+        context: &ContextHandle,
+        n: u64,
+        k: u64,
+        batch: u32,
+        input_stride: u64,
+        output_stride: u64,
+    ) -> CudaResult<Self> {
+        let config = RawGemmConfig::new(0, 1, n, k, 16 * 1024 * 1024);
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: all inputs and writable outputs live through this synchronous
+        // call. Native retains the context and publishes only an admitted plan.
+        let status = unsafe {
+            riley_cuda_gemm_plan_create_strided_m1(
+                context.as_ptr(),
+                &config,
+                batch,
+                input_stride,
+                output_stride,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare strided M1 GEMM", &error)?;
+        let pointer = NonNull::new(pointer)
+            .ok_or_else(|| missing_output("prepare strided M1 GEMM", "native plan is null"))?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
     pub(super) fn create(
         context: &ContextHandle,
         m: u64,

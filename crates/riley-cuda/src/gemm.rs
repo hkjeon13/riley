@@ -1690,3 +1690,336 @@ mod tests {
         assert!(error.message().contains("--features cuda"));
     }
 }
+
+/// Qualified per-matrix M1 GEMM with explicit batch storage extents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CudaStridedGemmConfig {
+    m1: CudaGemmConfig,
+    batch_count: u32,
+    input_stride: u64,
+    output_stride: u64,
+    input_bytes: u64,
+    weight_bytes: u64,
+    output_bytes: u64,
+}
+impl CudaStridedGemmConfig {
+    /// Creates a qualified SmolLM2 batch2/4 layout. Strides count BF16 elements.
+    /// Rejects unqualified shapes and arbitrary padding before CUDA allocation.
+    pub fn new(n: u64, k: u64, batch_count: u32, padded: bool) -> CudaResult<Self> {
+        const OP: &str = "CudaStridedGemmConfig::new";
+        if !matches!(batch_count, 2 | 4)
+            || !((k == 576 && matches!(n, 576 | 960 | 3072 | 49152)) || (k == 1536 && n == 576))
+        {
+            return Err(CudaError::invalid_argument(
+                OP,
+                "unqualified shape or batch count",
+            ));
+        }
+        let m1 = CudaGemmConfig::new(1, n, k, 16 * 1024 * 1024)?;
+        let input_stride = if padded { k.div_ceil(128) * 128 } else { k };
+        let output_stride = if padded { n.div_ceil(128) * 128 } else { n };
+        Ok(Self {
+            m1,
+            batch_count,
+            input_stride,
+            output_stride,
+            input_bytes: checked_bf16_matrix_bytes(u64::from(batch_count), input_stride, "input")?,
+            weight_bytes: m1.weight_bytes,
+            output_bytes: checked_bf16_matrix_bytes(
+                u64::from(batch_count),
+                output_stride,
+                "output",
+            )?,
+        })
+    }
+    /// Per-matrix algorithm contract; M remains one.
+    pub const fn m1_config(self) -> CudaGemmConfig {
+        self.m1
+    }
+    pub const fn batch_count(self) -> u32 {
+        self.batch_count
+    }
+    pub const fn input_stride(self) -> u64 {
+        self.input_stride
+    }
+    pub const fn output_stride(self) -> u64 {
+        self.output_stride
+    }
+    pub const fn input_bytes(self) -> u64 {
+        self.input_bytes
+    }
+    pub const fn weight_bytes(self) -> u64 {
+        self.weight_bytes
+    }
+    pub const fn output_bytes(self) -> u64 {
+        self.output_bytes
+    }
+}
+
+/// Owns a strided plan independently of the single-matrix graph API.
+/// Native closes before the retained context; execution failures poison reuse.
+pub struct CudaPreparedStridedGemm {
+    #[cfg(feature = "cuda")]
+    native: ffi::GemmPlanHandle,
+    context: Arc<ContextInner>,
+    config: CudaStridedGemmConfig,
+    algorithm: CudaGemmAlgorithmMetadata,
+    poisoned: bool,
+    _not_sync: PhantomData<Cell<()>>,
+}
+impl CudaContext {
+    /// Cold preparation of the qualified M1 strided algorithm and descriptors.
+    pub fn prepare_strided_gemm(
+        &self,
+        config: CudaStridedGemmConfig,
+    ) -> CudaResult<CudaPreparedStridedGemm> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = ffi::GemmPlanHandle::create_strided_m1(
+                &self.inner.native,
+                config.m1.n,
+                config.m1.k,
+                config.batch_count,
+                config.input_stride,
+                config.output_stride,
+            )?;
+            let algorithm = CudaGemmAlgorithmMetadata::from_native(config.m1, native.info()?)?;
+            Ok(CudaPreparedStridedGemm {
+                native,
+                context: Arc::clone(&self.inner),
+                config,
+                algorithm,
+                poisoned: false,
+                _not_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = config;
+            Err(CudaError::unavailable("CudaContext::prepare_strided_gemm"))
+        }
+    }
+}
+impl CudaPreparedStridedGemm {
+    pub const fn config(&self) -> CudaStridedGemmConfig {
+        self.config
+    }
+    /// Metadata describes each M1 matrix, never a heuristic M2/M4 GEMM.
+    pub const fn algorithm_metadata(&self) -> CudaGemmAlgorithmMetadata {
+        self.algorithm
+    }
+    pub const fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut GemmParams<'_>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedStridedGemm::execute";
+        let stream = execution_stream_mut(stream);
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the GEMM plan was poisoned by a prior native execution failure",
+            ));
+        }
+        self.validate_execution(params, stream)?;
+
+        #[cfg(feature = "cuda")]
+        {
+            let workspace = match params.workspace.as_ref() {
+                Some(workspace) => workspace.raw(),
+                None => params.output.buffer().native_handle().span(
+                    ffi::DTYPE_U8,
+                    params.output.byte_offset(),
+                    0,
+                ),
+            };
+            let result = self.native.execute(
+                params.input.raw(),
+                params.weight.raw(),
+                params.output.raw(),
+                workspace,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (params, stream);
+            Err(CudaError::unavailable("CudaPreparedStridedGemm::execute"))
+        }
+    }
+
+    /// Explicitly closes the prepared plan.
+    ///
+    /// A poisoned wrapper refuses to report a successful explicit close. Its
+    /// private native owner still performs best-effort fail-closed cleanup on
+    /// drop; ambiguous native resources remain retained rather than becoming
+    /// reachable through a stale handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns invalid-state for a poisoned plan, unavailable without CUDA, or
+    /// a translated native descriptor/context destruction error.
+    pub fn close(self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let mut this = self;
+            if this.poisoned {
+                return Err(CudaError::invalid_state(
+                    "CudaPreparedStridedGemm::close",
+                    "a poisoned GEMM plan cannot be explicitly reused or reported as cleanly closed",
+                ));
+            }
+            this.native.close()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("CudaPreparedStridedGemm::close"))
+        }
+    }
+
+    fn validate_execution(&self, params: &GemmParams<'_>, stream: &CudaStream) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedStridedGemm::execute";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+
+        validate_span(
+            OPERATION,
+            params.input.buffer(),
+            params.input.dtype(),
+            params.input.byte_offset(),
+            params.input.byte_len(),
+            CudaDType::BF16,
+            self.config.input_bytes,
+            "input",
+        )?;
+        validate_span(
+            OPERATION,
+            params.weight.buffer(),
+            params.weight.dtype(),
+            params.weight.byte_offset(),
+            params.weight.byte_len(),
+            CudaDType::BF16,
+            self.config.weight_bytes,
+            "weight",
+        )?;
+        validate_span(
+            OPERATION,
+            params.output.buffer(),
+            params.output.dtype(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+            CudaDType::BF16,
+            self.config.output_bytes,
+            "output",
+        )?;
+
+        let workspace_bytes = self.algorithm.workspace_bytes;
+        match params.workspace.as_ref() {
+            Some(workspace) => validate_span(
+                OPERATION,
+                workspace.buffer(),
+                workspace.dtype(),
+                workspace.byte_offset(),
+                workspace.byte_len(),
+                CudaDType::U8,
+                workspace_bytes,
+                "workspace",
+            )?,
+            None if workspace_bytes == 0 => {}
+            None => {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    format!(
+                        "the selected algorithm requires an exact {workspace_bytes}-byte U8 workspace"
+                    ),
+                ));
+            }
+        }
+
+        let required_buffers = [
+            ("input", params.input.buffer()),
+            ("weight", params.weight.buffer()),
+            ("output", params.output.buffer()),
+        ];
+        for (_, buffer) in required_buffers {
+            ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
+        }
+        ensure_distinct_buffers(&required_buffers, OPERATION)?;
+
+        if let Some(workspace) = params.workspace.as_ref() {
+            let workspace_buffer = workspace.buffer();
+            ensure_same_context(&self.context, workspace_buffer.context_owner(), OPERATION)?;
+            for (name, buffer) in required_buffers {
+                if ptr::eq(buffer, workspace_buffer) {
+                    return Err(CudaError::invalid_argument(
+                        OPERATION,
+                        format!("workspace aliases the {name} device-buffer handle"),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+impl Drop for CudaPreparedStridedGemm {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+        }
+    }
+}
+
+#[cfg(test)]
+mod strided_config_tests {
+    use super::*;
+    #[test]
+    fn storage_extents_keep_m1_algorithm_shape() {
+        for (n, k) in [
+            (960, 576),
+            (3072, 576),
+            (576, 576),
+            (576, 1536),
+            (49152, 576),
+        ] {
+            for batch in [2, 4] {
+                for padded in [false, true] {
+                    let c = CudaStridedGemmConfig::new(n, k, batch, padded).unwrap();
+                    assert_eq!(c.m1_config().m, 1);
+                    assert_eq!(c.input_bytes(), u64::from(batch) * c.input_stride() * 2);
+                    assert_eq!(c.output_bytes(), u64::from(batch) * c.output_stride() * 2);
+                    assert_eq!(c.weight_bytes(), n * k * 2);
+                    if padded {
+                        assert_eq!(c.input_stride() % 128, 0);
+                        assert_eq!(c.output_stride() % 128, 0);
+                    }
+                }
+            }
+        }
+    }
+    #[test]
+    fn unsupported_shapes_and_capacities_fail_before_native() {
+        for batch in [0, 1, 3, 8, u32::MAX] {
+            assert!(CudaStridedGemmConfig::new(960, 576, batch, false).is_err());
+        }
+        for (n, k) in [(0, 576), (960, 0), (960, 577), (u64::MAX, u64::MAX)] {
+            assert!(CudaStridedGemmConfig::new(n, k, 2, true).is_err());
+        }
+    }
+}
+
+impl fmt::Debug for CudaPreparedStridedGemm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CudaPreparedStridedGemm")
+            .field("config", &self.config)
+            .field("algorithm", &self.algorithm)
+            .field("poisoned", &self.poisoned)
+            .finish_non_exhaustive()
+    }
+}
