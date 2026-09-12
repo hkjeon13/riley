@@ -915,12 +915,13 @@ fn run_serve(
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
     if options.vllm_smol_p128_graph
-        && (options.max_active_sequences != 1
+        && (!matches!(options.max_active_sequences, 1 | 2 | 4)
+            || (options.max_active_sequences > 1 && options.batch_token_budget != 128)
             || !matches!(options.batch_token_budget, 1 | 128)
             || options.prefill_chunk_tokens != options.batch_token_budget
             || options.batch_shape_policy != BatchShapePolicyMode::FixedMaximum)
     {
-        return Err("vllm-smol-p128-v1 requires one active sequence, fixed-max shape, and matching batch/prefill budgets of 1 or 128".to_owned());
+        return Err("vllm-smol-p128-v1 requires capacity 1/2/4, fixed-max shape, matching batch/prefill budgets of 1 or 128, and P128 for multiple sequences".to_owned());
     }
     if options.batch_token_budget < options.max_active_sequences {
         return Err(
@@ -997,11 +998,23 @@ fn run_serve(
         max_promised_kv_blocks: physical_kv_blocks,
         metrics_window_samples: 1_024,
     };
+    let multi_graph = options.vllm_smol_p128_graph && options.max_active_sequences > 1;
+    if multi_graph && (max_sequence_tokens != 160 || max_output_tokens > 32) {
+        return Err("multi graph requires context 160 and output limit at most 32".to_owned());
+    }
     let batch_metadata = LlamaBatchMetadataConfig::new(
-        options.max_active_sequences,
+        if multi_graph {
+            1
+        } else {
+            options.max_active_sequences
+        },
         options.batch_token_budget,
-        physical_kv_blocks,
-        options.max_active_sequences,
+        if multi_graph { 10 } else { physical_kv_blocks },
+        if multi_graph {
+            1
+        } else {
+            options.max_active_sequences
+        },
         physical_kv_blocks,
     )
     .map_err(|error| format!("invalid batch configuration: {error}"))?;
