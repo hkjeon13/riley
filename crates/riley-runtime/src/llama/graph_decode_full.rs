@@ -2080,7 +2080,12 @@ impl PreparedLlamaBatchExecutor {
         }
         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
-        for source in [include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
+        for source in [
+include_bytes!("../../../../kernels/src/decode_shared.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared_attention.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared_model.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared_result.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             include_bytes!("variable_session.rs").as_slice(),
             include_bytes!("graph_decode_full.rs").as_slice(),
             include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
@@ -2093,11 +2098,13 @@ impl PreparedLlamaBatchExecutor {
             include_bytes!("../../../../kernels/src/graph_resources.cu").as_slice(),
             include_bytes!("../../../../kernels/src/graph_numerics_precise.cu").as_slice(),
             include_bytes!("multi_descriptor/variable_wire.rs").as_slice()] {hash.update((source.len() as u64).to_le_bytes());hash.update(source);}
-        let m=scratch.head.algorithm_metadata();
+        for m in std::iter::once(scratch.head.algorithm_metadata()).chain(scratch.shared_head.as_ref().map(|h|h.algorithm_metadata())) {
         let (major,minor)=m.compute_capability();hash.update(major.to_le_bytes());hash.update(minor.to_le_bytes());
         hash.update(m.runtime_version().to_le_bytes());hash.update(m.cublaslt_version().to_le_bytes());
         for v in [m.backend_id(),m.algorithm_id() as u32,m.tile_id(),m.stages_id(),m.split_k(),m.reduction_scheme(),m.cta_swizzling(),m.custom_option(),u32::from(m.deterministic())] {hash.update(v.to_le_bytes());}
         let (mr,n,k)=m.dimensions();for v in [mr,n,k,m.workspace_bytes(),m.numerical_implementation_flags()] {hash.update(v.to_le_bytes());}
+        }
+        hash.update([u8::from(scratch.shared_head.is_some())]);
         hash.update(scratch.capacity.to_le_bytes());hash.update((physical as u64).to_le_bytes());hash.update((context as u64).to_le_bytes());
         for &w in &weights {hash.update((w as u64).to_le_bytes());}
         let mut chunk=vec![0;f.io_staging.byte_len().min(1024*1024) as usize];
@@ -2110,6 +2117,7 @@ impl PreparedLlamaBatchExecutor {
         }
         // Pack immutable gate/up/down weights once before capture. The buffers
         // remain explicit reservation parents and are dropped after graph close.
+        if scratch.shared_head.is_none() {
         for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
             for layer in 0..30 { for part in 0..3 {
                 if weights[3+layer*9+6+part]!=index {continue;}
@@ -2130,16 +2138,20 @@ impl PreparedLlamaBatchExecutor {
                 }
             }}
         }
+        }
+        let shared=scratch.shared_head.is_some();
         let mut devices:Vec<_>=f.weights.borrow_graph_weight_parents().collect();let base=devices.len();
         let (rows,tail)=scratch.devices.split_at_mut(12);devices.extend(rows);
         devices.extend([&mut self.owner.key_cache,&mut self.owner.value_cache,&mut self.owner.absolute_rope_cos,&mut self.owner.absolute_rope_sin]);
         devices.extend(tail);
+        devices.extend(scratch.shared_devices.iter_mut());
         weights.extend(devices.len()..devices.len()+scratch.tiled.len());
         devices.extend(scratch.tiled.iter_mut());
+        let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
-            pinned:vec![&mut scratch.staging],plans:vec![&mut scratch.head]}).map_err(cuda)?;
-        graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32).map_err(cuda)?;
-        crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)
+            pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
+        if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+        (if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
             .map_err(|_|rejected("V3 session identity rejected"))
     }
 }

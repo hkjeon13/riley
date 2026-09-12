@@ -2134,16 +2134,16 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
         IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
     let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
     let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
-    let (identity,replay,cookie)=executor.issue().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+    let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
         catalog_digest:identity.catalog_digest,max_active_rows:8,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
-    let expectation=match authority.variable_descriptor_expectation(&owner,replay,&[cookie],crate::descriptor::ResultMode::FullLogits) {
+    let expectation=match authority.variable_descriptor_expectation(&owner,replay,&cookies,crate::descriptor::ResultMode::FullLogits) {
         Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
     };
     // Allocate before admission so allocation failure cannot follow GPU mutation.
-    let (token,bytes)=executor.execute(expectation).map_err(|e|fail(e,None))?;
-    if usize::from(token.is_some())!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
-    if token.is_some() {logits.copy_from_slice(bytes);}
+    let rows=executor.execute_rows(expectation).map_err(|e|fail(e,None))?;
+    if rows.iter().filter(|r|r.token.is_some()).count()!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
+    for row in rows {if row.token.is_some(){let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
     Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
         output:DownloadedLlamaOutput::Logits(logits),commit_outputs:prepared.commit_outputs})
 }
