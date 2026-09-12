@@ -2752,6 +2752,14 @@ RileyCudaStatus riley_cuda_graph_resources_record_v4_shared_greedy(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_record_v5_shared(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_record_v5_shared_greedy(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+    RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 
 RileyCudaStatus riley_cuda_graph_resources_record_decode_prefill128_packed(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,

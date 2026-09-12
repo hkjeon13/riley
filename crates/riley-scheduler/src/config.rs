@@ -33,6 +33,8 @@ pub enum ExecutionShapePolicy {
     VariablePrefillDecodeN,
     /// Variable prefill and up to sixteen decode rows on a prepared V4 session.
     VariablePrefillDecode16,
+    /// Variable prefill and up to thirty-two decode rows on a prepared V5 session.
+    VariablePrefillDecode32,
 }
 
 /// All host-memory, work, and KV promises enforced by one scheduler.

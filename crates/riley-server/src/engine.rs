@@ -2184,7 +2184,7 @@ mod cuda_backend {
             if config.executor.variable_graph() && (!matches!(config.scheduler.max_active_sequences,1|2|4|8|16|32)
                 || config.scheduler.iteration_token_budget>1024 || config.scheduler.max_prefill_chunk_tokens>1024
                 || config.scheduler.max_sequence_tokens>4096 || config.executor.metadata().max_rows()!=1
-                || config.executor.metadata().max_input_tokens()!=1 || (config.gpu_greedy && config.executor.variable_graph_rows()!=16)) {
+                || config.executor.metadata().max_input_tokens()!=1 || (config.gpu_greedy && !matches!(config.executor.variable_graph_rows(),16|32))) {
                 return Err(internal("V3 scheduler and prepared model geometry differ"));
             }
             if config.executor.vllm_smol_p128_batched_prefill()
@@ -2230,7 +2230,7 @@ mod cuda_backend {
                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
                 )));
             }
-            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
+            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16
             } else if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN
@@ -2453,13 +2453,14 @@ mod cuda_backend {
     enum VariableServingSession {
         Eight(riley_runtime::llama::variable_session::OwnedVariableSession),
         Sixteen(riley_runtime::llama::variable_session::OwnedVariableSession<16>),
+        ThirtyTwo(riley_runtime::llama::variable_session::OwnedVariableSession<32>),
     }
     impl VariableServingSession {
         fn execute(&mut self,authority:&riley_scheduler::AuthorizedExecution<'_>,gpu_greedy:bool,workspace:&mut Vec<u32>)->Result<riley_scheduler::execution::DownloadedLlamaIteration,riley_scheduler::execution::IterationExecutionFailure>{
-            match self {Self::Eight(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g),Self::Sixteen(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)}}
+            match self {Self::Eight(g)=>riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g),Self::Sixteen(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)},Self::ThirtyTwo(g)=>if gpu_greedy{riley_scheduler::execution::execute_llama_iteration_variable_graph_greedy_workspace(authority,g,workspace)}else{riley_scheduler::execution::execute_llama_iteration_variable_graph(authority,g)}}
         }
-        fn confirm_scheduler_commit(&mut self,id:u64)->riley_runtime::llama::multi_descriptor::Result<()>{match self{Self::Eight(g)=>g.confirm_scheduler_commit(id),Self::Sixteen(g)=>g.confirm_scheduler_commit(id)}}
-        fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close()}}
+        fn confirm_scheduler_commit(&mut self,id:u64)->riley_runtime::llama::multi_descriptor::Result<()>{match self{Self::Eight(g)=>g.confirm_scheduler_commit(id),Self::Sixteen(g)=>g.confirm_scheduler_commit(id),Self::ThirtyTwo(g)=>g.confirm_scheduler_commit(id)}}
+        fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close(),Self::ThirtyTwo(g)=>g.close()}}
     }
 
     struct CudaBackend {
@@ -2555,7 +2556,7 @@ mod cuda_backend {
             }
             let use_variable=resources.executor.config().variable_graph();
             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
-                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || (resources.gpu_greedy && resources.executor.config().variable_graph_rows()!=16)) {
+                || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || (resources.gpu_greedy && !matches!(resources.executor.config().variable_graph_rows(),16|32))) {
                 return Err(internal("V3 requires graph policy require, capacity1/2/4/8/16/32; GPU greedy requires sixteen-row graphs"));
             }
             let supported = use_variable || resources.executor.supports_owned_decode_graph();
@@ -2570,7 +2571,7 @@ mod cuda_backend {
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
-                let graph=if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                let graph=if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
                 (None,None,None,Some(graph))
             } else if use_multi {
@@ -2595,7 +2596,7 @@ mod cuda_backend {
                 !use_graph,
                 !use_graph,
                 decode_graph.as_ref().map_or(
-                    if use_variable { "variable-smol-v3" } else if use_multi {
+                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(_))=>"variable-smol-v5",Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
                         "vllm-smol-p128-multi-v1"
                     } else {
                         "existing"

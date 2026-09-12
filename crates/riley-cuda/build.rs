@@ -206,6 +206,11 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/decode_shared_model.cuh"),
         kernels_dir.join("src/decode_shared_result.cuh"),
         kernels_dir.join("src/decode_shared16.cuh"),
+        kernels_dir.join("src/decode_shared32.cuh"),
+        kernels_dir.join("src/decode_shared32_attention.cuh"),
+        kernels_dir.join("src/decode_shared32_model.cuh"),
+        kernels_dir.join("src/decode_shared32_result.cuh"),
+
         kernels_dir.join("src/decode_shared16_attention.cuh"),
         kernels_dir.join("src/decode_shared16_model.cuh"),
         kernels_dir.join("src/decode_shared16_result.cuh"),

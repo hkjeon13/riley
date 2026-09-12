@@ -2060,8 +2060,8 @@ impl PreparedLlamaBatchExecutor {
         scratch:&'a mut crate::llama::variable_session::VariableGraphBuffers,
     )->LlamaBatchExecutorResult<crate::llama::variable_session::BorrowedVariableSession<'a,ROWS>> {
         use sha2::{Digest,Sha256};
-        if !matches!(ROWS,8|16) || scratch.wire_rows!=ROWS || (ROWS==16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
-        if scratch.compact && (ROWS!=16 || scratch.shared_head.is_none()){return Err(rejected("compact requires shared sixteen-row buffers"));}
+        if !matches!(ROWS,8|16|32) || scratch.wire_rows!=ROWS || (ROWS>=16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
+        if scratch.compact && (!matches!(ROWS,16|32) || scratch.shared_head.is_none()){return Err(rejected("compact requires shared sixteen-row buffers"));}
         let context=self.maximum_position_count()?.min(4096);
         let physical=self.owner.layout.physical_block_count();
         let f=&mut self.owner.forward;
@@ -2089,6 +2089,11 @@ include_bytes!("../../../../kernels/src/decode_shared_attention.cuh").as_slice()
 include_bytes!("../../../../kernels/src/decode_shared_model.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared_result.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
+
 include_bytes!("../../../../kernels/src/decode_shared16_attention.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared16_model.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared16_result.cuh").as_slice(),
@@ -2161,7 +2166,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
             pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
-        if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+        if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
         (if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
             .map_err(|_|rejected("V3 session identity rejected"))
     }

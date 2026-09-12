@@ -5,10 +5,10 @@
 // complete page ownership, catalog and replay order before GPU dispatch.
 template<uint32_t Rows>
 inline bool valid_variable_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
- static_assert(Rows==8||Rows==16,"unsupported wire capacity");
+ static_assert(Rows==8||Rows==16||Rows==32,"unsupported wire capacity");
  constexpr uint32_t header=128,stride=1664,tokens=header+Rows*stride,extent=tokens+4096;
- constexpr uint32_t magic=Rows==8?0x33444d52:0x34444d52,version=Rows==8?3:4;
- if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||(Rows==16&&capacity==16)))return false;
+ constexpr uint32_t magic=Rows==8?0x33444d52:(Rows==16?0x34444d52:0x35444d52),version=Rows==8?3:(Rows==16?4:5);
+ if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||(Rows>=16&&capacity==16)||(Rows==32&&capacity==32)))return false;
  auto u32=[&](uint32_t at){uint32_t v;std::memcpy(&v,p+at,4);return v;};
  auto u64=[&](uint32_t at){uint64_t v;std::memcpy(&v,p+at,8);return v;};
  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
@@ -40,3 +40,5 @@ inline bool valid_prefill_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t 
 inline bool valid_v4_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
  return valid_variable_shape_packet<16>(p,bytes,physical,capacity);
 }
+
+inline bool valid_v5_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32>(p,bytes,physical,capacity);}

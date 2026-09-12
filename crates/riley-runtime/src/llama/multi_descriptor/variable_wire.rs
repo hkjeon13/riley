@@ -11,9 +11,9 @@ pub const MAGIC:u32=0x33444d52;
 /// Compile-time capacities. Public operations reject unsupported ROWS before writing.
 pub struct Layout<const ROWS:usize>;
 impl<const ROWS:usize> Layout<ROWS> {
-    pub const VERSION:u32=if ROWS==8 {3} else {4};
-    pub const MAGIC:u32=if ROWS==8 {0x33444d52} else {0x34444d52};
-    pub const RESULT_MAGIC:u32=if ROWS==8 {0x33524d52} else {0x34524d52};
+    pub const VERSION:u32=if ROWS==8 {3} else if ROWS==16 {4} else {5};
+    pub const MAGIC:u32=if ROWS==8 {0x33444d52} else if ROWS==16 {0x34444d52} else {0x35444d52};
+    pub const RESULT_MAGIC:u32=if ROWS==8 {0x33524d52} else if ROWS==16 {0x34524d52} else {0x35524d52};
     pub const TOKENS_OFFSET:usize=HEADER_BYTES+ROWS*ROW_BYTES;
     pub const REQUEST_BYTES:usize=Self::TOKENS_OFFSET+1024*4;
     pub const BATCH_RESULT_BYTES:usize=ROWS*RESULT_BYTES;
@@ -37,10 +37,10 @@ pub struct Expectation<const ROWS:usize=8> {
     pub block_ownership:Vec<BlockOwnership>,
 }
 pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
-    check(matches!(ROWS,8|16),"capacity","unsupported wire capacity")?;
+    check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
     check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
     check(e.replay_id==e.last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
-    check(matches!(e.max_active_rows,1|2|4|8|16) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
+    check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
     check(e.stage!=InputStage::Prefill || e.rows.len()==1,"stage","prefill must describe one request")?;
     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
     let mut ownership=BTreeMap::new();
@@ -207,12 +207,13 @@ mod tests {
     }
     #[test] fn compact_eight_identity_status_and_publication(){compact_contract::<8>();}
     #[test] fn compact_sixteen_identity_status_and_publication(){compact_contract::<16>();}
+    #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
     fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
         let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![]};
         for i in 0..active {
             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};
-            let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*256+p).collect();
+            let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*(if ROWS==32{128}else{256})+p).collect();
             e.block_ownership.extend(ids.iter().map(|&physical_id|BlockOwnership{physical_id,sequence_tag:u64::from(i)+1}));
             let mut valid=vec![16;ids.len()];*valid.last_mut().unwrap()=v.last_page_tokens;
             e.rows.push(Row{sequence_tag:u64::from(i)+1,cookie:u64::from(i)+29,output_slot:active-1-i,progress,input_tokens:vec![33;progress.input_tokens as usize],physical_ids:ids,valid_tokens:valid});
@@ -309,7 +310,7 @@ mod tests {
         let mut x=e.clone();x.replay_id=4;cases.push(x);
         let mut x=e.clone();x.rows.push(x.rows[0].clone());cases.push(x);
         for x in cases {let mut packet=vec![0xa5;Layout::<16>::REQUEST_BYTES];assert!(encode_into(&mut packet,&x).is_err());assert!(packet.iter().all(|&x|x==0xa5));}
-        let unsupported=fixture_rows::<32>(InputStage::Decode,1);let mut packet=vec![0xa5;Layout::<32>::REQUEST_BYTES];
+        let unsupported=fixture_rows::<64>(InputStage::Decode,1);let mut packet=vec![0xa5;Layout::<64>::REQUEST_BYTES];
         assert!(encode_into(&mut packet,&unsupported).is_err());assert!(packet.iter().all(|&x|x==0xa5));
         let mut old=fixture(InputStage::Decode,8);old.max_active_rows=16;
         assert!(validate(&old).is_err());

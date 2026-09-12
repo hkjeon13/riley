@@ -12,7 +12,7 @@ template<uint32_t WireRows=8>
 inline cudaError_t enqueue_v3_prefill_model(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false){
- static_assert(WireRows==8||WireRows==16,"wire capacity");
+ static_assert(WireRows==8||WireRows==16||WireRows==32,"wire capacity");
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!publish||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;

@@ -173,6 +173,7 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
+    pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
     pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
     pub const fn variable_graph(self)->bool {self.variable_graph}
     /// Opt-in arithmetic-changing QKV/gate-up/head graph; bounded P128 geometry.

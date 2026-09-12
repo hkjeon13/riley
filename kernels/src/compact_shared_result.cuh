@@ -82,12 +82,12 @@ __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint
   result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
   for(int i=0;i<8;++i)result[20+i]=m[16+i];
   result[28]=shape[1];result[29]=shape[10];result[30]=m[8];
-  result[31]=(Rows==8?0x33524d52U:0x34524d52U)^0x80000000U;
+  result[31]=(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U))^0x80000000U;
  }
 }
 template<uint32_t Rows>
 inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const void* logits,const uint32_t* status,void* partial,void* output){
- static_assert(Rows==8||Rows==16,"wire capacity");
+ static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
  if(!metadata||!logits||!status||!partial||!output)return cudaErrorInvalidValue;
  parts<Rows><<<Rows*24,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const __nv_bfloat16*>(logits),static_cast<GreedyPartial*>(partial));
  auto e=cudaGetLastError();if(e!=cudaSuccess)return e;
