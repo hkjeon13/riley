@@ -500,8 +500,12 @@ impl PreparedLlamaBatchExecutor {
             )?;
             let (signature, device_bytes) =
                 prepared_signature.ok_or_else(|| rejected("missing prepared signature"))?;
-            let mut registered =
-                RegisteredFullDecode::new(graph, signature, (transfer * 2) as u64, device_bytes)?;
+            let mut registered = RegisteredFullDecode::new(
+                graph,
+                signature,
+                (transfer * 2) as u64 + multi_pinned_bytes,
+                device_bytes,
+            )?;
             for step in 0..steps {
                 let pos = first_decode_position + step;
                 let live = pos as usize / 16 + 1;
@@ -1467,6 +1471,25 @@ impl PreparedLlamaBatchExecutor {
         };
         let (signature, device_bytes) =
             self.full_decode_signature_with_packed(&mut stream, packed.as_ref())?;
+        // The registry selects the original M1/P128 DAG, but its retained-owner
+        // footprint must include every extra catalog allocation as well.
+        let multi_device_bytes = multi.as_ref().map_or(0, |m| {
+            m.scratch
+                .iter()
+                .flatten()
+                .map(CudaDeviceBuffer::byte_len)
+                .sum::<u64>()
+        });
+        let multi_pinned_bytes = multi.as_ref().map_or(0, |m| {
+            m.staging
+                .iter()
+                .map(CudaPinnedHostBuffer::byte_len)
+                .sum::<u64>()
+        });
+        let device_bytes = device_bytes
+            .checked_add(multi_device_bytes)
+            .ok_or_else(|| rejected("catalog device footprint overflow"))?;
+
         let vocabulary_size = self.vocabulary_size();
         let maximum_position_count = self.maximum_position_count()?;
         let config = self.config.metadata();
