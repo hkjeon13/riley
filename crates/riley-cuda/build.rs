@@ -200,7 +200,6 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/graph_resources.cu"),
         kernels_dir.join("src/graph_numerics.cu"),
         kernels_dir.join("src/graph_numerics_precise.cu"),
-        kernels_dir.join("src/graph_multisequence_attention.cu"),
         kernels_dir.join("src/graph_multisequence_precise.cu"),
         kernels_dir.join("src/graph_multisequence_io.cu"),
         kernels_dir.join("src/graph_multisequence_packet.inc"),

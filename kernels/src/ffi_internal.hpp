@@ -2376,11 +2376,7 @@ cudaError_t enqueue_compiled_packed_decode_rope_attention(cudaStream_t,const voi
 
 #endif  // RILEY_CUDA_FFI_INTERNAL_HPP_
 
-namespace riley_multisequence_attention {
-cudaError_t enqueue_rows(cudaStream_t,const void*,const void*,const void*,void*,const void*,uint32_t) noexcept;
-}
 namespace riley_multisequence_precise {
-cudaError_t enqueue_rope_rows(cudaStream_t,const void*,void*,void*,void*,const void*,const void*,const void*,uint32_t) noexcept;
 cudaError_t enqueue_swiglu_rows(cudaStream_t,const void*,void*,const void*,uint32_t) noexcept;
 }
 namespace riley_cuda_internal {

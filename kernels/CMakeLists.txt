@@ -29,7 +29,6 @@ add_library(riley_cuda_native STATIC
     src/gemm.cu
     src/graph_numerics_precise.cu
     src/graph_numerics.cu
-    src/graph_multisequence_attention.cu
     src/graph_multisequence_precise.cu
     src/graph_multisequence_io.cu
     src/graph_resources.cu
@@ -144,4 +143,3 @@ install(FILES include/riley_cuda.h
 
 set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
 
-set_source_files_properties(src/graph_multisequence_attention.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
