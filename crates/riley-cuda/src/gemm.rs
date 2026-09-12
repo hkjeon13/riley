@@ -1801,6 +1801,17 @@ impl CudaContext {
     }
 }
 impl CudaPreparedStridedGemm {
+    #[cfg(feature = "cuda")]
+    pub(crate) fn graph_resource_handle(&self) -> CudaResult<&ffi::GemmPlanHandle> {
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                "reserve strided GEMM resource",
+                "plan is poisoned",
+            ));
+        }
+        Ok(&self.native)
+    }
+
     pub const fn config(&self) -> CudaStridedGemmConfig {
         self.config
     }

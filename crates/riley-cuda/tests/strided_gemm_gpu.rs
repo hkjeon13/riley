@@ -39,6 +39,21 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
                 let mut x = context.allocate_device_buffer(config.input_bytes())?;
                 let mut w = context.allocate_device_buffer(config.weight_bytes())?;
                 let mut y = context.allocate_device_buffer(config.output_bytes())?;
+                let reservation =
+                    riley_cuda::BorrowedGraphResourceReservation::reserve_with_strided(
+                        riley_cuda::BorrowedGraphResourceParents {
+                            stream: &mut stream,
+                            devices: vec![&mut x, &mut w, &mut y],
+                            pinned: vec![&mut staging],
+                            plans: vec![],
+                        },
+                        vec![&mut plan],
+                    )?;
+                if padded {
+                    reservation.close()?;
+                } else {
+                    drop(reservation);
+                }
                 x.upload_from_slice(0, &input, &mut staging, &mut stream)?;
                 w.upload_from_slice(0, &weight, &mut staging, &mut stream)?;
                 y.upload_from_slice(

@@ -35,7 +35,9 @@ impl<P> OwnedGraphResourceReservation<P> {
         let BorrowedGraphResourceReservation {
             native,
             parents: borrowed,
+            strided_plans,
         } = record(&mut parents)?;
+        drop(strided_plans);
         drop(borrowed);
         Ok(Self { native, parents })
     }
@@ -83,6 +85,9 @@ pub struct BorrowedGraphResourceReservation<'a> {
     native: crate::ffi::GraphResourcesHandle,
     #[allow(dead_code)]
     parents: BorrowedGraphResourceParents<'a>,
+    // Kept separate so existing single-row recording APIs cannot select these plans.
+    #[allow(dead_code)]
+    strided_plans: Vec<&'a mut crate::CudaPreparedStridedGemm>,
 }
 impl<'a> BorrowedGraphResourceReservation<'a> {
     /// Reserves all parents atomically with rollback on a busy resource.
@@ -90,26 +95,46 @@ impl<'a> BorrowedGraphResourceReservation<'a> {
     /// Rejects foreign contexts, busy resources, unsupported plans or capacity.
     #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))] // CUDA owns parents through close.
     pub fn reserve(parents: BorrowedGraphResourceParents<'a>) -> CudaResult<Self> {
+        Self::reserve_with_strided(parents, Vec::new())
+    }
+
+    /// Retains additional strided plans under the same aggregate lease owner.
+    /// Existing single-row recording methods only index `parents.plans`.
+    /// This admission does not record a multi-row decode graph.
+    /// # Errors
+    /// Rejects poisoned, foreign, busy or unsupported plans and rolls back acquisitions.
+    #[cfg_attr(not(feature = "cuda"), allow(clippy::needless_pass_by_value))]
+    pub fn reserve_with_strided(
+        parents: BorrowedGraphResourceParents<'a>,
+        strided_plans: Vec<&'a mut crate::CudaPreparedStridedGemm>,
+    ) -> CudaResult<Self> {
         #[cfg(feature = "cuda")]
         {
             let devices: Vec<_> = parents.devices.iter().map(|b| b.native_handle()).collect();
             let pinned: Vec<_> = parents.pinned.iter().map(|b| b.native_handle()).collect();
-            let plans: Vec<_> = parents
+            let mut plans: Vec<_> = parents
                 .plans
                 .iter()
                 .map(|p| p.graph_resource_handle())
                 .collect::<CudaResult<_>>()?;
+            for plan in &strided_plans {
+                plans.push(plan.graph_resource_handle()?);
+            }
             let native = crate::ffi::GraphResourcesHandle::reserve(
                 &parents.stream.native,
                 &devices,
                 &pinned,
                 &plans,
             )?;
-            Ok(Self { native, parents })
+            Ok(Self {
+                native,
+                parents,
+                strided_plans,
+            })
         }
         #[cfg(not(feature = "cuda"))]
         {
-            let _ = parents;
+            let _ = (parents, strided_plans);
             Err(crate::CudaError::unavailable(
                 "reserve aggregate graph resources",
             ))
