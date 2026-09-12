@@ -1582,16 +1582,16 @@ impl Scheduler {
 
         let mut selected = Vec::new();
         try_reserve_exact(&mut selected, self.active_sequences, "iteration candidates")?;
-        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
+        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
             // Alternate classes immediately when both are ready. Neither aging
-            // nor decode subtraction may split a prompt into 127 input tokens.
+            // nor decode subtraction changes the independently bounded prefill chunk.
             // A NotDispatched abort retains the previous class so a retry cannot
             // count an unexecuted prefill as progress for admission/fairness.
             if !prefill.is_empty()
                 && (decode.is_empty() || self.last_dispatched_shape != Some(WorkKind::Prefill))
             {
                 let item = &prefill[0];
-                if item.remaining_tokens != 128 {
+                if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN && item.remaining_tokens != 128 {
                     return Err(SchedulerError::InvalidPlan {
                         field: "complete prefill",
                         reason: "opt-in policy requires the entire untouched P128 prompt",
@@ -1600,7 +1600,7 @@ impl Scheduler {
                 selected.push(Candidate {
                     request_id: item.request_id,
                     kind: WorkKind::Prefill,
-                    token_count: 128,
+                    token_count: item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(self.config.iteration_token_budget),
                 });
             } else {
                 for item in decode {
@@ -1677,7 +1677,7 @@ impl Scheduler {
     }
 
     fn record_dispatched_shape(&mut self, inflight: &InflightPlan) {
-        if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
+        if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN) {
             self.last_dispatched_shape = Some(if inflight.prefill_count == 1 {
                 WorkKind::Prefill
             } else {
@@ -2098,7 +2098,7 @@ impl Scheduler {
             }
         }
         for output in result.outputs() {
-            if self.execution_shape_policy == ExecutionShapePolicy::CompletePrefill128DecodeN
+            if matches!(self.execution_shape_policy, ExecutionShapePolicy::CompletePrefill128DecodeN | ExecutionShapePolicy::VariablePrefillDecodeN)
                 && output.token_id() >= 49_152
             {
                 return Err(SchedulerError::InvalidIterationResult {
@@ -2662,6 +2662,10 @@ fn validate_descriptor(
     policy: ExecutionShapePolicy,
     descriptor: &RequestDescriptor,
 ) -> SchedulerResult<usize> {
+    if policy == ExecutionShapePolicy::VariablePrefillDecodeN
+        && descriptor.prompt_token_ids.iter().any(|&token|token>=49_152) {
+        return Err(SchedulerError::InvalidConfiguration {field:"prompt_token_ids",reason:"V3 vocabulary is 49152"});
+    }
     if policy == ExecutionShapePolicy::CompletePrefill128DecodeN {
         if descriptor.prompt_token_ids.len() != 128 {
             return Err(SchedulerError::InvalidConfiguration {
@@ -2718,6 +2722,18 @@ fn validate_execution_shape_config(
     layout: KvLayout,
 ) -> SchedulerResult<()> {
     if policy == ExecutionShapePolicy::General {
+        return Ok(());
+    }
+    if policy == ExecutionShapePolicy::VariablePrefillDecodeN {
+        for (valid,field,reason) in [
+            (matches!(config.max_active_sequences,1|2|4|8),"max_active_sequences","V3 supports capacities 1, 2, 4 or 8"),
+            (config.iteration_token_budget>=config.max_active_sequences && config.iteration_token_budget<=1024,"iteration_token_budget","V3 budget must cover decode capacity and fit 1024 tokens"),
+            ((1..=1024).contains(&config.max_prefill_chunk_tokens),"max_prefill_chunk_tokens","V3 chunks must fit 1024 tokens"),
+            (config.max_sequence_tokens<=4096,"max_sequence_tokens","V3 context limit is 4096"),
+            (layout.layer_count()==30 && layout.key_value_head_count()==3 && layout.head_dimension()==64 && layout.physical_block_count()<=4096,"kv_layout","V3 requires Smol geometry and at most4096 physical pages"),
+        ] {
+            if !valid {return Err(SchedulerError::InvalidConfiguration{field,reason});}
+        }
         return Ok(());
     }
     for (valid, field, reason) in [

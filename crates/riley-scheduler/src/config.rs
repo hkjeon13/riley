@@ -27,6 +27,10 @@ pub enum ExecutionShapePolicy {
     /// are limited to vocabulary 49152 and output limits 1..=32. This policy only
     /// constrains host plans; it does not qualify a multi-sequence GPU executor.
     CompletePrefill128DecodeN,
+    /// One variable-length prefill chunk or up to eight independent decode rows.
+    /// Alternates ready classes after dispatch; never mixes them in one plan.
+    /// This is a host contract only; GPU support must be checked separately.
+    VariablePrefillDecodeN,
 }
 
 /// All host-memory, work, and KV promises enforced by one scheduler.
