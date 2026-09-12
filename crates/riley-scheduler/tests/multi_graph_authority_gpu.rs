@@ -27,6 +27,14 @@ fn prepare(
 #[test]
 #[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
 fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
+    run(false)
+}
+#[test]
+#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
+fn cancelled_request_reuses_kv_without_cross_request_logits() -> Result {
+    run(true)
+}
+fn run(cancel_and_replace: bool) -> Result {
     let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
     let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
@@ -55,6 +63,9 @@ fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
         let prompt = (0..128).map(|i| (i * 311 + r * 977 + 13) % 49152).collect();
         scheduler.submit(RequestDescriptor::new(prompt, 32 - r as usize * 3), 0)?;
     }
+    let mut cancelled_blocks = std::collections::BTreeSet::new();
+    let mut replacement = None;
+    let mut reused = false;
     let mut rows = 0;
     let mut shapes = std::collections::BTreeSet::new();
     let mut finished = 0;
@@ -68,6 +79,12 @@ fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
         let mut samples = vec![SampledIterationToken::new(0, false); downloaded.output_count()];
         for work in plan.prefill_items().iter().chain(plan.decode_items()) {
             let table = &plan.block_tables()[work.block_table_index()];
+            if Some(work.request_id()) == replacement {
+                reused |= table
+                    .physical_block_ids()
+                    .iter()
+                    .any(|id| cancelled_blocks.contains(id));
+            }
             let row = LlamaBatchRow::new(
                 work.request_id().get(),
                 if work.input_tokens().len() == 128 {
@@ -100,6 +117,17 @@ fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
             shapes.insert(plan.batch_size());
         }
         drop(authority);
+        let cancelling = cancel_and_replace && now == 12;
+        if cancelling {
+            let work = &plan.decode_items()[0];
+            cancelled_blocks
+                .extend(plan.block_tables()[work.block_table_index()].physical_block_ids());
+            assert!(
+                scheduler
+                    .cancel(work.request_id(), now)?
+                    .deferred_until_iteration_settles()
+            );
+        }
         let id = downloaded.iteration_id().get();
         let result = downloaded
             .into_result(&samples, IterationTiming::new(0, 0))
@@ -108,9 +136,36 @@ fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
         assert!(settled.settlement_failures().is_empty());
         finished += settled.completions().len();
         owner.confirm_scheduler_commit(id)?;
+        if cancelling {
+            assert!(
+                settled
+                    .completions()
+                    .iter()
+                    .any(|c| c.reason() == RequestFinishReason::Cancelled)
+            );
+            replacement = Some(
+                scheduler
+                    .submit(
+                        RequestDescriptor::new(
+                            (0..128).map(|i| (i * 177 + 999) % 49152).collect(),
+                            32,
+                        ),
+                        now,
+                    )?
+                    .request_id(),
+            );
+        }
     }
-    assert_eq!(rows, 110);
-    assert_eq!(finished, 4);
+    if cancel_and_replace {
+        assert!(
+            reused,
+            "replacement must reuse at least one cancelled KV page"
+        );
+        assert_eq!(finished, 5);
+    } else {
+        assert_eq!(rows, 110);
+        assert_eq!(finished, 4);
+    }
     assert_eq!(shapes, [1, 2, 3, 4].into_iter().collect());
     owner.close()?;
     oracle.close()?;
