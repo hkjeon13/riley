@@ -1,0 +1,70 @@
+#include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <stdint.h>
+#include <vector>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <algorithm>
+namespace oracle {
+__global__ void compiled_norm_rows(const __nv_bfloat16* a,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode){
+ const uint32_t row=blockIdx.x;
+ a+=row*576;out+=row*576;
+ if(mode==1){b=static_cast<const __nv_bfloat16*>(b)+row*576;residual=static_cast<float*>(residual)+row*576;}
+ if(mode==2){b=static_cast<const float*>(b)+row*576;residual=static_cast<__nv_bfloat16*>(residual)+row*576;}
+
+ __shared__ float sums[8];int tid=threadIdx.x,lane=tid%32;float x[4]={};
+ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576){x[j]=__bfloat162float(a[i]);
+  if(mode==1)x[j]+=__bfloat162float(((const __nv_bfloat16*)b)[i]);if(mode==2)x[j]+=((const float*)b)[i];
+  if(mode==1)((float*)residual)[i]=x[j];if(mode==2)((__nv_bfloat16*)residual)[i]=__float2bfloat16_rn(x[j]);}}
+ float sum=x[1]*x[1];sum=fmaf(x[0],x[0],sum);sum=fmaf(x[2],x[2],sum);sum=fmaf(x[3],x[3],sum);
+ for(int step=16;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);
+ if(lane==0)sums[tid/32]=sum;__syncthreads();
+ if(tid<32){sum=lane<8?sums[lane]:0.;for(int step=4;step;step>>=1)sum+=__shfl_xor_sync(0xffffffff,sum,step);if(lane==0)sums[0]=sum;}__syncthreads();
+ float mean=fmaf(sums[0],1.F/576.F,1e-5F),inv;
+ asm("rsqrt.approx.ftz.f32 %0, %1;":"=f"(inv):"f"(mean));
+ for(int j=0;j<4;++j){int i=tid*4+j;if(i<576)out[i]=__float2bfloat16_rn((x[j]*inv)*__bfloat162float(w[i]));}
+}
+__global__ void compiled_swiglu_rows(const __nv_bfloat16* g,const __nv_bfloat16* u,__nv_bfloat16* out){
+ const uint32_t row=blockIdx.y;g+=row*1536;u+=row*1536;out+=row*1536;
+
+ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i<1536){float x=__bfloat162float(g[i]);out[i]=__float2bfloat16_rn((x/(1.F+expf(-x)))*__bfloat162float(u[i]));}
+}
+}
+
+#include "prefill_shape_pointwise.cuh"
+void ck(cudaError_t e){if(e!=cudaSuccess){fprintf(stderr,"%s\n",cudaGetErrorString(e));exit(2);}}
+template<class T>T* up(const std::vector<T>&a){T*p;ck(cudaMalloc(&p,a.size()*sizeof(T)));ck(cudaMemcpy(p,a.data(),a.size()*sizeof(T),cudaMemcpyHostToDevice));return p;}
+int main(){
+ constexpr int cap=1024,vocab=64;std::vector<unsigned short>w(vocab*576),n(576),gate(cap*1536),uv(gate.size()),init(cap*576,0x5555),si(cap*1536,0x5555),selected(640,0x5555);std::vector<float>fi(cap*576,0);
+ unsigned rng=91;for(auto*a:{&w,&n,&gate,&uv})for(auto&v:*a){rng=rng*1664525+1013904223;v=__bfloat16_as_ushort(__float2bfloat16_rn(float(int(rng%1025)-512)/512.f));}
+ auto dw=up(w),dn=up(n),dg=up(gate),du=up(uv),de=up(init),d0=up(init),d1=up(init),d2=up(init),dr=up(init),ds=up(si),re=up(init),r0=up(init),r1=up(init),r2=up(init),rr=up(init),rs=up(si),sel=up(selected);auto df=up(fi),rf=up(fi);
+ uint32_t *meta,*host,*status,*publish;ck(cudaMallocHost(&host,17536));ck(cudaMalloc(&meta,17536));ck(cudaMalloc(&status,4));ck(cudaMalloc(&publish,4));cudaStream_t stream;ck(cudaStreamCreate(&stream));
+ auto shape=meta+32;auto tokens=meta+3360;
+ cudaGraph_t graph;cudaGraphExec_t exec;ck(cudaStreamBeginCapture(stream,cudaStreamCaptureModeThreadLocal));ck(cudaMemcpyAsync(meta,host,17536,cudaMemcpyHostToDevice,stream));ck(cudaMemsetAsync(status,0,4,stream));
+ riley_prefill_pointwise::embedding_rows<<<cap,256,0,stream>>>((__nv_bfloat16*)dw,tokens,(__nv_bfloat16*)de,shape,cap,vocab,status);
+ riley_prefill_pointwise::norm_rows<<<cap,256,0,stream>>>((__nv_bfloat16*)de,nullptr,(__nv_bfloat16*)dn,nullptr,(__nv_bfloat16*)d0,0,shape,cap);
+ riley_prefill_pointwise::norm_rows<<<cap,256,0,stream>>>((__nv_bfloat16*)d0,de,(__nv_bfloat16*)dn,df,(__nv_bfloat16*)d1,1,shape,cap);
+ riley_prefill_pointwise::norm_rows<<<cap,256,0,stream>>>((__nv_bfloat16*)d1,df,(__nv_bfloat16*)dn,dr,(__nv_bfloat16*)d2,2,shape,cap);
+ riley_prefill_pointwise::swiglu_rows<<<dim3(6,cap),256,0,stream>>>((__nv_bfloat16*)dg,(__nv_bfloat16*)du,(__nv_bfloat16*)ds,shape,cap);
+ riley_prefill_pointwise::select_hidden<<<1,256,0,stream>>>((__nv_bfloat16*)d2,(__nv_bfloat16*)sel,shape,cap,status,publish);
+ ck(cudaStreamEndCapture(stream,&graph));ck(cudaGraphInstantiate(&exec,graph,nullptr,nullptr,0));
+ unsigned replays=0;uint64_t compared=0;
+ for(int count:{1,17,73,128,398,1024,16})for(bool partial:{false,true}){
+  std::memset(host,0,17536);host[34]=count;host[43]=partial?UINT32_MAX:count-1;
+  auto embedding=init;for(int i=0;i<count;++i){host[3360+i]=(i*7+replays)%vocab;std::copy_n(w.data()+host[3360+i]*576,576,embedding.data()+i*576);}
+  for(auto p:{de,d0,d1,d2,dr,r0,r1,r2,rr})ck(cudaMemsetAsync(p,0x55,init.size()*2,stream));for(auto p:{ds,rs})ck(cudaMemsetAsync(p,0x55,si.size()*2,stream));for(auto p:{df,rf})ck(cudaMemsetAsync(p,0,fi.size()*4,stream));ck(cudaMemcpyAsync(re,embedding.data(),embedding.size()*2,cudaMemcpyHostToDevice,stream));
+  ck(cudaGraphLaunch(exec,stream));
+  oracle::compiled_norm_rows<<<count,256,0,stream>>>((__nv_bfloat16*)re,nullptr,(__nv_bfloat16*)dn,nullptr,(__nv_bfloat16*)r0,0);
+  oracle::compiled_norm_rows<<<count,256,0,stream>>>((__nv_bfloat16*)r0,re,(__nv_bfloat16*)dn,rf,(__nv_bfloat16*)r1,1);
+  oracle::compiled_norm_rows<<<count,256,0,stream>>>((__nv_bfloat16*)r1,rf,(__nv_bfloat16*)dn,rr,(__nv_bfloat16*)r2,2);
+  oracle::compiled_swiglu_rows<<<dim3(6,count),256,0,stream>>>((__nv_bfloat16*)dg,(__nv_bfloat16*)du,(__nv_bfloat16*)rs);
+  ck(cudaStreamSynchronize(stream));
+  for(int i=0;i<7;++i){void*a=i==0?de:i==1?d0:i==2?d1:i==3?d2:i==4?dr:i==5?ds:(void*)df;void*b=i==0?re:i==1?r0:i==2?r1:i==3?r2:i==4?rr:i==5?rs:(void*)rf;size_t bytes=i==6?fi.size()*4:(i==5?si.size():init.size())*2;std::vector<uint8_t>aa(bytes),bb(bytes);ck(cudaMemcpy(aa.data(),a,bytes,cudaMemcpyDeviceToHost));ck(cudaMemcpy(bb.data(),b,bytes,cudaMemcpyDeviceToHost));if(aa!=bb){fprintf(stderr,"mismatch %d %d\n",count,i);exit(3);}compared+=bytes;}
+  unsigned flag;ck(cudaMemcpy(&flag,publish,4,cudaMemcpyDeviceToHost));if(flag!=!partial)exit(4);std::vector<unsigned short>a(640),b(576);ck(cudaMemcpy(a.data(),sel,a.size()*2,cudaMemcpyDeviceToHost));ck(cudaMemcpy(b.data(),r2+(count-1)*576,b.size()*2,cudaMemcpyDeviceToHost));for(int i=0;i<640;++i)if(a[i]!=(i>=576?0x5555:partial?0:b[i]))exit(5);++replays;
+ }
+ // Fresh replay with invalid token must suppress the published hidden state.
+ host[43]=host[34]-1;host[3360]=vocab;ck(cudaGraphLaunch(exec,stream));ck(cudaStreamSynchronize(stream));unsigned flag,error;ck(cudaMemcpy(&flag,publish,4,cudaMemcpyDeviceToHost));ck(cudaMemcpy(&error,status,4,cudaMemcpyDeviceToHost));if(flag||!(error&1))exit(6);std::vector<unsigned short> suppressed(576);ck(cudaMemcpy(suppressed.data(),sel,1152,cudaMemcpyDeviceToHost));for(auto value:suppressed)if(value)exit(7);
+ ck(cudaGraphExecDestroy(exec));ck(cudaGraphDestroy(graph));ck(cudaStreamDestroy(stream));ck(cudaFreeHost(host));for(void*p:{(void*)dw,(void*)dn,(void*)dg,(void*)du,(void*)de,(void*)d0,(void*)d1,(void*)d2,(void*)dr,(void*)ds,(void*)re,(void*)r0,(void*)r1,(void*)r2,(void*)rr,(void*)rs,(void*)sel,(void*)df,(void*)rf,(void*)meta,(void*)status,(void*)publish})ck(cudaFree(p));
+ printf("pointwise_graph valid_replays=%u compared_bytes=%llu invalid_token_suppressed=true partial_hidden_zero=true\n",replays,(unsigned long long)compared);
+}
