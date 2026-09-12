@@ -32,22 +32,27 @@ __global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16*
  scores+=row*9*4096;out+=row*576;
  int count=shape[1]+1,head=blockIdx.y%9,block=blockIdx.x,lane=threadIdx.x,g=lane/4,t=lane%4;
  if(count<1||count>4096)return;
- __shared__ __nv_bfloat16 probs[128];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
+ __shared__ __nv_bfloat16 probs[128];
+ __shared__ float exponentials[128];float maximum=-CUDART_INF_F,den=0.,accum[4]={};
  const __nv_bfloat16 zero=__float2bfloat16_rn(0.);
  for(int tile=(count-1)/128;tile>=0;--tile){
   int begin=tile*128,end=min(begin+128,count);float mx=maximum;
   for(int i=lane;i<end-begin;i+=32)mx=fmaxf(mx,scores[head*4096+begin+i]);
   for(int offset=16;offset>0;offset>>=1)mx=fmaxf(mx,__shfl_xor_sync(0xffffffff,mx,offset));
   float alpha=exp2f((maximum-mx)*1.4426950408889634F);
-  for(int i=lane;i<128;i+=32)probs[i]=__float2bfloat16_rn(i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.);
+  // Preserve unrounded exponentials for the original lane-local sum order.
+  for(int i=lane;i<128;i+=32){float value=i<end-begin?riley_prefill_shape::exponential(scores[head*4096+begin+i],mx):0.;exponentials[i]=value;probs[i]=__float2bfloat16_rn(value);}
+  __syncwarp();
   float local_den=den*alpha;
-  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=riley_prefill_shape::exponential(scores[head*4096+begin+i],mx);}
+  for(int j=0;j<16;++j)for(int z=0;z<2;++z){int i=2*t+j*8+z;if(i<end-begin)local_den+=exponentials[i];}
   den=local_den;maximum=mx;__syncwarp();
   for(int j=0;j<4;++j)accum[j]*=alpha;
   for(int token=begin;token<end;token+=16){
    int pi=token-begin;uint32_t a=riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]);
    uint32_t aa=riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]);
-   int dim=block*8+g;auto val=[&](int pos){return pos<end?v[riley_prefill_shape::cache_index(pos,head/3,dim,pages)]:zero;};
+   // Each aligned K16 tile lies entirely in one physical KV page.
+   int dim=block*8+g;int value_base=((pages[token/16]*3+head/3)*16)*64+dim;
+   auto val=[&](int pos){return pos<end?v[value_base+(pos-token)*64]:zero;};
    uint32_t b=riley_prefill_shape::pair(val(token+2*t),val(token+2*t+1));
    uint32_t bb=riley_prefill_shape::pair(val(token+2*t+8),val(token+2*t+9));
    riley_prefill_shape::mma(accum,a,a,aa,aa,b,bb);
