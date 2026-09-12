@@ -35,24 +35,33 @@ pub struct Expectation<const ROWS:usize=8> {
     pub physical_block_count:u32, pub max_active_rows:u32,
     pub stage:InputStage, pub mode:ResultMode, pub rows:Vec<Row>,
     pub block_ownership:Vec<BlockOwnership>,
+    /// Explicit V6 capability, bound to the retained native graph by the session.
+    pub packed_prefill:bool,
 }
+fn result_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {if e.packed_prefill{0x36524d52}else{Layout::<ROWS>::RESULT_MAGIC}}
+fn compact_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {result_magic(e)^0x8000_0000}
 pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
     check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
     check(e.replay_id==e.last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
     check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
-    check(e.stage!=InputStage::Prefill || e.rows.len()==1,"stage","prefill must describe one request")?;
+    check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
+    check(e.stage!=InputStage::Prefill || e.rows.len()<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
+    let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
+    check(e.stage!=InputStage::Prefill || total<=1024,"tokens","packed token capacity exceeded")?;
     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
     let mut ownership=BTreeMap::new();
     for x in &e.block_ownership {
         check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count && ownership.insert(x.physical_id,x.sequence_tag).is_none(),"ownership","invalid or duplicate ledger entry")?;
     }
+    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || e.stage==InputStage::Decode).count();
     let (mut tags,mut cookies,mut slots,mut used)=(BTreeSet::new(),BTreeSet::new(),BTreeSet::new(),BTreeSet::new());
     for row in &e.rows {
         check(row.sequence_tag!=0 && tags.insert(row.sequence_tag) && row.cookie!=0 && cookies.insert(row.cookie),"row_identity","duplicate or zero request identity")?;
         check(row.output_slot<e.rows.len() as u32 && slots.insert(row.output_slot),"slot","slots not unique and dense")?;
         check(row.progress.stage==e.stage,"stage","row stage differs")?;
         let v=row.progress.validate()?;
+        if e.packed_prefill {check(((row.output_slot as usize)<published)==v.logits_input_row.is_some(),"slot","published slots must precede internal partial slots")?;}
         check(row.input_tokens.len()==row.progress.input_tokens as usize && row.input_tokens.iter().all(|&t|t<49152),"tokens","invalid token count or vocabulary")?;
         check(row.physical_ids.len()==v.live_pages as usize && row.valid_tokens.len()==v.live_pages as usize,"pages","page map does not cover target exactly")?;
         for (i,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
@@ -69,18 +78,23 @@ fn u64_at(p:&mut [u8],at:usize,v:u64){p[at..at+8].copy_from_slice(&v.to_le_bytes
 pub fn encode_into<const ROWS:usize>(packet:&mut [u8],e:&Expectation<ROWS>)->Result<()> {
     check(packet.len()==Layout::<ROWS>::REQUEST_BYTES,"bytes","exact versioned request extent required")?;
     validate(e)?;packet.fill(0);
-    for (at,v) in [(0,Layout::<ROWS>::MAGIC),(4,Layout::<ROWS>::VERSION),(8,Layout::<ROWS>::REQUEST_BYTES as u32),(12,ROW_BYTES as u32),
+    for (at,v) in [(0,if e.packed_prefill{0x36444d52}else{Layout::<ROWS>::MAGIC}),(4,if e.packed_prefill{6}else{Layout::<ROWS>::VERSION}),(8,Layout::<ROWS>::REQUEST_BYTES as u32),(12,ROW_BYTES as u32),
         (16,if e.stage==InputStage::Prefill{0}else{1}),(20,e.rows.len() as u32),(24,e.max_active_rows),(28,e.physical_block_count),(32,e.mode as u32)] {u32_at(packet,at,v);}
     u64_at(packet,40,e.owner_generation);u64_at(packet,48,e.replay_id);u64_at(packet,56,e.iteration_id);packet[64..96].copy_from_slice(&e.catalog_digest);
+    let mut token_offset=0usize;
     for (i,row) in e.rows.iter().enumerate() {
         let b=HEADER_BYTES+i*ROW_BYTES;let p=row.progress;let v=p.validate()?;
         for (at,value) in [(0,row.input_tokens[0]),(4,v.last_position),(8,p.input_tokens),(12,v.live_pages),
             (16,p.committed_tokens),(20,v.target_tokens),(24,p.generated_index),(28,p.output_limit),
             (32,p.prompt_tokens),(36,p.context_tokens),(40,row.output_slot),(44,v.logits_input_row.unwrap_or(u32::MAX))] {u32_at(packet,b+at,value);}
         u64_at(packet,b+48,row.sequence_tag);u64_at(packet,b+56,row.cookie);
+        if e.stage==InputStage::Prefill {
+            if e.packed_prefill {u32_at(packet,b+64,token_offset as u32);}
+            for &t in &row.input_tokens {u32_at(packet,Layout::<ROWS>::TOKENS_OFFSET+token_offset*4,t);token_offset+=1;}
+        }
         for (j,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate(){u32_at(packet,b+128+j*4,id);packet[b+1152+j*2..b+1154+j*2].copy_from_slice(&valid.to_le_bytes());}
     }
-    if e.stage==InputStage::Prefill {for (i,&t) in e.rows[0].input_tokens.iter().enumerate(){u32_at(packet,Layout::<ROWS>::TOKENS_OFFSET+i*4,t);}}
+    if e.packed_prefill && e.stage==InputStage::Prefill {u32_at(packet,36,token_offset as u32);}
     Ok(())
 }
 /// Canonical comparison binds every byte, including padding, to live authority.
@@ -134,7 +148,7 @@ fn validate_result_row<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>,i
 fn result_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,token:u32)->Result<()>{result_row_identity_into(out,e,0,token)}
 fn result_row_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,index:usize,token:u32)->Result<()>{
     let row=&e.rows[index];let p=row.progress;let v=p.validate()?;out.fill(0);
-    for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,if e.stage==InputStage::Prefill{0}else{1}),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,Layout::<ROWS>::RESULT_MAGIC)]{u32_at(out,at,x);}
+    for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,if e.stage==InputStage::Prefill{0}else{1}),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,result_magic(e))]{u32_at(out,at,x);}
     for(at,x)in[(16,e.owner_generation),(24,e.replay_id),(32,e.iteration_id),(40,row.sequence_tag),(48,row.cookie)]{u64_at(out,at,x);}
     out[80..112].copy_from_slice(&e.catalog_digest);Ok(())
 }
@@ -172,7 +186,7 @@ pub fn validate_compact_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation
         let published=row.progress.validate()?.logits_input_row.is_some();
         check(token<49152 && (published||token==0),"argmax","invalid compact token publication")?;
         let mut expected=[0u8;HEADER_BYTES];result_row_identity_into(&mut expected,e,index,token)?;
-        u32_at(&mut expected,124,Layout::<ROWS>::COMPACT_RESULT_MAGIC);
+        u32_at(&mut expected,124,compact_magic(e));
         check(record==expected,"result_identity","compact identity or GPU validation status differs")?;
         result.push(RowResult{output_slot:row.output_slot,token:published.then_some(token),logits:&[]});
     }
@@ -186,7 +200,7 @@ mod tests {
     fn compact_fixture<const ROWS:usize>(e:&Expectation<ROWS>)->Vec<u8>{
         let mut bytes=vec![0;Layout::<ROWS>::COMPACT_RESULT_BYTES];
         for i in 0..e.rows.len(){let mut h=[0;128];let token=if e.rows[i].progress.validate().unwrap().logits_input_row.is_some(){i as u32+7}else{0};
-            result_row_identity_into(&mut h,e,i,token).unwrap();u32_at(&mut h,124,Layout::<ROWS>::COMPACT_RESULT_MAGIC);bytes[i*128..(i+1)*128].copy_from_slice(&h);}
+            result_row_identity_into(&mut h,e,i,token).unwrap();u32_at(&mut h,124,compact_magic(e));bytes[i*128..(i+1)*128].copy_from_slice(&h);}
         bytes
     }
     fn compact_contract<const ROWS:usize>(){
@@ -210,7 +224,7 @@ mod tests {
     #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
     fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
-        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![]};
+        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false};
         for i in 0..active {
             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};
             let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*(if ROWS==32{128}else{256})+p).collect();
@@ -218,6 +232,42 @@ mod tests {
             let mut valid=vec![16;ids.len()];*valid.last_mut().unwrap()=v.last_page_tokens;
             e.rows.push(Row{sequence_tag:u64::from(i)+1,cookie:u64::from(i)+29,output_slot:active-1-i,progress,input_tokens:vec![33;progress.input_tokens as usize],physical_ids:ids,valid_tokens:valid});
         } e
+    }
+
+    fn packed_fixture(active:u32,chunk:u32)->Expectation<32>{
+        let mut e=fixture_rows::<32>(InputStage::Prefill,active);e.packed_prefill=true;
+        e.block_ownership.clear();
+        let published=(active+1)/2;let(mut output,mut partial)=(0,published);
+        for (i,row) in e.rows.iter_mut().enumerate(){
+            let committed=13*i as u32;let target=committed+chunk;
+            row.progress=Progress{prompt_tokens:target+if i%2==0{0}else{7},output_limit:32,context_tokens:4096,committed_tokens:committed,input_tokens:chunk,generated_index:0,stage:InputStage::Prefill};
+            row.input_tokens=(0..chunk).map(|j|(i as u32*97+j)%49152).collect();
+            row.output_slot=if i%2==0{let n=output;output+=1;n}else{let n=partial;partial+=1;n};
+            let v=row.progress.validate().unwrap();row.physical_ids=(0..v.live_pages).map(|j|i as u32*128+j).collect();row.valid_tokens=vec![16;v.live_pages as usize];*row.valid_tokens.last_mut().unwrap()=v.last_page_tokens;
+            e.block_ownership.extend(row.physical_ids.iter().map(|&physical_id|BlockOwnership{physical_id,sequence_tag:row.sequence_tag}));
+        }e
+    }
+    #[test] fn packed_v6_offsets_publication_and_corruption(){
+        let export=std::env::var_os("RILEY_V48_WIRE_FIXTURES").map(std::path::PathBuf::from);
+        if let Some(d)=&export{std::fs::create_dir_all(d).unwrap();}
+        for active in 1..=4 {for chunk in [1,73,128,256] {
+            let e=packed_fixture(active,chunk);let mut p=vec![0;Layout::<32>::REQUEST_BYTES];encode_into(&mut p,&e).unwrap();
+            assert_eq!(u32::from_le_bytes(p[36..40].try_into().unwrap()),active*chunk);
+            let mut offset=0;
+            for (i,row) in e.rows.iter().enumerate(){let b=HEADER_BYTES+i*ROW_BYTES;assert_eq!(&p[b+64..b+68],&(offset as u32).to_le_bytes());for &token in &row.input_tokens{let at=Layout::<32>::TOKENS_OFFSET+offset*4;assert_eq!(&p[at..at+4],&token.to_le_bytes());offset+=1;}}
+            let mut scratch=vec![0;p.len()];validate_packet(&p,&mut scratch,&e).unwrap();
+            for at in 0..p.len(){p[at]^=0x80;assert!(validate_packet(&p,&mut scratch,&e).is_err(),"byte{at}");p[at]^=0x80;}
+            let compact=compact_fixture(&e);let rows=validate_compact_result(&compact,&e).unwrap();assert_eq!(rows.iter().filter(|r|r.token.is_some()).count(),((active+1)/2)as usize);
+            let mut wrong=e.clone();wrong.packed_prefill=false;assert!(validate_compact_result(&compact,&wrong).is_err());
+            if active>1{let mut wrong=e.clone();wrong.rows.swap(0,1);let slot=wrong.rows[0].output_slot;wrong.rows[0].output_slot=wrong.rows[1].output_slot;wrong.rows[1].output_slot=slot;assert!(validate(&wrong).is_err());}
+            if let Some(d)=&export{std::fs::write(d.join(format!("v6-prefill-{active}-{chunk}.bin")),&p).unwrap();}
+        }}
+        for active in [1,16,32]{let mut e=fixture_rows::<32>(InputStage::Decode,active);e.packed_prefill=true;let mut p=vec![0;Layout::<32>::REQUEST_BYTES];encode_into(&mut p,&e).unwrap();assert_eq!(&p[36..40],&[0;4]);if let Some(d)=&export{std::fs::write(d.join(format!("v6-decode-{active}.bin")),p).unwrap();}}
+    }
+    #[test] fn packed_v6_rejects_capacity_before_write(){
+        for e in [packed_fixture(4,257),packed_fixture(5,128)]{let mut p=vec![0xa5;Layout::<32>::REQUEST_BYTES];assert!(encode_into(&mut p,&e).is_err());assert!(p.iter().all(|&x|x==0xa5));}
+        let mut e=fixture_rows::<16>(InputStage::Prefill,1);e.packed_prefill=true;assert!(validate(&e).is_err());
+        let mut e=packed_fixture(4,256);e.rows[1].physical_ids[0]=e.rows[0].physical_ids[0];assert!(validate(&e).is_err());
     }
     fn maximum_prefill16()->Expectation<16> {
         let mut e=fixture_rows::<16>(InputStage::Prefill,1);

@@ -2230,7 +2230,7 @@ mod cuda_backend {
                     "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
                 )));
             }
-            let shape_policy = if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
+            let shape_policy = if config.executor.packed_prefill() {riley_scheduler::ExecutionShapePolicy::PackedPrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==32 {riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode32} else if config.executor.variable_graph() && config.executor.variable_graph_rows()==16 {
                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecode16
             } else if config.executor.variable_graph() && config.scheduler.max_active_sequences>1 {
                 riley_scheduler::ExecutionShapePolicy::VariablePrefillDecodeN
@@ -2571,7 +2571,7 @@ mod cuda_backend {
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
-                let graph=if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                let graph=if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
                 (None,None,None,Some(graph))
             } else if use_multi {
@@ -2596,7 +2596,7 @@ mod cuda_backend {
                 !use_graph,
                 !use_graph,
                 decode_graph.as_ref().map_or(
-                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(_))=>"variable-smol-v5",Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
+                    if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(g))=>if g.supports_packed_prefill(){"variable-smol-v6"}else{"variable-smol-v5"},Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
                         "vllm-smol-p128-multi-v1"
                     } else {
                         "existing"

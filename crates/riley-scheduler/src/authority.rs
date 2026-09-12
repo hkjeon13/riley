@@ -154,6 +154,7 @@ pub(crate) struct VariableOwnerGeometry {
     pub max_active_rows: u32,
     pub physical_block_count: u32,
     pub context_tokens: u32,
+    pub packed_prefill: bool,
 }
 impl AuthorizedExecution<'_> {
     #[allow(dead_code)]
@@ -172,6 +173,7 @@ impl AuthorizedExecution<'_> {
         let stage = if prefill.is_empty() { InputStage::Decode } else { InputStage::Prefill };
         let to32 = |v:usize| u32::try_from(v).map_err(|_| bad());
         let mut rows = Vec::with_capacity(self.rows.len());
+        let mut partial_slot=self.plan.output_slots().len() as u32;
         for ((work,row),cookie) in prefill.iter().chain(decode).zip(&self.rows).zip(cookies) {
             if work.request_id()!=row.request_id { return Err(bad()); }
             let progress = Progress {
@@ -184,12 +186,12 @@ impl AuthorizedExecution<'_> {
                 || checked.logits_input_row.is_some()!=work.output_slot().is_some() { return Err(bad()); }
             // V3 retains a dense row slot even when partial prefill publishes no output.
             // Such a slot must never be converted to an IterationOutput.
-            let output_slot = work.output_slot().map(|s|s.get()).unwrap_or(0);
+            let output_slot = work.output_slot().map(|s|s.get()).unwrap_or_else(||{let slot=partial_slot;partial_slot+=1;slot});
             rows.push(Row { sequence_tag:row.request_id.get(), cookie:*cookie, output_slot, progress,
                 input_tokens:work.input_tokens().to_vec(), physical_ids:row.table.physical_block_ids().to_vec(),
                 valid_tokens:row.table.valid_tokens().to_vec() });
         }
-        let e = Expectation { owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
+        let e = Expectation { packed_prefill:owner.packed_prefill, owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
             replay_id:replay, iteration_id:self.plan.iteration_id().get(), catalog_digest:owner.catalog_digest,
             physical_block_count:owner.physical_block_count, max_active_rows:owner.max_active_rows,
             stage, mode, rows, block_ownership:self.block_owners.iter().map(|(id,tag)| BlockOwnership {
@@ -214,7 +216,7 @@ mod tests {
             max_promised_kv_blocks:256,metrics_window_samples:16,
         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::VariablePrefillDecodeN).unwrap();
         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
-        let mut owner=super::VariableOwnerGeometry{generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+        let mut owner=super::VariableOwnerGeometry{packed_prefill:false,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
         let mut last=None;
         loop {
@@ -253,6 +255,56 @@ mod tests {
     }
 
     #[test]
+    fn packed_policy_batches_prefill_and_preserves_retry_partial_cancel() {
+        use crate::{IterationResult,IterationOutput,ExecutionAbort,ExecutionShapePolicy};
+        use crate::descriptor::{shape_progress::InputStage,variable_wire};
+        for cancel_last in [false,true] {
+        let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig {
+            max_waiting_requests:8,max_waiting_prompt_tokens:4096,max_active_sequences:4,
+            max_sequence_tokens:1024,iteration_token_budget:256,max_prefill_chunk_tokens:128,
+            aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,
+            max_promised_kv_blocks:256,metrics_window_samples:16,
+        },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::PackedPrefillDecode32).unwrap();
+        let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
+        let mut owner=super::VariableOwnerGeometry{packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+        let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
+        let mut last=None;let mut prefill_width=0;
+        loop {
+            now+=2;
+            let Some(plan)=scheduler.plan_iteration(now).unwrap().into_parts().0 else {break};
+            let prefill=!plan.prefill_items().is_empty();
+            assert!(plan.prefill_items().is_empty() || plan.decode_items().is_empty());
+            if prefill {prefill_width=prefill_width.max(plan.prefill_items().len());assert!(plan.prefill_items().len()<=4);assert!(plan.total_tokens()<=256);}
+            widest=widest.max(plan.decode_items().len());
+            let signature:Vec<_>=plan.prefill_items().iter().chain(plan.decode_items()).map(|w|(w.request_id(),w.input_tokens().to_vec(),w.target_logical_length())).collect();
+            if !retried {
+                scheduler.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,now+1).unwrap();
+                last=Some(signature);retried=true;continue;
+            }
+            if let Some(expected)=last.take(){assert_eq!(signature,expected);}
+            replay+=1;
+            let authority=scheduler.authorize_execution(&plan).unwrap();
+            let cookies:Vec<_>=(0..plan.batch_size()).map(|i|replay*8+i as u64+1).collect();
+            let expectation=authority.variable_descriptor_expectation_rows::<32>(&owner,replay,&cookies,ResultMode::FullLogits).unwrap();
+            assert_eq!(expectation.stage,if prefill{InputStage::Prefill}else{InputStage::Decode});
+            let mut bytes=vec![0;variable_wire::Layout::<32>::REQUEST_BYTES];variable_wire::encode_into(&mut bytes,&expectation).unwrap();
+            variable_wire::validate_packet(&bytes,&mut vec![0;bytes.len()],&expectation).unwrap();
+            partial |= prefill && plan.output_slots().len()<plan.prefill_items().len();
+            let outputs=plan.output_slots().iter().map(|&slot|IterationOutput::new(slot,23,false)).collect();
+            drop(authority);
+            let result=IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
+            assert!(scheduler.complete_iteration(&result,now+1).unwrap().settlement_failures().is_empty());
+            owner.last_accepted_replay=replay;
+            if cancel_last && replay==1 {scheduler.cancel(ids[3],now+1).unwrap();}
+            assert!(replay<256);
+        }
+        assert!(partial && retried && widest>=3 && prefill_width>=3);
+        for (i,id) in ids.into_iter().enumerate() {assert_eq!(scheduler.request_state(id),Some(if cancel_last && i==3 {crate::RequestState::Cancelled}else{crate::RequestState::Finished}));}
+        scheduler.close(now+2,None).unwrap();
+        }
+    }
+
+    #[test]
     fn variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler() {
         use crate::{IterationResult, IterationOutput};
         use crate::descriptor::{shape_progress::InputStage, variable_wire};
@@ -264,7 +316,7 @@ mod tests {
                 max_promised_kv_blocks:64, metrics_window_samples:16,
             }, riley_runtime::paged_kv::KvLayout::checked(30,64,3,64).unwrap()).unwrap();
             let id=scheduler.submit(RequestDescriptor::new(vec![17;prompt],limit),0).unwrap().request_id();
-            let mut owner=super::VariableOwnerGeometry { generation:1,last_accepted_replay:0,catalog_digest:[7;32],
+            let mut owner=super::VariableOwnerGeometry { packed_prefill:false, generation:1,last_accepted_replay:0,catalog_digest:[7;32],
                 max_active_rows:1,physical_block_count:64,context_tokens:1024 };
             let (mut committed,mut generated,mut replay)=(0,0,0u64);
             while generated<limit {

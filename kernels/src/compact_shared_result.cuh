@@ -65,7 +65,7 @@ __global__ void parts(const uint32_t* metadata,const __nv_bfloat16* logits,Greed
  }
  finish_partial(best,id,bad,partial+row*24+part,values,tokens,invalid);
 }
-template<uint32_t Rows>
+template<uint32_t Rows,bool Packed=false>
 __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint32_t* status,uint32_t* output){
  const uint32_t row=blockIdx.x,tid=threadIdx.x,active=m[5];uint32_t* result=output+row*32;
  if(active<1||active>Rows||row>=active){if(tid<32)result[tid]=0;return;}
@@ -82,16 +82,16 @@ __global__ void finish(const uint32_t* m,const GreedyPartial* partial,const uint
   result[14]=shape[5];result[15]=shape[8];result[16]=shape[6];result[17]=shape[2];result[18]=shape[9];result[19]=m[4];
   for(int i=0;i<8;++i)result[20+i]=m[16+i];
   result[28]=shape[1];result[29]=shape[10];result[30]=m[8];
-  result[31]=(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U))^0x80000000U;
+  result[31]=(Packed?0x36524d52U:(Rows==8?0x33524d52U:(Rows==16?0x34524d52U:0x35524d52U)))^0x80000000U;
  }
 }
-template<uint32_t Rows>
+template<uint32_t Rows,bool Packed=false>
 inline cudaError_t enqueue(cudaStream_t stream,const void* metadata,const void* logits,const uint32_t* status,void* partial,void* output){
  static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
  if(!metadata||!logits||!status||!partial||!output)return cudaErrorInvalidValue;
  parts<Rows><<<Rows*24,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const __nv_bfloat16*>(logits),static_cast<GreedyPartial*>(partial));
  auto e=cudaGetLastError();if(e!=cudaSuccess)return e;
- finish<Rows><<<Rows,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const GreedyPartial*>(partial),status,static_cast<uint32_t*>(output));
+ finish<Rows,Packed><<<Rows,256,0,stream>>>(static_cast<const uint32_t*>(metadata),static_cast<const GreedyPartial*>(partial),status,static_cast<uint32_t*>(output));
  return cudaGetLastError();
 }
 }
