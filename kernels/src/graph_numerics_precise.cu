@@ -248,7 +248,8 @@ __global__ void gemm_prefill_m16_vector(const __nv_bfloat16* x,const __nv_bfloat
 namespace riley_cuda_internal {
 template<int N,int K,int Interval,int Warps>
 cudaError_t launch_compiled_prefill_m16(cudaStream_t s,const void* x,const void* w,void* y,const void* position) noexcept {
- if constexpr(N==192){
+ // Whole-model V5 trace regressed Q/O; keep packed loads for gate/up/down only.
+ if constexpr(N==192||(N==576&&K==576)){
  gemm_prefill_m16<N,K,Interval,Warps><<<dim3(N/(8*Warps),8),32*Warps,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,(const uint32_t*)position);
  }else{
  gemm_prefill_m16_vector<N,K,Interval,Warps><<<dim3(N/(8*Warps),8),32*Warps,0,s>>>((const __nv_bfloat16*)x,(const __nv_bfloat16*)w,(__nv_bfloat16*)y,(const uint32_t*)position);
