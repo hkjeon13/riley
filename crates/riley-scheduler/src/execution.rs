@@ -647,6 +647,7 @@ thread_local! {
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 enum DownloadedLlamaOutput {
     Logits(Vec<u8>),
+    ValidatedLogits { logits:Vec<u8>, argmax:[u32;8] },
     GreedyTokens(Vec<u32>),
 }
 
@@ -673,7 +674,7 @@ impl DownloadedLlamaIteration {
     #[must_use]
     pub fn logits_bf16_native(&self) -> &[u8] {
         match &self.output {
-            DownloadedLlamaOutput::Logits(logits) => logits,
+            DownloadedLlamaOutput::Logits(logits) | DownloadedLlamaOutput::ValidatedLogits{logits,..} => logits,
             DownloadedLlamaOutput::GreedyTokens(_) => &[],
         }
     }
@@ -682,7 +683,7 @@ impl DownloadedLlamaIteration {
     #[must_use]
     pub fn greedy_token_ids(&self) -> &[u32] {
         match &self.output {
-            DownloadedLlamaOutput::Logits(_) => &[],
+            DownloadedLlamaOutput::Logits(_) | DownloadedLlamaOutput::ValidatedLogits{..} => &[],
             DownloadedLlamaOutput::GreedyTokens(token_ids) => token_ids,
         }
     }
@@ -768,6 +769,14 @@ impl DownloadedLlamaIteration {
                 reason: "downloaded storage is shorter than its declared shape",
             },
         )
+    }
+
+    /// Raw argmax independently checked against every finite logit by V3
+    /// completion validation. Sampling constraints must still be applied.
+    #[must_use]
+    pub fn validated_argmax_for_slot(&self,slot:OutputSlot)->Option<u32>{
+        let index=slot.get()as usize;if index>=self.output_count{return None;}
+        match &self.output {DownloadedLlamaOutput::ValidatedLogits{argmax,..}=>argmax.get(index).copied(),_=>None}
     }
 
     /// Returns one device-selected greedy token for a dense output slot.
@@ -2134,6 +2143,8 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
         IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
     let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
     let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+    if prepared.output_count>8{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
+    let mut argmax=[0u32;8];
     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
         catalog_digest:identity.catalog_digest,max_active_rows:8,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
@@ -2143,7 +2154,19 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
     // Allocate before admission so allocation failure cannot follow GPU mutation.
     let rows=executor.execute_rows(expectation).map_err(|e|fail(e,None))?;
     if rows.iter().filter(|r|r.token.is_some()).count()!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
-    for row in rows {if row.token.is_some(){let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
+    for row in rows {if let Some(token)=row.token {argmax[row.output_slot as usize]=token;let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
     Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
-        output:DownloadedLlamaOutput::Logits(logits),commit_outputs:prepared.commit_outputs})
+        output:DownloadedLlamaOutput::ValidatedLogits{logits,argmax},commit_outputs:prepared.commit_outputs})
+}
+
+#[cfg(test)]
+mod validated_argmax_routing_tests {
+ use super::*;
+ #[test]
+ fn validated_logits_keep_distinct_dense_argmax_and_full_rows(){
+  let mut d=DownloadedLlamaIteration{iteration_id:IterationId::new(1).expect("nonzero iteration"),vocabulary_size:4,output_count:2,output:DownloadedLlamaOutput::ValidatedLogits{logits:vec![0;16],argmax:[3,1,0,0,0,0,0,0]},commit_outputs:vec![]};
+  assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),Some(3));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(1)),Some(1));assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(2)),None);
+  assert_eq!(d.logits_for_slot(OutputSlot::new(1)).unwrap().len(),8);assert!(d.greedy_token_ids().is_empty());
+  d.output=DownloadedLlamaOutput::Logits(vec![0;16]);assert_eq!(d.validated_argmax_for_slot(OutputSlot::new(0)),None);
+ }
 }

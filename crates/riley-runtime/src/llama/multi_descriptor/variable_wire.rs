@@ -79,6 +79,23 @@ pub const RESULT_BYTES:usize=128+49152*2;
 /// This cannot prove quiescence or perform scheduler settlement on its own.
 // A reduction permits vectorized scanning while checking every inactive byte.
 fn all_zero(bytes:&[u8])->bool {bytes.iter().fold(0u8,|bits,&value|bits|value)==0}
+// Independent accumulators shorten the maximum dependency chain. All lanes
+// reject nonfinite values; final ties still choose the lowest vocabulary ID.
+fn finite_argmax(logits:&[u8])->Result<u32>{
+ let mut maxima=[f32::NEG_INFINITY;8];let mut indices=[0u32;8];
+ let mut chunks=logits.chunks_exact(16);
+ for (block,chunk) in chunks.by_ref().enumerate(){
+  let mut nonfinite=false;
+  for lane in 0..8 {let bits=u16::from_le_bytes([chunk[2*lane],chunk[2*lane+1]]);nonfinite|=bits&0x7f80==0x7f80;let value=f32::from_bits(u32::from(bits)<<16);
+   if value>maxima[lane]{maxima[lane]=value;indices[lane]=(block*8+lane)as u32;}}
+  check(!nonfinite,"logits","nonfinite logit")?;
+ }
+ let mut maximum=f32::NEG_INFINITY;let mut token=0;
+ for lane in 0..8 {if maxima[lane]>maximum || (maxima[lane]==maximum && indices[lane]<token){maximum=maxima[lane];token=indices[lane];}}
+ let base=logits.len()/16*8;
+ for (i,word) in chunks.remainder().chunks_exact(2).enumerate(){let value=f32::from_bits(u32::from(u16::from_le_bytes([word[0],word[1]]))<<16);check(value.is_finite(),"logits","nonfinite logit")?;if value>maximum{maximum=value;token=(base+i)as u32;}}
+ Ok(token)
+}
 pub fn validate_result<'a>(bytes:&'a[u8],e:&Expectation)->Result<(Option<u32>,&'a[u8])>{
     validate(e)?;
     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
@@ -93,9 +110,7 @@ fn validate_result_row<'a>(bytes:&'a[u8],e:&Expectation,index:usize)->Result<(Op
     check(bytes[..128]==expected,"result_identity","completion differs from outstanding expectation")?;
     let logits=&bytes[128..];
     if !published {check(all_zero(logits) && token==0,"partial_output","partial prefill produced output")?;return Ok((None,logits));}
-    let mut maximum=f32::NEG_INFINITY;let mut host_token=0;
-    for (i,word) in logits.chunks_exact(2).enumerate(){let v=f32::from_bits(u32::from(u16::from_le_bytes([word[0],word[1]]))<<16);
-        check(v.is_finite(),"logits","nonfinite logit")?;if v>maximum {maximum=v;host_token=i as u32;}}
+    let host_token=finite_argmax(logits)?;
     check(token==host_token,"argmax","token differs from published logits")?;
     Ok((Some(token),logits))
 }
@@ -192,4 +207,20 @@ mod tests {
         }
     }
 
+}
+
+#[cfg(test)]
+mod lane_argmax_tests {
+ use super::*;
+ #[test]
+ fn independent_lanes_match_scalar_and_reject_nonfinite(){
+  for size in [1,7,8,9,16,257,49152] {for seed in 0..8 {
+   let words:Vec<u16>=(0..size).map(|i|match (i+seed)%13 {0=>0,1=>0x8000,_=>((i*139+seed*73)%0x7f80)as u16 | if i%2==0{0x8000}else{0}}).collect();let mut bytes:Vec<_>=words.iter().flat_map(|x|x.to_le_bytes()).collect();
+   let mut maximum=f32::NEG_INFINITY;let mut expected=0;
+   for(i,&word)in words.iter().enumerate(){let value=f32::from_bits(u32::from(word)<<16);if value>maximum{maximum=value;expected=i as u32;}}
+   assert_eq!(finite_argmax(&bytes).unwrap(),expected);
+   for bad in [0x7f80u16,0xff80,0x7fc0,0xff81] {for at in [0,size/2,size-1]{let old=[bytes[at*2],bytes[at*2+1]];bytes[at*2..at*2+2].copy_from_slice(&bad.to_le_bytes());assert!(finite_argmax(&bytes).is_err());bytes[at*2..at*2+2].copy_from_slice(&old);}}
+  }}
+  for winner in 0..32 {let mut values=vec![0xbf80u16;32];values[winner]=0;values[(winner+8).min(31)]=0x8000;let bytes:Vec<_>=values.iter().flat_map(|x|x.to_le_bytes()).collect();assert_eq!(finite_argmax(&bytes).unwrap(),winner as u32);}
+ }
 }

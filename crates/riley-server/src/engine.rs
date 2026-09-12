@@ -2783,6 +2783,11 @@ mod cuda_backend {
                         })?,
                         Some(0.0),
                     )
+                } else if let Some(token)=super::reuse_validated_argmax(
+                    downloaded.validated_argmax_for_slot(slot),downloaded.vocabulary_size(),self.addressable_tokens,
+                    request.state.masked_finish_token_ids(),request.state.history_token_ids(),request.state.request().sampling_params) {
+                    request.state.sampling_rng().map_err(|source|internal(format!("sampling RNG failed: {source}")))?;
+                    (token,Some(0.0))
                 } else {
                     let logits = downloaded
                         .logits_for_slot(slot)
@@ -4408,4 +4413,32 @@ mod tests {
         let incomplete = [b'o', b'k', 0xe2, 0x82];
         assert_eq!(visible_utf8_prefix(&incomplete), "ok");
     }
+}
+
+#[cfg(any(feature="cuda",test))]
+fn reuse_validated_argmax(candidate:Option<u32>,vocabulary:usize,addressable:usize,masked:&[u32],history:&[u32],params:riley_runtime::sampling::SamplingParams)->Option<u32>{
+ let token=candidate?;
+ if params.temperature!=0.0 || params.repetition_penalty!=1.0 || params.validate(vocabulary).is_err()
+  || addressable>vocabulary || token as usize>=addressable
+  || masked.iter().any(|&id|id as usize>=vocabulary || id==token)
+  || history.iter().any(|&id|id as usize>=vocabulary){return None;}
+ Some(token)
+}
+
+#[cfg(test)]
+mod validated_argmax_tests {
+ use super::*;
+ #[test]
+ fn reuse_requires_eligible_validated_candidate(){
+  let p=riley_runtime::sampling::SamplingParams{temperature:0.0,..Default::default()};
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[7],&[1,1],p),Some(3));
+  assert_eq!(reuse_validated_argmax(None,8,8,&[],&[],p),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[3],&[],p),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,3,&[],&[],p),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[8],&[],p),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[8],p),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{temperature:0.5,..p}),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{repetition_penalty:1.1,..p}),None);
+  assert_eq!(reuse_validated_argmax(Some(3),8,8,&[],&[],riley_runtime::sampling::SamplingParams{top_k:Some(0),..p}),None);
+ }
 }
