@@ -283,7 +283,7 @@ struct RileyCudaCanonicalGemmBf16GraphState {
         plan_lease_held(false),
         input_lease_held(false),
         weight_lease_held(false),
-        workspace_lease_held(false), selected_no_split(false) {}
+        workspace_lease_held(false), selected_no_split(false), strided_m1(false) {}
 
   RileyCudaGemmPlan* plan;
   RileyCudaDeviceBuffer* input;
@@ -300,6 +300,7 @@ struct RileyCudaCanonicalGemmBf16GraphState {
   bool workspace_lease_held;
   // Additive contract: preserve policy, require effective no-split, optional workspace parent.
   bool selected_no_split;
+  bool strided_m1;
 };
 
 // C05-22 combines generic canonical RMSNorm with a canonical cuBLASLt GEMM.
@@ -1072,7 +1073,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* out_state,
-    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split = false) noexcept;
+    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split = false, bool strided_m1 = false) noexcept;
 RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
     const char* operation) noexcept;

@@ -1752,6 +1752,18 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
+        stream: *mut RawStream,
+        plan: *mut RawGemmPlan,
+        input: *mut RawDeviceBuffer,
+        weight: *mut RawDeviceBuffer,
+        output: *mut RawDeviceBuffer,
+        workspace: *mut RawDeviceBuffer,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
         capture: *mut RawGraphCapture,
         out_graph_error: *mut RawGraphErrorInfo,
@@ -4781,6 +4793,91 @@ impl StreamHandle {
         // validates null workspace against the selected algorithm requirement.
         let status = unsafe {
             riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
+                self.as_ptr(),
+                plan.as_ptr(),
+                input.as_ptr(),
+                weight.as_ptr(),
+                output.as_ptr(),
+                workspace.map_or(ptr::null_mut(), DeviceBufferHandle::as_ptr),
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native canonical cuBLASLt GEMM capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native canonical cuBLASLt GEMM capture returned success without a valid owned capture handle",
+        ))
+    }
+    pub(super) fn begin_graph_strided_m1_gemm_bf16_capture(
+        &mut self,
+        plan: &GemmPlanHandle,
+        input: &DeviceBufferHandle,
+        weight: &DeviceBufferHandle,
+        output: &DeviceBufferHandle,
+        workspace: Option<&DeviceBufferHandle>,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph canonical BF16 cuBLASLt GEMM capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the borrowed owner retains the plan, stream, exact I/O and
+        // optional workspace parent through close or known abort. Native
+        // validates null workspace against the selected algorithm requirement.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
                 self.as_ptr(),
                 plan.as_ptr(),
                 input.as_ptr(),

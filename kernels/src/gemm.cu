@@ -1074,9 +1074,9 @@ bool anchored_config_is_compatible(const RileyCudaGemmConfig& anchor,
 namespace riley_cuda_internal {
 namespace {
 
-bool canonical_gemm_bf16_plan_is_ready(
-    const RileyCudaGemmPlan* plan) noexcept {
-  if (plan == nullptr || plan->owner == nullptr || plan->batch_count != 1 || !plan->algorithm_ready ||
+bool gemm_bf16_plan_is_ready(
+    const RileyCudaGemmPlan* plan, bool strided_m1) noexcept {
+  if (plan == nullptr || plan->owner == nullptr || (strided_m1 ? (plan->batch_count != 2 && plan->batch_count != 4) : plan->batch_count != 1) || !plan->algorithm_ready ||
       plan->handle == nullptr || plan->operation == nullptr ||
       plan->weight_layout == nullptr || plan->input_layout == nullptr ||
       plan->output_layout == nullptr || plan->preference == nullptr ||
@@ -1114,10 +1114,14 @@ bool canonical_gemm_bf16_plan_is_ready(
   return true;
 }
 
+bool canonical_gemm_bf16_plan_is_ready(const RileyCudaGemmPlan* plan) noexcept {
+  return gemm_bf16_plan_is_ready(plan, false);
+}
+
 bool canonical_gemm_bf16_state_metadata_is_valid(
     const RileyCudaGemmPlan* plan,
     const RileyCudaCanonicalGemmBf16GraphState& state) noexcept {
-  return canonical_gemm_bf16_plan_is_ready(plan) && state.plan == plan &&
+  return gemm_bf16_plan_is_ready(plan, state.strided_m1) && state.plan == plan &&
          (state.selected_no_split || plan->config.flags == 0) &&
          state.input_byte_len == plan->input_bytes &&
          state.weight_byte_len == plan->weight_bytes &&
@@ -1134,7 +1138,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
     RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaCanonicalGemmBf16GraphState* out_state,
-    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split) noexcept {
+    RileyCudaErrorInfo* error, const char* operation, bool selected_no_split, bool strided_m1) noexcept {
   if (out_state == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
@@ -1147,7 +1151,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "canonical GEMM graph plan, stream, or fixed allocation is null");
   }
-  if (!canonical_gemm_bf16_plan_is_ready(plan) ||
+  if (!gemm_bf16_plan_is_ready(plan, strided_m1) || (strided_m1 && !selected_no_split) ||
       (!selected_no_split && plan->config.flags != 0) ||
       !same_context(plan->owner, stream->owner) ||
       plan->owner->restoration_failed.load(std::memory_order_acquire)) {
@@ -1204,6 +1208,7 @@ RileyCudaStatus preflight_canonical_gemm_bf16_graph_state(
     }
   }
   out_state->selected_no_split = selected_no_split;
+  out_state->strided_m1 = strided_m1;
   out_state->plan = plan;
   out_state->input = input;
   out_state->weight = weight;
@@ -1224,7 +1229,7 @@ bool aggregate_gemm_plan_matches_context(
 RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
     const char* operation) noexcept {
-  if (!canonical_gemm_bf16_plan_is_ready(plan) ||
+  if (!(canonical_gemm_bf16_plan_is_ready(plan) || gemm_bf16_plan_is_ready(plan, true)) ||
       !try_acquire_exclusive_use(plan->active_uses)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
@@ -1235,7 +1240,7 @@ RileyCudaStatus acquire_canonical_gemm_bf16_graph_plan_lease(
 
 bool release_canonical_gemm_bf16_graph_plan_lease(
     RileyCudaGemmPlan* plan) noexcept {
-  return canonical_gemm_bf16_plan_is_ready(plan) &&
+  return (canonical_gemm_bf16_plan_is_ready(plan) || gemm_bf16_plan_is_ready(plan, true)) &&
          release_exclusive_use(plan->active_uses);
 }
 

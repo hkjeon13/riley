@@ -81,6 +81,30 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
                     };
                     plan.execute(&mut params, &mut stream)?;
                 }
+                y.upload_from_slice(
+                    0,
+                    &vec![0x5a; config.output_bytes() as usize],
+                    &mut staging,
+                    &mut stream,
+                )?;
+                let mut graph = riley_cuda::BorrowedStridedGemmGraph::prepare(
+                    riley_cuda::BorrowedStridedGemmResources {
+                        stream: &mut stream,
+                        plan: &mut plan,
+                        input: &mut x,
+                        weight: &mut w,
+                        output: &mut y,
+                        workspace: None,
+                    },
+                )?;
+                for _ in 0..3 {
+                    graph.replay()?;
+                }
+                if padded {
+                    graph.close()?;
+                } else {
+                    drop(graph);
+                }
                 let mut output = vec![0; config.output_bytes() as usize];
                 y.download_to_slice(0, &mut output, &mut staging, &mut stream)?;
                 for row in 0..batch as usize {
@@ -111,7 +135,7 @@ fn strided_rust_owner_executes_rows_and_preserves_padding() -> Result<(), Box<dy
     }
     assert_eq!(checked, 20);
     println!(
-        "STRIDED_RUST_OWNER cases=20 exact_impulse_outputs=true padding_preserved=true invalid_span_reuse=true"
+        "STRIDED_RUST_OWNER cases=20 exact_impulse_outputs=true padding_preserved=true invalid_span_reuse=true strided_graph_replays=60 explicit_and_drop_close=true"
     );
     Ok(())
 }

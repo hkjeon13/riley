@@ -10042,7 +10042,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
     RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
-    RileyCudaErrorInfo* error, bool selected_no_split = false) noexcept {
+    RileyCudaErrorInfo* error, bool selected_no_split = false, bool strided_m1 = false) noexcept {
   using riley_cuda_internal::clear_error;
 
   clear_error(error);
@@ -10080,7 +10080,7 @@ RileyCudaStatus capture_begin_canonical_gemm_bf16_impl(
   RileyCudaStatus status =
       riley_cuda_internal::preflight_canonical_gemm_bf16_graph_state(
           plan, stream, input, weight, output, workspace, &graph_state,
-          error, kBeginCanonicalGemmBf16Operation, selected_no_split);
+          error, kBeginCanonicalGemmBf16Operation, selected_no_split, strided_m1);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
@@ -11525,6 +11525,19 @@ riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
   return capture_begin_canonical_gemm_bf16_impl(
       stream, plan, input, weight, output, workspace, mode, out_capture,
       out_graph_error, error, true);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_canonical_gemm_bf16_impl(
+      stream, plan, input, weight, output, workspace, mode, out_capture,
+      out_graph_error, error, true, true);
 }
 
 extern "C" RileyCudaStatus

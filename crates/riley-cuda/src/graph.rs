@@ -4,6 +4,8 @@
 //! keeping graph end, instantiate, and replay behind a later resource-lifetime
 //! slice. CPU vocabulary/lifecycle validation still fails closed.
 
+mod borrowed_strided_gemm;
+pub use borrowed_strided_gemm::{BorrowedStridedGemmGraph, BorrowedStridedGemmResources};
 mod borrowed_h2d;
 pub use borrowed_h2d::{BorrowedH2DGraph, BorrowedH2DResources};
 mod borrowed_output;

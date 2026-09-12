@@ -1595,6 +1595,15 @@ RileyCudaStatus riley_cuda_graph_capture_begin_selected_no_split_gemm_bf16(
     RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+/* Explicit strided-M1 graph admission; retains the full batch allocations. */
+RileyCudaStatus riley_cuda_graph_capture_begin_strided_m1_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* plan,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* weight,
+    RileyCudaDeviceBuffer* output, RileyCudaDeviceBuffer* workspace,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Enqueues the one capture-only cublasLtMatmul node for a capture created by
 // riley_cuda_graph_capture_begin_canonical_gemm_bf16. A failed submission is
 // terminal and abort-only; ordinary graph end and close APIs perform recovery.
