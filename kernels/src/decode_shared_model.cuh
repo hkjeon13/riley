@@ -29,6 +29,11 @@ __global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,con
   values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
  }
 }
+// Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
+__global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
+ uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>8||row<rows)return;
+ for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
+}
 inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context){
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
@@ -55,6 +60,7 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  enqueue_shared_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<8,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,8);
  }
+ clear_inactive_hidden<<<8,256,0,stream>>>(b(1),active);
  return cudaGetLastError();
 }
 }
