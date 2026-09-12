@@ -17,7 +17,9 @@ __device__ void mma(float* d,uint32_t a0,uint32_t a1,uint32_t a2,uint32_t a3,uin
 __device__ int cache_index(int token,int head,int dim,const uint32_t* blocks){
  return blocks ? ((blocks[token/16]*3+head)*16+token%16)*64+dim : (token*3+head)*64+dim;
 }
-__global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks){
+__global__ void attention_shape(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,const uint32_t* live_rows=nullptr){
+ if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
+ if(blockIdx.x>=static_cast<uint32_t>(rows))return;
  if(dynamic_n)n=*dynamic_n+1;
  int lane=threadIdx.x%32,warp=threadIdx.x/32,group=lane/4,t=lane%4;
  int row=blockIdx.x,kvh=blockIdx.y,qh=kvh*3+warp,count=n-rows+row+1;

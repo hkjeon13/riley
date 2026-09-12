@@ -2,9 +2,13 @@
 // Caller retains all parents and validates a unique logical-to-physical page map,
 // its full extent, and allocation sizes before enqueue; no host publication here.
 #pragma once
+#include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <stdint.h>
 __global__ void prefill_shape_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,
  __nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,
- const uint32_t* pages,uint32_t start,uint32_t rows){
+ const uint32_t* pages,uint32_t start,uint32_t rows,const uint32_t* shape=nullptr){
+ if(shape){uint32_t live=shape[2];if(!live||live>rows)return;rows=live;start=shape[4];}
  const uint32_t row=blockIdx.y;if(row>=rows)return;
  int i=threadIdx.x+blockIdx.x*blockDim.x;if(i>=384)return;
  const uint32_t pos=start+row;int head=i/32,dim=i%32;
