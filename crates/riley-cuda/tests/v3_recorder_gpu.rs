@@ -12,6 +12,7 @@ for i in 0..count{p32(&mut p,13440+i as usize*4,33);}p}
 fn v3_recorder_head_and_partial_completion()->Result<(),Box<dyn std::error::Error>>{
 let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;let mut upload=context.allocate_pinned_host_buffer(1<<20)?;
 let mut sizes=vec![1152*32;5];sizes.extend([384*32,384*32,384*32,3072*32,3072*32,2304*32,3072*32]);sizes.extend([30*4*16*384,30*4*16*384,64*128,64*128,17536,1152,128,4,98304,8,56623104,1152,663552,221184,1769472]);
+sizes[7]=sizes[7].max(9*4096*4);
 let mut buffers=vec![];for size in sizes{let mut b=context.allocate_device_buffer(size)?;b.upload_from_slice(0,&vec![0;size as usize],&mut upload,&mut stream)?;buffers.push(b);}
 let mut weights=vec![22,23,22];for _ in 0..30{weights.extend([23,24,25,25,24,23,26,26,26]);}
 let mut head=context.prepare_gemm(CudaGemmConfig::new(1,49152,576,0)?)?;let mut staging=context.allocate_pinned_host_buffer(196864)?;

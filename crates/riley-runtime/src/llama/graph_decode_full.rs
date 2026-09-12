@@ -2080,7 +2080,8 @@ impl PreparedLlamaBatchExecutor {
         }
         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
-        for source in [include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
+        for source in [include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
+            include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_rope_kv.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_attention.cuh").as_slice(),

@@ -79,7 +79,7 @@ impl VariableGraphBuffers {
         let _=config;
         let sizes=[1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072];
         let mut devices=Vec::with_capacity(18);
-        for bytes in sizes {devices.push(context.allocate_device_buffer(bytes*capacity as u64)?);}
+        for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         Ok(Self{devices,staging:context.allocate_pinned_host_buffer(196864)?,
             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
