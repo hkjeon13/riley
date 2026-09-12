@@ -201,6 +201,11 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/graph_numerics.cu"),
         kernels_dir.join("src/graph_numerics_precise.cu"),
         kernels_dir.join("src/decode_tiled.cuh"),
+        kernels_dir.join("src/decode_shared.cuh"),
+        kernels_dir.join("src/decode_shared_attention.cuh"),
+        kernels_dir.join("src/decode_shared_model.cuh"),
+        kernels_dir.join("src/decode_shared_result.cuh"),
+
         kernels_dir.join("src/decode_shape.cuh"),
         kernels_dir.join("src/prefill_shape_model.cuh"),
         kernels_dir.join("src/prefill_shape_projection.cuh"),
