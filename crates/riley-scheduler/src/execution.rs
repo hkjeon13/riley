@@ -2138,25 +2138,56 @@ pub fn execute_llama_iteration_variable_graph<G:riley_runtime::llama::variable_s
     authority:&crate::AuthorizedExecution<'_>,
     executor:&mut riley_runtime::llama::variable_session::VariableSession<G,ROWS>,
 ) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+    execute_llama_iteration_variable_graph_mode(authority,executor,false)
+}
+
+/// Selects the completion format before dispatch; no model replay is used to fall back.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_variable_graph_mode<G:riley_runtime::llama::variable_session::VariableGraph,const ROWS:usize>(
+    authority:&crate::AuthorizedExecution<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,ROWS>,
+    compact_greedy:bool,
+) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+    execute_variable_graph_impl(authority,executor,compact_greedy,None)
+}
+/// Uses the caller-owned token allocation and leaves the standard empty placeholder.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_variable_graph_greedy_workspace<G:riley_runtime::llama::variable_session::VariableGraph,const ROWS:usize>(
+    authority:&crate::AuthorizedExecution<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,ROWS>,
+    workspace:&mut Vec<u32>,
+) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+    execute_variable_graph_impl(authority,executor,true,Some(workspace))
+}
+#[cfg(feature = "cuda")]
+fn execute_variable_graph_impl<G:riley_runtime::llama::variable_session::VariableGraph,const ROWS:usize>(
+    authority:&crate::AuthorizedExecution<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,ROWS>,
+    compact_greedy:bool,workspace:Option<&mut Vec<u32>>,
+) -> Result<DownloadedLlamaIteration,IterationExecutionFailure> {
     let id=authority.plan().iteration_id();
     let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,
         IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
     let prepared=PreparedLlamaIteration::prepare(authority.plan()).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
-    let mut logits=zeroed_vec(prepared.output_count*49152*2,"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
+    if compact_greedy && !executor.supports_compact_greedy(){return Err(fail(crate::descriptor::Error{field:"V4 compact",reason:"session lacks compact graph"},Some(ExecutionAbort::NotDispatched)));}
+    let mut local_tokens=if compact_greedy && workspace.is_none(){reserve_vec(prepared.output_count,"V4 compact tokens").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?}else{Vec::new()};
+    let tokens=workspace.unwrap_or(&mut local_tokens);
+    if compact_greedy {prepare_greedy_token_workspace(tokens,prepared.output_count).map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;}
+    let mut logits=zeroed_vec(if compact_greedy{0}else{prepared.output_count*49152*2},"V3 logits").map_err(|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e))?;
     if prepared.output_count>ROWS || ROWS>16{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
     let mut argmax=[0u32;16];
     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
     let owner=crate::authority::VariableOwnerGeometry {generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
         catalog_digest:identity.catalog_digest,max_active_rows:ROWS as u32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
-    let expectation=match authority.variable_descriptor_expectation_rows::<ROWS>(&owner,replay,&cookies,crate::descriptor::ResultMode::FullLogits) {
+    let expectation=match authority.variable_descriptor_expectation_rows::<ROWS>(&owner,replay,&cookies,if compact_greedy{crate::descriptor::ResultMode::Greedy}else{crate::descriptor::ResultMode::FullLogits}) {
         Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
     };
     // Allocate before admission so allocation failure cannot follow GPU mutation.
     let rows=executor.execute_rows(expectation).map_err(|e|fail(e,None))?;
     if rows.iter().filter(|r|r.token.is_some()).count()!=prepared.output_count {return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"publication differs from plan"},None));}
-    for row in rows {if let Some(token)=row.token {argmax[row.output_slot as usize]=token;let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}
+    for row in rows {if let Some(token)=row.token {if compact_greedy {tokens[row.output_slot as usize]=token;}else{argmax[row.output_slot as usize]=token;let start=row.output_slot as usize*98304;logits[start..start+98304].copy_from_slice(row.logits);}}}
     Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
-        output:DownloadedLlamaOutput::ValidatedLogits{logits,argmax},commit_outputs:prepared.commit_outputs})
+        output:if compact_greedy{DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens))}else{DownloadedLlamaOutput::ValidatedLogits{logits,argmax}},commit_outputs:prepared.commit_outputs})
 }
 
 #[cfg(test)]

@@ -925,8 +925,8 @@ fn run_serve(
     }
     if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
-        || options.sampling_backend!=SamplingBackendMode::Cpu) {
-        return Err("variable-smol-v3 requires capacity1/2/4/8/16/32, CPU sampling, fixed-max shape and a token budget covering all active rows, at most1024".to_owned());
+        || (options.sampling_backend!=SamplingBackendMode::Cpu && !options.variable_graph16)) {
+        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4".to_owned());
     }
     if options.vllm_smol_p128_graph
         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)

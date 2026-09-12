@@ -1,5 +1,6 @@
 #include <vector>
 #include "ffi_internal.hpp"
+#include "compact_shared_result.cuh"
 #include "prefill_shape_packet.hpp"
 #include <cublasLt.h>
 #include <new>
@@ -40,6 +41,9 @@ struct RileyCudaGraphResources {
   // They share every parent and are only replayed sequentially on this stream.
   cudaGraph_t prefill_graph = nullptr;
   cudaGraphExec_t prefill_exec = nullptr;
+  cudaGraph_t compact_graph[2]{};
+  cudaGraphExec_t compact_exec[2]{};
+  bool compact_ready=false,last_compact=false;
   RileyCudaPinnedHostBuffer* input = nullptr;
   RileyCudaPinnedHostBuffer* output = nullptr;
   uint64_t transfer_bytes = 0;
@@ -200,6 +204,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
   if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
       (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
+      (*resources)->compact_graph[0] || (*resources)->compact_exec[0] ||
+      (*resources)->compact_graph[1] || (*resources)->compact_exec[1] ||
       (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
       (*resources)->catalog[1].graph || (*resources)->catalog[1].exec ||
       (*resources)->catalog[2].graph || (*resources)->catalog[2].exec ||
@@ -236,6 +242,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
                              RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
       else (*resources)->completion_unknown = true;
+    }
+    for(int i=0;i<2;++i){
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&(*resources)->compact_exec[i]){
+        status=runtime_error(cudaGraphExecDestroy((*resources)->compact_exec[i]),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)(*resources)->compact_exec[i]=nullptr;else (*resources)->completion_unknown=true;
+      }
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&(*resources)->compact_graph[i]){
+        status=runtime_error(cudaGraphDestroy((*resources)->compact_graph[i]),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)(*resources)->compact_graph[i]=nullptr;else (*resources)->completion_unknown=true;
+      }
     }
     for(auto& entry:(*resources)->catalog){
       if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.exec){
@@ -336,6 +352,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   // Any attempted replay invalidates the previous result, even preflight errors.
   r->completion_visible = false;
+  r->last_compact = false;
   r->last_catalog = 0;
   if (r->exec == nullptr || source == nullptr || bytes != (r->v3_prefill_capacity?(128+r->variable_rows*1664+4096):r->transfer_bytes))
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
@@ -351,6 +368,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   }
   auto selected_exec = r->exec;
   if(r->v3_prefill_capacity){uint32_t stage;std::memcpy(&stage,source+16,4);if(stage==0){if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");selected_exec=r->prefill_exec;}}
+  if(r->compact_ready){
+    uint32_t mode,stage;std::memcpy(&mode,source+32,4);std::memcpy(&stage,source+16,4);
+    if(mode==0){
+      if(stage>1||!r->compact_exec[stage])return reject(error,"compact stage capture missing");
+      selected_exec=r->compact_exec[stage];r->last_compact=true;
+    }
+  }
   if(r->decode_capacity!=0){
     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
     const uint64_t capacity=r->decode_capacity,pos=u32(4),live=pos/16+1;
@@ -439,7 +463,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(
   clear_error(error);
   auto status = transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
-  if (r->last_catalog != 0 || !r->completion_visible || destination == nullptr || bytes != r->transfer_bytes)
+  if (r->last_catalog != 0 || !r->completion_visible || destination == nullptr || bytes != (r->last_compact?r->variable_rows*128:r->transfer_bytes))
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "no completed output of the requested size");
   std::memmove(destination, static_cast<uint8_t*>(r->output->host_data) + r->output_byte_offset, static_cast<size_t>(bytes));
@@ -1188,12 +1212,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  return status;
 }
 
-template<uint32_t Rows>
+template<uint32_t Rows,bool Compact=false>
 static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
  static_assert(Rows==8||Rows==16,"wire capacity");
+ static_assert(!Compact||Rows==16,"compact capture currently requires sixteen rows");
  constexpr uint64_t request_bytes=128+Rows*1664+4096;
  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
  if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
@@ -1227,7 +1252,7 @@ static RileyCudaStatus record_variable_shared(
  if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
  constexpr uint64_t transfer=Rows*98432;
  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
- auto record_shape=[&](uint32_t row_capacity) noexcept {
+ auto record_shape=[&](uint32_t row_capacity,bool compact=false) noexcept {
   return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
   auto* host=static_cast<uint8_t*>(staging->host_data);
   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
@@ -1236,13 +1261,23 @@ static RileyCudaStatus record_variable_shared(
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:enqueue_compiled_v4_shared_model)(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
+   if(compact){
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact decode validation");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+    return result;
+   }
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_result:enqueue_compiled_v4_shared_result)(r->stream->stream,d[16]->device_data,d[24]->device_data,d[18]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared completion");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,transfer,cudaMemcpyDeviceToHost);
    return result;
   }
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
+  if(!compact&&result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:enqueue_compiled_v4_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
+  if(compact){
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact prefill validation");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+   return result;
+  }
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_decode_argmax(r->stream->stream,d[20]->device_data,d[21]->device_data,49152),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 argmax");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_result_header:enqueue_compiled_v4_result_header)(r->stream->stream,d[16]->device_data,d[18]->device_data,d[19]->device_data,d[21]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 completion header");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[25]->device_data,d[18]->device_data,128,cudaMemcpyDeviceToDevice);
@@ -1251,8 +1286,17 @@ static RileyCudaStatus record_variable_shared(
   return result;
  },error);};
  status=record_shape(capacity);
- if(status==RILEY_CUDA_STATUS_SUCCESS){r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;status=record_shape(1);}
- if(status==RILEY_CUDA_STATUS_SUCCESS){r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
+ if(status==RILEY_CUDA_STATUS_SUCCESS){
+  r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;
+  if constexpr(Compact){
+   for(int stage=0;stage<2&&status==RILEY_CUDA_STATUS_SUCCESS;++stage){
+    status=record_shape(stage==0?capacity:1,true);
+    if(status==RILEY_CUDA_STATUS_SUCCESS){r->compact_graph[stage]=r->graph;r->compact_exec[stage]=r->exec;r->graph=nullptr;r->exec=nullptr;}
+   }
+  }
+  if(status==RILEY_CUDA_STATUS_SUCCESS)status=record_shape(1);
+ }
+ if(status==RILEY_CUDA_STATUS_SUCCESS){r->compact_ready=Compact;r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
  return status;
 }
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_shared(
@@ -1267,4 +1311,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v4_shared(
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
  return record_variable_shared<16>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v4_shared_greedy(
+ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+ return record_variable_shared<16,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
 }

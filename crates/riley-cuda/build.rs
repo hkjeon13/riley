@@ -215,6 +215,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/prefill_shape_projection.cuh"),
         kernels_dir.join("src/prefill_shape_attention.cuh"),
         kernels_dir.join("src/prefill_query_tile_attention.cuh"),
+        kernels_dir.join("src/compact_shared_result.cuh"),
         kernels_dir.join("src/prefill_shape_rope_kv.cuh"),
         kernels_dir.join("src/prefill_shape_pointwise.cuh"),
         kernels_dir.join("src/prefill_shape_packet.hpp"),
