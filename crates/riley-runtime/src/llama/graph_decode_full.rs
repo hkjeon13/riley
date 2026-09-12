@@ -1946,3 +1946,7 @@ mod owned_tests {
         Ok(())
     }
 }
+
+#[cfg(all(test, feature = "cuda"))]
+#[path = "graph_decode_multisequence_model_gpu.rs"]
+mod multisequence_model_gpu;
