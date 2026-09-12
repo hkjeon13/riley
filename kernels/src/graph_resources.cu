@@ -17,7 +17,7 @@ struct RileyCudaGraphResources {
     uint64_t transfer=0;
     uint32_t bucket=0,physical=0,full=0;
   };
-  CatalogEntry catalog[2]{};
+  CatalogEntry catalog[3]{};
   uint32_t last_catalog=0;
   bool catalog_sealed=false;
   enum class Kind { Counter, Plan };
@@ -197,7 +197,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
   if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
       (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
       (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
-      (*resources)->catalog[1].graph || (*resources)->catalog[1].exec) {
+      (*resources)->catalog[1].graph || (*resources)->catalog[1].exec ||
+      (*resources)->catalog[2].graph || (*resources)->catalog[2].exec) {
     CaptureDomainControlLease admission((*resources)->owner->capture_domain);
     if (!admission.active())
       return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,

@@ -10,14 +10,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
   auto status=transfer_ready(r,error);
   if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
   if(!d||!w||!plans||!staging||device_count!=18||weight_count!=333||plan_count!=5||
-      (bucket!=2&&bucket!=4)||physical<10||physical>4096||full>1||r->graph||r->exec||
+      (bucket!=2&&bucket!=4&&bucket!=8)||physical<10||physical>4096||full>1||r->graph||r->exec||
       r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
       !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses))
     return reject(error,"multi decode catalog or parents invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
-  const uint64_t result=640+(full?uint64_t(bucket)*98304:0),transfer=result>1280?result:1280;
+  const uint64_t result=1152+(full?uint64_t(bucket)*98304:0),transfer=result>1792?result:1792;
   const uint64_t sizes[18]={1152ULL*bucket,1152ULL*bucket,1920ULL*bucket,
       1152ULL*bucket,1152ULL*bucket,1152ULL*bucket,2304ULL*bucket,6144ULL*bucket,
-      3072ULL*bucket,1152ULL*bucket,98304ULL*bucket,1280,result,8ULL*bucket,
+      3072ULL*bucket,1152ULL*bucket,98304ULL*bucket,1792,result,8ULL*bucket,
       384ULL*16*physical*30,384ULL*16*physical*30,160*128,160*128};
   if(staging->byte_len!=2*transfer)return reject(error,"multi staging extent invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<18;++i){
@@ -55,7 +55,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_multisequence_decod
     const auto stream=r->stream->stream;
     auto kernel=[&](cudaError_t e){return runtime_error(e,error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"multi decode kernel");};
     auto gemm=[&](size_t state,size_t output){return enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[output],states[state],error,"multi decode GEMM");};
-    auto s=runtime_error(cudaMemcpyAsync(d[11]->device_data,staging->host_data,1280,cudaMemcpyHostToDevice,stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"multi packet upload");
+    auto s=runtime_error(cudaMemcpyAsync(d[11]->device_data,staging->host_data,1792,cudaMemcpyHostToDevice,stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"multi packet upload");
     if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_multi_embedding(stream,w[0]->device_data,d[11]->device_data,d[0]->device_data,bucket));
     if(s==RILEY_CUDA_STATUS_SUCCESS)s=kernel(enqueue_compiled_norm_rows(stream,d[0]->device_data,nullptr,w[3]->device_data,nullptr,d[1]->device_data,0,bucket));
     for(size_t l=0;l<30&&s==RILEY_CUDA_STATUS_SUCCESS;++l){

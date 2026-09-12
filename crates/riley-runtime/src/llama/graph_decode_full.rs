@@ -269,7 +269,7 @@ impl PreparedLlamaBatchExecutor {
                         &multi_weights,
                         &std::array::from_fn(|i| index * 5 + i),
                         index + 1,
-                        if index == 0 { 2 } else { 4 },
+                        [2, 4, 8][index],
                         geometry[1] as u32,
                         true,
                     )

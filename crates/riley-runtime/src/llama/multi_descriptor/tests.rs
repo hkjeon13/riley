@@ -1,9 +1,9 @@
 use super::*;
 
-const GOLDEN_REQUEST: &[u8] = include_bytes!("fixtures/request-n3.bin");
-const GOLDEN_RESULT: &[u8] = include_bytes!("fixtures/result-n3.bin");
+const GOLDEN_REQUEST: &[u8] = include_bytes!("fixtures/request-n3-v2.bin");
+const GOLDEN_RESULT: &[u8] = include_bytes!("fixtures/result-n3-v2.bin");
 
-fn catalog() -> Vec<CatalogEntry> {
+fn catalog(max: u32) -> Vec<CatalogEntry> {
     let mut result = Vec::new();
     for mode in [ResultMode::Greedy, ResultMode::FullLogits] {
         result.push(CatalogEntry {
@@ -11,7 +11,7 @@ fn catalog() -> Vec<CatalogEntry> {
             bucket: 1,
             mode,
         });
-        for bucket in [1, 2, 4] {
+        for bucket in [1, 2, 4, 8].into_iter().filter(|b| *b <= max) {
             result.push(CatalogEntry {
                 stage: Stage::Decode,
                 bucket,
@@ -85,7 +85,7 @@ fn expectation() -> SubmissionExpectation {
             catalog_digest: [0x5a; 32],
             max_active_rows: 4,
             physical_block_count: 40,
-            catalog: catalog(),
+            catalog: catalog(4),
         },
         replay_id: 7,
         iteration_id: 42,
@@ -112,9 +112,12 @@ fn prefill() -> SubmissionExpectation {
 fn shape(active: usize, mode: ResultMode) -> SubmissionExpectation {
     let mut e = expectation();
     e.mode = mode;
-    if active == 4 {
+    if active >= 4 {
+        e.owner.max_active_rows = if active > 4 { 8 } else { 4 };
+        e.owner.physical_block_count = e.owner.max_active_rows * 10;
+        e.owner.catalog = catalog(e.owner.max_active_rows);
         // Distinct four-request fixture, canonical nine-block targets.
-        e.rows = (0..4)
+        e.rows = (0..active as u64)
             .map(|i| {
                 row(
                     100 + i,
@@ -171,7 +174,7 @@ fn synthetic_result(e: &SubmissionExpectation) -> Vec<u8> {
             put32(&mut bytes, b + off, value).unwrap();
         }
         if e.mode == ResultMode::FullLogits {
-            put64(&mut bytes, b + 96, (640 + i * LOGITS_BYTES) as u64).unwrap();
+            put64(&mut bytes, b + 96, (1152 + i * LOGITS_BYTES) as u64).unwrap();
             put64(&mut bytes, b + 104, LOGITS_BYTES as u64).unwrap();
         }
     }
@@ -236,27 +239,27 @@ fn every_request_byte_is_bound_in_both_stages() {
 fn p128_compatibility_view_and_all_prompt_tokens() {
     let e = prefill();
     let bytes = encode_request(&e).unwrap();
-    assert_eq!(&bytes[640..720], &bytes[128..208]);
-    assert_eq!(read32(&bytes, 720).unwrap(), 0x50313238);
-    assert_eq!(read32(&bytes, 724).unwrap(), 128);
-    assert_eq!(read32(&bytes, 728).unwrap(), 0);
-    assert_eq!(read32(&bytes, 1236).unwrap(), 127);
+    assert_eq!(&bytes[1152..1232], &bytes[128..208]);
+    assert_eq!(read32(&bytes, 1232).unwrap(), 0x50313238);
+    assert_eq!(read32(&bytes, 1236).unwrap(), 128);
+    assert_eq!(read32(&bytes, 1240).unwrap(), 0);
+    assert_eq!(read32(&bytes, 1748).unwrap(), 127);
     assert_eq!(decode_request(&bytes, &e).unwrap().rows[0].input_count, 128);
     validate_bulk_result(&synthetic_result(&e), &e, CompletionEvidence::Quiesced).unwrap();
 }
 
 #[test]
 fn all_exact_bucket_and_output_mode_sizes() {
-    for active in 1..=4 {
+    for active in 1..=8 {
         for mode in [ResultMode::Greedy, ResultMode::FullLogits] {
             let e = shape(active, mode);
             let request = encode_request(&e).unwrap();
-            let b = if active <= 2 { active } else { 4 };
+            let b = if active <= 2 { active } else if active <= 4 { 4 } else { 8 };
             assert_eq!(decode_request(&request, &e).unwrap().bucket, b as u32);
             let bytes = synthetic_result(&e);
             assert_eq!(
                 bytes.len(),
-                640 + if mode == ResultMode::FullLogits {
+                1152 + if mode == ResultMode::FullLogits {
                     b * 98304
                 } else {
                     0
@@ -279,9 +282,9 @@ fn unknown_stage_mode_version_and_lengths_rejected() {
     let good = encode_request(&e).unwrap();
     for (offset, value) in [
         (0, 0),
-        (4, 2),
+        (4, 1),
         (6, 127),
-        (8, 1279),
+        (8, (REQUEST_BYTES - 1) as u32),
         (12, 64),
         (16, 2),
         (20, 3),
@@ -298,7 +301,7 @@ fn unknown_stage_mode_version_and_lengths_rejected() {
         }
         assert!(decode_request(&bytes, &e).is_err(), "accepted {offset}");
     }
-    assert!(decode_request(&good[..1279], &e).is_err());
+    assert!(decode_request(&good[..REQUEST_BYTES - 1], &e).is_err());
     let mut extra = good.to_vec();
     extra.push(0);
     assert!(decode_request(&extra, &e).is_err());
@@ -478,7 +481,7 @@ fn malformed_last_row_never_exposes_earlier_rows() {
 #[test]
 fn inactive_rows_logits_and_arbitrary_spans_rejected() {
     let e = expectation();
-    for offset in [512, 592, 639, 295552, MAX_RESULT_BYTES - 1] {
+    for offset in [512, 592, 639, 296064, GOLDEN_RESULT.len() - 1] {
         let mut bytes = GOLDEN_RESULT.to_vec();
         bytes[offset] = 1;
         assert!(validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).is_err());
@@ -497,15 +500,15 @@ fn inactive_rows_logits_and_arbitrary_spans_rejected() {
 fn bf16_bits_preserved_and_nonfinite_rejected() {
     let e = expectation();
     let mut bytes = GOLDEN_RESULT.to_vec();
-    put16(&mut bytes, 640, 0x8000).unwrap();
-    put16(&mut bytes, 642, 0x0001).unwrap();
+    put16(&mut bytes, 1152, 0x8000).unwrap();
+    put16(&mut bytes, 1154, 0x0001).unwrap();
     let validated = validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced).unwrap();
     assert_eq!(
         &validated.rows_by_slot()[2].logits().unwrap()[..4],
         &[0, 128, 1, 0]
     );
     for word in [0x7f80, 0xff80, 0x7fc1, 0x7f81] {
-        put16(&mut bytes, 640, word).unwrap();
+        put16(&mut bytes, 1152, word).unwrap();
         assert_eq!(
             validate_bulk_result(&bytes, &e, CompletionEvidence::Quiesced)
                 .unwrap_err()
@@ -745,7 +748,7 @@ fn prefill_then_decode_requires_new_binding_and_respects_o1_terminal() {
     d.iteration_id = 43;
     d.rows[0].cookie = p.rows[0].cookie + 1;
     let bytes = encode_request(&d).unwrap();
-    assert!(bytes[640..1240].iter().all(|&x| x == 0));
+    assert!(bytes[1152..1752].iter().all(|&x| x == 0));
     assert!(validate_bulk_result(&p_result, &d, CompletionEvidence::Quiesced).is_err());
     owner.admit(&bytes, d.clone()).unwrap();
     owner
@@ -761,4 +764,23 @@ fn prefill_then_decode_requires_new_binding_and_respects_o1_terminal() {
     encode_request(&terminal).unwrap();
     d.rows[0].max_output_tokens = 1;
     assert_eq!(encode_request(&d).unwrap_err().field, "generation_bound");
+}
+
+#[test]
+fn old_wire_version_is_not_admitted() {
+ let e=expectation();
+ assert!(decode_request(include_bytes!("fixtures/request-n3.bin"),&e).is_err());
+ assert!(validate_bulk_result(include_bytes!("fixtures/result-n3.bin"),&e,CompletionEvidence::Quiesced).is_err());
+}
+#[test]
+fn eighth_row_identity_and_cross_row_block_alias_are_rejected() {
+ let e=shape(8,ResultMode::FullLogits);
+ let good=encode_request(&e).unwrap();
+ for offset in [128+7*128+80,128+7*128+88,128+7*128+100] {
+  let mut bytes=good;bytes[offset]^=1;assert!(decode_request(&bytes,&e).is_err());
+ }
+ let mut alias=e.clone();alias.rows[7].physical_ids[0]=alias.rows[0].physical_ids[0];
+ assert!(encode_request(&alias).is_err());
+ let mut output=synthetic_result(&e);output[128+7*128]^=1;
+ assert!(validate_bulk_result(&output,&e,CompletionEvidence::Quiesced).is_err());
 }

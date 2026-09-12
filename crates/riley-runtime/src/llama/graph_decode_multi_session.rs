@@ -7,7 +7,7 @@ use crate::llama::multi_descriptor::{
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
-const MAX_BYTES: usize = 640 + 4 * 98304;
+const MAX_BYTES: usize = 1152 + 8 * 98304;
 /// A single prepared P128/M1/N2/N4 owner with one outstanding transaction.
 /// Scheduler callers must supply expectations from their live reservation authority.
 pub struct OwnedLlamaMultiDecodeExecutor {
@@ -38,7 +38,10 @@ impl PreparedLlamaBatchExecutor {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
             .map_err(|_| rejected("multi owner generation exhausted"))?;
         let mut hash = Sha256::new();
-        hash.update(b"riley.multi-catalog.full-logits.v1\0");
+        hash.update(b"riley.multi-catalog.full-logits.v2\0");
+        hash.update(wire::CONTRACT_SHA256.as_bytes());
+        hash.update(include_bytes!("../../../../kernels/src/graph_multisequence_packet.inc"));
+        hash.update(include_bytes!("../../../../kernels/src/graph_resources.cu"));
         hash.update(inner.signature.fingerprint().as_bytes());
         hash.update(physical.to_le_bytes());
         hash.update(include_bytes!("graph_decode_multi_parents.rs"));
@@ -57,7 +60,7 @@ impl PreparedLlamaBatchExecutor {
         hash.update(include_bytes!(
             "../../../../kernels/src/batch_primitives.cu"
         ));
-        let max_active_rows = if physical >= 40 { 4 } else { 2 };
+        let max_active_rows = if physical >= 80 { 8 } else if physical >= 40 { 4 } else { 2 };
         let mut catalog = vec![
             CatalogEntry {
                 stage: Stage::Prefill128,
@@ -79,6 +82,7 @@ impl PreparedLlamaBatchExecutor {
                 bucket: 4,
                 mode: ResultMode::FullLogits,
             },
+            CatalogEntry { stage: Stage::Decode, bucket: 8, mode: ResultMode::FullLogits },
         ];
         catalog.retain(|entry| entry.bucket <= max_active_rows);
         let codec = CodecOwner::new(OwnerExpectation {
@@ -93,7 +97,7 @@ impl PreparedLlamaBatchExecutor {
             inner,
             codec,
             next_cookie: 1,
-            issued: Vec::with_capacity(4),
+            issued: Vec::with_capacity(8),
             input: vec![0; MAX_BYTES],
             output: vec![0; MAX_BYTES],
             started: false,
@@ -110,7 +114,7 @@ impl OwnedLlamaMultiDecodeExecutor {
         if self.poisoned
             || self.codec.retained_expectation().is_some()
             || !self.issued.is_empty()
-            || !(1..=4).contains(&rows)
+            || !(1..=8).contains(&rows)
         {
             return Err(rejected("multi owner busy or invalid row count"));
         }
@@ -203,14 +207,14 @@ impl OwnedLlamaMultiDecodeExecutor {
                 put32(&mut self.output, 172, row.generated_index);
                 self.output[176..216].copy_from_slice(&self.inner.output[98304..98344]);
                 put32(&mut self.output, 216, 1);
-                put32(&mut self.output, 224, 640);
+                put32(&mut self.output, 224, 1152);
                 put32(&mut self.output, 232, 98304);
-                self.output[640..bytes].copy_from_slice(&self.inner.output[..98304]);
+                self.output[1152..bytes].copy_from_slice(&self.inner.output[..98304]);
             })
         } else {
             self.input[..bytes].fill(0);
-            self.input[..1280].copy_from_slice(&packet);
-            let index = if decoded.bucket == 2 { 1 } else { 2 };
+            self.input[..1792].copy_from_slice(&packet);
+            let index = if decoded.bucket == 2 { 1 } else if decoded.bucket == 4 { 2 } else { 3 };
             self.inner
                 .graph
                 .replay_catalog(index, &self.input[..bytes])

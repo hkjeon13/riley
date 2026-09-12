@@ -2722,9 +2722,9 @@ fn validate_execution_shape_config(
     }
     for (valid, field, reason) in [
         (
-            matches!(config.max_active_sequences, 2 | 4),
+            matches!(config.max_active_sequences, 2 | 4 | 8),
             "max_active_sequences",
-            "complete-prefill policy requires capacity 2 or 4",
+            "complete-prefill policy requires capacity 2, 4 or 8",
         ),
         (
             config.iteration_token_budget == 128,

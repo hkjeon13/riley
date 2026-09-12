@@ -915,7 +915,7 @@ fn run_serve(
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
     if options.vllm_smol_p128_graph
-        && (!matches!(options.max_active_sequences, 1 | 2 | 4)
+        && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
             || (options.max_active_sequences > 1 && options.batch_token_budget != 128)
             || !matches!(options.batch_token_budget, 1 | 128)
             || options.prefill_chunk_tokens != options.batch_token_budget

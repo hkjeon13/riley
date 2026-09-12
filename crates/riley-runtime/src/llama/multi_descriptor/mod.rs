@@ -7,12 +7,12 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const REQUEST_BYTES: usize = 1280;
-pub const RESULT_PREFIX_BYTES: usize = 640;
+pub const REQUEST_BYTES: usize = 1792;
+pub const RESULT_PREFIX_BYTES: usize = 1152;
 pub const LOGITS_BYTES: usize = 49152 * 2;
-pub const MAX_RESULT_BYTES: usize = RESULT_PREFIX_BYTES + 4 * LOGITS_BYTES;
+pub const MAX_RESULT_BYTES: usize = RESULT_PREFIX_BYTES + 8 * LOGITS_BYTES;
 pub const CONTRACT_SHA256: &str =
-    "5bed6d70342dec4f30c85ba67dd41cf560e6b7f4b0de5dedfe59424cecc9b641";
+    "fdeb3a8c660a5a1059685361ddf50cc950354051f663817eb6a1fb2a8bc39329";
 const REQUEST_MAGIC: u32 = 0x3144_4d52;
 const RESULT_MAGIC: u32 = 0x314f_4d52;
 const PREFILL_MAGIC: u32 = 0x5031_3238;
@@ -135,15 +135,16 @@ fn bucket(count: usize) -> Result<u32> {
         1 => Ok(1),
         2 => Ok(2),
         3 | 4 => Ok(4),
+        5..=8 => Ok(8),
         _ => Err(Error {
             field: "active_rows",
-            reason: "requires one through four rows",
+            reason: "requires one through eight rows",
         }),
     }
 }
 pub fn result_bytes(bucket: u32, mode: ResultMode) -> Result<usize> {
     check(
-        matches!(bucket, 1 | 2 | 4),
+        matches!(bucket, 1 | 2 | 4 | 8),
         "bucket",
         "unsupported exact bucket",
     )?;
@@ -170,9 +171,9 @@ pub fn validate_expectations(e: &SubmissionExpectation) -> Result<()> {
         "zero owner identity",
     )?;
     check(
-        matches!(e.owner.max_active_rows, 2 | 4),
+        matches!(e.owner.max_active_rows, 2 | 4 | 8),
         "max_active_rows",
-        "owner capacity must be two or four",
+        "owner capacity must be two, four or eight",
     )?;
     check(
         e.owner.physical_block_count >= e.owner.max_active_rows * 10,
@@ -203,7 +204,7 @@ pub fn validate_expectations(e: &SubmissionExpectation) -> Result<()> {
     let mut entries = BTreeSet::new();
     for entry in &e.owner.catalog {
         check(
-            matches!(entry.bucket, 1 | 2 | 4)
+            matches!(entry.bucket, 1 | 2 | 4 | 8)
                 && entry.bucket <= e.owner.max_active_rows
                 && (entry.stage != Stage::Prefill128 || entry.bucket == 1),
             "catalog",
@@ -509,7 +510,7 @@ fn zero(bytes: &[u8], offset: usize, count: usize, field: &'static str) -> Resul
 fn write_header(bytes: &mut [u8], e: &SubmissionExpectation, result: bool) -> Result<()> {
     let b = bucket(e.rows.len())?;
     put32(bytes, 0, if result { RESULT_MAGIC } else { REQUEST_MAGIC })?;
-    put16(bytes, 4, 1)?;
+    put16(bytes, 4, 2)?;
     put16(bytes, 6, 128)?;
     let total = u32::try_from(bytes.len()).map_err(|_| overflow("packet_bytes"))?;
     let payload = if result {
@@ -530,7 +531,7 @@ fn write_header(bytes: &mut [u8], e: &SubmissionExpectation, result: bool) -> Re
         (20, b),
         (24, e.rows.len() as u32),
         (28, e.rows.len() as u32),
-        (32, 4),
+        (32, 8),
         (36, 10),
         (40, 49152),
         (44, e.owner.physical_block_count),
@@ -565,7 +566,7 @@ fn check_header(bytes: &[u8], e: &SubmissionExpectation, result: bool) -> Result
         "unknown packet kind",
     )?;
     check(
-        read16(bytes, 4)? == 1 && read16(bytes, 6)? == 128,
+        read16(bytes, 4)? == 2 && read16(bytes, 6)? == 128,
         "version",
         "unknown header/version",
     )?;
@@ -617,11 +618,11 @@ pub fn encode_request(e: &SubmissionExpectation) -> Result<[u8; REQUEST_BYTES]> 
         put16(&mut bytes, base + 116, 1)?;
     }
     if e.stage == Stage::Prefill128 {
-        bytes.copy_within(128..208, 640);
-        put32(&mut bytes, 720, PREFILL_MAGIC)?;
-        put32(&mut bytes, 724, 128)?;
+        bytes.copy_within(128..208, 1152);
+        put32(&mut bytes, 1232, PREFILL_MAGIC)?;
+        put32(&mut bytes, 1236, 128)?;
         for (index, &token) in e.rows[0].input_tokens.iter().enumerate() {
-            put32(&mut bytes, 728 + index * 4, token)?;
+            put32(&mut bytes, 1240 + index * 4, token)?;
         }
     }
     Ok(bytes)
@@ -715,28 +716,28 @@ pub fn decode_request(bytes: &[u8], e: &SubmissionExpectation) -> Result<Decoded
     zero(
         bytes,
         128 + e.rows.len() * 128,
-        (4 - e.rows.len()) * 128,
+        (8 - e.rows.len()) * 128,
         "inactive_rows",
     )?;
     if e.stage == Stage::Prefill128 {
         check(
-            span(bytes, 640, 80)? == span(bytes, 128, 80)?
-                && read32(bytes, 720)? == PREFILL_MAGIC
-                && read32(bytes, 724)? == 128,
+            span(bytes, 1152, 80)? == span(bytes, 128, 80)?
+                && read32(bytes, 1232)? == PREFILL_MAGIC
+                && read32(bytes, 1236)? == 128,
             "prefill_view",
             "compatibility view differs",
         )?;
         for (i, &token) in e.rows[0].input_tokens.iter().enumerate() {
             check(
-                read32(bytes, 728 + i * 4)? == token,
+                read32(bytes, 1240 + i * 4)? == token,
                 "prefill_tokens",
                 "full prompt differs from submission",
             )?;
         }
     } else {
-        zero(bytes, 640, 600, "decode_prefill_region")?;
+        zero(bytes, 1152, 600, "decode_prefill_region")?;
     }
-    zero(bytes, 1240, 40, "packet_padding")?;
+    zero(bytes, 1752, 40, "packet_padding")?;
     Ok(DecodedRequest {
         stage: e.stage,
         bucket: bucket(e.rows.len())?,
@@ -894,7 +895,7 @@ pub fn validate_bulk_result(
     zero(
         bytes,
         128 + e.rows.len() * 128,
-        (4 - e.rows.len()) * 128,
+        (8 - e.rows.len()) * 128,
         "inactive_result_rows",
     )?;
     if e.mode == ResultMode::FullLogits {

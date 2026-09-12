@@ -14,14 +14,14 @@ __global__ void multi_embedding(const __nv_bfloat16* weights, const uint32_t* pa
 __global__ void multi_completion(const uint32_t* packet, const uint32_t* argmax,
                                 const uint16_t* logits, uint32_t* output,
                                 unsigned bucket, unsigned full) {
-  const unsigned bytes=640+(full?bucket*98304:0);
+  const unsigned bytes=1152+(full?bucket*98304:0);
   if(blockIdx.x != 0) {
     const unsigned word=(blockIdx.x-1)*blockDim.x+threadIdx.x;
     if(word < bucket*24576)
-      output[160+word]=word < packet[6]*24576 ? reinterpret_cast<const uint32_t*>(logits)[word] : 0;
+      output[288+word]=word < packet[6]*24576 ? reinterpret_cast<const uint32_t*>(logits)[word] : 0;
     return;
   }
-  for(unsigned i=threadIdx.x;i<160;i+=blockDim.x)output[i]=0;
+  for(unsigned i=threadIdx.x;i<288;i+=blockDim.x)output[i]=0;
   __syncthreads();
   if(threadIdx.x==0){
     for(unsigned i=0;i<32;++i)output[i]=packet[i];
@@ -34,7 +34,7 @@ __global__ void multi_completion(const uint32_t* packet, const uint32_t* argmax,
       out[12]=argmax[2*r];out[13]=argmax[2*r+1];out[14]=32;
       out[22]=argmax[2*r+1]==0?1:2;
       if(argmax[2*r+1]!=0)output[27]=1;
-      if(full){out[24]=640+r*98304;out[26]=98304;}
+      if(full){out[24]=1152+r*98304;out[26]=98304;}
     }
   }
 

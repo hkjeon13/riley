@@ -2182,12 +2182,12 @@ mod cuda_backend {
             config: CudaBackendConfig,
         ) -> Result<Self, BackendError> {
             if config.executor.vllm_smol_p128_batched_prefill()
-                && (!matches!(config.scheduler.max_active_sequences, 1 | 2 | 4)
+                && (!matches!(config.scheduler.max_active_sequences, 1 | 2 | 4 | 8)
                     || config.scheduler.iteration_token_budget != 128
                     || config.scheduler.max_prefill_chunk_tokens != 128)
             {
                 return Err(internal(
-                    "P128 graph requires capacity 1, 2 or 4 and complete 128-token prefill scheduling",
+                    "P128 graph requires capacity 1, 2, 4 or 8 and complete 128-token prefill scheduling",
                 ));
             }
             metadata

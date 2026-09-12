@@ -22,7 +22,7 @@ pub enum ExecutionShapePolicy {
     General,
     /// One complete P128 prefill or independent decode rows, never mixed.
     ///
-    /// Requires active capacity 2 or 4, token/chunk budget 128, sequence capacity 160
+    /// Requires active capacity 2, 4 or 8, token/chunk budget 128, sequence capacity 160
     /// and at least ten promised/physical KV blocks per active request. Inputs
     /// are limited to vocabulary 49152 and output limits 1..=32. This policy only
     /// constrains host plans; it does not qualify a multi-sequence GPU executor.

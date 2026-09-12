@@ -2,19 +2,19 @@
 use super::*;
 use riley_cuda::{CudaContext, CudaPreparedStridedGemm, CudaStridedGemmConfig};
 pub(super) struct MultiDecodeParents {
-    pub(super) scratch: [Vec<CudaDeviceBuffer>; 2],
+    pub(super) scratch: [Vec<CudaDeviceBuffer>; 3],
     pub(super) plans: Vec<CudaPreparedStridedGemm>,
     pub(super) staging: Vec<CudaPinnedHostBuffer>,
 }
 impl MultiDecodeParents {
     pub(super) fn prepare(context: &CudaContext) -> LlamaBatchExecutorResult<Self> {
         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
-        let mut scratch = [Vec::new(), Vec::new()];
+        let mut scratch = [Vec::new(), Vec::new(), Vec::new()];
         let mut plans = Vec::new();
         let mut staging = Vec::new();
-        for (index, bucket) in [2u32, 4].into_iter().enumerate() {
+        for (index, bucket) in [2u32, 4, 8].into_iter().enumerate() {
             let b = u64::from(bucket);
-            let result = 640 + 98304 * b;
+            let result = 1152 + 98304 * b;
             for bytes in [
                 1152 * b,
                 1152 * b,
@@ -27,7 +27,7 @@ impl MultiDecodeParents {
                 3072 * b,
                 1152 * b,
                 98304 * b,
-                1280,
+                1792,
                 result,
                 8 * b,
             ] {

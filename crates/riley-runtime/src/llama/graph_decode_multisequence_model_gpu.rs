@@ -14,7 +14,7 @@ fn prepare(
     catalog: bool,
 ) -> Result<OwnedLlamaDecodeExecutor> {
     let config = PreparedLlamaBatchExecutorConfig::new(
-        LlamaBatchMetadataConfig::new(1, 128, 10, 1, 40)?,
+        LlamaBatchMetadataConfig::new(1, 128, 10, 1, 80)?,
         PreparedLlamaForwardConfig::default(),
     )
     .with_grouped_ragged_attention_heads()
@@ -42,7 +42,7 @@ fn run(
     tokens: &[u32],
     length: usize,
 ) -> Result<Vec<u8>> {
-    let mapping: Vec<u32> = (0..10).map(|i| ((row * 10 + i) * 7 % 40) as u32).collect();
+    let mapping: Vec<u32> = (0..10).map(|i| ((row * 10 + i) * 7 % 80) as u32).collect();
     let live = length.div_ceil(16);
     let mut valid = vec![16u16; live];
     valid[live - 1] = ((length - 1) % 16 + 1) as u16;
@@ -72,20 +72,20 @@ fn put64(p: &mut [u8], at: usize, v: u64) {
     p[at..at + 8].copy_from_slice(&v.to_le_bytes());
 }
 fn packet(bucket: u32, active: u32, positions: &[usize], tokens: &[u32], replay: u64) -> Vec<u8> {
-    let mut p = vec![0; 640 + bucket as usize * 98304];
+    let mut p = vec![0; 1152 + bucket as usize * 98304];
     for (at, v) in [
         (0, 0x31444d52),
-        (4, 0x00800001),
-        (8, 1280),
+        (4, 0x00800002),
+        (8, 1792),
         (12, 128),
         (16, 1),
         (20, bucket),
         (24, active),
         (28, active),
-        (32, 4),
+        (32, 8),
         (36, 10),
         (40, 49152),
-        (44, 40),
+        (44, 80),
         (104, 1),
     ] {
         put32(&mut p, at, v);
@@ -112,7 +112,7 @@ fn packet(bucket: u32, active: u32, positions: &[usize], tokens: &[u32], replay:
             put32(&mut p, b + at, v);
         }
         for i in 0..live {
-            put32(&mut p, b + 16 + 4 * i, ((r * 10 + i) * 7 % 40) as u32);
+            put32(&mut p, b + 16 + 4 * i, ((r * 10 + i) * 7 % 80) as u32);
             let v = if i + 1 < live {
                 16u16
             } else {
@@ -136,7 +136,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
     let mut stream = context.create_stream()?;
     let mut io = context.allocate_pinned_host_buffer(1 << 20)?;
     let mut total_rows = 0;
-    for bucket in [2u32, 4] {
+    for bucket in [2u32, 4, 8] {
         let mut oracle = prepare(&model, &context, &mut stream, false)?;
         let mut candidate = prepare(&model, &context, &mut stream, true)?;
         let mut tokens = vec![0; bucket as usize];
@@ -159,15 +159,11 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
                 tokens[r] = oracle.greedy_token()?;
                 positions[r] = 128;
             }
-            let active = if bucket == 4 {
-                [4, 3, 2, 1][step as usize % 4]
-            } else {
-                [2, 1][step as usize % 2]
-            };
+            let active = bucket - (step as u32 % bucket);
             let single_input = tokens[0];
-            let selected_bucket = if active <= 2 { 2 } else { 4 };
-            let index = if selected_bucket == 2 { 1 } else { 2 };
-            let selected_result = 640 + selected_bucket as usize * 98304;
+            let selected_bucket = if active <= 2 { 2 } else if active <= 4 { 4 } else { 8 };
+            let index = if selected_bucket == 2 { 1 } else if selected_bucket == 4 { 2 } else { 3 };
+            let selected_result = 1152 + selected_bucket as usize * 98304;
             let p = packet(selected_bucket, active, &positions, &tokens, step + 1);
             let mut expected = Vec::new();
             for r in 0..active as usize {
@@ -196,7 +192,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
             }
             candidate.graph.read_catalog(index, &mut actual)?;
             for r in 0..active as usize {
-                let logits = &actual[640 + r * 98304..640 + (r + 1) * 98304];
+                let logits = &actual[1152 + r * 98304..1152 + (r + 1) * 98304];
                 let mismatches = logits
                     .chunks_exact(2)
                     .zip(expected[r][..98304].chunks_exact(2))
@@ -218,12 +214,12 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
                 total_rows += 1;
             }
             assert!(
-                actual[128 + active as usize * 128..640]
+                actual[128 + active as usize * 128..1152]
                     .iter()
                     .all(|b| *b == 0)
             );
             assert!(
-                actual[640 + active as usize * 98304..]
+                actual[1152 + active as usize * 98304..]
                     .iter()
                     .all(|b| *b == 0)
             );
@@ -281,7 +277,7 @@ fn multisequence_full_model_logits_and_kv_match_m1() -> Result {
     assert!(context.allocation_stats()?.is_zero());
     context.close()?;
     println!(
-        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=1,2,4 prefill_reentry=true single_cold_owner=true catalog_switches=true replays=62 rows={total_rows} zero_allocations=true"
+        "MULTI_MODEL full_logits_exact=true full_physical_kv_exact=true buckets=1,2,4,8 prefill_reentry=true single_cold_owner=true catalog_switches=true replays=93 rows={total_rows} zero_allocations=true"
     );
     Ok(())
 }

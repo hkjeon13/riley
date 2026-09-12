@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(expectation.rows[0].committed_length, 0);
         assert_eq!(expectation.rows[0].generated_index, 0);
         let packet = encode_request(&expectation).unwrap();
-        assert_eq!(packet.len(), 1280);
+        assert_eq!(packet.len(), 1792);
         decode_request(&packet, &expectation).unwrap();
         let mut other = owner;
         other.physical_block_count = 41;

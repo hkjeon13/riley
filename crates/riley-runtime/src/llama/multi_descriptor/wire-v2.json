@@ -1,0 +1,26 @@
+{
+  "schema": "riley.multisequence-wire.v2",
+  "byte_order": "little",
+  "version": 2,
+  "header_bytes": 128,
+  "row_bytes": 128,
+  "row_capacity": 8,
+  "buckets": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "block_capacity_per_row": 10,
+  "vocabulary": 49152,
+  "request_bytes": 1792,
+  "row_offset": 128,
+  "prefill_view_offset": 1152,
+  "prefill_view_bytes": 600,
+  "reserved_tail_offset": 1752,
+  "reserved_tail_bytes": 40,
+  "result_prefix_bytes": 1152,
+  "full_logits_bytes_per_bucket_row": 98304,
+  "result_logits_order": "descriptor row order; output_slot independently validated",
+  "row_field_layout": "unchanged from V1; zero unused rows/blocks/reserved bytes required"
+}

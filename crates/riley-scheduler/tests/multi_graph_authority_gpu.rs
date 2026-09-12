@@ -10,9 +10,10 @@ fn prepare(
     model: &LoadedModel,
     context: &CudaContext,
     stream: &mut CudaStream,
+    physical: usize,
 ) -> Result<PreparedLlamaBatchExecutor> {
     let config = PreparedLlamaBatchExecutorConfig::new(
-        LlamaBatchMetadataConfig::new(1, 128, 10, 1, 40)?,
+        LlamaBatchMetadataConfig::new(1, 128, 10, 1, physical)?,
         PreparedLlamaForwardConfig::default(),
     )
     .with_grouped_ragged_attention_heads()
@@ -27,39 +28,45 @@ fn prepare(
 #[test]
 #[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
 fn scheduler_authorized_multi_graph_matches_m1_and_commits() -> Result {
-    run(false)
+    run(false, 4)
 }
 #[test]
 #[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
 fn cancelled_request_reuses_kv_without_cross_request_logits() -> Result {
-    run(true)
+    run(true, 4)
 }
-fn run(cancel_and_replace: bool) -> Result {
+#[test]
+#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
+fn eight_requests_match_m1_and_commit() -> Result { run(false, 8) }
+#[test]
+#[ignore = "requires qualified CUDA runtime and real SmolLM2 checkpoint"]
+fn eight_requests_cancel_and_reuse_kv() -> Result { run(true, 8) }
+fn run(cancel_and_replace: bool, capacity: usize) -> Result {
     let path = std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("checkpoint missing")?;
     let model = LoadedModel::load(std::path::Path::new(&path), LoadLimits::default())?;
     let context = CudaRuntime::initialize()?.device(0)?.create_context()?;
     let mut stream = context.create_stream()?;
     let mut owner =
-        prepare(&model, &context, &mut stream)?.into_owned_multi_decode_graph(&context)?;
-    let mut oracle = prepare(&model, &context, &mut stream)?.into_owned_decode_graph(&context)?;
+        prepare(&model, &context, &mut stream, capacity * 10)?.into_owned_multi_decode_graph(&context)?;
+    let mut oracle = prepare(&model, &context, &mut stream, capacity * 10)?.into_owned_decode_graph(&context)?;
     let mut scheduler = Scheduler::new_with_execution_shape(
         SchedulerConfig {
             max_waiting_requests: 8,
             max_waiting_prompt_tokens: 1024,
-            max_active_sequences: 4,
+            max_active_sequences: capacity,
             max_sequence_tokens: 160,
             iteration_token_budget: 128,
             max_prefill_chunk_tokens: 128,
             aging_threshold_ns: 1,
             overload_policy: OverloadPolicy::Wait,
             admission_timeout_ns: None,
-            max_promised_kv_blocks: 40,
+            max_promised_kv_blocks: capacity * 10,
             metrics_window_samples: 16,
         },
-        KvLayout::checked(30, 40, 3, 64)?,
+        KvLayout::checked(30, capacity * 10, 3, 64)?,
         ExecutionShapePolicy::CompletePrefill128DecodeN,
     )?;
-    for r in 0..4u32 {
+    for r in 0..capacity as u32 {
         let prompt = (0..128).map(|i| (i * 311 + r * 977 + 13) % 49152).collect();
         scheduler.submit(RequestDescriptor::new(prompt, 32 - r as usize * 3), 0)?;
     }
@@ -117,7 +124,7 @@ fn run(cancel_and_replace: bool) -> Result {
             shapes.insert(plan.batch_size());
         }
         drop(authority);
-        let cancelling = cancel_and_replace && now == 12;
+        let cancelling = cancel_and_replace && now == if capacity == 8 { 20 } else { 12 };
         if cancelling {
             let work = &plan.decode_items()[0];
             cancelled_blocks
@@ -161,12 +168,12 @@ fn run(cancel_and_replace: bool) -> Result {
             reused,
             "replacement must reuse at least one cancelled KV page"
         );
-        assert_eq!(finished, 5);
+        assert_eq!(finished, capacity + 1);
     } else {
-        assert_eq!(rows, 110);
-        assert_eq!(finished, 4);
+        assert_eq!(rows, (0..capacity).map(|r| 32 - r * 3).sum::<usize>());
+        assert_eq!(finished, capacity);
     }
-    assert_eq!(shapes, [1, 2, 3, 4].into_iter().collect());
+    assert_eq!(shapes, (1..=capacity).collect());
     owner.close()?;
     oracle.close()?;
     assert!(scheduler.close(200, None)?.settlement_failures().is_empty());

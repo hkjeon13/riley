@@ -3,19 +3,19 @@
 // runtime owner; these echoed wire identities do not establish that authority.
 static bool valid_multisequence_packet(const uint8_t* source,uint64_t bytes,
     uint32_t bucket,uint32_t physical,uint32_t full) noexcept {
-  if(bytes<1280)return false;
+  if(bytes<1792)return false;
   auto u32=[&](size_t offset){uint32_t value;std::memcpy(&value,source+offset,4);return value;};
   auto u64=[&](size_t offset){uint64_t value;std::memcpy(&value,source+offset,8);return value;};
   auto u16=[&](size_t offset){uint16_t value;std::memcpy(&value,source+offset,2);return value;};
   auto zero=[&](size_t begin,size_t end){for(size_t i=begin;i<end;++i)if(source[i])return false;return true;};
   const uint32_t active=u32(24);
-  if(u32(0)!=0x31444d52||u16(4)!=1||u16(6)!=128||u32(8)!=1280||u32(12)!=128||
-      u32(16)!=1||u32(20)!=bucket||active<2||active>bucket||(bucket==4&&active<3)||
-      u32(28)!=active||u32(32)!=4||u32(36)!=10||u32(40)!=49152||u32(44)!=physical||
+  if(u32(0)!=0x31444d52||u16(4)!=2||u16(6)!=128||u32(8)!=1792||u32(12)!=128||
+      u32(16)!=1||u32(20)!=bucket||active<2||active>bucket||(bucket==4&&active<3)||(bucket==8&&active<5)||
+      u32(28)!=active||u32(32)!=8||u32(36)!=10||u32(40)!=49152||u32(44)!=physical||
       !u64(48)||!u64(56)||!u64(64)||zero(72,104)||u32(104)!=full||!zero(108,128)||
       !zero(128+active*128,static_cast<size_t>(bytes)))return false;
-  // At most 40 live block IDs; no allocations or unbounded work on replay.
-  uint32_t blocks[40]{},count=0,slots=0;
+  // At most 80 live block IDs; no allocations or unbounded work on replay.
+  uint32_t blocks[80]{},count=0,slots=0;
   for(uint32_t row=0;row<active;++row){
     const size_t base=128+row*128;
     const uint32_t pos=u32(base+4),live=u32(base+12),slot=u32(base+100);
