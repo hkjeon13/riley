@@ -40,6 +40,14 @@ struct RileyCudaGraphResources {
   // They share every parent and are only replayed sequentially on this stream.
   cudaGraph_t prefill_graph = nullptr;
   cudaGraphExec_t prefill_exec = nullptr;
+  // Smaller prefill DAGs share maximum-sized scratch and the same parent ledger.
+  // They execute sequentially, so no additional device allocation is needed.
+  struct PrefillBucket {
+    uint32_t capacity = 0;
+    cudaGraph_t graph = nullptr;
+    cudaGraphExec_t exec = nullptr;
+  };
+  PrefillBucket prefill_buckets[2]{};
   RileyCudaPinnedHostBuffer* input = nullptr;
   RileyCudaPinnedHostBuffer* output = nullptr;
   uint64_t transfer_bytes = 0;
@@ -200,6 +208,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
   if ((*resources)->graph != nullptr || (*resources)->exec != nullptr ||
       (*resources)->prefill_graph != nullptr || (*resources)->prefill_exec != nullptr ||
+      (*resources)->prefill_buckets[0].graph || (*resources)->prefill_buckets[0].exec ||
+      (*resources)->prefill_buckets[1].graph || (*resources)->prefill_buckets[1].exec ||
       (*resources)->catalog[0].graph || (*resources)->catalog[0].exec ||
       (*resources)->catalog[1].graph || (*resources)->catalog[1].exec ||
       (*resources)->catalog[2].graph || (*resources)->catalog[2].exec ||
@@ -236,6 +246,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
                              RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
       else (*resources)->completion_unknown = true;
+    }
+    for(auto& entry:(*resources)->prefill_buckets){
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.exec){
+        status=runtime_error(cudaGraphExecDestroy(entry.exec),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.exec=nullptr;else (*resources)->completion_unknown=true;
+      }
+      if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.graph){
+        status=runtime_error(cudaGraphDestroy(entry.graph),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
+        if(status==RILEY_CUDA_STATUS_SUCCESS)entry.graph=nullptr;else (*resources)->completion_unknown=true;
+      }
     }
     for(auto& entry:(*resources)->catalog){
       if(status==RILEY_CUDA_STATUS_SUCCESS&&entry.exec){
@@ -350,7 +370,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     for(uint32_t row=0;row<value(20);++row)if(value(164+row*1664)>r->v3_prefill_context)return reject(error,"V3 row context exceeds retained tables",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   }
   auto selected_exec = r->exec;
-  if(r->v3_prefill_capacity){uint32_t stage;std::memcpy(&stage,source+16,4);if(stage==0){if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");selected_exec=r->prefill_exec;}}
+  if(r->v3_prefill_capacity){
+    uint32_t stage;std::memcpy(&stage,source+16,4);
+    if(stage==0){
+      if(!r->prefill_exec)return reject(error,"V3 prefill capture missing");
+      selected_exec=r->prefill_exec;
+      uint32_t tokens;std::memcpy(&tokens,source+136,4);
+      for(const auto& bucket:r->prefill_buckets){
+        if(bucket.exec&&tokens<=bucket.capacity){selected_exec=bucket.exec;break;}
+      }
+    }
+  }
   if(r->decode_capacity!=0){
     auto u32=[&](uint64_t offset){uint32_t v;std::memcpy(&v,source+offset,4);return v;};
     const uint64_t capacity=r->decode_capacity,pos=u32(4),live=pos/16+1;
@@ -1251,7 +1281,20 @@ static RileyCudaStatus record_variable_shared(
   return result;
  },error);};
  status=record_shape(capacity);
- if(status==RILEY_CUDA_STATUS_SUCCESS){r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;status=record_shape(1);}
+ if(status==RILEY_CUDA_STATUS_SUCCESS){
+  r->prefill_graph=r->graph;r->prefill_exec=r->exec;r->graph=nullptr;r->exec=nullptr;
+  const uint32_t sizes[2]={16,128};
+  for(size_t i=0;i<2&&status==RILEY_CUDA_STATUS_SUCCESS;++i){
+   if(sizes[i]>=capacity)continue;
+   status=record_shape(sizes[i]);
+   if(status==RILEY_CUDA_STATUS_SUCCESS){
+    auto& bucket=r->prefill_buckets[i];
+    bucket.capacity=sizes[i];bucket.graph=r->graph;bucket.exec=r->exec;
+    r->graph=nullptr;r->exec=nullptr;
+   }
+  }
+  if(status==RILEY_CUDA_STATUS_SUCCESS)status=record_shape(1);
+ }
  if(status==RILEY_CUDA_STATUS_SUCCESS){r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
  return status;
 }
