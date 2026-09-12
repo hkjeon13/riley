@@ -8,7 +8,8 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
  shape+=row*416;pages+=row*416;
  q+=row*576;result+=row*9*4096;
  int count=shape[1]+1,token=blockIdx.x*8,head=blockIdx.y%9;
- if(token>=count || count>4096)return;
+ if(count<1 || count>4096)return;
+ for(;token<count;token+=gridDim.x*8){
  int lane=threadIdx.x,g=lane/4,t=lane%4;float d[4]={};
  #pragma unroll
  for(int depth=0;depth<64;depth+=16){
@@ -21,6 +22,7 @@ __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* resu
   riley_prefill_shape::mma(d,a,a,aa,aa,b,bb);
  }
  if(g==0)for(int j=0;j<2;++j)if(token+2*t+j<count)result[head*4096+token+2*t+j]=d[j]*.125F;
+ }
 }
 // Independent output eight-column groups share the precomputed score buffer.
 // Tile order, lane-local denominator and BF16 probability rounding are unchanged.
@@ -57,7 +59,7 @@ __global__ void values(const float* scores,const __nv_bfloat16* v,__nv_bfloat16*
 }
 
 inline void enqueue(cudaStream_t stream,const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,float* scratch,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows,uint32_t context){
- scores<<<dim3((context+7)/8,72),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
+ scores<<<dim3(min((context+7)/8,32u),72),32,0,stream>>>(q,k,scratch,shape,pages,live_rows);
  values<<<dim3(8,72),32,0,stream>>>(scratch,v,out,shape,pages,live_rows);
 }
 }

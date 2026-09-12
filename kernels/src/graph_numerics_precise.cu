@@ -316,8 +316,8 @@ cudaError_t enqueue_compiled_v3_result_header(cudaStream_t stream,const void* me
 #include "decode_shared_model.cuh"
 #include "decode_shared_result.cuh"
 namespace riley_cuda_internal {
-cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context) noexcept {
- return riley_shared_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context);
+cudaError_t enqueue_compiled_v3_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
+ return riley_shared_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled);
 }
 cudaError_t enqueue_compiled_v3_shared_result(cudaStream_t s,const void* m,const void* logits,const void* status,void* result) noexcept {
  return riley_shared_result::enqueue(s,m,static_cast<const __nv_bfloat16*>(logits),static_cast<const uint32_t*>(status),result);

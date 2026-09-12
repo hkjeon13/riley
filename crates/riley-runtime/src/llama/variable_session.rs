@@ -97,7 +97,7 @@ impl VariableGraphBuffers {
             head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity})
     }
     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{
-        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},false)?;
+        let mut s=Self::prepare_base(context,if capacity==0{0}else{capacity.max(8)},true)?;
         s.devices[7]=context.allocate_device_buffer((s.capacity as u64*384).max(8*9*4096*4))?;
         s.staging=context.allocate_pinned_host_buffer(2*wire::BATCH_RESULT_BYTES as u64)?;
         for bytes in [8*1152,8*98304,wire::BATCH_RESULT_BYTES as u64]{s.shared_devices.push(context.allocate_device_buffer(bytes)?);}

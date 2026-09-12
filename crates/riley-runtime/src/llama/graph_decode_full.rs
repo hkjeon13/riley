@@ -2117,7 +2117,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
         }
         // Pack immutable gate/up/down weights once before capture. The buffers
         // remain explicit reservation parents and are dropped after graph close.
-        if scratch.shared_head.is_none() {
+        if !scratch.tiled.is_empty() {
         for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
             for layer in 0..30 { for part in 0..3 {
                 if weights[3+layer*9+6+part]!=index {continue;}
