@@ -2439,6 +2439,14 @@ riley_cuda_fixed37_ragged_paged_attention_two_pass_execute(
 
 // Plan creation performs all cuBLASLt descriptor construction and heuristic
 // selection. A successful plan owns one context-child lease and is immutable.
+/* Qualified BF16 M1 strided batches. Strides are BF16 elements, not bytes.
+ * Metadata retains per-matrix M=1. Execute spans cover batch_count * stride.
+ * This plan is not accepted by existing single-matrix graph binders. */
+RileyCudaStatus riley_cuda_gemm_plan_create_strided_m1(
+    RileyCudaContext* context, const RileyCudaGemmConfig* config,
+    uint32_t batch_count, uint64_t input_stride, uint64_t output_stride,
+    RileyCudaGemmPlan** out_plan, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_gemm_plan_create(
     RileyCudaContext* context,
     const RileyCudaGemmConfig* config,
