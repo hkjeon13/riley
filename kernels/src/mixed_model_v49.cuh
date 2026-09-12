@@ -2,6 +2,7 @@
 #include "mixed_rope_v49.cuh"
 #pragma once
 #include "prefill_shape_projection.cuh"
+#include "prefill_fused_gate_v51.cuh"
 #include "prefill_shape_rope_kv.cuh"
 #include "prefill_shape_attention.cuh"
 #include "prefill_shape_pointwise.cuh"
@@ -46,6 +47,9 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
+  if(capacity>1&&tiled){
+   riley_prefill51::gate_up<4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),w(base+7),b(11),capacity,shape+2);
+  }else{
   if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
   else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
   else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),b(8),capacity,shape+2);
@@ -55,6 +59,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   else if(tiled)gemm_prefill_shape_vector<1536,576,0,4,true><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
+  }
   if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
   else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
   else if(tiled)gemm_prefill_shape_vector<576,1536,320,2,true><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);

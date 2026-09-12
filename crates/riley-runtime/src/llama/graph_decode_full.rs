@@ -2109,6 +2109,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/mixed_attention_v49.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/mixed_rope_v49.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/mixed_model_v49.cuh").as_slice(),
+            include_bytes!("../../../../kernels/src/prefill_fused_gate_v51.cuh").as_slice(),
 
 
             include_bytes!("../../../../kernels/src/prefill_shape_projection.cuh").as_slice(),

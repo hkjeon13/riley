@@ -224,6 +224,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/mixed_attention_v49.cuh"),
         kernels_dir.join("src/mixed_rope_v49.cuh"),
         kernels_dir.join("src/mixed_model_v49.cuh"),
+        kernels_dir.join("src/prefill_fused_gate_v51.cuh"),
 
 
         kernels_dir.join("src/prefill_shape_projection.cuh"),
