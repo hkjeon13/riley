@@ -46,7 +46,7 @@ serve options:
   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
-  --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
@@ -88,6 +88,7 @@ struct ServeOptions {
     reduction_profile: ReductionProfileMode,
     vllm_smol_p128_graph: bool,
     shared_rows_graph: bool,
+    variable_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -365,12 +366,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--graph-numerics" => {
                 let value = next_value(&mut arguments, "--graph-numerics")?;
                 let enabled = match value.to_str() {
-                    Some("existing") => (false, false),
-                    Some("vllm-smol-p128-v1") => (true, false),
-                    Some("shared-smol-p128-v1") => (true, true),
+                    Some("existing") => (false, false, false),
+                    Some("vllm-smol-p128-v1") => (true, false, false),
+                    Some("shared-smol-p128-v1") => (true, true, false),
+                    Some("variable-smol-v3") => (false, false, true),
                     _ => {
                         return Err(
-                            "--graph-numerics requires existing, vllm-smol-p128-v1 or shared-smol-p128-v1".to_owned()
+                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 or variable-smol-v3".to_owned()
                         );
                     }
                 };
@@ -502,13 +504,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
-    let (vllm_smol_p128_graph, shared_rows_graph) = graph_numerics.unwrap_or((false, false));
-    if vllm_smol_p128_graph
+    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph) = graph_numerics.unwrap_or((false, false, false));
+    if (vllm_smol_p128_graph || variable_graph)
         && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
     {
         return Err("vllm-smol-p128-v1 requires --execution-graph-policy require".to_owned());
     }
-    if vllm_smol_p128_graph && c02_runtime_config.is_some() {
+    if (vllm_smol_p128_graph || variable_graph) && c02_runtime_config.is_some() {
         return Err("vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts".to_owned());
     }
     Ok(CliCommand::Serve(ServeOptions {
@@ -534,6 +536,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
         vllm_smol_p128_graph,
         shared_rows_graph,
+        variable_graph,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -917,6 +920,11 @@ fn run_serve(
     if options.prefill_chunk_tokens > options.batch_token_budget {
         return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
     }
+    if options.variable_graph && (options.max_active_sequences!=1 || options.prefill_chunk_tokens>1024
+        || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
+        || options.sampling_backend!=SamplingBackendMode::Cpu) {
+        return Err("variable-smol-v3 currently requires one active sequence, CPU sampling, fixed-max shape and token/chunk budgets at most1024".to_owned());
+    }
     if options.vllm_smol_p128_graph
         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
             || (options.max_active_sequences > 1 && options.batch_token_budget != 128)
@@ -965,6 +973,7 @@ fn run_serve(
             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
         ));
     }
+    if options.variable_graph && max_sequence_tokens>4096 {return Err("variable-smol-v3 context must not exceed4096".to_owned());}
     validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
     let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
@@ -1011,7 +1020,7 @@ fn run_serve(
         } else {
             options.max_active_sequences
         },
-        options.batch_token_budget,
+        if options.variable_graph {1} else {options.batch_token_budget},
         if multi_graph { 10 } else { physical_kv_blocks },
         if multi_graph {
             1
@@ -1054,7 +1063,9 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.shared_rows_graph {
+    let executor = if options.variable_graph {
+        executor.with_variable_graph()
+    } else if options.shared_rows_graph {
         executor.with_shared_rows_graph()
     } else if options.vllm_smol_p128_graph {
         executor.with_vllm_smol_p128_graph()
@@ -3854,6 +3865,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
+                variable_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4242,6 +4254,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
+                variable_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4397,6 +4410,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
+                variable_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4519,6 +4533,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
                 shared_rows_graph: false,
+                variable_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4643,6 +4658,15 @@ mod graph_policy_cli_tests {
 
 #[cfg(test)]
 mod graph_numerics_cli_tests {
+    #[test]
+    fn variable_profile_is_explicit_and_requires_graph_policy() {
+        for policy in ["disabled","auto","require"] {
+            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v3","--execution-graph-policy",policy].map(std::ffi::OsString::from));
+            if policy=="require" {let super::CliCommand::Serve(options)=result.unwrap() else {panic!("serve")};assert!(options.variable_graph);assert!(!options.vllm_smol_p128_graph&&!options.shared_rows_graph);}
+            else {assert!(result.is_err());}
+        }
+    }
+
     use super::*;
     #[test]
     fn shared_profile_is_explicit_and_requires_graph() {

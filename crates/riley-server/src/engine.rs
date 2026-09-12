@@ -2181,6 +2181,12 @@ mod cuda_backend {
             model: LoadedModel,
             config: CudaBackendConfig,
         ) -> Result<Self, BackendError> {
+            if config.executor.variable_graph() && (config.scheduler.max_active_sequences!=1
+                || config.scheduler.iteration_token_budget>1024 || config.scheduler.max_prefill_chunk_tokens>1024
+                || config.scheduler.max_sequence_tokens>4096 || config.executor.metadata().max_rows()!=1
+                || config.executor.metadata().max_input_tokens()!=1 || config.gpu_greedy) {
+                return Err(internal("V3 scheduler and prepared model geometry differ"));
+            }
             if config.executor.vllm_smol_p128_batched_prefill()
                 && (!matches!(config.scheduler.max_active_sequences, 1 | 2 | 4 | 8)
                     || config.scheduler.iteration_token_budget != 128
@@ -2217,7 +2223,7 @@ mod cuda_backend {
                         internal(format!("batch executor preparation failed: {source}"))
                     })?;
             let batch_token_budget = executor.batch_token_budget();
-            if config.scheduler.iteration_token_budget != batch_token_budget {
+            if !config.executor.variable_graph() && config.scheduler.iteration_token_budget != batch_token_budget {
                 let scheduler_budget = config.scheduler.iteration_token_budget;
                 let _ = executor.close();
                 return Err(internal(format!(
@@ -2449,6 +2455,7 @@ mod cuda_backend {
         executor: Option<PreparedLlamaBatchExecutor>,
         decode_graph: Option<riley_runtime::llama::OwnedLlamaDecodeExecutor>,
         multi_graph: Option<riley_runtime::llama::OwnedLlamaMultiDecodeExecutor>,
+        variable_graph: Option<riley_runtime::llama::variable_session::OwnedVariableSession>,
         timer: Option<LlamaIterationCudaTimer>,
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
@@ -2530,7 +2537,12 @@ mod cuda_backend {
                     "vllm-smol-p128-v1 requires an explicitly required graph",
                 ));
             }
-            let supported = resources.executor.supports_owned_decode_graph();
+            let use_variable=resources.executor.config().variable_graph();
+            if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
+                || resources.scheduler.config().max_active_sequences!=1 || resources.gpu_greedy) {
+                return Err(internal("V3 requires graph policy require, one active request and CPU sampling"));
+            }
+            let supported = use_variable || resources.executor.supports_owned_decode_graph();
             if resources.execution_graph_policy == ExecutionGraphPolicy::Require && !supported {
                 return Err(internal(
                     "required full graph unsupported by prepared server configuration",
@@ -2541,20 +2553,24 @@ mod cuda_backend {
             let use_multi = use_graph
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
-            let (executor, decode_graph, multi_graph) = if use_multi {
+            let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
+                let graph=resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32)
+                    .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
+                (None,None,None,Some(graph))
+            } else if use_multi {
                 let graph = resources
                     .executor
                     .into_owned_multi_decode_graph(&resources.context)
                     .map_err(|e| internal(format!("server multi graph preparation failed: {e}")))?;
-                (None, None, Some(graph))
+                (None, None, Some(graph), None)
             } else if use_graph {
                 let graph = resources
                     .executor
                     .into_owned_decode_graph(&resources.context)
                     .map_err(|e| internal(format!("server graph preparation failed: {e}")))?;
-                (None, Some(graph), None)
+                (None, Some(graph), None, None)
             } else {
-                (Some(resources.executor), None, None)
+                (Some(resources.executor), None, None, None)
             };
             eprintln!(
                 "RILEY_GRAPH prepared={} policy={:?} fallback={} gpu_iteration_timing={} numerics={}",
@@ -2563,7 +2579,7 @@ mod cuda_backend {
                 !use_graph,
                 !use_graph,
                 decode_graph.as_ref().map_or(
-                    if use_multi {
+                    if use_variable { "variable-smol-v3" } else if use_multi {
                         "vllm-smol-p128-multi-v1"
                     } else {
                         "existing"
@@ -2580,6 +2596,7 @@ mod cuda_backend {
                 executor,
                 decode_graph,
                 multi_graph,
+                variable_graph,
                 timer: Some(resources.timer),
                 sampling,
                 allowed_tokens,
@@ -3038,6 +3055,9 @@ mod cuda_backend {
             let mut first_error = None;
             let mut final_scheduler = None;
             let mut final_allocation = None;
+            if let Some(graph)=self.variable_graph.take() {
+                graph.close().map_err(|e|internal(format!("V3 close failed; KV remains retained: {e}")))?;
+            }
             if let Some(graph) = self.multi_graph.take() {
                 graph.close().map_err(|e| {
                     internal(format!(
@@ -3334,7 +3354,13 @@ mod cuda_backend {
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
             let (mut downloaded, timing, staged_shape) =
-                if let Some(graph) = self.multi_graph.as_mut() {
+                if let Some(graph)=self.variable_graph.as_mut() {
+                    let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
+                        .map_err(|e|internal(format!("V3 authority failed: {e}")))?;
+                    let downloaded=riley_scheduler::execution::execute_llama_iteration_variable_graph(&authority,graph)
+                        .map_err(|e|internal(format!("V3 iteration failed: {}",e.error())))?;
+                    (downloaded,riley_scheduler::IterationTiming::default(),None)
+                } else if let Some(graph) = self.multi_graph.as_mut() {
                     let authority = self
                         .scheduler
                         .as_ref()
@@ -3487,6 +3513,10 @@ mod cuda_backend {
                     return Err(internal(detail));
                 }
             };
+            if let Some(graph)=self.variable_graph.as_mut() {
+                if !updates.settlement_failures().is_empty(){return Err(internal("V3 scheduler settlement failed"));}
+                graph.confirm_scheduler_commit(result.iteration_id().get()).map_err(|e|internal(format!("V3 commit failed: {e}")))?;
+            }
             if let Some(graph) = self.multi_graph.as_mut() {
                 if !updates.settlement_failures().is_empty() {
                     return Err(internal("multi graph scheduler settlement failed"));
@@ -3596,6 +3626,7 @@ mod cuda_backend {
                 && self.executor.is_none()
                 && self.decode_graph.is_none()
                 && self.multi_graph.is_none()
+                && self.variable_graph.is_none()
                 && self.timer.is_none()
                 && self.stream.is_none()
                 && self.context.is_none()
