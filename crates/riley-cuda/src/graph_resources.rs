@@ -56,6 +56,20 @@ impl<P> OwnedGraphResourceReservation<P> {
         self.native.read_transfer(output)
     }
 
+    /// Replays one cold catalog entry while retaining every parent.
+    /// # Errors
+    /// Rejects an absent entry, invalid packet or CUDA execution failure.
+    pub fn replay_catalog(&mut self, index: u32, input: &[u8]) -> CudaResult<()> {
+        self.native.replay_catalog(index, input)
+    }
+
+    /// Reads only the most recently completed catalog entry.
+    /// # Errors
+    /// Rejects stale selection or an incorrectly sized output buffer.
+    pub fn read_catalog(&mut self, index: u32, output: &mut [u8]) -> CudaResult<()> {
+        self.native.read_catalog(index, output)
+    }
+
     /// Returns parents only after the native reservation has been released.
     /// # Errors
     /// Unknown completion retains native parent protection and returns an error.
