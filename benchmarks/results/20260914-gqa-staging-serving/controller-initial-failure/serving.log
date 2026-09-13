@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/gqa_staging_serving_screen.py", line 106, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/gqa_staging_serving_screen.py", line 65, in main
+    with server('prior','references') as port:
+  File "/usr/lib/python3.10/contextlib.py", line 135, in __enter__
+    return next(self.gen)
+  File "/data/riley-serving-260913-recovery/gqa_staging_serving_screen.py", line 46, in server
+    process=subprocess.Popen(argv,env=child,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+  File "/usr/lib/python3.10/subprocess.py", line 971, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.10/subprocess.py", line 1780, in _execute_child
+    k = os.fsencode(k)
+  File "/usr/lib/python3.10/os.py", line 811, in fsencode
+    filename = fspath(filename)  # Does type-checking of `filename`.
+TypeError: expected str, bytes or os.PathLike object, not tuple

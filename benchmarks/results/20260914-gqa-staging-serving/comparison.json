@@ -1,0 +1,290 @@
+{
+  "scope": "closed-loop C32 screen; two reversed-order runs; not overall qualification",
+  "aggregation": "median of two lane throughput / percentile estimates, not pooled percentiles",
+  "retained_requests": 4096,
+  "retained_tokens": 131072,
+  "archive_sha256": "f835d66f82874849d8bde26aa51be04004384fe7fbe7685c372379df070b9480",
+  "preparation": {
+    "hashes": {
+      "current": "b51b1c4ea6a6c6d3953a639c6459081241e25b51d37ecf0f260384184d8a84b8",
+      "prior": "68ab14f5c2fef2adf3f222f143de7e225ce7218d9a6352a7df00fbda9cd7e0a0"
+    },
+    "controller_sha256": "da2686da1948223f805024673a62e5fb9e64308539634c197380ce39207a1553",
+    "client_sha256": "adf9930078b8c9fd4a83ef0fd5936749fb9088a5114c47644883458d5dd9cf7e",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "concurrency": 32,
+    "active_capacity": 32,
+    "warmup": 64,
+    "retained": 256,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "qualification": false,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "prompt_token_ranges": {
+    "shared": [
+      498,
+      518
+    ],
+    "unique": [
+      552,
+      603
+    ]
+  },
+  "comparison": [
+    {
+      "workload": "shared",
+      "lane": "prior",
+      "throughput_tokens_s": 10021.544597194305,
+      "ttft_0.5_ms": 14.8362305,
+      "tpot_0.5_ms": 2.763444508064516,
+      "e2e_0.95_ms": 121.39926137500001,
+      "e2e_0.99_ms": 137.84292075,
+      "itl_0.5_ms": 1.6099539999999999,
+      "itl_0.95_ms": 10.916884249999999,
+      "itl_0.99_ms": 11.700838174999998
+    },
+    {
+      "workload": "shared",
+      "lane": "control",
+      "throughput_tokens_s": 9941.244208235727,
+      "ttft_0.5_ms": 14.9327265,
+      "tpot_0.5_ms": 2.7510980806451615,
+      "e2e_0.95_ms": 122.48142,
+      "e2e_0.99_ms": 138.604320425,
+      "itl_0.5_ms": 1.59781375,
+      "itl_0.95_ms": 10.95546675,
+      "itl_0.99_ms": 11.908961849999999
+    },
+    {
+      "workload": "shared",
+      "lane": "gqa",
+      "throughput_tokens_s": 9870.365759220922,
+      "ttft_0.5_ms": 15.2022765,
+      "tpot_0.5_ms": 2.7763682500000004,
+      "e2e_0.95_ms": 125.9989805,
+      "e2e_0.99_ms": 145.70044479999999,
+      "itl_0.5_ms": 1.61438125,
+      "itl_0.95_ms": 11.041779625,
+      "itl_0.99_ms": 12.093011749999992
+    },
+    {
+      "workload": "shared",
+      "lane": "vllm",
+      "throughput_tokens_s": 11979.719272654113,
+      "ttft_0.5_ms": 30.0523635,
+      "tpot_0.5_ms": 1.7018045806451614,
+      "e2e_0.95_ms": 96.50287425,
+      "e2e_0.99_ms": 98.173280425,
+      "itl_0.5_ms": 1.61292375,
+      "itl_0.95_ms": 3.4423234999999996,
+      "itl_0.99_ms": 6.271656274999989
+    },
+    {
+      "workload": "unique",
+      "lane": "prior",
+      "throughput_tokens_s": 3532.3740146561468,
+      "ttft_0.5_ms": 125.94037399999999,
+      "tpot_0.5_ms": 5.654407169354839,
+      "e2e_0.95_ms": 344.432533625,
+      "e2e_0.99_ms": 376.04232212499994,
+      "itl_0.5_ms": 5.9565495,
+      "itl_0.95_ms": 9.59916275,
+      "itl_0.99_ms": 12.271602199999991
+    },
+    {
+      "workload": "unique",
+      "lane": "control",
+      "throughput_tokens_s": 3538.779798222127,
+      "ttft_0.5_ms": 125.47107475,
+      "tpot_0.5_ms": 5.609217120967742,
+      "e2e_0.95_ms": 344.350243,
+      "e2e_0.99_ms": 375.77272867499994,
+      "itl_0.5_ms": 5.978103,
+      "itl_0.95_ms": 9.500073125,
+      "itl_0.99_ms": 12.17662485
+    },
+    {
+      "workload": "unique",
+      "lane": "gqa",
+      "throughput_tokens_s": 3498.9225949528973,
+      "ttft_0.5_ms": 126.37620675,
+      "tpot_0.5_ms": 5.5432355,
+      "e2e_0.95_ms": 350.81206925000004,
+      "e2e_0.99_ms": 380.54359777499997,
+      "itl_0.5_ms": 6.036867,
+      "itl_0.95_ms": 9.491727625000001,
+      "itl_0.99_ms": 12.791685099999999
+    },
+    {
+      "workload": "unique",
+      "lane": "vllm",
+      "throughput_tokens_s": 4842.164622466023,
+      "ttft_0.5_ms": 41.687051000000004,
+      "tpot_0.5_ms": 5.1104916532258065,
+      "e2e_0.95_ms": 287.22429087499995,
+      "e2e_0.99_ms": 348.18032797499995,
+      "itl_0.5_ms": 4.97321125,
+      "itl_0.95_ms": 6.707980125000001,
+      "itl_0.99_ms": 10.868252349999997
+    }
+  ],
+  "reference_agreement": {
+    "shared-p0-prior": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-control": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-gqa": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-vllm": {
+      "prompt": 256,
+      "tokens": 214,
+      "text": 214,
+      "finish": 256
+    },
+    "shared-p1-vllm": {
+      "prompt": 256,
+      "tokens": 221,
+      "text": 221,
+      "finish": 256
+    },
+    "shared-p1-gqa": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p1-control": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p1-prior": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-prior": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-control": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-gqa": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-vllm": {
+      "prompt": 256,
+      "tokens": 80,
+      "text": 80,
+      "finish": 256
+    },
+    "unique-p1-vllm": {
+      "prompt": 256,
+      "tokens": 80,
+      "text": 80,
+      "finish": 256
+    },
+    "unique-p1-gqa": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p1-control": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p1-prior": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    }
+  },
+  "cache_telemetry_including_warmup": {
+    "shared-p0-prior": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 384,
+      "reused_tokens": 191552,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p0-gqa": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 402,
+      "reused_tokens": 200160,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p1-gqa": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 306,
+      "reused_tokens": 152832,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p1-prior": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 288,
+      "reused_tokens": 143296,
+      "host_capacity_bytes": 194152
+    },
+    "unique-p0-prior": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 145116
+    },
+    "unique-p0-gqa": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 145116
+    },
+    "unique-p1-gqa": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 145116
+    },
+    "unique-p1-prior": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 145116
+    }
+  }
+}

@@ -1396,6 +1396,19 @@ pub fn record_v7_query_reuse(&mut self,devices:&[usize;25],workspace:Option<usiz
         }
         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn);Err(crate::CudaError::unavailable("record V7 mixed"))}
     }
+pub fn record_v7_gqa_staging(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool)->CudaResult<()> {
+        #[cfg(feature="cuda")]{
+            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
+            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
+            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
+            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
+            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
+            self.native.record_v7_gqa_staging(&devices,workspace,&weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn)
+        }
+        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn);Err(crate::CudaError::unavailable("record V7 mixed"))}
+    }
 pub fn record_v7_adaptive_decode(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool)->CudaResult<()> {
         #[cfg(feature="cuda")]{
             let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");

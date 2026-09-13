@@ -1,6 +1,6 @@
 # PR21 — GQA head 그룹의 K/V shared staging
 
-상태: 격리 native 구현·4090 GPU gate 및 SM90a/SM100a compile 완료. Serving 미연결·기본값 변경 없음.
+상태: 격리 native 구현·4090 GPU gate 및 SM90a/SM100a compile 완료. Retained model/server opt-in 연결 및 C8/C32/C64 serving 검증 완료, 개선 미확인으로 승격하지 않음. 기본값 변경 없음.
 
 ## 선택 근거
 
@@ -23,12 +23,20 @@ SM89 ptxas: staging release152 registers/thread,45,056B shared,spill0; grouping-
 
 기존17 shape, ragged31/32/33/47/49, context4096, scrambled pages, nonfinite V 및 captured replay/coverage 검사를 사용한다. Native memcheck/racecheck는 bounded fixture로 실행한다. 여러 prefill owner 및 추가 K/Q nonfinite 입력은 별도 보강하고 single-prefill 합성 시험을 전체 serving 증거로 대체하지 않는다. SM90a/SM100a compile과 실제 runtime 검증을 구분하며 장비 부재만 skip한다.
 
-Blender 세션은 GPU gate 동안만 종료하고 결과 성공·실패에 관계없이 복구한다. `3d.fin-ally.net`의 정적 웹 서버는 계속 유지한다.
+Blender 세션은 GPU gate 동안만 종료하고 결과 성공·실패에 관계없이 복구한다. `3d.fin-ally.net`, `3dsol.fin-ally.net`, `3dfable.fin-ally.net`의 정적 웹 서버는 계속 유지한다.
 
 ## 완료·롤백
 
-GPU gate, 모델 수치, 실제 serving 비교 전 승격하지 않는다. 롤백은 기존 mapped/compact path이며 이 격리 후보는 production에서 참조하지 않는다. Multi-GPU/Hopper/Blackwell 전문 backend는 별도 capability로 확장하며 이 SM89 fixture를 일반 모델 지원으로 표시하지 않는다.
+GPU gate, 모델 수치, 실제 serving 비교 전 승격하지 않는다. 롤백은 기존 mapped/compact path이며 이 후보는 명시적 opt-in에서만 선택한다. Multi-GPU/Hopper/Blackwell 전문 backend는 별도 capability로 확장하며 이 SM89 fixture를 일반 모델 지원으로 표시하지 않는다.
 
 ## Native 판정
 
-[최종 native gate](../../benchmarks/results/20260914-gqa-staged-native/README.md):171개 audit와171개 graph 비교가 bitwise 일치했고 memcheck/racecheck 각45개 검사에서 오류0이다. 여러 prefill owner를 포함한8개 shape의 graph 시간은2.30–16.90% 감소했다. Grouping-only는 모두 회귀했다. Full-model 및 serving은 미검증이므로 기본값은 유지하고 명시적 retained-model backend 연결로 진행한다.
+[최종 native gate](../../benchmarks/results/20260914-gqa-staged-native/README.md):171개 audit와171개 graph 비교가 bitwise 일치했고 memcheck/racecheck 각45개 검사에서 오류0이다. 여러 prefill owner를 포함한8개 shape의 graph 시간은2.30–16.90% 감소했다. Grouping-only는 모두 회귀했다. 이 native 결과만으로 승격하지 않았으며 후속 full-model 및 serving 판정은 아래에 기록한다.
+
+## Retained model 및 serving 통합
+
+별도 C ABI recorder와 Rust factory, source-bound graph identity, `RILEY_MIXED_GQA_STAGING=1` 선택을 연결했다. Query reuse 등과 동시 선택은 거부하며 기존 ordinary/future pure-decode 및 rolling reservation 경로는 유지한다. [모델 gate](../../benchmarks/results/20260914-gqa-staging-model/README.md)의2,359,296 BF16 logits bytes가 일치했고 whole-model memcheck 오류0이다. 로컬 server105개, CUDA wrapper host95개 검사가 통과했다.
+
+[C32 serving](../../benchmarks/results/20260914-gqa-staging-serving/README.md)에서 shared/unique throughput은 기존 rolling Riley 대비 각각−1.51%/−0.95%다. Native 개선이 serving으로 이어지지 않아 승격하지 않는다. 프로파일 없이 occupancy나 데이터 분포를 확정 원인으로 쓰지 않는다. 다음 분석은 동일 binary의 control/GQA 실제 모델 graph를 비교해 attention 및 나머지 stage의 시간 변화를 분리한다. Unqualified 경로이며 전체 vLLM 성능 목표는 미달이다.
+
+[C8/C32/C64 통합 표](../../benchmarks/results/20260914-gqa-staging-serving/README.md#c8c32c64-milestone)를 확정했다. 후보의 기존 Riley 대비 throughput 변화는 shared에서 C8 −1.00%, C32 −1.51%, C64 −0.57%; unique에서 +0.49%, −0.95%, −1.45%다. C8 shared의 vLLM 우위는 기존 rolling 경로에도 있어 이 후보의 개선으로 해석하지 않는다. C8 unique token interval P95 회귀도 유지 기록한다. 전체 12,288 요청과 stop/cancel/recovery 각312건은 통과했지만 장기 부하 및 다른 모델·하드웨어 검증은 미완료다.

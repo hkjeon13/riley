@@ -223,6 +223,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("optional/ffn_pipeline.cuh"),
         kernels_dir.join("optional/prefill_ffn_pipeline.cuh"),
         kernels_dir.join("optional/query_reuse_mixed_attention.cuh"),
+        kernels_dir.join("optional/gqa_staged_mixed_attention.cuh"),
         kernels_dir.join("optional/compact_mixed_attention.cuh"),
         kernels_dir.join("optional/pod_mixed_attention.cuh"),
         kernels_dir.join("optional/future_token.cuh"),

@@ -5,12 +5,12 @@ use riley_runtime::llama::{PreparedLlamaBatchExecutor,PreparedLlamaBatchExecutor
 use riley_scheduler::{Scheduler,SchedulerConfig,RequestDescriptor,OverloadPolicy,SampledIterationToken,IterationTiming,ExecutionShapePolicy};
 type TestResult<T> = Result<T,Box<dyn std::error::Error>>;
 
-fn run(cached:bool,prompts:&[Vec<u32>],query_reuse:bool)->TestResult<Vec<Vec<u8>>> {
+fn run(cached:bool,prompts:&[Vec<u32>],attention:u8)->TestResult<Vec<Vec<u8>>> {
     let model=LoadedModel::load(std::path::Path::new(&std::env::var("RILEY_REAL_CHECKPOINT")?),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
     let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
     let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,8,1,64)?,PreparedLlamaForwardConfig::default());
     let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;
-    let mut session=if query_reuse {executor.into_owned_variable_query_reuse_session(&context,512,false,false,cached)?}else if cached {executor.into_owned_variable_prefix_session(&context,512,false,false,false,false)?}
+    let mut session=if attention==2 {executor.into_owned_variable_gqa_staging_session(&context,512,false,false,cached)?}else if attention==1 {executor.into_owned_variable_query_reuse_session(&context,512,false,false,cached)?}else if cached {executor.into_owned_variable_prefix_session(&context,512,false,false,false,false)?}
         else {executor.into_owned_variable_mixed_session(&context,512,false)?};
     let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{
         max_waiting_requests:4,max_waiting_prompt_tokens:512,max_active_sequences:2,max_sequence_tokens:1024,
@@ -50,7 +50,7 @@ fn automatic_cache_matches_uncached_model_logits()->TestResult<()> {
     let mut suffix=vec![17;33];suffix[32]=18;
     let mut shorter=vec![17;25];shorter[20]=19;
     let prompts=vec![vec![17;33],vec![17;33],suffix,shorter,vec![18;33]];
-    let cold=run(false,&prompts,false)?;let cached=run(true,&prompts,false)?;
+    let cold=run(false,&prompts,0)?;let cached=run(true,&prompts,0)?;
     for (index,(a,b)) in cold.iter().zip(&cached).enumerate(){assert_eq!(a,b,"cached request {index} changed BF16 logits");}
     println!("automatic-prefix-cache exact_logits_bytes={} requests={} outputs_per_request=3",cold.iter().map(Vec::len).sum::<usize>(),prompts.len());Ok(())
 }
@@ -60,12 +60,27 @@ fn automatic_cache_matches_uncached_model_logits()->TestResult<()> {
 fn query_reuse_matches_full_model_logits()->TestResult<()> {
     let mut suffix=vec![17;398];suffix[397]=18;
     let prompts=vec![vec![17;398],suffix,vec![19;47],vec![20;512]];
-    let cold=run(false,&prompts,false)?;
-    let candidate=run(false,&prompts,true)?;
+    let cold=run(false,&prompts,0)?;
+    let candidate=run(false,&prompts,1)?;
     for (a,b) in cold.iter().zip(&candidate){assert_eq!(a,b,"query reuse changed full model logits");}
     // Repeated long prefixes cover cache-only owners and shorter suffix prefill.
     let shared=vec![vec![17;128];4];
-    let baseline=run(true,&shared,false)?;let reuse=run(true,&shared,true)?;
+    let baseline=run(true,&shared,0)?;let reuse=run(true,&shared,1)?;
     for (a,b) in baseline.iter().zip(&reuse){assert_eq!(a,b,"cached query reuse changed full model logits");}
     println!("query-reuse exact_logits_bytes={}",cold.iter().chain(&baseline).map(Vec::len).sum::<usize>());Ok(())
+}
+
+#[test]
+#[ignore="requires CUDA13 SM89 and real SmolLM2 checkpoint"]
+fn gqa_staging_matches_full_model_logits()->TestResult<()> {
+    let mut suffix=vec![17;398];suffix[397]=18;
+    let prompts=vec![vec![17;398],suffix,vec![19;47],vec![20;512]];
+    let cold=run(false,&prompts,0)?;
+    let candidate=run(false,&prompts,2)?;
+    for (a,b) in cold.iter().zip(&candidate){assert_eq!(a,b,"GQA staging changed full model logits");}
+    // Repeated long prefixes cover cache-only owners and shorter suffix prefill.
+    let shared=vec![vec![17;128];4];
+    let baseline=run(true,&shared,0)?;let reuse=run(true,&shared,2)?;
+    for (a,b) in baseline.iter().zip(&reuse){assert_eq!(a,b,"cached GQA staging changed full model logits");}
+    println!("gqa-staging exact_logits_bytes={}",cold.iter().chain(&baseline).map(Vec::len).sum::<usize>());Ok(())
 }

@@ -6,6 +6,7 @@
 #endif
 #include "mixed_attention_v49.cuh"
 #include "../optional/query_reuse_mixed_attention.cuh"
+#include "../optional/gqa_staged_mixed_attention.cuh"
 #include "mixed_rope_v49.cuh"
 #pragma once
 #include "prefill_shape_projection.cuh"
@@ -24,7 +25,7 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* 
  if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
 }
-template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false>
+template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false,bool GqaStaging=false>
 inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false){
@@ -77,7 +78,8 @@ if constexpr(Fa3) {
    if(err!=cudaSuccess)return err;
 #endif
   } else {
-  if constexpr(QueryReuse)riley_query_reuse::mapped<true><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+  if constexpr(GqaStaging)riley_gqa_staging::mapped<true><<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+  else if constexpr(QueryReuse)riley_query_reuse::mapped<true><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
   else riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,attention_workspace!=nullptr&&!prefill_only,attention_workspace!=nullptr&&prefill_only);
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
   if(attention_workspace){

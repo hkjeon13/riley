@@ -1,0 +1,146 @@
+warning: struct `OwnedCheckedExpectation` is never constructed
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:124:19
+    |
+124 | pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `new` and `checked` are never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:126:19
+    |
+125 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- associated items in this implementation
+126 |     pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+    |                   ^^^
+...
+129 |     pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    |                   ^^^^^^^
+
+warning: `riley-runtime` (lib) generated 2 warnings
+   Compiling riley-server v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.79s
+     Running unittests src/lib.rs (target/debug/deps/riley_server-4de8c9049a056a78)
+
+running 70 tests
+test domain::tests::model_metadata_checks_token_limit_relationship ... ok
+test domain::tests::usage_total_is_checked_once ... ok
+test engine::tests::committed_shape_without_matching_flattened_rows_degrades_without_a_hit ... ok
+test domain::tests::request_metadata_enforces_public_identifier_bounds ... ok
+test engine::tests::complete_iteration_failure_produces_no_audit_record ... ok
+test engine::tests::deferred_cancel_checkpoint_excludes_current_uncommitted_token ... ok
+test engine::tests::gpu_greedy_ineligibility_is_typed_and_has_a_stable_precedence ... ok
+test engine::tests::c02_metrics_map_only_checked_source_owned_scheduler_and_allocation_facts ... ok
+test engine::tests::active_shape_buckets_route_without_hot_path_growth ... ok
+test engine::tests::native_fallback_attribution_requires_one_output_slot ... ok
+test engine::tests::shape_metric_overflow_is_isolated_as_degraded_observability ... ok
+test engine::tests::committed_empty_token_is_delivered_and_channel_overflow_cancels ... ok
+test engine::tests::staged_shape_metrics_count_only_committed_iterations ... ok
+test engine::tests::events_are_ordered_and_terminal_is_last ... ok
+test engine::tests::user_input_diagnostics_do_not_retain_prompt_text ... ok
+test engine::validated_argmax_tests::reuse_requires_eligible_validated_candidate ... ok
+test engine::tests::metrics_snapshot_is_serialized_through_the_worker ... ok
+test engine::tests::slow_consumer_is_cancelled_when_request_channel_is_full ... ok
+test engine::tests::text_only_backend_rejects_token_ids_before_admission ... ok
+test engine::tests::concurrent_requests_finish_without_deadlock ... ok
+test http::tests::response_headers_are_close_delimited_and_non_sniffable ... ok
+test http::tests::fixed_json_and_get_requests_are_framed_exactly ... ok
+test http::tests::header_body_target_and_field_bounds_are_enforced ... ok
+test http::tests::framing_ambiguity_and_missing_required_fields_fail_closed ... ok
+test openai::tests::finish_reason_uses_openai_values ... ok
+test openai::tests::empty_and_aggregate_stop_constraints_are_checked ... ok
+test openai::tests::in_stream_failure_is_sanitized_then_done ... ok
+test openai::tests::multi_or_token_prompt_is_an_explicit_validation_error ... ok
+test openai::tests::non_finite_and_out_of_range_floats_are_rejected ... ok
+test openai::tests::non_neutral_and_unsupported_options_fail_explicitly ... ok
+test openai::tests::non_streaming_response_has_one_choice_and_checked_usage ... ok
+test openai::tests::normalization_applies_defaults_and_preserves_supported_values ... ok
+test openai::tests::numeric_and_byte_bounds_are_enforced_before_admission ... ok
+test openai::tests::request_deserialization_accepts_stop_string_or_array ... ok
+test openai::tests::optional_token_request_flags_are_typed_and_stream_usage_requires_streaming ... ok
+test openai::tests::sanitized_errors_never_contain_internal_diagnostics ... ok
+test openai::tests::opted_in_sse_keeps_empty_tokens_and_requires_checked_usage_before_one_done ... ok
+test openai::tests::sse_encoder_is_deterministic_and_enforces_terminal_order ... ok
+test openai::tests::token_collector_rejects_missing_repeated_or_out_of_order_metadata_and_bounds ... ok
+test openai::tests::usage_only_opt_in_does_not_invent_token_ids_and_direct_finish_cannot_omit_usage ... ok
+test service::tests::cancellation_after_invisible_token_emits_no_success_usage ... ok
+test service::tests::c02_metrics_endpoint_is_raw_canonical_and_explicitly_gated ... ok
+test engine::tests::graceful_shutdown_rejects_new_work_and_closes_backend ... ok
+test engine::tests::drop_guard_cancels_without_relying_on_command_capacity ... ok
+test service::tests::concurrent_clients_finish_without_deadlock ... ok
+test service::tests::committed_tokens_and_usage_survive_concurrent_http_delivery ... ok
+test service::tests::loopback_transport_timing ... ignored, prints loopback transport latency; run alone in release mode
+test service::tests::listener_shutdown_wakeup_persists_and_takes_priority_over_backlog ... ok
+test service::tests::c02_shutdown_evidence_requires_post_close_typed_quiescence ... ok
+test service::tests::metrics_endpoint_consumes_committed_fixed_shape_snapshot ... ok
+test service::tests::observation_buffer_evicts_oldest_metadata_as_one_consistent_state ... ok
+test service::tests::malformed_bounded_and_unavailable_requests_are_sanitized ... ok
+test service::tests::opt_in_nonstream_response_counts_serialized_token_bytes ... ok
+test service::tests::readiness_health_and_model_metadata_are_separate ... ok
+test service::tests::nonstream_disconnect_probe_cadence_counts_invisible_tokens ... ok
+test service::tests::graceful_shutdown_stops_admission_cancels_active_and_joins ... ok
+test service::tests::runtime_config_endpoint_is_immutable_and_fails_closed ... ok
+test service::tests::missing_token_metadata_fails_before_first_payload_and_bad_usage_cannot_finish ... ok
+test service::tests::shutdown_metrics_fail_closed_without_post_close_backend_evidence ... ok
+test service::tests::streaming_and_non_streaming_text_match_and_are_observed ... ok
+test tests::version_line_is_available_without_cuda ... ok
+test service::tests::accepted_connection_waits_for_delayed_request_bytes ... ok
+test engine::tests::model_mismatch_and_live_capacity_are_rejected ... ok
+test service::tests::shutdown_wakes_idle_listener_and_all_workers_without_tcp_connections ... ok
+test service::tests::disconnect_after_invisible_token_cancels_source ... ok
+test service::tests::shutdown_interrupts_partial_requests_within_global_grace ... ok
+test service::tests::backend_and_connection_queue_overload_return_429 ... ok
+test service::tests::shutdown_deadline_contains_a_backend_that_violates_its_contract ... ok
+test service::tests::absolute_framing_deadline_rejects_trickle_and_releases_worker ... ok
+test service::tests::request_timeout_and_client_disconnect_cancel_backend_work ... ok
+
+test result: ok. 69 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running unittests src/main.rs (target/debug/deps/riley-1e0032c6aab50203)
+
+running 36 tests
+test graph_numerics_cli_tests::variable_profile_accepts_supported_shared_capacities ... ok
+test tests::adaptive_decode_requires_independent_loopback_v7 ... ok
+test graph_numerics_cli_tests::shared_profile_is_explicit_and_requires_graph ... ok
+test graph_policy_cli_tests::graph_policy_is_explicit_and_closed ... ok
+test graph_numerics_cli_tests::variable_profile_is_explicit_and_requires_graph_policy ... ok
+test graph_numerics_cli_tests::numerical_profile_requires_explicit_required_graph ... ok
+test tests::c02_generation_audit_marker_binds_only_a_safe_create_only_leaf ... ok
+test tests::c02_linux_process_identity_parser_handles_a_parenthesized_comm ... ok
+test tests::c02_runtime_identity_is_all_or_none_and_fail_closed ... ok
+test tests::c02_generation_audit_v2_schema_is_narrow_and_canonical ... ok
+test tests::c02_shutdown_artifact_requires_one_safe_nonhidden_audit_child ... ok
+test tests::custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound ... ok
+test tests::ffn_pipeline_requires_independent_v7_and_loopback ... ok
+test tests::fixed37_profile_rejects_an_advertised_context_above_its_ragged_limit ... ok
+test tests::fa3_diagnostic_is_explicit_loopback_and_requires_graph ... ok
+test tests::flashinfer_diagnostic_is_explicit_loopback_and_requires_graph ... ok
+test tests::fused_residual_norm_requires_explicit_per_operation_completion ... ok
+test tests::mixed_time_cli_bounds_and_profile ... ok
+test tests::mixed_v7_profile_preserves_aggregate_budget ... ok
+test tests::packed_v6_profile_preserves_aggregate_budget ... ok
+test tests::paired_decode_requires_compatible_graph_sampling_and_loopback ... ok
+test tests::c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection ... ok
+test tests::prefill_ffn_selection_checks_profile_bind_and_pairing ... ok
+test tests::reduction_profile_values_and_duplicates_fail_closed ... ok
+test tests::serve_defaults_are_bounded_and_model_is_required ... ok
+test tests::serve_explicit_options_and_duplicate_rejection_are_deterministic ... ok
+test tests::c02_receipt_bytes_and_startup_artifact_are_canonical_and_create_only ... ok
+test tests::variable_v4_cli_selects_sixteen_row_profile_explicitly ... ok
+test tests::variable_v5_cli_selects_thirtytwo_row_profile_explicitly ... ok
+test tests::version_and_help_are_exact_commands ... ok
+test tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence ... ok
+test tests::shutdown_metrics_path_is_absolute_and_create_only ... ok
+test signal::tests::synchronously_receives_sigint_and_sigterm ... ok
+test tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker ... ok
+test tests::c02_audit_directory_is_private_held_and_descriptor_relative ... ok
+test tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+   Doc-tests riley_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
