@@ -9,6 +9,7 @@ import sys
 parser = argparse.ArgumentParser()
 for name in ('source', 'output', 'headers', 'nvcc'):
     parser.add_argument('--'+name, type=Path, required=True)
+parser.add_argument('--zero-padding', action='store_true')
 args = parser.parse_args()
 source = args.source.resolve()
 out = args.output.absolute()
@@ -20,12 +21,12 @@ from verify_flashinfer import header_digest
 
 receipt = prepare(args.headers, out/'headers')
 header = out/'headers/include/flashinfer/attention/prefill.cuh'
-header.write_text(transform(header.read_text()))
+header.write_text(transform(header.read_text(), zero_padding=args.zero_padding))
 # The original receipt describes only the synchronized BF16 overlay. Retain it
 # as provenance, and replace it with an explicit diagnostic receipt.
 receipt = {'base_overlay': receipt,
            'profile': 'BF16 storage, FP16 register inputs with explicit FTZ, FP32 accumulation',
-           'numerical_error_status_bit': 32,
+           'numerical_error_status_bit': 32, 'zero_padding': args.zero_padding,
            'prefill_sha256': hashlib.sha256(header.read_bytes()).hexdigest(),
            'header_tree_sha256': header_digest(out/'headers')}
 (out/'headers/overlay.json').write_text(json.dumps(receipt, indent=2)+'\n')

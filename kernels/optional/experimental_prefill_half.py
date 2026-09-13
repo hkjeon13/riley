@@ -13,7 +13,7 @@ def close_paren(text, start):
             return i
     raise ValueError('unbalanced function/call')
 
-def transform(text):
+def transform(text, zero_padding=False):
     if hashlib.sha256(text.encode()).hexdigest() != BASE:
         raise ValueError('expected pinned warp-synchronized BF16 prefill header')
     for name in ['compute_qk', 'compute_sfm_v']:
@@ -79,4 +79,12 @@ __device__ __forceinline__ void riley_half_fragment(uint32_t (&fragment)[4], uin
     result = text.replace(anchor, helper+anchor)
     if hashlib.sha256(result.encode()).hexdigest() != PATCHED:
         raise ValueError('half-register diagnostic differs from verified header')
+    if zero_padding:
+        kv = 'produce_v ? SharedMemFillMode::kFillZero : SharedMemFillMode::kNoFill'
+        q = 'q_smem->template load_128b_async<SharedMemFillMode::kNoFill>'
+        if result.count(kv) != 2 or result.count(q) != 1:
+            raise ValueError('padding initialization anchors changed')
+        result = result.replace(kv, 'SharedMemFillMode::kFillZero').replace(q, q.replace('kNoFill', 'kFillZero'))
+        if hashlib.sha256(result.encode()).hexdigest() != '52e30676f420ea9bb86e8bb091de48f4e4c4250ec94f4cebf94f40ba51f35ca0':
+            raise ValueError('zero-padding overlay differs')
     return result

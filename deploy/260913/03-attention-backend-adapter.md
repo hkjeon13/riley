@@ -134,3 +134,8 @@ C32 natural·두 역순·engine별1,536 retained 비교에서 V7/후보/vLLM thr
 ### BF16 저장 / FP16 register 변환 native 진단
 
 [검증 기록](../../benchmarks/results/20260913-prefill-half-register/README.md): 명시적인 Q/K/V fragment 및 probability 변환, FP16 범위 오류 status, 별도 검증 overlay를 구현했다. 일반·mixed oracle, 15개 nonfinite/overflow 주입, memcheck/racecheck를 통과했다. SM90a/SM100a compile 통과, runtime은 장비 부재 skip이다. 기본 backend는 유지한다. 다음은 변환 경계·full-model 품질·status 전달·workspace/graph 계약 통합이며 새 serving 결과는 아직 없다.
+
+
+### FP16 register 모델 판정
+
+[모델 v2 보고서](../../benchmarks/results/20260913-prefill-half-register/README.md): workspace·graph profile·prefill selector를 격리 모델에 연결했다. Q/K padding zero-fill로 초기 status32 오류를 해결하고 native fault/memcheck/racecheck 및 full-model memcheck를 통과했다. 자연어 NLL은 개선됐으나 KL이 2.87% 증가했고 strict 자유 생성은 284/1,024 tokens가 달라 품질 gate에 실패했다. 기본값 승격은 보류하며 새 serving 성능 주장은 없다. 후속 backend 선택은 이 모델 결과를 반영하고 FP16 변환 계열의 추가 tile 튜닝을 기본 방향으로 삼지 않는다.
