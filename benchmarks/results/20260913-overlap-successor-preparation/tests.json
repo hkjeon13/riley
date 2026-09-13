@@ -1,0 +1,16 @@
+{
+  "runtime_staged_window": {
+    "passed": 6,
+    "mode": "CUDA feature release library tests with fake native graph",
+    "initial_failure": "test fixture aggregate stage was incorrectly Prefill for all-decode rows; corrected to Decode; actual failed log retained remotely"
+  },
+  "scheduler_decode_window": {
+    "passed": 6,
+    "mode": "CPU library tests; prefix stop/cancel, OOM rollback, atomic result rejection, page boundary and C32"
+  },
+  "build": {
+    "exit_code": 0,
+    "release_cuda_seconds": 11.36
+  },
+  "scope": "Tests establish covered contracts, not serving speedup or GPU event completion."
+}

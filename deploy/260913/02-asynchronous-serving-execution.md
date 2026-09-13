@@ -193,3 +193,12 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 첫 read 이후에도 issue/commit을 거부하며, callback 오류도 successor drain 뒤 전파한다. Native/validation 오류 시 기존 retained owner의 close·격리 경로를 따른다. 첫 결과 처리 중 scheduler와 graph owner는 로컬 scope에서 보유하고 오류 반환 전에 server 필드로 복구한다. 첫 stop에 따른 successor suppression, 전체 drain 후 atomic pair settlement와 외부 공개를 유지한다.
 
 새 상태 전이 테스트 3개, CUDA release build, 실제 HTTP reference/stop/cancel smoke를 통과했다. [최종 결과](../../benchmarks/results/20260913-staged-pair-drain/README.md): 실제83개 pair 모두 host/device overlap을 확인했으나 serving 변화는 직전 paired 대비+0.58%(두 순서+1.65%/−0.49%)로 안정적인 이득을 입증하지 못했다. vLLM 대비−7.39%, default single 유지다. 다음 영역은 다음 descriptor/scheduler 준비와 commit 의존성을 나눈 예약 구조이며 token 처리의 추가 미세 튜닝은 우선하지 않는다.
+
+
+## Successor preparation overlap batch — 구현·측정 완료, 승격 보류
+
+기존 두-iteration KV 예약을 유지하면서 첫 descriptor만 준비해 GPU에 먼저 제출한다. 두 번째 descriptor/미래 token reference 검증·encoding은 첫 graph가 실행되는 동안 수행하고, 그 후 successor를 같은 stream에 제출한다. Authority의 first/second wire 준비를 분리하고 runtime에 retained predecessor ticket 상태를 추가했다. 이 상태에서는 단일-iteration wait/query/commit과 새 issue를 거부한다. 늦은 준비·검증·제출 오류는 NotDispatched로 되돌리지 않고 owner를 격리한다. 이후 staged drain/stop suppression/전체 pair commit을 유지한다.
+
+현재 pair보다 더 먼 iteration을 예약하거나 scheduler의 in-flight 수를 늘리는 구현은 아니다. 먼저 이 영역의 실제 준비 overlap과 serving 효과를 검증하며 default single은 유지한다. 새로운 상태 전이, descriptor 오류, exact serving/stop/cancel, 같은 조건의 single/직전/후보/vLLM 역순 비교와 CUDA graph trace를 수행한다.
+
+[최종 측정](../../benchmarks/results/20260913-overlap-successor-preparation/README.md): C32 throughput은 직전 paired 대비+4.27%, vLLM 대비−3.38%다. 준비 구간의 predecessor device overlap 중앙값271.24µs를 확인했다. Client C64/active32에서는 직전 대비+0.71%로 반복별 부호가 달랐고 vLLM 대비−7.93%, TTFT/TPOT도 더 높았다. 기본값 single을 유지하며 높은 부하 전반의 개선이나 PR02 전체 완료로 표시하지 않는다. 다음 pair 준비와 admission/commit 의존성 분리를 별도로 다룬다.

@@ -65,10 +65,12 @@ def summary(rows):
     return out
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('root',type=pathlib.Path);parser.add_argument('fixture',type=pathlib.Path);parser.add_argument('out',type=pathlib.Path);parser.add_argument('--warmup',type=int,default=192);parser.add_argument('--retained',type=int,default=768);parser.add_argument('--concurrency',type=int,default=32);parser.add_argument('--smoke',action='store_true');parser.add_argument('--riley-only',action='store_true');parser.add_argument('--prior-paired-binary',type=pathlib.Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('root',type=pathlib.Path);parser.add_argument('fixture',type=pathlib.Path);parser.add_argument('out',type=pathlib.Path);parser.add_argument('--warmup',type=int,default=192);parser.add_argument('--retained',type=int,default=768);parser.add_argument('--concurrency',type=int,default=32);parser.add_argument('--active-capacity',type=int);parser.add_argument('--smoke',action='store_true');parser.add_argument('--riley-only',action='store_true');parser.add_argument('--prior-paired-binary',type=pathlib.Path);args=parser.parse_args()
+    capacity=args.concurrency if args.active_capacity is None else args.active_capacity
+    assert args.concurrency>0 and capacity>0
     spec=json.loads(args.fixture.read_text());args.out.mkdir();binary=args.root/'target/release/riley'
     env=os.environ.copy();env.update({'CUDA_VISIBLE_DEVICES':'0','VLLM_BATCH_INVARIANT':'0','LD_LIBRARY_PATH':str(args.root/'toolchain130/nvidia/cu13/lib')+':/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/nvidia/cu13/lib'})
-    write(args.out/'preparation.json',{'binary_sha256':file_hash(binary),'fixture_sha256':file_hash(args.fixture),'controller_sha256':file_hash(__file__),'concurrency':args.concurrency,'warmup':args.warmup,'retained':args.retained,'smoke':args.smoke,'riley_only':args.riley_only,'prior_paired_binary':str(args.prior_paired_binary) if args.prior_paired_binary else None,'prior_paired_sha256':file_hash(args.prior_paired_binary) if args.prior_paired_binary else None,'host_phase_timing':env.get('RILEY_SERVING_PHASE_TIMING')=='1','timing_scope':'client-observed SSE frames; no token timestamp interpolation','qualified':False,'gpu':subprocess.check_output(['nvidia-smi','--query-gpu=uuid,name,driver_version,memory.total','--format=csv,noheader'],text=True).strip(),'model_files':{str(path):file_hash(path) for path in pathlib.Path(spec['riley_argv'][spec['riley_argv'].index('--model')+1]).glob('*') if path.is_file()}})
+    write(args.out/'preparation.json',{'binary_sha256':file_hash(binary),'fixture_sha256':file_hash(args.fixture),'controller_sha256':file_hash(__file__),'concurrency':args.concurrency,'active_capacity':capacity,'warmup':args.warmup,'retained':args.retained,'smoke':args.smoke,'riley_only':args.riley_only,'prior_paired_binary':str(args.prior_paired_binary) if args.prior_paired_binary else None,'prior_paired_sha256':file_hash(args.prior_paired_binary) if args.prior_paired_binary else None,'host_phase_timing':env.get('RILEY_SERVING_PHASE_TIMING')=='1','timing_scope':'client-observed SSE frames; no token timestamp interpolation','qualified':False,'gpu':subprocess.check_output(['nvidia-smi','--query-gpu=uuid,name,driver_version,memory.total','--format=csv,noheader'],text=True).strip(),'model_files':{str(path):file_hash(path) for path in pathlib.Path(spec['riley_argv'][spec['riley_argv'].index('--model')+1]).glob('*') if path.is_file()}})
     records=[];stop_references=None;orders=[['single','paired']] if args.smoke else ([['single','paired'],['paired','single']] if args.riley_only else [['single','paired','vllm'],['vllm','paired','single']])
     if args.prior_paired_binary:
         assert not args.smoke and not args.riley_only
@@ -82,9 +84,9 @@ def main():
             with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
             argv=list(spec['vllm_argv' if lane=='vllm' else 'riley_argv'])
             def option(key,value):argv[argv.index(key)+1]=str(value)
-            if lane=='vllm':option('--port',port);option('--max-num-seqs',args.concurrency)
+            if lane=='vllm':option('--port',port);option('--max-num-seqs',capacity)
             else:
-                argv[0]=str(binary);option('--bind',f'127.0.0.1:{port}');option('--max-active-sequences',args.concurrency)
+                argv[0]=str(binary);option('--bind',f'127.0.0.1:{port}');option('--max-active-sequences',capacity)
                 if lane in ('paired','prior_paired'):argv+=['--decode-window','paired-experimental-v1']
                 if lane=='prior_paired':argv[0]=str(args.prior_paired_binary)
             lane_env=env.copy()

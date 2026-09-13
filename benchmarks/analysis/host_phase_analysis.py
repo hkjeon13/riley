@@ -16,8 +16,9 @@ def parse(path):
     assert runtime['retain_encode']['calls']==total_steps
     staged=runtime['read_validate']['calls']-total_steps
     assert staged in (0,engine['paired_decode']['steps'])
-    assert runtime['sync_transfer']['calls']+runtime['buffered_submit']['calls']==total_steps
-    assert runtime['buffered_wait']['calls']==runtime['buffered_submit']['calls']+staged
+    extra_submit=runtime['sync_transfer']['calls']+runtime['buffered_submit']['calls']-total_steps
+    assert extra_submit in (0,engine['paired_decode']['steps'])
+    assert runtime['buffered_wait']['calls']==runtime['buffered_submit']['calls']+staged-extra_submit
     assert runtime['future_prepare']['calls'] in (0,engine['paired_decode']['steps'])
     execute=sum(r['execute_wall_ns'] for r in engine.values())
     native=sum(runtime[k]['wall_ns'] for k in ['sync_transfer','buffered_submit','buffered_wait'])

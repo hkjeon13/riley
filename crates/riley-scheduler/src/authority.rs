@@ -486,13 +486,20 @@ pub struct AuthorizedDecodeWindow<'a> {
     pub(crate) second: AuthorizedExecution<'a>,
 }
 impl AuthorizedDecodeWindow<'_> {
-    #[allow(dead_code)]
-    pub(crate) fn prepare_wire(&self,owner:&VariableOwnerGeometry,replay:u64,first_cookies:&[u64],second_cookies:&[u64])->crate::descriptor::Result<crate::descriptor::future_token::PreparedFutureWindow> {
-        let first=self.first.variable_descriptor_expectation_rows::<32>(owner,replay,first_cookies,crate::descriptor::ResultMode::Greedy)?;
+    pub(crate) fn prepare_wire_first(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
+        self.first.variable_descriptor_expectation_rows::<32>(owner,replay,cookies,crate::descriptor::ResultMode::Greedy)
+    }
+    pub(crate) fn prepare_wire_second(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
         let mut structural_owner=owner.clone();structural_owner.last_accepted_replay=replay;
         let next=replay.checked_add(1).ok_or(crate::descriptor::Error{field:"window replay",reason:"overflow"})?;
-        let mut second=self.second.variable_descriptor_expectation_rows::<32>(&structural_owner,next,second_cookies,crate::descriptor::ResultMode::Greedy)?;
+        let mut second=self.second.variable_descriptor_expectation_rows::<32>(&structural_owner,next,cookies,crate::descriptor::ResultMode::Greedy)?;
         second.last_accepted_replay=owner.last_accepted_replay;
+        Ok(second)
+    }
+    #[allow(dead_code)]
+    pub(crate) fn prepare_wire(&self,owner:&VariableOwnerGeometry,replay:u64,first_cookies:&[u64],second_cookies:&[u64])->crate::descriptor::Result<crate::descriptor::future_token::PreparedFutureWindow> {
+        let first=self.prepare_wire_first(owner,replay,first_cookies)?;
+        let second=self.prepare_wire_second(owner,replay,second_cookies)?;
         let sources=(0..second.rows.len()).map(|i|crate::descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();
         crate::descriptor::future_token::PreparedFutureWindow::new(first,second,&sources)
     }

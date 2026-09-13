@@ -24,11 +24,19 @@ def measure(launches, waits, activities):
         overlapped = union_ns([(max(s, a[1]), min(e, b[0]))
                               for s, e in activities[second['correlation']]
                               if max(s, a[1]) < min(e, b[0])])
+        assert first['cpu_end'] <= second['cpu_start']
+        preparation_overlap = union_ns([(max(s, first['cpu_end']), min(e, second['cpu_start']))
+                                        for s, e in activities[first['correlation']]
+                                        if max(s, first['cpu_end']) < min(e, second['cpu_start'])])
         rows.append({'first_correlation': first['correlation'], 'second_correlation': second['correlation'],
+                     'between_launches_ns': second['cpu_start']-first['cpu_end'],
+                     'preparation_device_overlap_ns': preparation_overlap,
                      'host_start_ns': a[1], 'host_end_ns': b[0],
                      'between_waits_ns': b[0]-a[1], 'overlapped_device_activity_ns': overlapped})
     assert rows
     return {'pairs': len(rows), 'pairs_with_device_overlap': sum(r['overlapped_device_activity_ns'] > 0 for r in rows),
+            'between_launches': quantiles([r['between_launches_ns'] for r in rows]),
+            'preparation_device_overlap': quantiles([r['preparation_device_overlap_ns'] for r in rows]),
             'between_waits': quantiles([r['between_waits_ns'] for r in rows]),
             'overlapped_device_activity': quantiles([r['overlapped_device_activity_ns'] for r in rows]), 'rows': rows}
 
@@ -54,7 +62,7 @@ def main():
                 for s, e, correlation in db.execute(f'SELECT start,end,correlationId FROM {table}'):
                     activities.setdefault(correlation, []).append((s, e))
     report = measure(prior['launches'], waits, activities)
-    report.update(source_sha256=source['source_sha256'], scope='Middle launch-count window; CPU interval includes result read/validation, token/stop processing and other host overhead. GPU intervals are unioned. Profiler and client overhead remain. Event association uses the verified two-wait execution order; this does not isolate callback time or establish serving gain.')
+    report.update(source_sha256=source['source_sha256'], scope='Middle launch-count window; Between-launches interval includes successor descriptor preparation and native host overhead; between-waits interval includes result read/validation and token/stop processing. GPU intervals are unioned. Profiler and client overhead remain. Event association uses the verified two-wait execution order; this does not isolate callback time or establish serving gain.')
     a.output.write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k: v for k, v in report.items() if k != 'rows'}, indent=2))
 

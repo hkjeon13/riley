@@ -2361,8 +2361,11 @@ pub fn execute_llama_decode_window_with_first<G:riley_runtime::llama::variable_s
     let outputs=[prepare(&authority.first)?,prepare(&authority.second)?];
     let(identity,replay,first_cookies,second_cookies)=executor.issue_decode_window(outputs[0].output_count).map_err(desc)?;
     let owner=crate::authority::VariableOwnerGeometry{mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
-    let prepared=match authority.prepare_wire(&owner,replay,&first_cookies,&second_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
-    executor.submit_prepared_decode_window(prepared).map_err(|e|variable_ticket_failure(id,e))?;
+    let first=match authority.prepare_wire_first(&owner,replay,&first_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
+    executor.submit_decode_window_predecessor(first).map_err(|e|variable_ticket_failure(id,e))?;
+    // The second descriptor and future packet are prepared while the first
+    // graph can execute. Runtime contains every failure after that dispatch.
+    executor.submit_decode_window_successor(||authority.prepare_wire_second(&owner,replay,&second_cookies)).map_err(|e|variable_ticket_failure(id,e))?;
     let fill=|mut output:DownloadedLlamaIteration,rows:Vec<(u32,u32)>| {
         if rows.len()!=output.output_count {return Err(variable_ticket_failure(id,crate::descriptor::Error{field:"window output",reason:"publication count differs"}));}
         let DownloadedLlamaOutput::GreedyTokens(tokens)=&mut output.output else{unreachable!()};
