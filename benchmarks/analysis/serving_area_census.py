@@ -25,7 +25,7 @@ def area(name):
 
 
 path, output = map(Path, sys.argv[1:3])
-gaps, launches = analyze(path)
+gaps, launches = analyze(path, merge_graph_streams=True)
 launches.sort(key=lambda x: x['gpu_start'])
 assert len(gaps['groups']) == 1
 connection = sqlite3.connect(path.resolve().as_uri()+'?mode=ro', uri=True)

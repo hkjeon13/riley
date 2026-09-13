@@ -58,7 +58,7 @@ def gap_accounting(rows):
             'inside_graph_unoccupied_ms': sum(row['gpu_end']-row['gpu_start']-row['gpu_union_ns'] for row in rows)/1e6}
 
 
-def analyze(path):
+def analyze(path, merge_graph_streams=False):
     connection = sqlite3.connect(path.resolve().as_uri()+'?mode=ro', uri=True)
     tables = {row[0] for row in connection.execute("select name from sqlite_master where type='table'")}
     api = {}
@@ -78,10 +78,12 @@ def analyze(path):
         for start, end, correlation, pid, context, stream in connection.execute(
                 f'select start,end,correlationId,globalPid,contextId,streamId from {table}'):
             if correlation in api:
-                activities.setdefault((pid,context,stream,correlation), []).append((start,end,table))
+                group_stream = -1 if merge_graph_streams else stream
+                activities.setdefault((pid,context,group_stream,correlation), []).append((start,end,table,stream))
     rows = []
     for (pid,context,stream,correlation), events in activities.items():
         rows.append(dict(api[correlation], global_pid=pid, context=context, stream=stream,
+                         streams=sorted({e[3] for e in events}),
                          correlation=correlation, gpu_start=min(e[0] for e in events),
                          gpu_end=max(e[1] for e in events), gpu_union_ns=union_ns([(e[0],e[1]) for e in events]),
                          kernels=sum(e[2].endswith('KERNEL') for e in events), activities=len(events)))
@@ -107,8 +109,10 @@ def analyze(path):
         for block in iter(lambda:source.read(1024*1024), b''):
             digest.update(block)
     return {'source':str(path.resolve()),'source_sha256':digest.hexdigest(),
+            'stream_mode':'merged_graph_internal_streams' if merge_graph_streams else 'strict_single_stream',
             'cpu_graph_launches':len(api), 'matched_device_launches':len(rows), 'groups':reports,
-            'limits':['All inter-graph gaps are optimistically removable, including client pacing and launch overhead.',
+            'limits':['Merged mode unions internal streams per process/context/launch; overlapping launch envelopes remain rejected.',
+                      'All inter-graph gaps are optimistically removable, including client pacing and launch overhead.',
                       'Profiler overhead is not removed; this is not a bound on unprofiled serving.',
                       'Inside-graph unoccupied time is kept and must not be called scheduler host bubble.',
                       'No throughput, latency, fairness or correctness gain is established.']}, rows
@@ -117,9 +121,10 @@ def analyze(path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('sqlite',type=Path)
+    parser.add_argument('--merge-graph-streams', action='store_true')
     parser.add_argument('--output',type=Path,required=True)
     args = parser.parse_args()
-    report, rows = analyze(args.sqlite)
+    report, rows = analyze(args.sqlite, merge_graph_streams=args.merge_graph_streams)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(report,indent=2)+'\n')
     with args.output.with_suffix('.csv').open('w',newline='') as output:

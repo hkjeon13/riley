@@ -1,0 +1,166 @@
+{
+  "trace": {
+    "source": "/data/riley-serving-260913-recovery/paired-trace-v3/paired.sqlite",
+    "source_sha256": "032e0c13ed405a6dd766213dc8bf9f52cee92b5eae99d532157c53d8169d2f81",
+    "stream_mode": "merged_graph_internal_streams",
+    "cpu_graph_launches": 302,
+    "matched_device_launches": 302,
+    "groups": [
+      {
+        "launches": 302,
+        "window_ms": 759.508584,
+        "graph_span_ms": 624.198624,
+        "inter_graph_gap": {
+          "count": 301,
+          "median_us": 298.696,
+          "p95_us": 1547.151,
+          "max_us": 9366.759,
+          "sum_ms": 135.30996
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 301,
+          "median_us": 291.286,
+          "p95_us": 1537.091,
+          "max_us": 9340.084,
+          "sum_ms": 132.908304
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 301,
+          "median_us": 8.161,
+          "p95_us": 14.441,
+          "max_us": 26.675,
+          "sum_ms": 2.401656
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.17815461582722547,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.216773883820673,
+        "inside_graph_unoccupied_ms": 35.602497,
+        "process_context_stream": [
+          291612559147008,
+          1,
+          -1
+        ],
+        "kernel_count_distribution": {
+          "276": 137,
+          "277": 111,
+          "306": 54
+        }
+      }
+    ],
+    "limits": [
+      "Merged mode unions internal streams per process/context/launch; overlapping launch envelopes remain rejected.",
+      "All inter-graph gaps are optimistically removable, including client pacing and launch overhead.",
+      "Profiler overhead is not removed; this is not a bound on unprofiled serving.",
+      "Inside-graph unoccupied time is kept and must not be called scheduler host bubble.",
+      "No throughput, latency, fairness or correctness gain is established."
+    ]
+  },
+  "scope": "Middle 80 percent of graph launches by count; startup/drain are not precisely isolated; profiler overhead remains.",
+  "stages": {
+    "decode": {
+      "launches": 200,
+      "kernel_ms": 275.473679,
+      "graph_span_ms": 297.891427,
+      "areas": {
+        "attention": {
+          "kernel_ms": 91.56629,
+          "kernel_fraction": 0.3323957858057285,
+          "count": 12000
+        },
+        "ffn_gate_activation_down": {
+          "kernel_ms": 89.52749,
+          "kernel_fraction": 0.324994715738341,
+          "count": 12000
+        },
+        "other_projections_qkv_rope": {
+          "kernel_ms": 56.675556,
+          "kernel_fraction": 0.2057385526114094,
+          "count": 18000
+        },
+        "residual_norm": {
+          "kernel_ms": 22.126963,
+          "kernel_fraction": 0.08032332918456431,
+          "count": 12200
+        },
+        "output_head": {
+          "kernel_ms": 13.156485,
+          "kernel_fraction": 0.04775949937489309,
+          "count": 200
+        },
+        "other": {
+          "kernel_ms": 2.420895,
+          "kernel_fraction": 0.00878811728506374,
+          "count": 889
+        }
+      },
+      "kernels_ms": {
+        "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)": 58.087372,
+        "void riley_gate_v56::split_rows<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)": 54.127841,
+        "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)": 35.399649,
+        "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)": 33.478918,
+        "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 25.989685,
+        "riley_merge_norm_v56::merge_norm(const float *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 21.799429,
+        "void shared32_projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)": 21.59182,
+        "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)": 13.156485,
+        "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)": 9.094051,
+        "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)": 0.72954,
+        "riley_future_token::resolve(unsigned int *, const riley_future_token::Reference *, const unsigned int *, unsigned int *)": 0.692065,
+        "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)": 0.538474,
+        "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 0.327534,
+        "riley_shared32_model::embedding(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, unsigned int *)": 0.293696,
+        "riley_shared32_model::clear_inactive_hidden(__nv_bfloat16 *, const unsigned int *)": 0.16712
+      }
+    },
+    "prefill_or_mixed": {
+      "launches": 41,
+      "kernel_ms": 186.996442,
+      "graph_span_ms": 194.968805,
+      "areas": {
+        "attention": {
+          "kernel_ms": 64.454833,
+          "kernel_fraction": 0.3446848095644515,
+          "count": 1230
+        },
+        "other_projections_qkv_rope": {
+          "kernel_ms": 59.384659,
+          "kernel_fraction": 0.31757106373179017,
+          "count": 6150
+        },
+        "ffn_gate_activation_down": {
+          "kernel_ms": 52.621856,
+          "kernel_fraction": 0.2814056536968762,
+          "count": 2460
+        },
+        "residual_norm": {
+          "kernel_ms": 7.364717,
+          "kernel_fraction": 0.03938426272303085,
+          "count": 2501
+        },
+        "output_head": {
+          "kernel_ms": 2.787735,
+          "kernel_fraction": 0.014907957446591418,
+          "count": 41
+        },
+        "other": {
+          "kernel_ms": 0.382642,
+          "kernel_fraction": 0.002046252837259866,
+          "count": 164
+        }
+      },
+      "kernels_ms": {
+        "riley_mixed_attention::mapped_attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, bool, bool)": 64.454833,
+        "void gemm_prefill_shape_vector<(int)576, (int)1536, (int)320, (int)2, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 26.531533,
+        "void riley_prefill51::gate_up<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 26.090323,
+        "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 20.114062,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 14.617544,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 13.932551,
+        "mixed_rope_kv_v7(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)": 10.720502,
+        "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 7.364717,
+        "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)": 2.787735,
+        "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)": 0.152594,
+        "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)": 0.098607,
+        "riley_prefill_pointwise::embedding_rows(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, const unsigned int *, unsigned int, unsigned int, unsigned int *, const unsigned int *)": 0.072521,
+        "mixed_select_hidden_v7(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int, const unsigned int *, unsigned int *)": 0.05892
+      }
+    }
+  }
+}

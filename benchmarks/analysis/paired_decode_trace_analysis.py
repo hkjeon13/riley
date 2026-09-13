@@ -5,7 +5,7 @@ from overlap_headroom import analyze,gap_accounting,quantiles
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('sqlite',type=pathlib.Path);ap.add_argument('output',type=pathlib.Path);args=ap.parse_args()
-    report,launches=analyze(args.sqlite);assert len(report['groups'])==1
+    report,launches=analyze(args.sqlite, merge_graph_streams=True);assert len(report['groups'])==1
     db=sqlite3.connect(args.sqlite.resolve().as_uri()+'?mode=ro',uri=True)
     kernels=collections.defaultdict(list)
     for start,end,correlation,name in db.execute('SELECT k.start,k.end,k.correlationId,s.value FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON k.demangledName=s.id'):

@@ -1,0 +1,5120 @@
+{
+  "source": {
+    "source": "/data/riley-serving-260913-recovery/paired-trace-v3/paired.sqlite",
+    "source_sha256": "032e0c13ed405a6dd766213dc8bf9f52cee92b5eae99d532157c53d8169d2f81",
+    "stream_mode": "merged_graph_internal_streams",
+    "cpu_graph_launches": 302,
+    "matched_device_launches": 302,
+    "groups": [
+      {
+        "launches": 302,
+        "window_ms": 759.508584,
+        "graph_span_ms": 624.198624,
+        "inter_graph_gap": {
+          "count": 301,
+          "median_us": 298.696,
+          "p95_us": 1547.151,
+          "max_us": 9366.759,
+          "sum_ms": 135.30996
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 301,
+          "median_us": 291.286,
+          "p95_us": 1537.091,
+          "max_us": 9340.084,
+          "sum_ms": 132.908304
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 301,
+          "median_us": 8.161,
+          "p95_us": 14.441,
+          "max_us": 26.675,
+          "sum_ms": 2.401656
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.17815461582722547,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.216773883820673,
+        "inside_graph_unoccupied_ms": 35.602497,
+        "process_context_stream": [
+          291612559147008,
+          1,
+          -1
+        ],
+        "kernel_count_distribution": {
+          "276": 137,
+          "277": 111,
+          "306": 54
+        }
+      }
+    ],
+    "limits": [
+      "Merged mode unions internal streams per process/context/launch; overlapping launch envelopes remain rejected.",
+      "All inter-graph gaps are optimistically removable, including client pacing and launch overhead.",
+      "Profiler overhead is not removed; this is not a bound on unprofiled serving.",
+      "Inside-graph unoccupied time is kept and must not be called scheduler host bubble.",
+      "No throughput, latency, fairness or correctness gain is established."
+    ]
+  },
+  "scope": "middle 80 percent of graph launch count; includes profiling overhead and client pacing; no speedup claim",
+  "selected": {
+    "launches": 241,
+    "window_ms": 607.111434,
+    "graph_span_ms": 492.860232,
+    "inter_graph_gap": {
+      "count": 240,
+      "median_us": 361.9685,
+      "p95_us": 1659.391,
+      "max_us": 2763.634,
+      "sum_ms": 114.251202
+    },
+    "post_gpu_until_next_cpu_launch": {
+      "count": 240,
+      "median_us": 353.097,
+      "p95_us": 1649.684,
+      "max_us": 2752.722,
+      "sum_ms": 112.318859
+    },
+    "remaining_gap_after_cpu_launch_starts": {
+      "count": 240,
+      "median_us": 8.2415,
+      "p95_us": 12.664,
+      "max_us": 17.524,
+      "sum_ms": 1.932343
+    },
+    "removable_fraction_if_all_inter_graph_gaps_vanish": 0.18818819017663238,
+    "optimistic_trace_speedup_if_all_gaps_vanish": 1.2318125800825415,
+    "inside_graph_unoccupied_ms": 28.435454
+  },
+  "stage_graph_spans": {
+    "future_decode": {
+      "count": 89,
+      "median_us": 1465.508,
+      "p95_us": 1507.498,
+      "max_us": 1514.89,
+      "sum_ms": 126.749229
+    },
+    "ordinary_decode": {
+      "count": 111,
+      "median_us": 1569.683,
+      "p95_us": 1635.771,
+      "max_us": 2182.02,
+      "sum_ms": 171.142198
+    },
+    "prefill_or_mixed": {
+      "count": 41,
+      "median_us": 5167.029,
+      "p95_us": 5647.22,
+      "max_us": 5697.179,
+      "sum_ms": 194.968805
+    }
+  },
+  "gaps": {
+    "after_pair": {
+      "gpu_gap": {
+        "count": 88,
+        "median_us": 716.5275,
+        "p95_us": 1143.706,
+        "max_us": 2251.086,
+        "sum_ms": 59.994501
+      },
+      "post_gpu_until_cpu_launch": {
+        "count": 88,
+        "median_us": 704.8895,
+        "p95_us": 1126.182,
+        "max_us": 2235.313,
+        "sum_ms": 59.237197
+      }
+    },
+    "ordinary": {
+      "gpu_gap": {
+        "count": 64,
+        "median_us": 637.029,
+        "p95_us": 1826.069,
+        "max_us": 2763.634,
+        "sum_ms": 53.706262
+      },
+      "post_gpu_until_cpu_launch": {
+        "count": 64,
+        "median_us": 626.3385,
+        "p95_us": 1813.021,
+        "max_us": 2752.722,
+        "sum_ms": 53.081662
+      }
+    },
+    "within_pair": {
+      "gpu_gap": {
+        "count": 88,
+        "median_us": 6.1605,
+        "p95_us": 9.25,
+        "max_us": 11.106,
+        "sum_ms": 0.550439
+      },
+      "post_gpu_until_cpu_launch": {
+        "count": 88,
+        "median_us": 0.0,
+        "p95_us": 0.0,
+        "max_us": 0.0,
+        "sum_ms": 0.0
+      }
+    }
+  },
+  "runtime_apis": {
+    "cudaEventSynchronize_v3020": {
+      "count": 240,
+      "median_us": 2390.7705,
+      "p95_us": 5276.955,
+      "max_us": 5538.16,
+      "sum_ms": 454.586009
+    },
+    "cudaGraphLaunch_v10000": {
+      "count": 241,
+      "median_us": 139.919,
+      "p95_us": 222.555,
+      "max_us": 799.967,
+      "sum_ms": 37.873406
+    },
+    "cudaEventRecord_v3020": {
+      "count": 241,
+      "median_us": 1.674,
+      "p95_us": 3.087,
+      "max_us": 9.209,
+      "sum_ms": 0.445311
+    }
+  },
+  "kernel_ms": {
+    "riley_mixed_attention::mapped_attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, bool, bool)": 64.454833,
+    "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)": 58.087372,
+    "void riley_gate_v56::split_rows<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)": 54.127841,
+    "void shared32_projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)": 35.399649,
+    "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)": 33.478918,
+    "void gemm_prefill_shape_vector<(int)576, (int)1536, (int)320, (int)2, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 26.531533,
+    "void riley_prefill51::gate_up<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 26.090323,
+    "shared32_qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 25.989685,
+    "riley_merge_norm_v56::merge_norm(const float *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 21.799429,
+    "void shared32_projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, __nv_bfloat16 *, const unsigned int *)": 21.59182,
+    "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 20.114062,
+    "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)": 15.94422,
+    "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 14.617544,
+    "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 13.932551,
+    "mixed_rope_kv_v7(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)": 10.720502,
+    "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)": 9.094051,
+    "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 7.692251,
+    "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)": 0.882134,
+    "riley_future_token::resolve(unsigned int *, const riley_future_token::Reference *, const unsigned int *, unsigned int *)": 0.692065,
+    "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)": 0.637081,
+    "riley_shared32_model::embedding(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, unsigned int *)": 0.293696,
+    "riley_shared32_model::clear_inactive_hidden(__nv_bfloat16 *, const unsigned int *)": 0.16712,
+    "riley_prefill_pointwise::embedding_rows(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, const unsigned int *, unsigned int, unsigned int, unsigned int *, const unsigned int *)": 0.072521,
+    "mixed_select_hidden_v7(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int, const unsigned int *, unsigned int *)": 0.05892
+  },
+  "launches": [
+    {
+      "cpu_start": 1235815972,
+      "cpu_end": 1235948440,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16467,
+      "gpu_start": 1237224592,
+      "gpu_end": 1238670577,
+      "gpu_union_ns": 1408573,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1239004860,
+      "cpu_end": 1239140909,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16480,
+      "gpu_start": 1239013023,
+      "gpu_end": 1240551853,
+      "gpu_union_ns": 1397851,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1240997437,
+      "cpu_end": 1241219992,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16489,
+      "gpu_start": 1241006570,
+      "gpu_end": 1242624963,
+      "gpu_union_ns": 1391548,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1241233882,
+      "cpu_end": 1241428590,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16494,
+      "gpu_start": 1242629956,
+      "gpu_end": 1244062980,
+      "gpu_union_ns": 1403545,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1245534601,
+      "cpu_end": 1245709899,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16507,
+      "gpu_start": 1245543658,
+      "gpu_end": 1250743426,
+      "gpu_union_ns": 5018754,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1251498826,
+      "cpu_end": 1251672240,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16516,
+      "gpu_start": 1251510025,
+      "gpu_end": 1255514722,
+      "gpu_union_ns": 3826178,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1257190195,
+      "cpu_end": 1257366473,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16525,
+      "gpu_start": 1257199427,
+      "gpu_end": 1262873147,
+      "gpu_union_ns": 5491393,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1263164433,
+      "cpu_end": 1263338044,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16534,
+      "gpu_start": 1263171843,
+      "gpu_end": 1266905079,
+      "gpu_union_ns": 3551866,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1267195217,
+      "cpu_end": 1267356423,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16543,
+      "gpu_start": 1267201983,
+      "gpu_end": 1268791572,
+      "gpu_union_ns": 1417855,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1270587990,
+      "cpu_end": 1270757982,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16552,
+      "gpu_start": 1270599238,
+      "gpu_end": 1276296417,
+      "gpu_union_ns": 5520835,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1276639096,
+      "cpu_end": 1276838125,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16561,
+      "gpu_start": 1276651537,
+      "gpu_end": 1280421674,
+      "gpu_union_ns": 3571744,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1280740194,
+      "cpu_end": 1280905785,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16570,
+      "gpu_start": 1280749654,
+      "gpu_end": 1282360237,
+      "gpu_union_ns": 1444706,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1283784483,
+      "cpu_end": 1283961314,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16579,
+      "gpu_start": 1283795246,
+      "gpu_end": 1289213027,
+      "gpu_union_ns": 5237500,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1289850820,
+      "cpu_end": 1290018194,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16588,
+      "gpu_start": 1289862746,
+      "gpu_end": 1291481203,
+      "gpu_union_ns": 1451972,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1290032861,
+      "cpu_end": 1290181265,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16593,
+      "gpu_start": 1291487444,
+      "gpu_end": 1292977532,
+      "gpu_union_ns": 1458533,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1293692872,
+      "cpu_end": 1293852304,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16606,
+      "gpu_start": 1293704413,
+      "gpu_end": 1295312788,
+      "gpu_union_ns": 1450018,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1293865967,
+      "cpu_end": 1294008707,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16611,
+      "gpu_start": 1295323894,
+      "gpu_end": 1296821054,
+      "gpu_union_ns": 1461636,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1297546919,
+      "cpu_end": 1297912912,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16624,
+      "gpu_start": 1297558017,
+      "gpu_end": 1299374324,
+      "gpu_union_ns": 1451748,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1297928171,
+      "cpu_end": 1298068090,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16629,
+      "gpu_start": 1299383542,
+      "gpu_end": 1300881886,
+      "gpu_union_ns": 1466114,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1301858682,
+      "cpu_end": 1302174385,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16642,
+      "gpu_start": 1301873411,
+      "gpu_end": 1303637680,
+      "gpu_union_ns": 1450564,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1302200082,
+      "cpu_end": 1302458128,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16647,
+      "gpu_start": 1303640784,
+      "gpu_end": 1305142169,
+      "gpu_union_ns": 1462981,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1305816245,
+      "cpu_end": 1305960093,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16660,
+      "gpu_start": 1305828533,
+      "gpu_end": 1307422923,
+      "gpu_union_ns": 1451136,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1305973424,
+      "cpu_end": 1306101864,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16665,
+      "gpu_start": 1307426091,
+      "gpu_end": 1308920211,
+      "gpu_union_ns": 1460837,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1309589223,
+      "cpu_end": 1309726241,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16678,
+      "gpu_start": 1309597934,
+      "gpu_end": 1311194020,
+      "gpu_union_ns": 1453890,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1309739639,
+      "cpu_end": 1309887542,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16683,
+      "gpu_start": 1311200037,
+      "gpu_end": 1312702446,
+      "gpu_union_ns": 1467106,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1313545232,
+      "cpu_end": 1313689074,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16696,
+      "gpu_start": 1313558176,
+      "gpu_end": 1315164472,
+      "gpu_union_ns": 1464548,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1313704183,
+      "cpu_end": 1313830609,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16701,
+      "gpu_start": 1315167544,
+      "gpu_end": 1316673954,
+      "gpu_union_ns": 1471334,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1317368393,
+      "cpu_end": 1317508701,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16714,
+      "gpu_start": 1317380128,
+      "gpu_end": 1318989528,
+      "gpu_union_ns": 1464324,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1317521881,
+      "cpu_end": 1317649237,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16719,
+      "gpu_start": 1318992600,
+      "gpu_end": 1320501154,
+      "gpu_union_ns": 1473670,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1321194839,
+      "cpu_end": 1321348735,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16732,
+      "gpu_start": 1321204577,
+      "gpu_end": 1322819769,
+      "gpu_union_ns": 1458274,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1321362175,
+      "cpu_end": 1322162142,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16737,
+      "gpu_start": 1322823994,
+      "gpu_end": 1324331459,
+      "gpu_union_ns": 1471301,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1325022854,
+      "cpu_end": 1325155481,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16750,
+      "gpu_start": 1325030945,
+      "gpu_end": 1326634808,
+      "gpu_union_ns": 1465473,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1325168899,
+      "cpu_end": 1325291926,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16755,
+      "gpu_start": 1326645049,
+      "gpu_end": 1328159652,
+      "gpu_union_ns": 1478726,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1328838001,
+      "cpu_end": 1328975352,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16768,
+      "gpu_start": 1328847648,
+      "gpu_end": 1330462905,
+      "gpu_union_ns": 1469795,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1328988105,
+      "cpu_end": 1329111576,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 16773,
+      "gpu_start": 1330468154,
+      "gpu_end": 1331983044,
+      "gpu_union_ns": 1483650,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1332426092,
+      "cpu_end": 1332574844,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16786,
+      "gpu_start": 1332435201,
+      "gpu_end": 1334062811,
+      "gpu_union_ns": 1470818,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1334422629,
+      "cpu_end": 1334583732,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16795,
+      "gpu_start": 1334429644,
+      "gpu_end": 1336055878,
+      "gpu_union_ns": 1459105,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1337260077,
+      "cpu_end": 1337466878,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16804,
+      "gpu_start": 1337275689,
+      "gpu_end": 1341323016,
+      "gpu_union_ns": 3850821,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1343982782,
+      "cpu_end": 1344172483,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16813,
+      "gpu_start": 1343997774,
+      "gpu_end": 1349644994,
+      "gpu_union_ns": 5458233,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1350154159,
+      "cpu_end": 1350549006,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16822,
+      "gpu_start": 1350168840,
+      "gpu_end": 1355758165,
+      "gpu_union_ns": 5201880,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1356589443,
+      "cpu_end": 1356818281,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16831,
+      "gpu_start": 1356604102,
+      "gpu_end": 1360626721,
+      "gpu_union_ns": 3800315,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1362016621,
+      "cpu_end": 1362182195,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16840,
+      "gpu_start": 1362027261,
+      "gpu_end": 1367040252,
+      "gpu_union_ns": 4846345,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1368690419,
+      "cpu_end": 1368859075,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16849,
+      "gpu_start": 1368699643,
+      "gpu_end": 1374137555,
+      "gpu_union_ns": 5268163,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1374498219,
+      "cpu_end": 1374654843,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16858,
+      "gpu_start": 1374506052,
+      "gpu_end": 1378210357,
+      "gpu_union_ns": 3542812,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1378935457,
+      "cpu_end": 1379103750,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16867,
+      "gpu_start": 1378944471,
+      "gpu_end": 1382855811,
+      "gpu_union_ns": 3741334,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1384208851,
+      "cpu_end": 1384377037,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16876,
+      "gpu_start": 1384219417,
+      "gpu_end": 1389508606,
+      "gpu_union_ns": 5121103,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1390467722,
+      "cpu_end": 1390828654,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16885,
+      "gpu_start": 1390482432,
+      "gpu_end": 1392273776,
+      "gpu_union_ns": 1432033,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1390854621,
+      "cpu_end": 1391180556,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16890,
+      "gpu_start": 1392283026,
+      "gpu_end": 1393748534,
+      "gpu_union_ns": 1434625,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1394675847,
+      "cpu_end": 1394832385,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16903,
+      "gpu_start": 1394688276,
+      "gpu_end": 1396265831,
+      "gpu_union_ns": 1424382,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1394847486,
+      "cpu_end": 1394976218,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16908,
+      "gpu_start": 1396274088,
+      "gpu_end": 1397740493,
+      "gpu_union_ns": 1436320,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1398502487,
+      "cpu_end": 1398645406,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16921,
+      "gpu_start": 1398513620,
+      "gpu_end": 1400089095,
+      "gpu_union_ns": 1427936,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1398659097,
+      "cpu_end": 1398787932,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16926,
+      "gpu_start": 1400098216,
+      "gpu_end": 1401565773,
+      "gpu_union_ns": 1436542,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1402307894,
+      "cpu_end": 1402443163,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16939,
+      "gpu_start": 1402315793,
+      "gpu_end": 1403885444,
+      "gpu_union_ns": 1426528,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1402456743,
+      "cpu_end": 1402579425,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16944,
+      "gpu_start": 1403892645,
+      "gpu_end": 1405367466,
+      "gpu_union_ns": 1437473,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1406125234,
+      "cpu_end": 1406259060,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16957,
+      "gpu_start": 1406134833,
+      "gpu_end": 1407704451,
+      "gpu_union_ns": 1431550,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1406272548,
+      "cpu_end": 1406408104,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16962,
+      "gpu_start": 1407711652,
+      "gpu_end": 1409190346,
+      "gpu_union_ns": 1442211,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1409928542,
+      "cpu_end": 1410056761,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16975,
+      "gpu_start": 1409936398,
+      "gpu_end": 1411500000,
+      "gpu_union_ns": 1428540,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1410069319,
+      "cpu_end": 1410196136,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16980,
+      "gpu_start": 1411502848,
+      "gpu_end": 1412974661,
+      "gpu_union_ns": 1442911,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1413769583,
+      "cpu_end": 1413909848,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 16993,
+      "gpu_start": 1413779953,
+      "gpu_end": 1415358917,
+      "gpu_union_ns": 1435682,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1413924120,
+      "cpu_end": 1414046378,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 16998,
+      "gpu_start": 1415368102,
+      "gpu_end": 1416849068,
+      "gpu_union_ns": 1442910,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1417617296,
+      "cpu_end": 1417747738,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17011,
+      "gpu_start": 1417625940,
+      "gpu_end": 1419195270,
+      "gpu_union_ns": 1432543,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1417764216,
+      "cpu_end": 1417910065,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17016,
+      "gpu_start": 1419203496,
+      "gpu_end": 1420675021,
+      "gpu_union_ns": 1444097,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1421463284,
+      "cpu_end": 1421593199,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17029,
+      "gpu_start": 1421471831,
+      "gpu_end": 1423047146,
+      "gpu_union_ns": 1438689,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1421607164,
+      "cpu_end": 1421733864,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17034,
+      "gpu_start": 1423053227,
+      "gpu_end": 1424536146,
+      "gpu_union_ns": 1445092,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1425319369,
+      "cpu_end": 1425458709,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17047,
+      "gpu_start": 1425328284,
+      "gpu_end": 1426914384,
+      "gpu_union_ns": 1438370,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1425471659,
+      "cpu_end": 1425607184,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17052,
+      "gpu_start": 1426921393,
+      "gpu_end": 1428403192,
+      "gpu_union_ns": 1450308,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1429212773,
+      "cpu_end": 1429354832,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17065,
+      "gpu_start": 1429221221,
+      "gpu_end": 1430806042,
+      "gpu_union_ns": 1439042,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1429368666,
+      "cpu_end": 1429495236,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17070,
+      "gpu_start": 1430815163,
+      "gpu_end": 1432299202,
+      "gpu_union_ns": 1447043,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1432786736,
+      "cpu_end": 1432914916,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17083,
+      "gpu_start": 1432794276,
+      "gpu_end": 1434367863,
+      "gpu_union_ns": 1436929,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1434759158,
+      "cpu_end": 1434915307,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17092,
+      "gpu_start": 1434766796,
+      "gpu_end": 1436352641,
+      "gpu_union_ns": 1427200,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1437226690,
+      "cpu_end": 1437407017,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17101,
+      "gpu_start": 1437236055,
+      "gpu_end": 1441250161,
+      "gpu_union_ns": 3827071,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1442787252,
+      "cpu_end": 1442957061,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17110,
+      "gpu_start": 1442797312,
+      "gpu_end": 1448113928,
+      "gpu_union_ns": 5146324,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1448837589,
+      "cpu_end": 1449000318,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17119,
+      "gpu_start": 1448846410,
+      "gpu_end": 1450456130,
+      "gpu_union_ns": 1442083,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1449014970,
+      "cpu_end": 1449157338,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17124,
+      "gpu_start": 1450462211,
+      "gpu_end": 1451945193,
+      "gpu_union_ns": 1446720,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1452909223,
+      "cpu_end": 1453088600,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17137,
+      "gpu_start": 1452918124,
+      "gpu_end": 1456948039,
+      "gpu_union_ns": 3844805,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1458761060,
+      "cpu_end": 1458937663,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17146,
+      "gpu_start": 1458773724,
+      "gpu_end": 1464361897,
+      "gpu_union_ns": 5412181,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1464801113,
+      "cpu_end": 1464970392,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17155,
+      "gpu_start": 1464813573,
+      "gpu_end": 1468624227,
+      "gpu_union_ns": 3639914,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1469405292,
+      "cpu_end": 1469576155,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17164,
+      "gpu_start": 1469414157,
+      "gpu_end": 1471036071,
+      "gpu_union_ns": 1445156,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1469590546,
+      "cpu_end": 1469740695,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17169,
+      "gpu_start": 1471045320,
+      "gpu_end": 1472537648,
+      "gpu_union_ns": 1455587,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1474187332,
+      "cpu_end": 1474349476,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17182,
+      "gpu_start": 1474197230,
+      "gpu_end": 1479369571,
+      "gpu_union_ns": 5001825,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1480168668,
+      "cpu_end": 1480337377,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17191,
+      "gpu_start": 1480176719,
+      "gpu_end": 1481811082,
+      "gpu_union_ns": 1460990,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1480351338,
+      "cpu_end": 1480509429,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17196,
+      "gpu_start": 1481818219,
+      "gpu_end": 1483318548,
+      "gpu_union_ns": 1468387,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1484215462,
+      "cpu_end": 1484369075,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17209,
+      "gpu_start": 1484225837,
+      "gpu_end": 1485837029,
+      "gpu_union_ns": 1456869,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1484386711,
+      "cpu_end": 1484534796,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17214,
+      "gpu_start": 1485841030,
+      "gpu_end": 1487343407,
+      "gpu_union_ns": 1467523,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1488206294,
+      "cpu_end": 1488347829,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17227,
+      "gpu_start": 1488214212,
+      "gpu_end": 1489820795,
+      "gpu_union_ns": 1458721,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1488361608,
+      "cpu_end": 1488499996,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17232,
+      "gpu_start": 1489824923,
+      "gpu_end": 1491314979,
+      "gpu_union_ns": 1466628,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1492190331,
+      "cpu_end": 1492330425,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17245,
+      "gpu_start": 1492198713,
+      "gpu_end": 1493805809,
+      "gpu_union_ns": 1458757,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1492343910,
+      "cpu_end": 1492479570,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17250,
+      "gpu_start": 1493811889,
+      "gpu_end": 1495314235,
+      "gpu_union_ns": 1469733,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1496512495,
+      "cpu_end": 1496650192,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17263,
+      "gpu_start": 1496524061,
+      "gpu_end": 1498124403,
+      "gpu_union_ns": 1460130,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1496670767,
+      "cpu_end": 1496798182,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17268,
+      "gpu_start": 1498129652,
+      "gpu_end": 1499636190,
+      "gpu_union_ns": 1472583,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1500554443,
+      "cpu_end": 1500699046,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17281,
+      "gpu_start": 1500562906,
+      "gpu_end": 1502174962,
+      "gpu_union_ns": 1463778,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1500712382,
+      "cpu_end": 1500845924,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17286,
+      "gpu_start": 1502183187,
+      "gpu_end": 1503688636,
+      "gpu_union_ns": 1472645,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1504627951,
+      "cpu_end": 1504766406,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17299,
+      "gpu_start": 1504636283,
+      "gpu_end": 1506243891,
+      "gpu_union_ns": 1466597,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1504779149,
+      "cpu_end": 1504904271,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17304,
+      "gpu_start": 1506252084,
+      "gpu_end": 1507759582,
+      "gpu_union_ns": 1476037,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1508689719,
+      "cpu_end": 1508827638,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17317,
+      "gpu_start": 1508698043,
+      "gpu_end": 1510303634,
+      "gpu_union_ns": 1465285,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1508840313,
+      "cpu_end": 1508968953,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17322,
+      "gpu_start": 1510312788,
+      "gpu_end": 1511826430,
+      "gpu_union_ns": 1476005,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1512759192,
+      "cpu_end": 1512897320,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17335,
+      "gpu_start": 1512767292,
+      "gpu_end": 1514389846,
+      "gpu_union_ns": 1475398,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1512909876,
+      "cpu_end": 1513032341,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17340,
+      "gpu_start": 1514399095,
+      "gpu_end": 1515908513,
+      "gpu_union_ns": 1484744,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1516471596,
+      "cpu_end": 1516618762,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17353,
+      "gpu_start": 1516478638,
+      "gpu_end": 1518102343,
+      "gpu_union_ns": 1475525,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1518905752,
+      "cpu_end": 1519074551,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17362,
+      "gpu_start": 1518914484,
+      "gpu_end": 1520548879,
+      "gpu_union_ns": 1464676,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1519088317,
+      "cpu_end": 1519257357,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17367,
+      "gpu_start": 1520554191,
+      "gpu_end": 1522052440,
+      "gpu_union_ns": 1472294,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1522605329,
+      "cpu_end": 1522792619,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17380,
+      "gpu_start": 1522613187,
+      "gpu_end": 1526489002,
+      "gpu_union_ns": 3679180,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1528409155,
+      "cpu_end": 1528586023,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17389,
+      "gpu_start": 1528418765,
+      "gpu_end": 1534060449,
+      "gpu_union_ns": 5457275,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1534498652,
+      "cpu_end": 1534672733,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17398,
+      "gpu_start": 1534506940,
+      "gpu_end": 1538369154,
+      "gpu_union_ns": 3684111,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1540390151,
+      "cpu_end": 1540580097,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17407,
+      "gpu_start": 1540406099,
+      "gpu_end": 1546040837,
+      "gpu_union_ns": 5452598,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1546671172,
+      "cpu_end": 1546845799,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17416,
+      "gpu_start": 1546682939,
+      "gpu_end": 1550581830,
+      "gpu_union_ns": 3723092,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1551011494,
+      "cpu_end": 1551180110,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17425,
+      "gpu_start": 1551022849,
+      "gpu_end": 1552638297,
+      "gpu_union_ns": 1442816,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1554388431,
+      "cpu_end": 1554568438,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17434,
+      "gpu_start": 1554397317,
+      "gpu_end": 1560032664,
+      "gpu_union_ns": 5451452,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1560458601,
+      "cpu_end": 1560643594,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17443,
+      "gpu_start": 1560466642,
+      "gpu_end": 1564356475,
+      "gpu_union_ns": 3702321,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1565139213,
+      "cpu_end": 1565314495,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17452,
+      "gpu_start": 1565149157,
+      "gpu_end": 1569214982,
+      "gpu_union_ns": 3886569,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1571967704,
+      "cpu_end": 1572136669,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17461,
+      "gpu_start": 1571978616,
+      "gpu_end": 1577537280,
+      "gpu_union_ns": 5383283,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1577885829,
+      "cpu_end": 1578060805,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17470,
+      "gpu_start": 1577894384,
+      "gpu_end": 1583459962,
+      "gpu_union_ns": 5383954,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1583817607,
+      "cpu_end": 1583998331,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17479,
+      "gpu_start": 1583827051,
+      "gpu_end": 1587858599,
+      "gpu_union_ns": 3843236,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1588525185,
+      "cpu_end": 1588713524,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17488,
+      "gpu_start": 1588536130,
+      "gpu_end": 1590137080,
+      "gpu_union_ns": 1410236,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1588728478,
+      "cpu_end": 1588887703,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17493,
+      "gpu_start": 1590140024,
+      "gpu_end": 1591594427,
+      "gpu_union_ns": 1421344,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1592340917,
+      "cpu_end": 1592498147,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17506,
+      "gpu_start": 1592349632,
+      "gpu_end": 1593919315,
+      "gpu_union_ns": 1408861,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1592511553,
+      "cpu_end": 1592646252,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17511,
+      "gpu_start": 1593923347,
+      "gpu_end": 1595364276,
+      "gpu_union_ns": 1417787,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1596089659,
+      "cpu_end": 1596238876,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17524,
+      "gpu_start": 1596098583,
+      "gpu_end": 1597659240,
+      "gpu_union_ns": 1410525,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1596251332,
+      "cpu_end": 1596395881,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17529,
+      "gpu_start": 1597667593,
+      "gpu_end": 1599111626,
+      "gpu_union_ns": 1419840,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1599842370,
+      "cpu_end": 1600141559,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17542,
+      "gpu_start": 1599850797,
+      "gpu_end": 1601569395,
+      "gpu_union_ns": 1424449,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1600167640,
+      "cpu_end": 1600426856,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17547,
+      "gpu_start": 1601578773,
+      "gpu_end": 1603040088,
+      "gpu_union_ns": 1429440,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1603776207,
+      "cpu_end": 1603915234,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17560,
+      "gpu_start": 1603784220,
+      "gpu_end": 1605345773,
+      "gpu_union_ns": 1420925,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1603927803,
+      "cpu_end": 1604058615,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17565,
+      "gpu_start": 1605350670,
+      "gpu_end": 1606807889,
+      "gpu_union_ns": 1432833,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1607571990,
+      "cpu_end": 1607719643,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17578,
+      "gpu_start": 1607583449,
+      "gpu_end": 1609157260,
+      "gpu_union_ns": 1425598,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1607733326,
+      "cpu_end": 1607872115,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17583,
+      "gpu_start": 1609160300,
+      "gpu_end": 1610620848,
+      "gpu_union_ns": 1428962,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1611389052,
+      "cpu_end": 1611522715,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17596,
+      "gpu_start": 1611398296,
+      "gpu_end": 1612956905,
+      "gpu_union_ns": 1422176,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1611536208,
+      "cpu_end": 1611666422,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17601,
+      "gpu_start": 1612962090,
+      "gpu_end": 1614432590,
+      "gpu_union_ns": 1435872,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1615170083,
+      "cpu_end": 1615345521,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17614,
+      "gpu_start": 1615179058,
+      "gpu_end": 1616781225,
+      "gpu_union_ns": 1425631,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1615359018,
+      "cpu_end": 1615485003,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17619,
+      "gpu_start": 1616786186,
+      "gpu_end": 1618247726,
+      "gpu_union_ns": 1428831,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1619020377,
+      "cpu_end": 1619155216,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17632,
+      "gpu_start": 1619030614,
+      "gpu_end": 1620590727,
+      "gpu_union_ns": 1424670,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1619175814,
+      "cpu_end": 1619297460,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17637,
+      "gpu_start": 1620594952,
+      "gpu_end": 1622059340,
+      "gpu_union_ns": 1430976,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1622584539,
+      "cpu_end": 1622726756,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17650,
+      "gpu_start": 1622595540,
+      "gpu_end": 1624162086,
+      "gpu_union_ns": 1423838,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1624536804,
+      "cpu_end": 1624689971,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17659,
+      "gpu_start": 1624545177,
+      "gpu_end": 1626122412,
+      "gpu_union_ns": 1420670,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1627650777,
+      "cpu_end": 1627827424,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17668,
+      "gpu_start": 1627661370,
+      "gpu_end": 1633039307,
+      "gpu_union_ns": 5201173,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1633661649,
+      "cpu_end": 1633817744,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17677,
+      "gpu_start": 1633671263,
+      "gpu_end": 1635238033,
+      "gpu_union_ns": 1411199,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1633832062,
+      "cpu_end": 1633997427,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17682,
+      "gpu_start": 1635245234,
+      "gpu_end": 1636684211,
+      "gpu_union_ns": 1413789,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1638538062,
+      "cpu_end": 1638720789,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17695,
+      "gpu_start": 1638550509,
+      "gpu_end": 1644152219,
+      "gpu_union_ns": 5417142,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1644551654,
+      "cpu_end": 1644736179,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17704,
+      "gpu_start": 1644563923,
+      "gpu_end": 1648406517,
+      "gpu_union_ns": 3653193,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1650216791,
+      "cpu_end": 1650419246,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17713,
+      "gpu_start": 1650232586,
+      "gpu_end": 1655843769,
+      "gpu_union_ns": 5411541,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1656222246,
+      "cpu_end": 1656417330,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17722,
+      "gpu_start": 1656231437,
+      "gpu_end": 1660117014,
+      "gpu_union_ns": 3685514,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1661149098,
+      "cpu_end": 1661317476,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17731,
+      "gpu_start": 1661164450,
+      "gpu_end": 1662721075,
+      "gpu_union_ns": 1391387,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1661334168,
+      "cpu_end": 1661497044,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 17736,
+      "gpu_start": 1662726931,
+      "gpu_end": 1664164756,
+      "gpu_union_ns": 1403707,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1666400069,
+      "cpu_end": 1666587907,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17749,
+      "gpu_start": 1666415842,
+      "gpu_end": 1671970858,
+      "gpu_union_ns": 5367661,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1672357439,
+      "cpu_end": 1672538377,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17758,
+      "gpu_start": 1672367391,
+      "gpu_end": 1676544462,
+      "gpu_union_ns": 3995128,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1677932640,
+      "cpu_end": 1678102101,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17767,
+      "gpu_start": 1677941449,
+      "gpu_end": 1683108478,
+      "gpu_union_ns": 4991838,
+      "kernels": 306,
+      "activities": 309,
+      "future": false,
+      "stage": "prefill_or_mixed"
+    },
+    {
+      "cpu_start": 1683766442,
+      "cpu_end": 1683942360,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17776,
+      "gpu_start": 1683775351,
+      "gpu_end": 1685382862,
+      "gpu_union_ns": 1428351,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1683957631,
+      "cpu_end": 1684106130,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17781,
+      "gpu_start": 1685385967,
+      "gpu_end": 1686856596,
+      "gpu_union_ns": 1437761,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1687624290,
+      "cpu_end": 1687781884,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17794,
+      "gpu_start": 1687634140,
+      "gpu_end": 1689218256,
+      "gpu_union_ns": 1426817,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1687794531,
+      "cpu_end": 1687931185,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17799,
+      "gpu_start": 1689224433,
+      "gpu_end": 1690695062,
+      "gpu_union_ns": 1435998,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1691459126,
+      "cpu_end": 1692208537,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17812,
+      "gpu_start": 1691469854,
+      "gpu_end": 1693651874,
+      "gpu_union_ns": 1431999,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1692221755,
+      "cpu_end": 1692355034,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17817,
+      "gpu_start": 1693655874,
+      "gpu_end": 1695128552,
+      "gpu_union_ns": 1440321,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1695864363,
+      "cpu_end": 1695999858,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17830,
+      "gpu_start": 1695872043,
+      "gpu_end": 1697438909,
+      "gpu_union_ns": 1426815,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1696012204,
+      "cpu_end": 1696140593,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17835,
+      "gpu_start": 1697447230,
+      "gpu_end": 1698926180,
+      "gpu_union_ns": 1445283,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1699671435,
+      "cpu_end": 1699804305,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17848,
+      "gpu_start": 1699678857,
+      "gpu_end": 1701250876,
+      "gpu_union_ns": 1436094,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1699816592,
+      "cpu_end": 1699944374,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17853,
+      "gpu_start": 1701255996,
+      "gpu_end": 1702737955,
+      "gpu_union_ns": 1449154,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1703495359,
+      "cpu_end": 1703627886,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17866,
+      "gpu_start": 1703502825,
+      "gpu_end": 1705079069,
+      "gpu_union_ns": 1436832,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1703639767,
+      "cpu_end": 1703764530,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17871,
+      "gpu_start": 1705087294,
+      "gpu_end": 1706567140,
+      "gpu_union_ns": 1447614,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1707338290,
+      "cpu_end": 1707484484,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17884,
+      "gpu_start": 1707346508,
+      "gpu_end": 1708933793,
+      "gpu_union_ns": 1436193,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1707497278,
+      "cpu_end": 1707621778,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17889,
+      "gpu_start": 1708941122,
+      "gpu_end": 1710421992,
+      "gpu_union_ns": 1446848,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1711174362,
+      "cpu_end": 1711305065,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17902,
+      "gpu_start": 1711181422,
+      "gpu_end": 1712757025,
+      "gpu_union_ns": 1440066,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1711316897,
+      "cpu_end": 1711456829,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17907,
+      "gpu_start": 1712759969,
+      "gpu_end": 1714246184,
+      "gpu_union_ns": 1453027,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1715142835,
+      "cpu_end": 1715287477,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17920,
+      "gpu_start": 1715153986,
+      "gpu_end": 1716748184,
+      "gpu_union_ns": 1447685,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1715300617,
+      "cpu_end": 1715434262,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17925,
+      "gpu_start": 1716755289,
+      "gpu_end": 1718246432,
+      "gpu_union_ns": 1457315,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1719372614,
+      "cpu_end": 1719571316,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17938,
+      "gpu_start": 1719390138,
+      "gpu_end": 1721025909,
+      "gpu_union_ns": 1448355,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1719588928,
+      "cpu_end": 1719719287,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17943,
+      "gpu_start": 1721035158,
+      "gpu_end": 1722527294,
+      "gpu_union_ns": 1457381,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1723201816,
+      "cpu_end": 1723436985,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17956,
+      "gpu_start": 1723212474,
+      "gpu_end": 1724902172,
+      "gpu_union_ns": 1454977,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1725347388,
+      "cpu_end": 1725535853,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17965,
+      "gpu_start": 1725358457,
+      "gpu_end": 1726968177,
+      "gpu_union_ns": 1422050,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1727328665,
+      "cpu_end": 1727472910,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17974,
+      "gpu_start": 1727335906,
+      "gpu_end": 1728904660,
+      "gpu_union_ns": 1420093,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1729233077,
+      "cpu_end": 1729384082,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17983,
+      "gpu_start": 1729240001,
+      "gpu_end": 1730808371,
+      "gpu_union_ns": 1411224,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1731376553,
+      "cpu_end": 1731513395,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 17992,
+      "gpu_start": 1731385664,
+      "gpu_end": 1732899787,
+      "gpu_union_ns": 1376378,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1731528747,
+      "cpu_end": 1731661483,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 17997,
+      "gpu_start": 1732902860,
+      "gpu_end": 1734328330,
+      "gpu_union_ns": 1390009,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1734935969,
+      "cpu_end": 1735077013,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18010,
+      "gpu_start": 1734948350,
+      "gpu_end": 1736458632,
+      "gpu_union_ns": 1366071,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1735093460,
+      "cpu_end": 1735225102,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18015,
+      "gpu_start": 1736467881,
+      "gpu_end": 1737877990,
+      "gpu_union_ns": 1374938,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1738454241,
+      "cpu_end": 1738593316,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18028,
+      "gpu_start": 1738465045,
+      "gpu_end": 1739935738,
+      "gpu_union_ns": 1331665,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1738609848,
+      "cpu_end": 1738736460,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18033,
+      "gpu_start": 1739943803,
+      "gpu_end": 1741305073,
+      "gpu_union_ns": 1338192,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1741640326,
+      "cpu_end": 1741772764,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18046,
+      "gpu_start": 1741649055,
+      "gpu_end": 1743117476,
+      "gpu_union_ns": 1330324,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1743534417,
+      "cpu_end": 1743686242,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18055,
+      "gpu_start": 1743541853,
+      "gpu_end": 1745015426,
+      "gpu_union_ns": 1312751,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1743703921,
+      "cpu_end": 1743850185,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18060,
+      "gpu_start": 1745018242,
+      "gpu_end": 1746375256,
+      "gpu_union_ns": 1320624,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1746860221,
+      "cpu_end": 1747009492,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18073,
+      "gpu_start": 1746870138,
+      "gpu_end": 1748335679,
+      "gpu_union_ns": 1315792,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1747026286,
+      "cpu_end": 1747161101,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18078,
+      "gpu_start": 1748340703,
+      "gpu_end": 1749698581,
+      "gpu_union_ns": 1320787,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1750168068,
+      "cpu_end": 1750306241,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18091,
+      "gpu_start": 1750176373,
+      "gpu_end": 1751634329,
+      "gpu_union_ns": 1312114,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1750324404,
+      "cpu_end": 1750471997,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18096,
+      "gpu_start": 1751640473,
+      "gpu_end": 1752998351,
+      "gpu_union_ns": 1321457,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1753470510,
+      "cpu_end": 1753608679,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18109,
+      "gpu_start": 1753479600,
+      "gpu_end": 1754936147,
+      "gpu_union_ns": 1312785,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1753625224,
+      "cpu_end": 1753751540,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18114,
+      "gpu_start": 1754939219,
+      "gpu_end": 1756296169,
+      "gpu_union_ns": 1326417,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1756764668,
+      "cpu_end": 1756896641,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18127,
+      "gpu_start": 1756771977,
+      "gpu_end": 1758221547,
+      "gpu_union_ns": 1314511,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1756913176,
+      "cpu_end": 1757037307,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18132,
+      "gpu_start": 1758224491,
+      "gpu_end": 1759589826,
+      "gpu_union_ns": 1328786,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1760067033,
+      "cpu_end": 1760200264,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18145,
+      "gpu_start": 1760074851,
+      "gpu_end": 1761541832,
+      "gpu_union_ns": 1329394,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1760216553,
+      "cpu_end": 1760339891,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18150,
+      "gpu_start": 1761545928,
+      "gpu_end": 1762920288,
+      "gpu_union_ns": 1342005,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1763392909,
+      "cpu_end": 1763521014,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18163,
+      "gpu_start": 1763399969,
+      "gpu_end": 1764868101,
+      "gpu_union_ns": 1334578,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1763537082,
+      "cpu_end": 1763660277,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18168,
+      "gpu_start": 1764874374,
+      "gpu_end": 1766253759,
+      "gpu_union_ns": 1342257,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1766730353,
+      "cpu_end": 1766857449,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18181,
+      "gpu_start": 1766737280,
+      "gpu_end": 1768210213,
+      "gpu_union_ns": 1337617,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1766873680,
+      "cpu_end": 1766995598,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18186,
+      "gpu_start": 1768220230,
+      "gpu_end": 1769596639,
+      "gpu_union_ns": 1344050,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1770095620,
+      "cpu_end": 1770225592,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18199,
+      "gpu_start": 1770103715,
+      "gpu_end": 1771572295,
+      "gpu_union_ns": 1335667,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1770241895,
+      "cpu_end": 1770364396,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18204,
+      "gpu_start": 1771581449,
+      "gpu_end": 1772967138,
+      "gpu_union_ns": 1347538,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1773450937,
+      "cpu_end": 1773576019,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18217,
+      "gpu_start": 1773457252,
+      "gpu_end": 1774929353,
+      "gpu_union_ns": 1338836,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1773592059,
+      "cpu_end": 1773712688,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18222,
+      "gpu_start": 1774938570,
+      "gpu_end": 1776322052,
+      "gpu_union_ns": 1349237,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1776799869,
+      "cpu_end": 1776924789,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18235,
+      "gpu_start": 1776805860,
+      "gpu_end": 1778279370,
+      "gpu_union_ns": 1340213,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1776940782,
+      "cpu_end": 1777062316,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18240,
+      "gpu_start": 1778282410,
+      "gpu_end": 1779664963,
+      "gpu_union_ns": 1349912,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1779954821,
+      "cpu_end": 1780077842,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18253,
+      "gpu_start": 1779959627,
+      "gpu_end": 1781432688,
+      "gpu_union_ns": 1343412,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1781836711,
+      "cpu_end": 1781988430,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18262,
+      "gpu_start": 1781842951,
+      "gpu_end": 1783314956,
+      "gpu_union_ns": 1312720,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1782005473,
+      "cpu_end": 1782150364,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18267,
+      "gpu_start": 1783323213,
+      "gpu_end": 1784676099,
+      "gpu_union_ns": 1318801,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1784953690,
+      "cpu_end": 1785089428,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18280,
+      "gpu_start": 1784959561,
+      "gpu_end": 1786409931,
+      "gpu_union_ns": 1305677,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1786602034,
+      "cpu_end": 1786747307,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18289,
+      "gpu_start": 1786606789,
+      "gpu_end": 1788037157,
+      "gpu_union_ns": 1278185,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1788378023,
+      "cpu_end": 1788515694,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18298,
+      "gpu_start": 1788383603,
+      "gpu_end": 1789793648,
+      "gpu_union_ns": 1265993,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1788532680,
+      "cpu_end": 1788667823,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18303,
+      "gpu_start": 1789797777,
+      "gpu_end": 1791104448,
+      "gpu_union_ns": 1273193,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1791335388,
+      "cpu_end": 1791467343,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18316,
+      "gpu_start": 1791340671,
+      "gpu_end": 1792742267,
+      "gpu_union_ns": 1262634,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1792904548,
+      "cpu_end": 1793029257,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18325,
+      "gpu_start": 1792909329,
+      "gpu_end": 1794301964,
+      "gpu_union_ns": 1257734,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1794581642,
+      "cpu_end": 1794707944,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18334,
+      "gpu_start": 1794586514,
+      "gpu_end": 1795946664,
+      "gpu_union_ns": 1224071,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1794725073,
+      "cpu_end": 1794857611,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18339,
+      "gpu_start": 1795953897,
+      "gpu_end": 1797221619,
+      "gpu_union_ns": 1231046,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1797536730,
+      "cpu_end": 1797659811,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18352,
+      "gpu_start": 1797542142,
+      "gpu_end": 1798897107,
+      "gpu_union_ns": 1226532,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1797676946,
+      "cpu_end": 1797803151,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18357,
+      "gpu_start": 1798901332,
+      "gpu_end": 1800168062,
+      "gpu_union_ns": 1231815,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1800471975,
+      "cpu_end": 1800596614,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18370,
+      "gpu_start": 1800477383,
+      "gpu_end": 1801841630,
+      "gpu_union_ns": 1228774,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1800613929,
+      "cpu_end": 1800737499,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18375,
+      "gpu_start": 1801846751,
+      "gpu_end": 1803104263,
+      "gpu_union_ns": 1232420,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1803411268,
+      "cpu_end": 1803533718,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18388,
+      "gpu_start": 1803416593,
+      "gpu_end": 1804774759,
+      "gpu_union_ns": 1223107,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1803550874,
+      "cpu_end": 1803674048,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18393,
+      "gpu_start": 1804783976,
+      "gpu_end": 1806051858,
+      "gpu_union_ns": 1234343,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1806365469,
+      "cpu_end": 1806489943,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18406,
+      "gpu_start": 1806371101,
+      "gpu_end": 1807725266,
+      "gpu_union_ns": 1224516,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1806507087,
+      "cpu_end": 1806629396,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18411,
+      "gpu_start": 1807731475,
+      "gpu_end": 1808994076,
+      "gpu_union_ns": 1232325,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1809310225,
+      "cpu_end": 1809434119,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18424,
+      "gpu_start": 1809315303,
+      "gpu_end": 1810673885,
+      "gpu_union_ns": 1227429,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1809451250,
+      "cpu_end": 1809572225,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18429,
+      "gpu_start": 1810676861,
+      "gpu_end": 1811951912,
+      "gpu_union_ns": 1244166,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1812269656,
+      "cpu_end": 1812392405,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18442,
+      "gpu_start": 1812275123,
+      "gpu_end": 1813651116,
+      "gpu_union_ns": 1248007,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1812409577,
+      "cpu_end": 1812529802,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18447,
+      "gpu_start": 1813659149,
+      "gpu_end": 1814938200,
+      "gpu_union_ns": 1252997,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1815248645,
+      "cpu_end": 1815369699,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18460,
+      "gpu_start": 1815253762,
+      "gpu_end": 1816632187,
+      "gpu_union_ns": 1245990,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1815389131,
+      "cpu_end": 1815510543,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18465,
+      "gpu_start": 1816635131,
+      "gpu_end": 1817924648,
+      "gpu_union_ns": 1255721,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1818238450,
+      "cpu_end": 1818360696,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18478,
+      "gpu_start": 1818243955,
+      "gpu_end": 1819629837,
+      "gpu_union_ns": 1251593,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1818379148,
+      "cpu_end": 1818499545,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18483,
+      "gpu_start": 1819639086,
+      "gpu_end": 1820932443,
+      "gpu_union_ns": 1258149,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1821255841,
+      "cpu_end": 1821380649,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18496,
+      "gpu_start": 1821261127,
+      "gpu_end": 1822640800,
+      "gpu_union_ns": 1245705,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1821397659,
+      "cpu_end": 1821518545,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18501,
+      "gpu_start": 1822649025,
+      "gpu_end": 1823943502,
+      "gpu_union_ns": 1259688,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1824262550,
+      "cpu_end": 1824386203,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18514,
+      "gpu_start": 1824267802,
+      "gpu_end": 1825652787,
+      "gpu_union_ns": 1252681,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1824403418,
+      "cpu_end": 1824522981,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18519,
+      "gpu_start": 1825655732,
+      "gpu_end": 1826954370,
+      "gpu_union_ns": 1263719,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1827278115,
+      "cpu_end": 1827402911,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18532,
+      "gpu_start": 1827283822,
+      "gpu_end": 1828680361,
+      "gpu_union_ns": 1262058,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1827420835,
+      "cpu_end": 1827541412,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18537,
+      "gpu_start": 1828683241,
+      "gpu_end": 1829982839,
+      "gpu_union_ns": 1263338,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1830282683,
+      "cpu_end": 1830406583,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18550,
+      "gpu_start": 1830287392,
+      "gpu_end": 1831661400,
+      "gpu_union_ns": 1240902,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1830424036,
+      "cpu_end": 1830543628,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18555,
+      "gpu_start": 1831664345,
+      "gpu_end": 1832945828,
+      "gpu_union_ns": 1250664,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1833209539,
+      "cpu_end": 1833330043,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18568,
+      "gpu_start": 1833214376,
+      "gpu_end": 1834565853,
+      "gpu_union_ns": 1221765,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1833347230,
+      "cpu_end": 1833469388,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18573,
+      "gpu_start": 1834575103,
+      "gpu_end": 1835831687,
+      "gpu_union_ns": 1226661,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1835978240,
+      "cpu_end": 1836097599,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18586,
+      "gpu_start": 1835982683,
+      "gpu_end": 1837336048,
+      "gpu_union_ns": 1221634,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1837532149,
+      "cpu_end": 1837678311,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18595,
+      "gpu_start": 1837536875,
+      "gpu_end": 1838910339,
+      "gpu_union_ns": 1214563,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1837696248,
+      "cpu_end": 1837846074,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        26
+      ],
+      "correlation": 18600,
+      "gpu_start": 1838919492,
+      "gpu_end": 1840178157,
+      "gpu_union_ns": 1222274,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    },
+    {
+      "cpu_start": 1840301559,
+      "cpu_end": 1840433184,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18613,
+      "gpu_start": 1840306622,
+      "gpu_end": 1841654835,
+      "gpu_union_ns": 1209507,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1841798466,
+      "cpu_end": 1841921068,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14
+      ],
+      "correlation": 18622,
+      "gpu_start": 1841802599,
+      "gpu_end": 1843109078,
+      "gpu_union_ns": 1173306,
+      "kernels": 276,
+      "activities": 280,
+      "future": false,
+      "stage": "ordinary_decode"
+    },
+    {
+      "cpu_start": 1841939100,
+      "cpu_end": 1842061799,
+      "global_tid": 291612559751403,
+      "api": "cudaGraphLaunch_v10000",
+      "global_pid": 291612559147008,
+      "context": 1,
+      "stream": -1,
+      "streams": [
+        14,
+        20
+      ],
+      "correlation": 18627,
+      "gpu_start": 1843117431,
+      "gpu_end": 1844336026,
+      "gpu_union_ns": 1180348,
+      "kernels": 277,
+      "activities": 282,
+      "future": true,
+      "stage": "future_decode"
+    }
+  ]
+}

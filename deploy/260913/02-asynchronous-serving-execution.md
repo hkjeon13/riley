@@ -179,3 +179,8 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 
 
 [Prepared window batch](../../benchmarks/results/20260913-prepared-window-batch/README.md)는 immutable prepared 객체 전달과 checked-borrow encoding으로 중복 future 준비/검증을 제거했다. CPU descriptor 51개·scheduler 44개·immutable binding Rustdoc, 실제 CUDA/HTTP correctness가 통과했다. C32 교차 serving throughput은 이전 paired 대비 +3.10%지만 single과 사실상 동률, vLLM 대비 -10.79%였다. E2E P99 개선도 확인되지 않아 single 기본값을 유지한다. 다음 분석 영역은 native execution/transfer/wait 및 GPU kernel 비용의 분해다.
+
+
+## Paired serving trace 재시도 완료
+
+[현재 binary의 trace 분석](../../benchmarks/results/20260913-paired-trace-v3/README.md)을 완료했다. 두 lane 각 96 HTTP 요청이 frozen reference와 일치하고 Nsight export/종료가 정상이다. Pair 내부 gap 중앙값은 6.16µs지만 pair 이후는 716.53µs이며, 선택 구간의 전체 gap 합은 single/paired 114.12/114.25ms다. Profiler/client pacing이 포함되므로 unprofiled 개선율로 해석하지 않는다. Pair 수 확대보다 결과 검증·commit/publication과 다음 descriptor 준비를 GPU 실행 중에 겹치는 남은 구조를 우선 검토한다. 다음 batch의 3개 변경 및 검증 경계는 보고서에 기록했다. 이번 작업은 분석기 보정이며 runtime overlap 구현 완료나 기본값 승격이 아니다.
