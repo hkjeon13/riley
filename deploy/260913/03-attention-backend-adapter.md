@@ -1,6 +1,6 @@
 # PR 03 — FlashInfer paged attention 실행층 통합
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — standalone native adapter 검증, 모델·serving 통합 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -51,3 +51,11 @@ backend flag로 기존 attention 복귀. 새 workspace는 해당 stream 완료 �
 ## 착수 우선순위 보강
 
 [비동기 시간 예산 분석](../../benchmarks/results/20260913-overlap-headroom/README.md)에 따라 다음 구현은 이 PR의 실제 모델 adapter를 우선한다. PR 02 전체 완료를 기다리는 의존성은 추가하지 않는다. 기존 FlashInfer primitive 호환 검사는 actual-model correctness나 serving 이득의 증거가 아니다. HND/page16 무복사 경로, explicit numerical profile, graph-compatible plan 수명, 기존 exact fallback을 함께 연결한 뒤 검증하며 품질·성능 결과 없이 기본값으로 승격하지 않는다.
+
+## Native adapter 진행 증거 (2026-09-13)
+
+[검증 기록](../../benchmarks/results/20260913-flashinfer-native-adapter/README.md): FlashInfer 0.6.16.post3 CUDA-core unsplit decode를 별도 shared library로 구현했다. HND KV는 복사하지 않고 33,456-byte device metadata를 갱신한다. 1/4/16/32 rows, ragged context, graph replay와 metadata 갱신을 4090에서 검사했다. SM89/90a/100a AOT 빌드는 통과했지만 SM90a/100a runtime 검사는 장비 부재로 skip이다.
+
+Native-only memcheck는 0 errors. Python FlashInfer 포함 memcheck는 cuGetProcAddress_v2 34건으로 실패했고, adapter를 로드하지 않은 import-only 대조군에서도 동일하게 재현됐다. 실패를 통과로 바꾸지 않는다.
+
+현재 CMake·Rust owner·model recorder·server에는 등록하지 않았다. 다음 batch는 (1) pinned optional dependency/build와 명시적 numerical profile, (2) context/stream/extent/lease를 검증하는 owner/recorder 연결, (3) 전체 모델 logits·greedy·batch invariant 및 기존 exact fallback, (4) 동일 workload serving 비교다. 기존 scratch는 layer마다 덮어쓰므로 metadata는 별도 retained buffer로 수명을 보장한다. 이 검증만으로 성능 개선이나 수치 계약 통과를 주장하지 않는다.
