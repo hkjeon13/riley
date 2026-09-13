@@ -38,7 +38,7 @@ impl Scheduler {
                 let index=tables.len();tables.push(OwnedBlockTable::copy_from_v1(item.request_id,seq.reserved_block_table(&item.reservation)?)?);
                 items.push(WorkItem::new(item.request_id,WorkKind::Decode,copy_tokens(&[0],"future token placeholder")?,item.target_logical_length,index,item.output_slot)?);
             }
-            IterationPlan::new(second_id,Vec::new(),items,tables)
+            IterationPlan::with_shared_prefixes(second_id,Vec::new(),items,tables)
         })();
         let second=match second {Ok(p)=>p,Err(error)=>{
             let pending=self.inflight.take().expect("prepared window");
@@ -66,13 +66,7 @@ impl Scheduler {
             first_rows.push(crate::AuthorizedExecutionRow{request_id:item.request_id,committed_length:seq.logical_length() as usize,prompt_tokens:record.descriptor.prompt_token_ids.len(),generated_index:record.generated_token_ids.len(),max_output_tokens:record.descriptor.max_new_tokens,table:ta});
             second_rows.push(crate::AuthorizedExecutionRow{request_id:item.request_id,committed_length:prefix,prompt_tokens:record.descriptor.prompt_token_ids.len(),generated_index:record.generated_token_ids.len()+1,max_output_tokens:record.descriptor.max_new_tokens,table:tb});
         }
-        let mut owners=Vec::new();try_reserve_exact(&mut owners,self.pool.layout().physical_block_count(),"window block ownership")?;
-        for record in &self.requests {
-            if let Some(seq)=&record.sequence {
-                let table=if let Some(item)=pending.items.iter().find(|i|i.request_id==record.request_id){seq.reserved_block_table(&item.reservation)?}else{seq.block_table()?};
-                owners.extend(table.physical_block_ids().iter().map(|&id|(id,record.request_id)));
-            }
-        }
+        let owners=self.execution_block_owners()?;
         Ok(crate::AuthorizedDecodeWindow {
             first:crate::AuthorizedExecution{scheduler:self,plan:&window.first,rows:first_rows,block_owners:owners.clone()},
             second:crate::AuthorizedExecution{scheduler:self,plan:&window.second,rows:second_rows,block_owners:owners},

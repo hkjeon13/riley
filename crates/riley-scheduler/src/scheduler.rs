@@ -1943,7 +1943,10 @@ impl Scheduler {
             }
         }
 
-        let plan = match IterationPlan::new(iteration_id, prefill_items, decode_items, block_tables)
+        let build_plan = if self.execution_shape_policy == ExecutionShapePolicy::MixedPrefillDecode32 {
+            IterationPlan::with_shared_prefixes
+        } else { IterationPlan::new };
+        let plan = match build_plan(iteration_id, prefill_items, decode_items, block_tables)
         {
             Ok(plan) => plan,
             Err(error) => return self.rollback_prepared_plan(inflight_items, error),
@@ -2208,7 +2211,7 @@ impl Scheduler {
                         field: "sequence",
                         reason: "in-flight reservation owner has no KV sequence",
                     })?;
-            let table = sequence.reserved_block_table(&item.reservation)?;
+            let table = sequence.execution_block_table(&self.pool, Some(&item.reservation))?;
             if table.logical_length() as usize != item.target_logical_length {
                 return Err(SchedulerError::InvalidPlan {
                     field: "target_logical_length",
@@ -2956,6 +2959,77 @@ mod tests {
         SchedulerError,
     };
 
+    #[test]
+    fn shared_prefix_authority_preserves_off_batch_readers_retry_and_cancel() {
+        use riley_runtime::paged_kv::{KvIdentity, PrefixDescriptor};
+        use crate::descriptor::{variable_wire, ResultMode};
+        let layout = KvLayout::checked(30, 12, 3, 64).unwrap();
+        let mut scheduler = Scheduler::new_with_execution_shape(SchedulerConfig {
+            max_waiting_requests:4, max_waiting_prompt_tokens:128, max_active_sequences:4,
+            max_sequence_tokens:64, iteration_token_budget:96, max_prefill_chunk_tokens:32,
+            aging_threshold_ns:1, overload_policy:OverloadPolicy::Wait, admission_timeout_ns:None,
+            max_promised_kv_blocks:12, metrics_window_samples:4,
+        }, layout, crate::ExecutionShapePolicy::MixedPrefillDecode32).unwrap();
+        let ids:Vec<_> = (0..3).map(|_| scheduler.submit(RequestDescriptor::new(vec![17;32],4),0)
+            .unwrap().request_id()).collect();
+        let plan = scheduler.plan_iteration(1).unwrap().into_parts().0.unwrap();
+        assert_eq!(plan.batch_size(),3);
+        let outputs = plan.output_slots().iter().map(|&s| IterationOutput::new(s,23,false)).collect();
+        let result = IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
+        assert!(scheduler.complete_iteration(&result,2).unwrap().settlement_failures().is_empty());
+        // Simulate the completed cache-import seam using real pool operations.
+        // No synthetic page numbers or forged reservation tokens are injected.
+        let descriptor = PrefixDescriptor::new(KvIdentity { model_revision:[1;32],
+            numerical_profile:[2;32], position_encoding:[3;32], partition:[4;32],
+            layout:layout.into() },0,&[17;32]).unwrap();
+        let mut export = scheduler.pool.export_prefix(scheduler.requests[0].sequence.as_ref().unwrap(),descriptor.clone()).unwrap();
+        for index in 1..3 {
+            scheduler.requests[index].sequence.take().unwrap().close(&mut scheduler.pool).unwrap();
+            let mut sequence = scheduler.pool.create_sequence(64).unwrap();
+            sequence.import_prefix(&mut scheduler.pool,&export,&descriptor).unwrap();
+            scheduler.requests[index].sequence = Some(sequence);
+        }
+        scheduler.pool.release_prefix(&mut export).unwrap();
+        assert_eq!(scheduler.pool.stats().allocated_block_count(),2);
+        // Only two consumers execute; the third must remain in the authority.
+        scheduler.config.iteration_token_budget = 2;
+        let owner = crate::authority::VariableOwnerGeometry { generation:1,last_accepted_replay:0,
+            catalog_digest:[9;32],max_active_rows:32,physical_block_count:12,context_tokens:64,
+            packed_prefill:true,mixed_execution:true };
+        for (now,abort) in [(3,true),(5,false)] {
+            let plan = scheduler.plan_iteration(now).unwrap().into_parts().0.unwrap();
+            assert_eq!(plan.batch_size(),2);
+            let authority = scheduler.authorize_execution(&plan).unwrap();
+            assert_eq!(authority.block_owners().len(),8); // 3*2 readers + 2 append pages
+            let e = authority.variable_descriptor_expectation_rows::<32>(&owner,1,&[1,2],ResultMode::FullLogits).unwrap();
+            for page in &e.rows[0].physical_ids[..2] {
+                assert_eq!(e.block_ownership.iter().filter(|entry|entry.physical_id==*page).count(),3);
+            }
+            let mut packet = vec![0;variable_wire::MIXED_REQUEST_BYTES];
+            variable_wire::encode_into(&mut packet,&e).unwrap();
+            variable_wire::validate_packet(&packet,&mut vec![0;packet.len()],&e).unwrap();
+            drop(authority);
+            if abort {
+                scheduler.abort_iteration(plan.iteration_id(),super::ExecutionAbort::NotDispatched,now+1).unwrap();
+                assert_eq!(scheduler.pool.stats().allocated_block_count(),2);
+            } else {
+                let outputs = plan.output_slots().iter().map(|&s| IterationOutput::new(s,24,false)).collect();
+                let result = IterationResult::new(plan.iteration_id(),outputs,0,0).unwrap();
+                assert!(scheduler.complete_iteration(&result,now+1).unwrap().settlement_failures().is_empty());
+            }
+        }
+        let window = scheduler.plan_decode_window(7).unwrap().unwrap();
+        let authority = scheduler.authorize_decode_window(&window).unwrap();
+        let _prepared = authority.prepare_wire(&owner,1,&[1,2],&[3,4]).unwrap();
+        assert!(authority.first.block_owners().len() >= 8);
+        assert_eq!(authority.first.block_owners(),authority.second.block_owners());
+        drop(authority);
+        scheduler.abort_iteration(window.first().iteration_id(),super::ExecutionAbort::NotDispatched,8).unwrap();
+        for id in ids { scheduler.cancel(id,9).unwrap(); }
+        assert_eq!(scheduler.pool.stats().allocated_block_count(),0);
+        scheduler.close(10,None).unwrap();
+    }
+
     fn test_scheduler() -> Scheduler {
         test_scheduler_with_max_active_sequences(1)
     }
@@ -3327,10 +3401,27 @@ impl Scheduler {
                 table: OwnedBlockTable::copy_from_v1(item.request_id, live)?,
             });
         }
+        let block_owners = self.execution_block_owners()?;
+        Ok(crate::AuthorizedExecution {
+            scheduler: self,
+            plan,
+            rows,
+            block_owners,
+        })
+    }
+    // Both ordinary and paired execution use the same complete request ledger.
+    // Cache-only owners must be added here when scheduler cache storage lands.
+    fn execution_block_owners(&self) -> SchedulerResult<Vec<(u32, RequestId)>> {
+        let inflight = self.inflight.as_ref().ok_or(SchedulerError::NoIterationInFlight)?;
         let mut block_owners = Vec::new();
+        // Shared prefixes create more owner/page pairs than physical pages.
+        // Reserve once for all live sequence tables, including off-batch rows.
+        let owner_entries = self.requests.iter().filter_map(|r| r.sequence.as_ref())
+            .try_fold(0usize, |n, s| n.checked_add(s.allocated_block_count())
+                .ok_or(SchedulerError::ArithmeticOverflow { field: "execution block ownership" }))?;
         try_reserve_exact(
             &mut block_owners,
-            self.pool.layout().physical_block_count(),
+            owner_entries,
             "execution block ownership",
         )?;
         for record in &self.requests {
@@ -3342,22 +3433,19 @@ impl Scheduler {
                 .iter()
                 .find(|item| item.request_id == record.request_id)
             {
-                sequence.reserved_block_table(&item.reservation)?
+                sequence.execution_block_table(&self.pool, Some(&item.reservation))?
             } else {
-                sequence.block_table()?
+                sequence.execution_block_table(&self.pool, None)?
             };
             for &physical in table.physical_block_ids() {
-                if block_owners.iter().any(|(id, _)| *id == physical) {
-                    return Err(bad());
-                }
+                // Pool generation/owner validation above is authoritative.
+                // The same physical page may legitimately have several readers.
+                // Request records and sequence tables already have unique IDs;
+                // rescanning accumulated physical IDs here was quadratic.
                 block_owners.push((physical, record.request_id));
             }
         }
-        Ok(crate::AuthorizedExecution {
-            scheduler: self,
-            plan,
-            rows,
-            block_owners,
-        })
+        Ok(block_owners)
     }
+
 }

@@ -1432,6 +1432,35 @@ impl SequenceState {
         ))
     }
 
+    /// Validates the complete execution table against current pool generations
+    /// and owners. With a reservation, also rechecks exclusive write access to
+    /// the append range, including immutable leases held outside the batch.
+    /// The caller must retain both owners until device execution is quiescent.
+    ///
+    /// # Errors
+    /// Rejects foreign/stale/poisoned state, invalid reservations and writes to
+    /// shared or leased pages. This check performs no allocation or mutation.
+    pub fn execution_block_table<'a>(
+        &'a self, pool: &KvBlockPool, reservation: Option<&SequenceReservation>,
+    ) -> PagedKvResult<BlockTableV1<'a>> {
+        self.ensure_mutable(pool)?;
+        let table = match reservation {
+            Some(token) => self.reserved_block_table(token)?,
+            None => self.block_table()?,
+        };
+        let writes = reservation.is_some_and(|r| r.target_logical_length > self.logical_length);
+        let first_written = self.logical_length as usize / KV_BLOCK_SIZE;
+        for index in 0..table.physical_block_ids().len() {
+            let block = self.allocated_block(index)?;
+            pool.validate_block(block, self.sequence_id)?;
+            let slot = &pool.slots[block.physical_index as usize];
+            if writes && index >= first_written && (slot.read_leases != 0 || !slot.shared_owners.is_empty()) {
+                return Err(PagedKvError::ImmutableBlock { physical_index: block.physical_index });
+            }
+        }
+        Ok(table)
+    }
+
     /// Views an earlier endpoint of a shared append reservation without
     /// publishing it or changing the full target's occupancy array.
     /// Caller-owned scratch holds only prefix valid counts; physical IDs remain
@@ -2033,6 +2062,36 @@ fn next_pool_cookie() -> PagedKvResult<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn execution_table_rechecks_all_generations_and_external_write_holds() {
+        let mut pool = pool(4);
+        let mut sequence = pool.create_sequence(64).unwrap();
+        reserve_and_commit(&mut sequence,&mut pool,17);
+        let head = sequence.block_id(0).unwrap();
+        let tail = sequence.block_id(1).unwrap();
+        let reservation = sequence.reserve_to(&mut pool,18).unwrap();
+        assert_eq!(sequence.execution_block_table(&pool,Some(&reservation)).unwrap().logical_length(),18);
+        // Fault injection models a stale pool slot, including a read-only head
+        // that append-only commit validation would not otherwise inspect.
+        pool.slots[head.physical_index as usize].generation += 1;
+        assert!(matches!(sequence.execution_block_table(&pool,Some(&reservation)),Err(PagedKvError::StaleBlock{..})));
+        pool.slots[head.physical_index as usize].generation -= 1;
+        pool.slots[tail.physical_index as usize].read_leases = 1;
+        assert!(matches!(sequence.execution_block_table(&pool,Some(&reservation)),Err(PagedKvError::ImmutableBlock{..})));
+        pool.slots[tail.physical_index as usize].read_leases = 0;
+        let mut external = pool.create_sequence(64).unwrap();
+        pool.slots[tail.physical_index as usize].shared_owners.push(external.sequence_id());
+        assert!(matches!(sequence.execution_block_table(&pool,Some(&reservation)),Err(PagedKvError::ImmutableBlock{..})));
+        pool.slots[tail.physical_index as usize].shared_owners.clear();
+        assert!(sequence.execution_block_table(&pool,None).is_err());
+        sequence.rollback(&mut pool,reservation).unwrap();
+        let mut lease = pool.lease_prefix(&sequence,17).unwrap();
+        assert_eq!(sequence.execution_block_table(&pool,None).unwrap().logical_length(),17);
+        pool.release_read_lease(&mut lease).unwrap();
+        sequence.close(&mut pool).unwrap(); external.close(&mut pool).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(),0);
+    }
 
     #[test]
     fn read_leases_retain_orphans_until_last_completion() {

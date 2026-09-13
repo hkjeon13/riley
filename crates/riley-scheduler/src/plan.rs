@@ -389,6 +389,22 @@ impl IterationPlan {
         decode_items: Vec<WorkItem>,
         block_tables: Vec<OwnedBlockTable>,
     ) -> SchedulerResult<Self> {
+        Self::checked(schema_version, iteration_id, prefill_items, decode_items, block_tables, false)
+    }
+
+    /// Scheduler-only geometry construction; live pool authority is still
+    /// required before dispatch. Public transported plans remain exclusive.
+    pub(crate) fn with_shared_prefixes(
+        iteration_id: IterationId, prefill_items: Vec<WorkItem>,
+        decode_items: Vec<WorkItem>, block_tables: Vec<OwnedBlockTable>,
+    ) -> SchedulerResult<Self> {
+        Self::checked(ITERATION_SCHEMA_VERSION, iteration_id, prefill_items, decode_items, block_tables, true)
+    }
+
+    fn checked(
+        schema_version: u16, iteration_id: IterationId, prefill_items: Vec<WorkItem>,
+        decode_items: Vec<WorkItem>, block_tables: Vec<OwnedBlockTable>, shared_prefixes: bool,
+    ) -> SchedulerResult<Self> {
         validate_schema("iteration plan", schema_version)?;
         if prefill_items.is_empty() && decode_items.is_empty() {
             return Err(SchedulerError::InvalidPlan {
@@ -403,8 +419,11 @@ impl IterationPlan {
                 field: "iteration item count",
             },
         )?;
-        let mut referenced_block_tables =
-            validate_iteration_block_tables(&block_tables, item_count)?;
+        let (mut referenced_block_tables, has_shared_pages) =
+            validate_iteration_block_tables(&block_tables, item_count, shared_prefixes)?;
+        if has_shared_pages {
+            validate_shared_prefixes(&block_tables, &prefill_items, &decode_items)?;
+        }
         let mut request_ids = HashSet::new();
         request_ids
             .try_reserve(item_count)
@@ -575,7 +594,8 @@ impl IterationPlan {
 fn validate_iteration_block_tables(
     block_tables: &[OwnedBlockTable],
     item_count: usize,
-) -> SchedulerResult<Vec<bool>> {
+    shared_prefixes: bool,
+) -> SchedulerResult<(Vec<bool>, bool)> {
     if block_tables.len() != item_count {
         return Err(SchedulerError::InvalidPlan {
             field: "block_tables",
@@ -598,13 +618,17 @@ fn validate_iteration_block_tables(
             resource: "iteration physical block identity set",
             requested_elements: block_entry_count,
         })?;
+    let mut has_shared_pages = false;
     for table in block_tables {
         for &physical_block_id in &table.physical_block_ids {
             if !physical_block_ids.insert(physical_block_id) {
-                return Err(SchedulerError::InvalidPlan {
-                    field: "block_tables",
-                    reason: "physical block IDs must be unique across the iteration",
-                });
+                has_shared_pages = true;
+                if !shared_prefixes {
+                    return Err(SchedulerError::InvalidPlan {
+                        field: "block_tables",
+                        reason: "physical block IDs must be unique across the iteration",
+                    });
+                }
             }
         }
     }
@@ -617,7 +641,30 @@ fn validate_iteration_block_tables(
             requested_elements: block_tables.len(),
         })?;
     referenced_block_tables.resize(block_tables.len(), false);
-    Ok(referenced_block_tables)
+    Ok((referenced_block_tables, has_shared_pages))
+}
+
+fn validate_shared_prefixes(tables: &[OwnedBlockTable], prefill: &[WorkItem], decode: &[WorkItem]) -> SchedulerResult<()> {
+    let mut pages = std::collections::HashMap::new();
+    let entries = tables.iter().try_fold(0usize, |n,t| n.checked_add(t.physical_block_ids.len()))
+        .ok_or(SchedulerError::ArithmeticOverflow { field: "shared plan entries" })?;
+    pages.try_reserve(entries).map_err(|_| SchedulerError::HostAllocation {
+        resource: "shared plan pages", requested_elements: entries })?;
+    for work in prefill.iter().chain(decode) {
+        let table = tables.get(work.block_table_index).ok_or(SchedulerError::InvalidPlan {
+            field:"block_table_index",reason:"work item references a missing block table" })?;
+        let committed = work.target_logical_length.checked_sub(work.input_tokens.len())
+            .ok_or(SchedulerError::InvalidPlan { field:"shared prefix",reason:"input exceeds target" })?;
+        for (index,&page) in table.physical_block_ids.iter().enumerate() {
+            let writes = index >= committed / KV_BLOCK_SIZE;
+            if let Some(&(prior_index, prior_writes)) = pages.get(&page) {
+                if writes || prior_writes || prior_index != index {
+                    return Err(SchedulerError::InvalidPlan { field:"shared prefix",reason:"page alias overlaps writes or changes logical position" });
+                }
+            } else { pages.insert(page,(index,writes)); }
+        }
+    }
+    Ok(())
 }
 
 /// Runtime output routed back to one stable plan slot.
@@ -916,6 +963,22 @@ mod tests {
                 reason: "physical block IDs must be unique across the iteration",
             }
         );
+    }
+
+    #[test]
+    fn shared_plan_rejects_aliased_writes_and_shifted_read_positions() {
+        for pages in [vec![0,1,3],vec![0,1,2],vec![1,0,3]] {
+            let tables = vec![
+                OwnedBlockTable::new(RequestId::new(1).unwrap(),BLOCK_TABLE_V1_VERSION,vec![0,1,2],vec![16,16,1],33).unwrap(),
+                OwnedBlockTable::new(RequestId::new(2).unwrap(),BLOCK_TABLE_V1_VERSION,pages.clone(),vec![16,16,1],33).unwrap(),
+            ];
+            let items = (0..2).map(|i| WorkItem::new(RequestId::new(i+1).unwrap(),WorkKind::Decode,
+                vec![7],33,i as usize,Some(OutputSlot::new(i as u32))).unwrap()).collect();
+            let result = IterationPlan::with_shared_prefixes(IterationId::new(1).unwrap(),Vec::new(),items,tables);
+            assert_eq!(result.is_ok(),pages==[0,1,3]);
+        }
+        assert!(IterationPlan::with_shared_prefixes(IterationId::new(1).unwrap(),
+            vec![prefill(1,0),prefill(2,1)],Vec::new(),vec![table(1,7),table(2,7)]).is_err());
     }
 
     #[test]

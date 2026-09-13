@@ -93,3 +93,11 @@ Nsight 원본은 환경 정보를 담을 수 있으므로 저장소에 넣지 �
 [검증 기록](../../benchmarks/results/20260914-shared-prefix-validation/README.md): runtime 347 passed / 1 기존 timing diagnostic ignored, wire 18 passed, batch 11 passed, scheduler 48 passed. Linux ASan/UBSan에서 정상·거부 사례 및 61,568 byte × 2 mode mutation traversal을 통과했다. GPU/model/serving 측정은 이 단계에서 실행하지 않았다.
 
 다음 통합 단위는 retained model owner의 capability와 전체 owner ledger 공급, captured K/V COW 권한·drain, scheduler cache lookup/publication/eviction 및 full-model parity다. 이 serving 연결이 완료되면 동일 조건의 cache-hit/cache-miss 및 cache-off regression을 vLLM과 비교하여 표로 보고한다. 검증 helper 단계마다 serving benchmark를 반복하지 않는다.
+
+## Scheduler 실행 authority 연결
+
+일반 iteration과 paired decode window의 plan/authority에 실제 공유 sequence를 연결했다. Scheduler 내부 plan은 같은 위치의 committed page 읽기를 허용하며 쓰기 alias는 거부한다. Pool의 전체 generation/owner 검사와 append 범위의 lease/shared-owner 재검사를 dispatch authority에 연결했다. 두 실행 경로의 owner ledger를 통합하고 physical ID 중복 여부를 누적 목록에서 반복 검색하던 경로를 제거했다. 예약 capacity는 physical page 수 대신 전체 sequence owner/page 수를 사용한다.
+
+실제 export/import 후 두 consumer 실행과 off-batch consumer, NotDispatched 재시도, paired future-token authority, 취소 후 전체 회수를 검증했다. [검증 기록](../../benchmarks/results/20260914-shared-prefix-scheduler/README.md): scheduler 전체 150 passed, runtime library 348 passed / 1 기존 timing diagnostic ignored. 이 테스트의 출력 token은 host fixture이며 model 정확도 증거가 아니다.
+
+현재 ledger는 request-owned sequence를 포함한다. Scheduler cache-only owner가 도입될 때 해당 owner도 추가해야 한다. 자동 cache 정책과 native model capability는 아직 연결하지 않았으므로 serving에서 prefix reuse가 켜진 상태는 아니다. 다음 단계는 위 retained-model/COW/cache 통합과 실제 GPU·serving 검증으로 유지한다.
