@@ -12,6 +12,9 @@ use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
+mod prefix;
+pub use prefix::{CopyOnWrite, CopyOutcome, KvCopyRegion, KvIdentity, KvPageLayout, PrefixDescriptor, PrefixExport};
+
 /// Fixed token capacity of every PR10 physical block.
 pub const KV_BLOCK_SIZE: usize = 16;
 /// Address-translation table format understood by the PR10 exact path.
@@ -603,6 +606,7 @@ struct BlockSlot {
     generation: u64,
     owner: Option<SequenceId>,
     read_leases: usize,
+    shared_owners: Vec<SequenceId>,
     sidecar: Option<OptionalBlockMetadata>,
 }
 
@@ -703,6 +707,7 @@ pub struct KvBlockPool {
     lifetime_allocation_count: u64,
     total_allocation_latency_ns: u64,
     maximum_allocation_latency_ns: u64,
+    shared_owner_metadata_bytes: u64,
 }
 
 /// Non-cloneable immutable page hold for a cache or an in-flight reader.
@@ -855,6 +860,7 @@ impl KvBlockPool {
                 generation: 0,
                 owner: None,
                 read_leases: 0,
+                shared_owners: Vec::new(),
                 sidecar: None,
             });
         }
@@ -886,6 +892,7 @@ impl KvBlockPool {
             lifetime_allocation_count: 0,
             total_allocation_latency_ns: 0,
             maximum_allocation_latency_ns: 0,
+            shared_owner_metadata_bytes: 0,
         })
     }
 
@@ -912,7 +919,7 @@ impl KvBlockPool {
             free_block_count: self.free_list.len(),
             high_water_mark: self.high_water_mark,
             usable_kv_bytes: self.layout.total_bytes(),
-            host_pool_metadata_bytes: per_block,
+            host_pool_metadata_bytes: per_block.saturating_add(self.shared_owner_metadata_bytes),
             sidecar_count: self.sidecar_count,
             sidecar_device_bytes: self.sidecar_device_bytes,
             lifetime_allocation_count: self.lifetime_allocation_count,
@@ -985,11 +992,13 @@ impl KvBlockPool {
                 physical_index: block.physical_index,
                 generation: block.generation,
             }),
-            Some(actual) if actual != owner => Err(PagedKvError::WrongOwner {
-                physical_index: block.physical_index,
-                expected: owner,
-                actual: Some(actual),
-            }),
+            Some(actual) if actual != owner && !slot.shared_owners.contains(&owner) => {
+                Err(PagedKvError::WrongOwner {
+                    physical_index: block.physical_index,
+                    expected: owner,
+                    actual: Some(actual),
+                })
+            }
             Some(_) => Ok(()),
         }
     }
@@ -1015,8 +1024,10 @@ impl KvBlockPool {
         }
         let mut released = 0;
         for index in (0..self.slots.len()).rev() {
-            if self.slots[index].owner == Some(owner) {
-                self.release_slot(index);
+            if self.slots[index].owner == Some(owner)
+                || self.slots[index].shared_owners.contains(&owner)
+            {
+                self.detach_owner(index, owner);
                 released += 1;
             }
         }
@@ -1057,6 +1068,7 @@ impl KvBlockPool {
         let slot = &mut self.slots[physical_index as usize];
         debug_assert!(slot.owner.is_none());
         debug_assert_eq!(slot.read_leases, 0);
+        debug_assert!(slot.shared_owners.is_empty());
         debug_assert!(slot.sidecar.is_none());
         let Some(generation) = slot.generation.checked_add(1) else {
             self.free_list.push(physical_index);
@@ -1075,11 +1087,22 @@ impl KvBlockPool {
 
     fn release_block(&mut self, block: BlockId, owner: SequenceId) -> PagedKvResult<()> {
         self.validate_block(block, owner)?;
-        self.release_slot(block.physical_index as usize);
+        self.detach_owner(block.physical_index as usize, owner);
         Ok(())
     }
 
-    fn release_slot(&mut self, index: usize) {
+    fn detach_owner(&mut self, index: usize, owner: SequenceId) {
+        let slot = &mut self.slots[index];
+        if slot.owner != Some(owner) {
+            let position = slot.shared_owners.iter().position(|&entry| entry == owner)
+                .expect("validated shared owner");
+            slot.shared_owners.swap_remove(position);
+            return;
+        }
+        if let Some(next) = slot.shared_owners.pop() {
+            slot.owner = Some(next);
+            return;
+        }
         let slot = &mut self.slots[index];
         debug_assert!(slot.owner.is_some());
         slot.owner = None;
@@ -1498,7 +1521,8 @@ impl SequenceState {
             let first_written = self.logical_length as usize / KV_BLOCK_SIZE;
             for index in first_written..self.allocated_block_count {
                 let block = self.allocated_block(index)?;
-                if pool.slots[block.physical_index as usize].read_leases != 0 {
+                let slot = &pool.slots[block.physical_index as usize];
+                if slot.read_leases != 0 || !slot.shared_owners.is_empty() {
                     return Err(PagedKvError::ImmutableBlock {
                         physical_index: block.physical_index,
                     });

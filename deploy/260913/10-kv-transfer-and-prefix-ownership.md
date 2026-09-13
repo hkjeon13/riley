@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **구현 진행 중 — host read lease 기반 추가, serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — host identity·공유 import·COW ticket 구현, CUDA/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -59,6 +59,19 @@ cache/transfer를 끄고 local KV를 사용한다. in-flight transfer drain 이�
 
 Lease가 있는 page에 쓰는 append는 `ImmutableBlock`으로 거부한다. Full-page prefix 뒤 새 page append는 허용하며, truncate로 partial page가 된 경우에도 보호한다. 아직 COW를 실행하는 기능은 아니다. 이 host token 자체는 CUDA event가 아니므로 acquisition은 device write 완료 후, release는 모든 reader의 device 작업 완료 후 호출해야 한다. Token을 버려도 자동 해제하지 않아 미완료 reader의 page가 재사용되지 않는다.
 
-남은 필수 범위는 identity descriptor, shared-prefix sequence import, partial-page COW, CUDA completion과 transport ticket 연결, local adapter, 모델/serving 연결 및 cache-hit/cache-miss 비교다. 이 기반 작업으로 PR10 완료나 serving 성능 개선을 주장하지 않는다. 기본 serving 경로에는 lease를 발급하는 호출을 아직 넣지 않았다.
+이 read lease 기반 작업만으로 PR10 완료나 serving 성능 개선을 주장하지 않는다. 이후 identity·공유 import·COW 진행 상황은 아래에 기록한다. 기본 serving 경로에는 lease를 발급하는 호출을 아직 넣지 않았다.
 
 Host 검증: `cargo test -p riley-runtime --lib` 334 passed / 1 ignored / 0 failed. 이후 overflow/stale-completion 원자성 테스트를 추가한 최종 `cargo test -p riley-runtime --lib paged_kv --quiet`는 23 passed / 0 failed. `cargo test -p riley-scheduler --lib --quiet`는 48 passed / 0 failed. 새 테스트는 lease 회수 지연·중복 완료·foreign pool·partial/full-page append·truncate/reset·generation 재사용·overflow 실패 원자성을 확인한다. 이 단계에서는 새 GPU/serving 측정을 실행하지 않았다.
+
+## 다음 구현 batch: identity·공유 import·COW
+
+`crates/riley-runtime/src/paged_kv/prefix.rs`에 아래 host 계약을 연결했다.
+
+1. `PrefixDescriptor`: model revision/content, numerical profile, position encoding/RoPE, tensor/pipeline partition fingerprint 및 BF16 page format을 token digest·시작 position·길이와 함께 대조한다. 누락된 fingerprint, 빈 prefix, position overflow를 거부한다. Pool physical capacity는 page 표현 identity와 분리한다. 실제 loaded model 및 sequence token과의 binding은 앞으로 실행 adapter가 공급해야 한다.
+2. `SequenceState::import_prefix`: 검증된 export의 **같은 physical page**를 빈 sequence에 연결한다. Pool은 각 page의 sequence owner들을 추적하고 source 종료·cache eviction·consumer 종료 순서와 관계없이 마지막 owner/read lease 이후에만 반환한다. 공유 owner의 추가 host allocation capacity는 pool metadata 통계에 포함한다.
+3. `begin_copy_on_write`/`complete_copy_on_write`: partial tail의 source lease와 별도 staging sequence를 ticket이 보유한다. 복사 중 target table을 publish하지 않는다. 성공 완료 후에만 마지막 page의 ownership/table을 교체한다. 실패, reset 이후 지연 완료, 새 reservation, orphan 취소 및 중복 완료를 구별한다. Enqueue 성공이나 cancel 요청을 copy 완료로 취급해서는 안 된다.
+4. `copy_regions`: 모든 layer/head의 유효 token만 복사하는 K/V byte region을 allocation 없이 열거한다. Host buffer 검증에서 별도 dense-layout oracle로 주소와 bytes를 확인하고 unused tail guard를 보존했다. **이 iterator는 아직 CUDA transport adapter가 아니다.**
+
+검증: 최종 `cargo test -p riley-runtime --lib paged_kv --quiet` 31 passed; `cargo test -p riley-scheduler --lib --quiet` 48 passed; `cargo test -p riley-runtime --lib llama::batch:: --quiet` 8 passed. 초기 offset API 인자 수 컴파일 오류는 수정 후 재실행했다. 이 단계에서 GPU 실행·full-model 재검증·serving 성능 측정은 하지 않았다.
+
+다음 연결 범위: `llama/batch.rs`와 `llama/multi_descriptor/variable_wire.rs`는 현재 cross-sequence page alias를 일괄 거부한다. 이 검증을 단순히 제거하지 말고, authoritative shared-owner ledger와 committed read-only range를 기반으로 읽기 공유를 허용하고 쓰기 충돌을 거부하도록 native 검사까지 함께 변경해야 한다. 이어서 Rust→C ABI→CUDA D2D local adapter와 실제 event에 ticket 완료를 묶고, scheduler cache lookup/publication/eviction 및 model identity를 연결한다. 이 작업이 완료되기 전까지 PR10은 host 기반 구현이며 serving 승격 대상이 아니다.
