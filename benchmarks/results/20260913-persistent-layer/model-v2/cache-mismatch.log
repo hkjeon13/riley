@@ -1,0 +1,93 @@
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13 nvcc=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+error: failed to run custom build command for `riley-cuda v0.1.0 (/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/riley-opt-260912/persistent-layer-cargo-target-v1/release/build/riley-cuda-9eadd31f0372f4a4/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES
+  cargo:rustc-env=RILEY_CUDA_COMPILED_ARCHITECTURES=89
+  cargo:rerun-if-env-changed=CUDAToolkit_ROOT
+  cargo:rerun-if-env-changed=CUDA_HOME
+  cargo:rerun-if-env-changed=CUDA_PATH
+  cargo:rerun-if-env-changed=NVCC
+  cargo:rerun-if-env-changed=CUDACXX
+  cargo:rerun-if-env-changed=CMAKE
+  cargo:rerun-if-env-changed=RILEY_FLASHINFER_DATA
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/CMakeLists.txt
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/include/riley_cuda.h
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/flashinfer.cmake
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/verify_flashinfer.py
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/flashinfer_api.h
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/flashinfer_decode.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/flashinfer_prefill.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/prepare_flashinfer_prefill_overlay.py
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/optional/ffn_pipeline.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/ffi_internal.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/attention_online.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/attention_online.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/attention_cublaslt.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/attention_reference.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/batch_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/fixed37_gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/fixed37_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/fixed37_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/fixed37_reduction.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_resources.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_numerics.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_numerics_precise.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_tiled.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared16.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared32.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared32_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_gqa_attention_v50.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_merge_norm_v56.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_gate_v56.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared32_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared32_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared16_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared16_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shared16_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/decode_shape.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/packed_prefill_attention_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/packed_prefill_rope_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/packed_prefill_model_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/mixed_attention_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/mixed_rope_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/mixed_model_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_fused_gate_v51.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_projection.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_query_tile_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/compact_shared_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_rope_kv.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_pointwise.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/prefill_shape_packet.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_multisequence_precise.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_multisequence_io.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_multisequence_packet.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_buffered_transfer.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_multisequence_record.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/graph_multisequence_catalog.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/host_runtime.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/memory.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/smoke_fill.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/src/version.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels/tests/abi_layout.c
+  cargo:warning=riley-cuda: CUDA toolkit=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13 nvcc=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc
+  cargo:warning=riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+  cargo:rerun-if-changed=/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data
+
+  --- stderr
+  CMake Error: The source "/tmp/riley-opt-260912/persistent-layer-model-source-v2/kernels/CMakeLists.txt" does not match the source "/tmp/riley-opt-260912/persistent-layer-model-source-v1/kernels/CMakeLists.txt" used to generate cache.  Re-run cmake with a different source directory.
+  error: riley-cuda native build failed: could not configure the native CUDA library: "/data/cmake-3.31.12/bin/cmake" "-S" "/tmp/riley-opt-260912/persistent-layer-model-source-v2/crates/riley-cuda/../../kernels" "-B" "/tmp/riley-opt-260912/persistent-layer-cargo-target-v1/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-build" "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_INSTALL_PREFIX=/tmp/riley-opt-260912/persistent-layer-cargo-target-v1/release/build/riley-cuda-ee7139af7da78382/out/cuda-native-install" "-DCMAKE_CUDA_ARCHITECTURES=89" "-DCUDAToolkit_ROOT=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13" "-DCMAKE_CUDA_COMPILER=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc" "-DRILEY_FLASHINFER_DATA=/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data" "-DRILEY_CUDA_ENABLE_TEST_FAULT_INJECTION=OFF" "-DRILEY_CUDA_ENABLE_NVML_PROBE=OFF" exited with exit status: 1

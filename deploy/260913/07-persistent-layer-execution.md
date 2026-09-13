@@ -62,3 +62,9 @@ C32 natural 두 역순에서 V7/후보/vLLM throughput은10,440.7/10,715.1/11,79
 ## Attention task body native gate — batch 진행 중
 
 [Native gate](../../benchmarks/results/20260913-persistent-attention-native/README.md): score/value 연산을 explicit task body로 분리하고 ragged request-prefix score 작업 계획·row-interleaved value 배치·cooperative barrier를 구현했다. 원본 V7과15개 graph replay의 score/output 전체가 bitwise 같으며 native memcheck/racecheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다. 아직 모델·serving 통합 전이므로 성능 개선이나 batch 완료를 주장하지 않는다. 다음 단계는 attention score scratch를 projection/down partial로 재사용하기 전 전체 value 소비 완료 barrier, retained owner·graph identity, full-model gate 및 기존/직전/신규/vLLM 비교다.
+
+## Attention→FFN 결합 batch: serving 회귀
+
+[결합 결과 및 분리 대조](../../benchmarks/results/20260913-persistent-layer/README.md): score/value→projection→FFN을 한 cooperative kernel로 연결하고 score scratch 재사용 전 grid barrier를 추가했다. Native24 replay, full-model1,024토큰/12,582,912 logits는 bitwise 일치하며 native memcheck/racecheck 및 whole-model memcheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다.
+
+C32 serving에서 결합 후보는8,597.8 tokens/s로 V7 10,486.0보다18.01% 느리고 vLLM 12,265.3보다29.90% 느리다. Native 경계 대조에서도 attention/post-attention 분리로 일부 회복되지만 C32에서는 원래 연산보다 느리다. 이 비교는 grid 크기·컴파일 자원도 바꾸므로 barrier만을 원인으로 단정하지 않는다. 기본값 승격을 거부하고 monolithic kernel 확대는 중단한다. 다음 영역은 attention의 task planning/work assignment 비용과 per-column softmax 재계산이며, profiler/대조군으로 원인을 구분한 coherent execution batch를 진행한다. 전체 serving 목표와 PR07/19의 나머지 통합·안정성 조건은 미완료다.

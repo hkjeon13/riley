@@ -1,0 +1,43 @@
+{"iteration":0,"rows":0,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":1,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":15,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":16,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":17,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":31,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":32,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":0,"rows":33,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":0,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":1,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":15,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":16,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":17,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":31,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":32,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":1,"rows":33,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":0,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":1,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":15,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":16,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":17,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":31,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":32,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+{"iteration":2,"rows":33,"gate_bit_mismatches":0,"down_bit_mismatches":0}
+timing rows=1 pair=0 backend=operators graph_us=19.226624 serving_measured=false
+timing rows=1 pair=0 backend=joined_persistent graph_us=19.555008 serving_measured=false
+timing rows=1 pair=0 backend=separate_persistent graph_us=17.197056 serving_measured=false
+timing rows=1 pair=1 backend=separate_persistent graph_us=17.197056 serving_measured=false
+timing rows=1 pair=1 backend=joined_persistent graph_us=19.564545 serving_measured=false
+timing rows=1 pair=1 backend=operators graph_us=19.230721 serving_measured=false
+timing rows=16 pair=0 backend=operators graph_us=27.285503 serving_measured=false
+timing rows=16 pair=0 backend=joined_persistent graph_us=37.543617 serving_measured=false
+timing rows=16 pair=0 backend=separate_persistent graph_us=30.971905 serving_measured=false
+timing rows=16 pair=1 backend=separate_persistent graph_us=30.963713 serving_measured=false
+timing rows=16 pair=1 backend=joined_persistent graph_us=36.289215 serving_measured=false
+timing rows=16 pair=1 backend=operators graph_us=26.093569 serving_measured=false
+timing rows=32 pair=0 backend=operators graph_us=31.313919 serving_measured=false
+timing rows=32 pair=0 backend=joined_persistent graph_us=49.398975 serving_measured=false
+timing rows=32 pair=0 backend=separate_persistent graph_us=42.858498 serving_measured=false
+timing rows=32 pair=1 backend=separate_persistent graph_us=42.842113 serving_measured=false
+timing rows=32 pair=1 backend=joined_persistent graph_us=49.412094 serving_measured=false
+timing rows=32 pair=1 backend=operators graph_us=31.322111 serving_measured=false
+cases=24 blocks=128 registers=60 shared=6308 local=0 exact_all_outputs=true
