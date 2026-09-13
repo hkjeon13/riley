@@ -13,6 +13,7 @@ parser.add_argument('--flashinfer-data',type=Path,required=True)
 parser.add_argument('--architecture',action='append',required=True)
 parser.add_argument('--source',type=Path,required=True)
 parser.add_argument('--output',type=Path,required=True)
+parser.add_argument('--lineinfo',action='store_true',help='include CUDA source locations for sanitizer diagnostics')
 args=parser.parse_args()
 for architecture in args.architecture:
     if not re.fullmatch(r'[0-9]{2,3}[af]?',architecture):
@@ -28,6 +29,7 @@ for base in includes:
             header_digest.update(str(path.relative_to(args.flashinfer_data)).encode()+b'\0')
             header_digest.update(hashlib.sha256(path.read_bytes()).digest())
 command=[str(args.nvcc),'-std=c++17','-O3','-shared','-Xcompiler','-fPIC']
+if args.lineinfo:command+=['-lineinfo']
 for arch in args.architecture:command+=['-gencode',f'arch=compute_{arch},code=sm_{arch}']
 command += [f'-I{p}' for p in includes]+[str(args.source),'-o',str(args.output)]
 args.output.parent.mkdir(parents=True,exist_ok=True)

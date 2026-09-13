@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc",
+    "-std=c++17",
+    "-O3",
+    "-shared",
+    "-Xcompiler",
+    "-fPIC",
+    "-lineinfo",
+    "-gencode",
+    "arch=compute_89,code=sm_89",
+    "-gencode",
+    "arch=compute_90a,code=sm_90a",
+    "-gencode",
+    "arch=compute_100a,code=sm_100a",
+    "-I/tmp/riley-opt-260912/flashinfer-prefill-sync-overlay-v1/include",
+    "-I/tmp/riley-opt-260912/flashinfer-prefill-sync-overlay-v1/cccl/libcudacxx/include",
+    "-I/tmp/riley-opt-260912/flashinfer-prefill-sync-overlay-v1/cccl/cub",
+    "-I/tmp/riley-opt-260912/flashinfer-prefill-sync-overlay-v1/cccl/thrust",
+    "kernels/optional/flashinfer_prefill.cu",
+    "-o",
+    "/tmp/riley-opt-260912/flashinfer-prefill-sync-v1/adapter.so"
+  ],
+  "compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "source_sha256": "11e881a5c45ad5f6001f4f35e43fe8971049aaca919d6a21ee6ae41f04be40b2",
+  "dependency_headers_sha256": "d34d25c9005e6f7fdf3278720851bc279a5fd378404c683e11a9cdb15c00fdb7",
+  "exit_code": 0,
+  "library_sha256": "0f9675b8da39607426f2853733ca59b441bdca98dd7143212b8497b954c90d19",
+  "production_registration": false
+}

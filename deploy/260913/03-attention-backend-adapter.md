@@ -89,3 +89,9 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 ## 실험적 serving 비교 결과
 
 [동일 바이너리 V7 / FlashInfer / vLLM 비교](../../benchmarks/results/20260913-flashinfer-serving-screen/README.md)를 완료했다. C32 natural 확장 교차 screen에서 FlashInfer throughput은 V7 대비 +7.24%, vLLM 대비 −5.36%이며 median TPOT는 vLLM보다 17.82% 길다. TTFT P99는 V7보다 나빠졌다. 품질 gate 실패는 유지하며, loopback 전용 `flashinfer-smol-experimental-v2`는 명시적 진단 선택지다. 지원·승격 backend 등록이나 기본값 변경이 아니다. 실제 serving 이득은 있지만 PR03 및 전체 목표의 완료 조건은 충족하지 못했다.
+
+## Native paged-prefill adapter 진행
+
+[Prefill native 검증](../../benchmarks/results/20260913-flashinfer-prefill-native/README.md): 기존 HND KV 및 packed-query metadata를 FlashInfer causal paged-prefill kernel에 직접 연결했다. 32요청·1,024 query row·context4096·비연속 page·graph replay를 검증했다. 원본 kernel의 output shared-memory 단계에서 racecheck warning을 확인했고, 고정 원본을 검증한 별도 빌드 overlay에 warp barrier 하나를 추가해 expanded probe의32 warnings를0으로 만들었다. 설치된 원본은 변경하지 않았다. 868,032 출력 값은 보정 전후 bitwise 일치하며 patched memcheck도0 errors다. SM89/90a/100a AOT 통과, 후자의 runtime은 장비 부재 skip이다.
+
+모델 통합 시 이 검증된 overlay를 prefill object에 강제하고, mixed의 decode row는 선택된 decode backend로 유지해야 한다. 현재 raw adapter는 모든 supplied query를 처리하므로 그대로 mixed 전체에 붙이지 않는다. Rust owner·graph identity·stage routing 및 기존 full-model 품질 gate·serving 비교가 남아 있다. 합성 attention 오차0.01 기준은 기존 자연어 품질 gate를 대체하지 않는다.

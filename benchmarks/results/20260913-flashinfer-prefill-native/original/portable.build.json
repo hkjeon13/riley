@@ -1,0 +1,27 @@
+{
+  "command": [
+    "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc",
+    "-std=c++17",
+    "-O3",
+    "-shared",
+    "-Xcompiler",
+    "-fPIC",
+    "-gencode",
+    "arch=compute_90a,code=sm_90a",
+    "-gencode",
+    "arch=compute_100a,code=sm_100a",
+    "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/include",
+    "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/libcudacxx/include",
+    "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/cub",
+    "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/thrust",
+    "kernels/optional/flashinfer_prefill.cu",
+    "-o",
+    "/tmp/riley-opt-260912/flashinfer-prefill-v1/portable.so"
+  ],
+  "compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "source_sha256": "11e881a5c45ad5f6001f4f35e43fe8971049aaca919d6a21ee6ae41f04be40b2",
+  "dependency_headers_sha256": "2a7d8ab8f81f6cb7fd259270b63bd71e152bff77a105b3c0ba875108b5567e0c",
+  "exit_code": 0,
+  "library_sha256": "6237feb5175437eb484bae9c106580a21bf02d3f107438a4a5f77941733c57d9",
+  "production_registration": false
+}

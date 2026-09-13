@@ -1,0 +1,12 @@
+--- upstream/flashinfer/attention/prefill.cuh
++++ overlay/flashinfer/attention/prefill.cuh
+@@ -1989,6 +1989,9 @@
+ #endif
+         }
+       }
++
++      // Riley overlay: publish every lane before the cross-lane shared read.
++      __syncwarp();
+ 
+       uint32_t o_smem_offset_w = o_smem->template get_permuted_offset<UPCAST_STRIDE_O>(
+           warp_idx_x * KTraits::NUM_MMA_Q * 16 + lane_idx / 8, lane_idx % 8);

@@ -1,0 +1,28 @@
+{
+  "/tmp/riley-opt-260912/hardware-validation-source/kernels/optional/flashinfer_prefill.cu": {
+    "sha256": "11e881a5c45ad5f6001f4f35e43fe8971049aaca919d6a21ee6ae41f04be40b2",
+    "bytes": 4356
+  },
+  "/tmp/riley-opt-260912/hardware-validation-source/benchmarks/analysis/flashinfer_prefill_probe.cu": {
+    "sha256": "2ac1c76d4bd0ccbd5bb07edf64f1e25c460ce6405cbd6f3b3711343b057aaa88",
+    "bytes": 5683
+  },
+  "/tmp/riley-opt-260912/hardware-validation-source/benchmarks/analysis/prepare_flashinfer_prefill_overlay.py": {
+    "sha256": "39d511ae1400afdb4ee2514b9a46a51665b930cbb1c01b07e87799fb2e772e68",
+    "bytes": 1816
+  },
+  "/tmp/riley-opt-260912/flashinfer-prefill-v1/probe-v2": {
+    "sha256": "7025eb95f4157d5fcbf0666835ca6d944b8be6ad235973a8b66202d8f4a298f0",
+    "bytes": 997024
+  },
+  "/tmp/riley-opt-260912/flashinfer-prefill-v1/output-v2.bf16": {
+    "sha256": "a54af5adead8ee65e9f934afd0cb95bbe39f2d98b21b362840807d7eb3c2524d",
+    "bytes": 1736064
+  },
+  "/tmp/riley-opt-260912/flashinfer-prefill-sync-v1/output-v2.bf16": {
+    "sha256": "a54af5adead8ee65e9f934afd0cb95bbe39f2d98b21b362840807d7eb3c2524d",
+    "bytes": 1736064
+  },
+  "probe_linkage_with_overlay": "\tlinux-vdso.so.1 (0x00007ffe0d9ea000)\n\tadapter.so => /tmp/riley-opt-260912/flashinfer-prefill-sync-v1/adapter.so (0x0000745c1ba00000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000745c1b600000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000745c1b919000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000745c1be80000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000745c1b200000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000745c1bf64000)\n",
+  "gpu_compute_processes_after": ""
+}
