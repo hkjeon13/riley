@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_trace.py", line 59, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_trace.py", line 41, in main
+    assert p.poll() is None,'profiler/server exited before readiness'
+AssertionError: profiler/server exited before readiness

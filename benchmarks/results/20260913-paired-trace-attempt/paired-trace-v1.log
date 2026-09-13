@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_trace.py", line 59, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_trace.py", line 46, in main
+    assert time.monotonic()<deadline,'readiness timeout';time.sleep(.5)
+AssertionError: readiness timeout

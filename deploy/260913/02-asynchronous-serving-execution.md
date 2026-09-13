@@ -170,3 +170,6 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 실제 CUDA release 빌드와 single/paired HTTP natural reference, stop-string 결과·usage 일치, disconnect 후 요청 재사용 검사를 통과했다. 종료 시 완료 window 수와 최대 batch 폭을 한 번 기록하여 opt-in의 실제 실행 여부를 확인한다. 기존 full-model racecheck는 재부팅 후 결과가 유실되어 통과로 간주하지 않는다. 재부팅 이전 커널에서 대량 메모리 사용과 global OOM이 확인되어 이 검사는 그대로 재실행하지 않는다.
 
 새 driver/toolkit 환경에서 과거 수치를 직접 이어 붙이지 않고 동일 binary의 single/paired와 vLLM을 다시 측정한다. 비교 결과·승격 여부와 남은 범위는 [복구 후 serving 보고서](../../benchmarks/results/20260913-paired-serving-recovery/README.md)를 따른다.
+
+
+후속 [paired trace 수집 시도](../../benchmarks/results/20260913-paired-trace-attempt/README.md)는 Nsight process probe와 최소 launcher 검사 단계에서 실패했다. 유효 GPU trace가 없으므로 회귀 원인을 확정하거나 새 serving 성능을 주장하지 않는다. Detached Nsight session agent를 포함하는 소유권 추적과 pair 내부/외부 gap 분석기를 준비했으며, 다음은 최소 수집기 정상화 확인 후 같은 binary의 trace 수집이다.
