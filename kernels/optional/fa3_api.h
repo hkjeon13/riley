@@ -42,6 +42,24 @@ int riley_fa3_enqueue(RileyFa3Plan *) RILEY_FA3_NOEXCEPT;
 // bound stream before freeing. A close-stage CUDA failure permanently poisons
 // the plan: retain pointer/leases, never retry a possibly completed free.
 int riley_fa3_destroy(RileyFa3Plan **) RILEY_FA3_NOEXCEPT;
+// Internal model-recorder ABI: external workspace is retained/accounted by the
+// existing Riley graph reservation. Return values here are cudaError_t codes.
+// Metadata prepare is SM89-compatible and graph-safe. Invalid packets publish
+// zero query lengths and set status, including when a bad page is in a suffix.
+uint64_t riley_fa3_model_workspace_bytes(void) RILEY_FA3_NOEXCEPT;
+int riley_fa3_model_metadata_prepare(void *stream, const void *packet,
+    uint64_t packet_bytes, void *workspace, uint64_t workspace_bytes,
+    uint32_t physical, uint32_t capacity, uint32_t context, void *status) RILEY_FA3_NOEXCEPT;
+// Cold prepare_only=1 checks SM90 capabilities and sets kernel attributes, with
+// no attention launch. Normal calls require that preparation and exact stable
+// shape/addresses. Caller validates context, extents, alignment and all leases.
+int riley_fa3_model_attention(void *stream, const void *q, const void *k,
+    const void *v, void *out, void *workspace, uint64_t workspace_bytes,
+    uint32_t physical, uint32_t capacity, uint32_t context, uint32_t prepare_only) RILEY_FA3_NOEXCEPT;
+// Schedule once after metadata prepare, then attention resets only its semaphore
+// for each sequential layer. Not safe for concurrent layers sharing workspace.
+int riley_fa3_model_schedule(void *stream, void *workspace, uint64_t workspace_bytes,
+    uint32_t capacity, uint32_t context) RILEY_FA3_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

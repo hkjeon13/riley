@@ -1,0 +1,49 @@
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-260913-recovery/source/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13 nvcc=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10307:19
+      |
+10306 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10307 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10317 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10611:19
+      |
+10610 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10611 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10622 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10634 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1551:8
+     |
+1551 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+    Finished `release` profile [optimized + debuginfo] target(s) in 27.65s
+     Running tests/fa3_owner_gpu.rs (/data/riley-serving-260913-recovery/target/release/deps/fa3_owner_gpu-49db4096a32ff637)
+
+running 1 test
+FA3 Rust/native rejection: three creates, all buffers and stream closed; Hopper runtime skipped
+test unsupported_device_releases_native_leases ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+

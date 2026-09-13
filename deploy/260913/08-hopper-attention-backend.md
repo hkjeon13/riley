@@ -64,3 +64,9 @@ Rust retained owner, optional production build, 동적 serving metadata 연결�
 [Rust owner 검증](../../benchmarks/results/20260914-fa3-rust-owner/README.md): `RILEY_FA3_SOURCE`로 분리 SM90a object를 빌드하고 Rust exclusive borrow와 native stream/buffer 사용권을 연결했다. Enqueue·완료 확인·close를 분리하며 불명확한 close 후 destructive free 재시도를 막는다. Cargo enabled 링크, 4090 거부 3회 후 전체 자원 해제, 같은 build directory의 disabled 복귀 및 archive symbol 제거를 확인했다.
 
 현재 safe owner는 고정 입력 primitive이며 graph capture나 다른 모델 primitive를 통한 buffer 갱신을 노출하지 않는다. Retained graph session, 동적 metadata, workspace 통계, model recorder/profile 및 실제 Hopper 정상·오류·수치·serving 검증은 다음 범위다. 실제 Hopper CUDA fault injection이나 성능 개선을 입증한 상태가 아니다.
+
+### 동적 model metadata와 외부 workspace 호출
+
+[GPU metadata 검증](../../benchmarks/results/20260914-fa3-dynamic-metadata/README.md): mixed packet을 검증 후 FA3 page table·query offset·KV 길이로 게시하는 GPU planner와 71,424-byte 외부 workspace 호출을 추가했다. 배치 scheduling은 한 번 준비하고 각 레이어는 semaphore만 초기화하는 경로다. 4090 metadata graph 비교 34건, memcheck/racecheck 및 SM90a native build/link가 통과했다.
+
+실제 model recorder는 아직 새 함수를 호출하지 않는다. Hopper에서 scheduling 재사용·빈/실패 배치 처리·attention 수치·graph·모델 품질을 검증해야 하며, metadata 검사 통과를 FA3 attention 또는 serving 성능 증거로 간주하지 않는다.

@@ -47,6 +47,10 @@ int main() {
     CHECK(cudaGraphDestroy(graph)==cudaSuccess);
     if (props.major!=9 || props.minor!=0) {
         CHECK(riley_fa3_create(&s,&buffers,stream,&plan)==RILEY_FA3_UNSUPPORTED && plan==nullptr);
+        void *workspace=nullptr;
+        CHECK(cudaMalloc(&workspace,riley_fa3_model_workspace_bytes())==cudaSuccess);
+        CHECK(riley_fa3_model_schedule(stream,workspace,riley_fa3_model_workspace_bytes(),1024,4096)==cudaErrorNotSupported);
+        CHECK(cudaFree(workspace)==cudaSuccess);
         std::puts("{\"host_layout\":\"pass\",\"unsupported_device_rejection\":\"pass\",\"hopper_runtime\":\"skip_no_hopper\"}");
     } else {
         // This is a contract probe, not a substitute for the Hopper numerical suite.

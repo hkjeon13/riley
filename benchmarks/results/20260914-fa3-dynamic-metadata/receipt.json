@@ -1,0 +1,40 @@
+{
+  "fa3_commit": "98eb7998a0eba4047c7a30375522569d4b8efb20",
+  "cutlass_commit": "7127592069c2fe01b041e174ba4345ef9b279671",
+  "original_error_header_sha256": "f93a4a55e528edaa3b51a26e26e33f6b52e2b26a30b8e325b2c5121db70d8df0",
+  "patched_error_header_sha256": "97a26693411e4e47f4a106101225c4a4b1b0d40dd29c9988d44b713f40f5dcf5",
+  "launch_original_sha256": "c435e8a039cbc4e3eede523cda203773ca6681d1ace4731ae6f063574ebaad8f",
+  "launch_overlay_sha256": "64e4d9181709dad495bca229362cfa2e19d231c520652695cc29691ddc049e5b",
+  "command": [
+    "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+    "-std=c++17",
+    "-O3",
+    "-arch=sm_90a",
+    "--expt-relaxed-constexpr",
+    "--expt-extended-lambda",
+    "-Xptxas=-v",
+    "-I/data/riley-serving-260913-recovery/fa3-model-native-v2/fa3/hopper",
+    "-I/data/riley-serving-260913-recovery/fa3-model-native-v2/cutlass/include",
+    "-I/data/riley-serving-260913-recovery/fa3-model-native-v2/cutlass/tools/util/include",
+    "-I/data/riley-serving-260913-recovery/source/kernels/optional",
+    "/data/riley-serving-260913-recovery/source/kernels/optional/fa3_adapter.cu",
+    "/data/riley-serving-260913-recovery/source/kernels/optional/fa3_model_metadata.cu",
+    "/data/riley-serving-260913-recovery/fa3-model-native-v2/fa3/hopper/flash_prepare_scheduler.cu",
+    "/data/riley-serving-260913-recovery/source/benchmarks/analysis/fa3_adapter_contract_probe.cpp",
+    "-lcuda",
+    "-o",
+    "/data/riley-serving-260913-recovery/fa3-model-native-v2/fa3-adapter-probe"
+  ],
+  "source_sha256": {
+    "kernels/optional/fa3_adapter.cu": "bc4d6a7e94e153fab4e0b9570fdf7aa157b33a053adadc44197941236e27c1ed",
+    "kernels/optional/fa3_api.h": "58117ec22ebff2828e357df08756e607fbdbff63b212707bab3dd4367936d197",
+    "kernels/optional/fa3_contract.hpp": "271183af21ad915ffc3db90e7203504d96f051e99929fc4ae979171cd780333d",
+    "kernels/optional/fa3_model_metadata.cu": "0ea5ff52025614249f1db58a53d4218d2d0c56dcf8eaf9a20b21ce967d338f23",
+    "kernels/optional/fa3_model_metadata.cuh": "5860bd2b61eb9d926f5f6d64a4e31ae2e6041aac74fdfd2b8255381faa829c26",
+    "benchmarks/analysis/fa3_adapter_contract_probe.cpp": "efdb9392e2d2384da8f107ff875cb7f1882f7135bb79369d98bd57e11263a0f4"
+  },
+  "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "build_exit": 0,
+  "contract_exit": 0,
+  "binary_sha256": "45f625fe2d4405540a8be186bf95fb6c5b4febcb768eb65d0f058f53cb06e26e"
+}

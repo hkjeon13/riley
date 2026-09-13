@@ -1,4 +1,5 @@
 #include "fa3_contract.hpp"
+#include "fa3_model_metadata.cuh"
 #include "flash_fwd_launch_template.h"
 #include <cuda.h>
 #include <cstdint>
@@ -136,5 +137,73 @@ extern "C" int riley_fa3_destroy(RileyFa3Plan **p) noexcept {
         (*p)->close_failed=true;
         runtime(cudaStreamSynchronize((*p)->stream));
         runtime(cudaFree((*p)->workspace)); delete *p; *p=nullptr;
+    });
+}
+
+namespace {
+bool model_params(Flash_fwd_params &f, void *workspace, uint64_t bytes,
+                  unsigned capacity, unsigned context) {
+    if(!workspace || bytes!=sizeof(riley_fa3_model::Workspace) ||
+       reinterpret_cast<uintptr_t>(workspace)%256 || !capacity || capacity>1024 ||
+       !context || context>4096) return false;
+    int device; runtime(cudaGetDevice(&device));
+    cudaDeviceProp props{}; runtime(cudaGetDeviceProperties(&props,device));
+    require(props.major==9 && props.minor==0,RILEY_FA3_UNSUPPORTED);
+    auto *w=static_cast<riley_fa3_model::Workspace*>(workspace);
+    f=Flash_fwd_params{};
+    f.h=9; f.h_k=3; f.b=f.b_k=32; f.total_q=f.seqlen_q=capacity;
+    f.seqlen_k=(context+15)/16*16; f.d=f.dv=f.d_rounded=f.dv_rounded=64;
+    f.seqlen_q_rounded=(capacity+127)/128*128; f.seqlen_k_rounded=(context+127)/128*128;
+    f.q_row_stride=f.o_row_stride=9*64; f.q_head_stride=f.o_head_stride=64;
+    f.k_row_stride=f.v_row_stride=64; f.k_head_stride=f.v_head_stride=16*64;
+    f.k_batch_stride=f.v_batch_stride=3*16*64; f.v_dim_stride=1;
+    f.page_size=16; f.page_table_batch_stride=256; f.page_table=w->pages;
+    f.cu_seqlens_q=w->q_indptr; f.seqused_k=w->kv_lengths;
+    f.num_splits_dynamic_ptr=w->splits; f.num_m_blocks_ptr=w->m_blocks;
+    f.varlen_batch_idx_ptr=w->batch_indices; f.num_nheads_in_l2_ptr=w->nheads;
+    f.tile_count_semaphore=&w->semaphore; f.softmax_lse_ptr=w->lse;
+    f.num_splits=1; f.scale_softmax=0.125f; f.is_bf16=f.is_causal=f.pack_gqa=true;
+    f.varlen_sort_batches=f.head_swizzle=true; f.skip_scheduler_metadata_computation=true;
+    f.window_size_left=-1; f.window_size_right=0; f.arch=90; f.num_sm=props.multiProcessorCount;
+    return true;
+}
+template<class F> int model_boundary(F fn) noexcept {
+    try { return fn(); }
+    catch(const ApiError &e) {return e.code==RILEY_FA3_UNSUPPORTED?cudaErrorNotSupported:cudaErrorUnknown;}
+    catch(const RileyFa3CudaError &e) {return e.status;}
+    catch(...) {return cudaErrorUnknown;}
+}
+}
+extern "C" int riley_fa3_model_schedule(void *stream,void *workspace,uint64_t bytes,
+    uint32_t capacity,uint32_t context) noexcept {
+    return model_boundary([&]()->int {
+        Flash_fwd_params f;
+        if(!model_params(f,workspace,bytes,capacity,context)) return cudaErrorInvalidValue;
+        constexpr auto tile=tile_size_fwd_sm90(64,64,true,false,2,false,true,false);
+        prepare_varlen_num_blocks(f,static_cast<cudaStream_t>(stream),true,std::get<0>(tile),std::get<1>(tile),false);
+        return cudaGetLastError();
+    });
+}
+extern "C" int riley_fa3_model_attention(void *stream,const void *q,const void *k,
+    const void *v,void *out,void *workspace,uint64_t bytes,uint32_t physical,
+    uint32_t capacity,uint32_t context,uint32_t prepare_only) noexcept {
+    return model_boundary([&]()->int {
+        Flash_fwd_params f;
+        if(!q || !k || !v || !out || !physical || physical>4096 || prepare_only>1 ||
+           !model_params(f,workspace,bytes,capacity,context)) return cudaErrorInvalidValue;
+        if(prepare_only) {
+            int device,tma,cluster; runtime(cudaGetDevice(&device));
+            driver(cuDeviceGetAttribute(&tma,CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED,device));
+            runtime(cudaDeviceGetAttribute(&cluster,cudaDevAttrClusterLaunch,device));
+            if(!tma || !cluster) return cudaErrorNotSupported;
+            cudaStreamCaptureStatus state; runtime(cudaStreamIsCapturing(static_cast<cudaStream_t>(stream),&state));
+            if(state!=cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
+        }
+        f.q_ptr=const_cast<void*>(q); f.k_ptr=const_cast<void*>(k); f.v_ptr=const_cast<void*>(v);
+        f.o_ptr=out; f.num_pages=physical;
+        if(!prepare_only) runtime(cudaMemsetAsync(f.tile_count_semaphore,0,sizeof(int),static_cast<cudaStream_t>(stream)));
+        run_flash_fwd<90,64,64,1,cutlass::bfloat16_t,cutlass::bfloat16_t,
+            true,false,false,true,true,false,false,true,false,false>(f,static_cast<cudaStream_t>(stream),prepare_only!=0);
+        return cudaSuccess;
     });
 }

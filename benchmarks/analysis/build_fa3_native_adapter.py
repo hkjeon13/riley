@@ -65,11 +65,13 @@ def build(source, nvcc, output):
              '--expt-extended-lambda','-Xptxas=-v','-I'+str(output/'fa3/hopper'),
              '-I'+str(output/'cutlass/include'),'-I'+str(output/'cutlass/tools/util/include'),
              '-I'+str(native),str(native/'fa3_adapter.cu'),
+             str(native/'fa3_model_metadata.cu'),
              str(output/'fa3/hopper/flash_prepare_scheduler.cu'),str(probe),'-lcuda',
              '-o',str(output/'fa3-adapter-probe')]
     receipt.update({'command':command,
                     'source_sha256':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest()
-                                     for p in [native/'fa3_adapter.cu',native/'fa3_api.h',native/'fa3_contract.hpp',probe]},
+                                     for p in [native/'fa3_adapter.cu',native/'fa3_api.h',native/'fa3_contract.hpp',
+                                               native/'fa3_model_metadata.cu',native/'fa3_model_metadata.cuh',probe]},
                     'nvcc':subprocess.check_output([str(nvcc),'--version'],text=True)})
     with (output/'build.log').open('w') as log:
         result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT)

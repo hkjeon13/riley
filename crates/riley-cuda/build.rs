@@ -103,6 +103,7 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     configure.arg(format!("-DRILEY_FA3_SOURCE={}", PathBuf::from(fa3_source).display()));
     for path in ["optional/fa3.cmake", "optional/fa3_adapter.cu", "optional/fa3_owner.cu",
                  "optional/fa3_contract.hpp", "optional/fa3_api.h",
+                 "optional/fa3_model_metadata.cu", "optional/fa3_model_metadata.cuh",
                  "../benchmarks/analysis/build_fa3_native_adapter.py",
                  "../benchmarks/analysis/build_fa3_native_probe.py"] {
         println!("cargo:rerun-if-changed={}", kernels_dir.join(path).display());
