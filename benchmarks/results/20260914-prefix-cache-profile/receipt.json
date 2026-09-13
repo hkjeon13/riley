@@ -1,0 +1,289 @@
+{
+  "archive_sha256": "c64fda16468ce5dafe16b7417e697b424dedf18da4276503e9cf262d1a53d8d5",
+  "scope": "diagnostic profile, middle 80% of graph count including warmup, phase transitions and profiler overhead; not serving performance",
+  "verified_requests": 256,
+  "results": {
+    "shared": {
+      "receipt": {
+        "peak_owned_tree_rss_bytes": 1517359104,
+        "requests": 64,
+        "reference_exact": true,
+        "exit_code": 0,
+        "remaining_owned_pids": []
+      },
+      "original_sqlite_sha256": "b1940ccb2e1b58026763396735b5da9de823ed54e7bf2ca95cfee542cbf5c6eb",
+      "curated_sqlite_sha256": "60b29030a26fcf189ef12c96e7789e2777035f9445f4abd73dde4ef7389986f5",
+      "selected": {
+        "launches": 120,
+        "window_ms": 432.732084,
+        "graph_span_ms": 284.140986,
+        "inter_graph_gap": {
+          "count": 119,
+          "median_us": 846.376,
+          "p95_us": 7305.415,
+          "max_us": 27013.893,
+          "sum_ms": 148.591098
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 119,
+          "median_us": 837.138,
+          "p95_us": 7291.722,
+          "max_us": 26988.972,
+          "sum_ms": 147.601808
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 119,
+          "median_us": 7.963,
+          "p95_us": 16.064,
+          "max_us": 24.921,
+          "sum_ms": 0.98929
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.34337897164103043,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.5229484844541223,
+        "inside_graph_unoccupied_ms": 14.459481
+      },
+      "stage_graph_spans": {
+        "future_decode": {
+          "count": 41,
+          "median_us": 1518.638,
+          "p95_us": 1585.007,
+          "max_us": 1601.423,
+          "sum_ms": 62.403383
+        },
+        "ordinary_decode": {
+          "count": 52,
+          "median_us": 1622.5115,
+          "p95_us": 1687.312,
+          "max_us": 1693.488,
+          "sum_ms": 82.78429
+        },
+        "prefill_or_mixed": {
+          "count": 27,
+          "median_us": 5398.964,
+          "p95_us": 6154.908,
+          "max_us": 6192.028,
+          "sum_ms": 138.953313
+        }
+      },
+      "gaps": {
+        "after_pair": {
+          "gpu_gap": {
+            "count": 40,
+            "median_us": 1029.05,
+            "p95_us": 1105.067,
+            "max_us": 1144.235,
+            "sum_ms": 39.20518
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 40,
+            "median_us": 1020.805,
+            "p95_us": 1091.969,
+            "max_us": 1134.716,
+            "sum_ms": 38.861255
+          }
+        },
+        "within_pair": {
+          "gpu_gap": {
+            "count": 40,
+            "median_us": 5.264,
+            "p95_us": 9.376,
+            "max_us": 10.176,
+            "sum_ms": 0.233665
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 40,
+            "median_us": 0.0,
+            "p95_us": 0.0,
+            "max_us": 0.0,
+            "sum_ms": 0.0
+          }
+        },
+        "ordinary": {
+          "gpu_gap": {
+            "count": 39,
+            "median_us": 870.824,
+            "p95_us": 7423.624,
+            "max_us": 27013.893,
+            "sum_ms": 109.152253
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 39,
+            "median_us": 861.076,
+            "p95_us": 7406.753,
+            "max_us": 26988.972,
+            "sum_ms": 108.740553
+          }
+        }
+      },
+      "kernel_ms": {
+        "riley_mixed_attention::mapped_attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, bool, bool)": 54.747701,
+        "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)": 32.154345,
+        "void riley_gate_v56::split_rows<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)": 25.556852,
+        "riley_prefill_ffn_pipeline::gate_up(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 18.4547,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 16.846241,
+        "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)": 15.545718,
+        "riley_prefill_ffn_pipeline::down(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 14.37646,
+        "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 13.438656,
+        "riley_adaptive_decode::qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 12.38898,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 10.364011,
+        "riley_merge_norm_v56::merge_norm(const float *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 10.28171,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 10.049603,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 9.46236,
+        "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)": 8.038579,
+        "mixed_rope_kv_v7(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)": 6.174685,
+        "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 5.262451,
+        "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)": 4.287302,
+        "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)": 0.446272,
+        "riley_future_token::resolve(unsigned int *, const riley_future_token::Reference *, const unsigned int *, unsigned int *)": 0.335266,
+        "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)": 0.314049,
+        "riley_shared32_model::embedding(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, unsigned int *)": 0.135651,
+        "riley_shared32_model::clear_inactive_hidden(__nv_bfloat16 *, const unsigned int *)": 0.078305,
+        "riley_prefill_pointwise::embedding_rows(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, const unsigned int *, unsigned int, unsigned int, unsigned int *, const unsigned int *)": 0.048576,
+        "mixed_select_hidden_v7(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int, const unsigned int *, unsigned int *)": 0.03888
+      },
+      "mixed_fraction_of_graph_spans": 0.489029460184952,
+      "mapped_attention_fraction_of_kernel_time": 0.20365375914704625
+    },
+    "unique": {
+      "receipt": {
+        "peak_owned_tree_rss_bytes": 1521238016,
+        "requests": 64,
+        "reference_exact": true,
+        "exit_code": 0,
+        "remaining_owned_pids": []
+      },
+      "original_sqlite_sha256": "0c033792c307de27d77c0258b26b0c06b488769a78b68d5feb2b0bf4209b3fdd",
+      "curated_sqlite_sha256": "e4dc74e9ef452d74c58268e7354c7c371f9603d9a0b22916a3b61ad56bed852e",
+      "selected": {
+        "launches": 215,
+        "window_ms": 1029.798076,
+        "graph_span_ms": 860.634129,
+        "inter_graph_gap": {
+          "count": 214,
+          "median_us": 288.1145,
+          "p95_us": 943.369,
+          "max_us": 29824.451,
+          "sum_ms": 169.163947
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 214,
+          "median_us": 282.2045,
+          "p95_us": 933.908,
+          "max_us": 29799.769,
+          "sum_ms": 167.614385
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 214,
+          "median_us": 6.6225,
+          "p95_us": 12.61,
+          "max_us": 28.167,
+          "sum_ms": 1.549562
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.16426904549780882,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.196557330577347,
+        "inside_graph_unoccupied_ms": 29.397651
+      },
+      "stage_graph_spans": {
+        "prefill_or_mixed": {
+          "count": 133,
+          "median_us": 5473.173,
+          "p95_us": 5839.833,
+          "max_us": 6200.348,
+          "sum_ms": 720.94716
+        },
+        "ordinary_decode": {
+          "count": 45,
+          "median_us": 1789.617,
+          "p95_us": 1812.274,
+          "max_us": 1869.458,
+          "sum_ms": 78.131775
+        },
+        "future_decode": {
+          "count": 37,
+          "median_us": 1689.488,
+          "p95_us": 1697.617,
+          "max_us": 1706.129,
+          "sum_ms": 61.555194
+        }
+      },
+      "gaps": {
+        "ordinary": {
+          "gpu_gap": {
+            "count": 141,
+            "median_us": 288.386,
+            "p95_us": 6904.963,
+            "max_us": 29824.451,
+            "sum_ms": 137.735678
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 141,
+            "median_us": 282.206,
+            "p95_us": 6888.835,
+            "max_us": 29799.769,
+            "sum_ms": 136.674351
+          }
+        },
+        "within_pair": {
+          "gpu_gap": {
+            "count": 37,
+            "median_us": 5.248,
+            "p95_us": 9.249,
+            "max_us": 9.376,
+            "sum_ms": 0.207777
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 37,
+            "median_us": 0.0,
+            "p95_us": 0.0,
+            "max_us": 0.0,
+            "sum_ms": 0.0
+          }
+        },
+        "after_pair": {
+          "gpu_gap": {
+            "count": 36,
+            "median_us": 872.105,
+            "p95_us": 941.641,
+            "max_us": 943.369,
+            "sum_ms": 31.220492
+          },
+          "post_gpu_until_cpu_launch": {
+            "count": 36,
+            "median_us": 864.88,
+            "p95_us": 932.833,
+            "max_us": 933.908,
+            "sum_ms": 30.940034
+          }
+        }
+      },
+      "kernel_ms": {
+        "riley_mixed_attention::mapped_attention(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, bool, bool)": 257.952791,
+        "riley_prefill_ffn_pipeline::gate_up(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 114.832094,
+        "riley_prefill_ffn_pipeline::down(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 84.920348,
+        "void gemm_prefill_shape_vector<(int)192, (int)576, (int)192, (int)1, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 69.8366,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)192, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 58.978108,
+        "void gemm_prefill_shape_vector<(int)576, (int)576, (int)128, (int)2, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *)": 56.263506,
+        "riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)": 31.398546,
+        "riley_prefill_pointwise::norm_rows(const __nv_bfloat16 *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 29.930422,
+        "riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)": 23.173822,
+        "void riley_gate_v56::split_rows<(int)4>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *)": 22.3727,
+        "mixed_rope_kv_v7(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, unsigned int)": 15.83128,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 14.775565,
+        "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_tn_align8>(T1::Params)": 14.615507,
+        "riley_adaptive_decode::qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 10.944545,
+        "riley_merge_norm_v56::merge_norm(const float *, const void *, const __nv_bfloat16 *, void *, __nv_bfloat16 *, int, const unsigned int *, unsigned int)": 8.992538,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 8.943169,
+        "riley_shared32_model::qkv_merge_rope(const float *, __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *, const float *, const float *, const unsigned int *, const unsigned int *, const unsigned int *)": 3.75357,
+        "void riley_compact_result::parts<(unsigned int)32>(const unsigned int *, const __nv_bfloat16 *, riley_compact_result::GreedyPartial *)": 0.66035,
+        "void riley_compact_result::finish<(unsigned int)32, (bool)1, (bool)1>(const unsigned int *, const riley_compact_result::GreedyPartial *, const unsigned int *, unsigned int *)": 0.53412,
+        "riley_future_token::resolve(unsigned int *, const riley_future_token::Reference *, const unsigned int *, unsigned int *)": 0.300258,
+        "riley_prefill_pointwise::embedding_rows(const __nv_bfloat16 *, const unsigned int *, __nv_bfloat16 *, const unsigned int *, unsigned int, unsigned int, unsigned int *, const unsigned int *)": 0.237411,
+        "mixed_select_hidden_v7(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, unsigned int, const unsigned int *, unsigned int *)": 0.182432,
+        "riley_shared32_model::embedding(const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, unsigned int *)": 0.11856,
+        "riley_shared32_model::clear_inactive_hidden(__nv_bfloat16 *, const unsigned int *)": 0.069728
+      },
+      "mixed_fraction_of_graph_spans": 0.8376929704585304,
+      "mapped_attention_fraction_of_kernel_time": 0.3109296089620624
+    }
+  }
+}

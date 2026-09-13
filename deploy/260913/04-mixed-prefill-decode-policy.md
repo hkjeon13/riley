@@ -72,3 +72,7 @@ prefill의 compute 자원과 decode의 memory 자원을 함께 활용하면서 d
 [Native resource batch](../../benchmarks/results/20260914-compact-mixed-native/README.md): small-query/prefill 모두 exponential FP32 저장을 재사용하고 PV operand load 때 BF16 round를 적용했다. Direct와 POD를 분리 비교했다.234개 bitwise·117 coverage, bounded sanitizer, SM90a/SM100a compile은 통과했다. Direct shared6144→4096B, POD24584→16392B로 감소했다.
 
 Direct native는 대표 shape에서1.6–3.7% 낮지만 긴 prefill은 거의 동률이며, compact POD는159register/3CTA 상한과 주요 mixed 회귀가 남는다. Native 저장 규약 후보만 보존하고 Rust/serving에 연결하지 않았다. 작은 native 이득을 serving 완료로 승격하지 않는다. 다음은 phase별 live register·native backend precision 계약을 함께 다루는 영역이다.
+
+## Cache 결합 후 attention 우선순위 재확인
+
+[Composed profile](../../benchmarks/results/20260914-prefix-cache-profile/README.md): 고유 prompt에서 prefill/mixed는 선택 graph span의83.8%, mapped attention은 kernel 누적시간의31.1%다. 공유 prefix에서도 mapped attention이 최대 단일 kernel family다. Warmup 파일쓰기 공백을 제거해 재측정했고 profiler/client 영향이 남는 gap을 순수 CPU 병목으로 주장하지 않는다. 다음 batch는 query 작업 mapping, K/V reuse, resource-bounded native dispatch를 함께 다룬다. 기존 POD CTA 상수/시간 threshold 반복은 하지 않는다. 실제 register/shared usage·exact causal/page/nonfinite native gate 이후 retained graph·serving 검증으로 진행한다. 상세 수치 계약과 미완료 범위는 profile 문서를 따른다.
