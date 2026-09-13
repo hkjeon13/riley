@@ -129,3 +129,8 @@ C32 natural·두 역순·engine별1,536 retained 비교에서 V7/후보/vLLM thr
 ## 다음 착수: native precision 경로의 모델 검증
 
 [Attention 실행 대안 분석](../../benchmarks/results/20260913-attention-task-costs/README.md)에서 task remapping과 두 softmax 공유안 모두 C16/C32 native 회귀를 보였다. 다음에는 기존 same-input FP16 primitive 근거를 출발점으로, pinned FlashInfer의 실제 mixed-dtype load/compute 경로를 확인한다. BF16 KV 저장·명시적 변환 및 FP16 범위/subnormal 계약·retained owner/graph identity를 하나의 batch로 다루고, 기존 full-model 수치 gate와 serving 비교를 완료한다. 현재 FP16 모델 품질·serving 이득은 미검증이며, BF16 bit reinterpret 또는 사후 tolerance 완화는 허용하지 않는다.
+
+
+### BF16 저장 / FP16 register 변환 native 진단
+
+[검증 기록](../../benchmarks/results/20260913-prefill-half-register/README.md): 명시적인 Q/K/V fragment 및 probability 변환, FP16 범위 오류 status, 별도 검증 overlay를 구현했다. 일반·mixed oracle, 15개 nonfinite/overflow 주입, memcheck/racecheck를 통과했다. SM90a/SM100a compile 통과, runtime은 장비 부재 skip이다. 기본 backend는 유지한다. 다음은 변환 경계·full-model 품질·status 전달·workspace/graph 계약 통합이며 새 serving 결과는 아직 없다.

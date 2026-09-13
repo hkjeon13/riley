@@ -1,0 +1,47 @@
+{
+  "all_query_exit": 0,
+  "mixed_exit": 0,
+  "fault_injection_runs": 15,
+  "memcheck_errors": 0,
+  "racecheck_errors": 0,
+  "workspace_bytes": 34008,
+  "architectures": {
+    "sm_89": {
+      "binary_sha256": "2fba59112c8bb3b7adcef0689f928a9fabb9e036c0724545b9457df901ef5696",
+      "runtime": "tested"
+    },
+    "sm_90a": {
+      "binary_sha256": "deb0e18ee552df18f6ad58825d310a9ad44b5c0a1a46ccbaa411d4ef25092ec4",
+      "runtime": "skipped: hardware unavailable"
+    },
+    "sm_100a": {
+      "binary_sha256": "694f1b51cdbde9e4b8ad923d00356b54881deccf2cd361749b5b2e3a1de7485e",
+      "runtime": "skipped: hardware unavailable"
+    }
+  },
+  "installed_tree_after": "2a7d8ab8f81f6cb7fd259270b63bd71e152bff77a105b3c0ba875108b5567e0c",
+  "logs_sha256": {
+    "racecheck.log": "5140aebda803d36eee9fabbcbbc176c3513ea22ab0a6d1bd6b1431278da5b46a",
+    "fault-q--inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "mixed.log": "80a61761a7059c18bb37377d35062827a10cc839b527e1686860625d588da30d",
+    "fault-v--inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "all.log": "09ec2469a3ac0673f0dc334d1747c6f5fb04c34b0eb5deb4da25592c4332d84c",
+    "fault-v-inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-k--1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fault-k-1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "memcheck.log": "5873116e9d502dc03236132faa673bd7b8fd1ede2e8ff8f642af9ac428a6037f",
+    "build-sm_100a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fault-k-inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-q-1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-k--inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-q--1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-q-nan.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-k-nan.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-v-1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "build-sm_90a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fault-v-nan.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-v--1e5.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4",
+    "fault-q-inf.log": "528b1efed38bdd844edcdc7fc5b98dcb408e1e1d097bb06bc8827ea6692d8dd4"
+  }
+}
