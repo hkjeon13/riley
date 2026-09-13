@@ -95,3 +95,7 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 [Prefill native 검증](../../benchmarks/results/20260913-flashinfer-prefill-native/README.md): 기존 HND KV 및 packed-query metadata를 FlashInfer causal paged-prefill kernel에 직접 연결했다. 32요청·1,024 query row·context4096·비연속 page·graph replay를 검증했다. 원본 kernel의 output shared-memory 단계에서 racecheck warning을 확인했고, 고정 원본을 검증한 별도 빌드 overlay에 warp barrier 하나를 추가해 expanded probe의32 warnings를0으로 만들었다. 설치된 원본은 변경하지 않았다. 868,032 출력 값은 보정 전후 bitwise 일치하며 patched memcheck도0 errors다. SM89/90a/100a AOT 통과, 후자의 runtime은 장비 부재 skip이다.
 
 모델 통합 시 이 검증된 overlay를 prefill object에 강제하고, mixed의 decode row는 선택된 decode backend로 유지해야 한다. 현재 raw adapter는 모든 supplied query를 처리하므로 그대로 mixed 전체에 붙이지 않는다. Rust owner·graph identity·stage routing 및 기존 full-model 품질 gate·serving 비교가 남아 있다. 합성 attention 오차0.01 기준은 기존 자연어 품질 gate를 대체하지 않는다.
+
+## Prefill optional archive 연결
+
+[빌드 연결 검증](../../benchmarks/results/20260913-flashinfer-prefill-build/README.md): 원본 dependency lock과 GPU 검증된 patched header digest를 모두 유지하는 생성 overlay를 CMake에 연결했다. Prefill만 overlay를 사용하며 decode는 원본을 유지한다. 전체 archive, header/receipt 변경 거부, 동일 디렉터리 enabled→disabled→enabled 빌드를 검증했다. Archive-linked GPU probe의868,032개 값은 이전 patched library와 bitwise 일치하고 memcheck/racecheck 모두0이다. Cargo native 입력 및 내부 ABI를 등록했지만 model recorder/serving 선택에는 아직 연결하지 않았다. 다음 구현은 retained workspace와 mixed prefill-only routing이며 모델 수치·serving gate가 여전히 필요하다.

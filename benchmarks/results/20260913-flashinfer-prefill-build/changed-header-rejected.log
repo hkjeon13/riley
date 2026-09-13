@@ -1,0 +1,11 @@
+-- riley CUDA AOT architectures: 89 (compile targets only)
+CMake Error at optional/flashinfer.cmake:40 (message):
+  FlashInfer prefill overlay verification failed: existing generated
+  FlashInfer overlay has changed; remove that build overlay and reconfigure
+
+Call Stack (most recent call first):
+  CMakeLists.txt:147 (include)
+
+
+-- Configuring incomplete, errors occurred!
+gmake: *** [Makefile:866: cmake_check_build_system] Error 1

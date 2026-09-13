@@ -4,6 +4,7 @@
 #include <flashinfer/attention/prefill.cuh>
 #include <flashinfer/attention/default_prefill_params.cuh>
 #include <cstdint>
+#include "flashinfer_api.h"
 
 namespace riley_flashinfer_prefill {
 constexpr unsigned Requests=32, Tiles=64;

@@ -1,0 +1,72 @@
+{
+  "reconfigure": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "changed-header-rejected": {
+    "exit_code": 2,
+    "expected_success": false
+  },
+  "changed-receipt-rejected": {
+    "exit_code": 1,
+    "expected_success": false
+  },
+  "restored-configure": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "restored-build": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "enabled-symbols": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "probe-build": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "archive-probe": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "output": {
+    "values": 868032,
+    "sha256": "a54af5adead8ee65e9f934afd0cb95bbe39f2d98b21b362840807d7eb3c2524d",
+    "bitwise_equal_prior_probe": true
+  },
+  "archive-memcheck": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "archive-racecheck": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "disabled-configure": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "disabled-build": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "disabled-symbols": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "reenabled-configure": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "reenabled-build": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "original-lock-check": {
+    "exit_code": 0,
+    "expected_success": true
+  },
+  "archive_sha256": "5e652ca0aa7518131d5768310c36b042f761278a0a540e650cd228abf3bcef89"
+}

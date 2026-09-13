@@ -1,0 +1,72 @@
+[  4%] Built target riley_cuda_abi_checks
+[  8%] Built target riley_flashinfer_object
+[ 12%] Built target riley_flashinfer_prefill_object
+[ 16%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/attention_cublaslt.cu.o
+[ 20%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/attention_reference.cu.o
+[ 25%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/attention_online.cu.o
+[ 29%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/batch_primitives.cu.o
+[ 33%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/decode_attention.cu.o
+[ 37%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_gemm.cu.o
+[ 41%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_attention.cu.o
+[ 45%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/fixed37_primitives.cu.o
+[ 50%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/gemm.cu.o
+[ 54%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph_numerics_precise.cu.o
+[ 58%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph_numerics.cu.o
+[ 62%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph_multisequence_precise.cu.o
+[ 66%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph_multisequence_io.cu.o
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/packed_prefill_model_v48.cuh(30): warning #177-D: variable "pages" was declared but never referenced
+   auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/mixed_model_v49.cuh(34): warning #177-D: variable "pages" was declared but never referenced
+   auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
+        ^
+
+[ 70%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph_resources.cu.o
+[ 75%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/graph.cu.o
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=8U, Compact=false, Packed=false, Mixed=false, FfnPipeline=false]" at line 1463
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=16U, Compact=false, Packed=false, Mixed=false, FfnPipeline=false]" at line 1470
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=16U, Compact=true, Packed=false, Mixed=false, FfnPipeline=false]" at line 1476
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=32U, Compact=false, Packed=false, Mixed=false, FfnPipeline=false]" at line 1482
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=32U, Compact=true, Packed=false, Mixed=false, FfnPipeline=false]" at line 1488
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=32U, Compact=false, Packed=true, Mixed=false, FfnPipeline=false]" at line 1495
+
+/tmp/riley-opt-260912/hardware-validation-source/kernels/src/graph_resources.cu(1369): warning #128-D: loop is not reachable
+    for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",((RileyCudaStatus)1));
+    ^
+          detected during instantiation of "RileyCudaStatus record_variable_shared<Rows,Compact,Packed,Mixed,FfnPipeline>(RileyCudaGraphResources *, RileyCudaDeviceBuffer *const *, RileyCudaDeviceBuffer *const *, uint64_t, RileyCudaGemmPlan *, RileyCudaGemmPlan *, RileyCudaPinnedHostBuffer *, uint32_t, uint32_t, RileyCudaErrorInfo *, RileyCudaDeviceBuffer *) noexcept [with Rows=32U, Compact=true, Packed=true, Mixed=false, FfnPipeline=false]" at line 1502
+
+[ 79%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/host_runtime.cu.o
+[ 83%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/memory.cu.o
+[ 87%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/primitives.cu.o
+[ 91%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/smoke_fill.cu.o
+[ 95%] Building CUDA object CMakeFiles/riley_cuda_native.dir/src/version.cu.o
+[100%] Linking CUDA static library libriley_cuda_native.a
+[100%] Built target riley_cuda_native
