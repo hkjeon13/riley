@@ -1,0 +1,14 @@
+RILEY_GRAPH prepared=true policy=Require fallback=false gpu_iteration_timing=false numerics=variable-smol-v7;decode-window=paired-experimental-v1
+riley listening on http://127.0.0.1:59969 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+riley graceful shutdown requested by SIGTERM
+RILEY_HOST_PHASE kind=decode steps=245 scheduled_tokens=6545 plan_ns=6583408 execute_wall_ns=404276346 sample_ns=2423852 commit_publish_ns=2797622
+RILEY_HOST_PHASE kind=prefill_or_mixed steps=609 scheduled_tokens=190349 plan_ns=15806161 execute_wall_ns=2939393812 sample_ns=7823673 commit_publish_ns=7755458
+RILEY_HOST_PHASE kind=paired_decode steps=907 scheduled_tokens=47266 plan_ns=41493850 execute_wall_ns=3244452001 sample_ns=16172880 commit_publish_ns=13244231
+RILEY_HOST_PHASE_FALLBACK count=854 wall_ns=1271380
+RILEY_RUNTIME_PHASE kind=retain_encode calls=1761 wall_ns=115387759
+RILEY_RUNTIME_PHASE kind=sync_transfer calls=0 wall_ns=0
+RILEY_RUNTIME_PHASE kind=buffered_submit calls=1761 wall_ns=58782313
+RILEY_RUNTIME_PHASE kind=buffered_wait calls=1761 wall_ns=5606883514
+RILEY_RUNTIME_PHASE kind=read_validate calls=1761 wall_ns=163674916
+RILEY_RUNTIME_PHASE kind=future_prepare calls=907 wall_ns=186294976
+RILEY_DECODE_WINDOW completed=907 widest=32

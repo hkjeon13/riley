@@ -2,6 +2,15 @@
 use super::multi_descriptor::{variable_wire as wire, Error, Result};
 use riley_cuda::BorrowedGraphResourceReservation;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+#[derive(Default)]
+struct HostRuntimeTiming { counts: [u64; 6], nanos: [u128; 6] }
+fn runtime_phase_record(timing: &mut Option<HostRuntimeTiming>, stage: usize, start: Option<Instant>) {
+    if let (Some(timing), Some(start)) = (timing.as_mut(), start) {
+        timing.counts[stage] = timing.counts[stage].saturating_add(1);
+        timing.nanos[stage] = timing.nanos[stage].saturating_add(start.elapsed().as_nanos());
+    }
+}
 static GENERATION: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy)]
 pub struct VariableSessionIdentity {
@@ -12,6 +21,7 @@ pub struct VariableSessionIdentity {
 /// A result remains outstanding until scheduler commit is explicitly confirmed.
 pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
+    host_phase_timing: Option<HostRuntimeTiming>,
     issued_successor:Option<Vec<u64>>, window:Option<DecodeWindowState<ROWS>>,
     issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
     buffered:bool, buffered_ticket:Option<u64>, async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
@@ -27,7 +37,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
-        Ok(Self{graph,issued_successor:None,window:None,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
+        Ok(Self{graph,host_phase_timing:(std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref()==Some("1")).then(HostRuntimeTiming::default),issued_successor:None,window:None,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
             buffered:false,buffered_ticket:None,async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
@@ -38,6 +48,14 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     }
     pub(crate) fn new_shared_mixed(graph:G,digest:[u8;32],physical:u32,context:u32,compact:bool)->Result<Self>{let mut s=Self::new_shared_packed(graph,digest,physical,context,compact)?;s.identity.mixed_execution=true;s.input.resize(wire::MIXED_REQUEST_BYTES,0);Ok(s)}
     pub(crate) fn set_buffered_completion(&mut self,enabled:bool) {self.buffered=enabled;}
+    /// Opt-in diagnostic wall time; native execution includes GPU waits.
+    pub fn report_host_phase_timing(&self) {
+        if let Some(timing) = self.host_phase_timing.as_ref() {
+            for (stage, name) in ["retain_encode", "sync_transfer", "buffered_submit", "buffered_wait", "read_validate", "future_prepare"].iter().enumerate() {
+                eprintln!("RILEY_RUNTIME_PHASE kind={} calls={} wall_ns={}", name, timing.counts[stage], timing.nanos[stage]);
+            }
+        }
+    }
     pub fn supports_mixed_execution(&self)->bool{self.identity.mixed_execution}
     pub fn supports_packed_prefill(&self)->bool{self.identity.packed_prefill}
     pub fn supports_compact_greedy(&self)->bool{self.compact}
@@ -65,6 +83,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         self.async_completion=enabled; Ok(())
     }
     fn retain_submission(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         if self.issued_successor.is_some() || self.window.is_some() {return Err(bad("window requires paired submission"));}
         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
         let i=self.identity;
@@ -74,25 +93,30 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
         wire::encode_into(&mut self.input,&e)?;
         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
+        runtime_phase_record(&mut self.host_phase_timing, 0, phase);
         Ok(())
     }
     pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
         if self.async_completion || self.buffered { self.submit_rows(e)?; return self.wait_rows(); }
         self.retain_submission(e)?;
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         if self.graph.replay_transfer(&self.input).is_err() {
             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
         }
+        runtime_phase_record(&mut self.host_phase_timing, 1, phase);
         self.collect_rows()
     }
     /// Stage and submit one iteration. Its buffers remain owned until commit.
     pub fn submit_rows(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
         self.retain_submission(e)?;
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         let result=if self.buffered {
             self.graph.submit_buffered_transfer(&self.input).map(|ticket|self.buffered_ticket=Some(ticket))
         } else {self.graph.submit_transfer(&self.input)};
         if result.is_err() {
             self.poisoned=true;return Err(bad("native submission failed; close required before KV release"));
         }
+        runtime_phase_record(&mut self.host_phase_timing, 2, phase);
         Ok(())
     }
     pub fn query_completion(&mut self)->Result<bool> {
@@ -102,11 +126,14 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     }
     pub fn wait_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
         if self.poisoned || self.window.is_some() || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         let result=if let Some(ticket)=self.buffered_ticket {self.graph.query_buffered_transfer(ticket,true).map(|_|())} else {self.graph.wait_transfer()};
         if result.is_err() {self.poisoned=true;return Err(bad("native completion failed; close required"));}
+        runtime_phase_record(&mut self.host_phase_timing, 3, phase);
         self.collect_rows()
     }
     fn collect_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         if self.poisoned || self.window.is_some() || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
         let compact=self.compact && self.retained.as_ref().unwrap().mode==super::multi_descriptor::ResultMode::Greedy;
         let output_bytes=if compact{wire::Layout::<ROWS>::COMPACT_RESULT_BYTES}else{self.output.len()};
@@ -115,7 +142,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         self.buffered_ticket=None;
         let e=self.retained.as_ref().unwrap();
         match if compact {wire::validate_compact_result(&self.output[..output_bytes],e)}else if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
-            Ok(result)=>{self.completed=true;Ok(result)},
+            Ok(result)=>{self.completed=true;runtime_phase_record(&mut self.host_phase_timing, 4, phase);Ok(result)},
             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
         }
     }
@@ -302,6 +329,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
     }
     pub fn submit_decode_window(&mut self,first:wire::Expectation<32>,second:wire::Expectation<32>)->Result<()> {
         use super::multi_descriptor::future_token::{prepare,TokenSource};
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         if self.poisoned || self.retained.is_some() || self.window.is_some() || !self.buffered || !self.compact {return Err(bad("window session busy or unavailable"));}
         let cookies:Vec<_>=second.rows.iter().map(|r|r.cookie).collect();
         if self.issued_successor.as_deref()!=Some(cookies.as_slice()) {return Err(bad("successor cookies differ from issue"));}
@@ -309,10 +337,12 @@ impl<G:VariableGraph> VariableSession<G,32> {
         let sources:Vec<_>=(0..second.rows.len()).map(|r|TokenSource::PreviousRow(r as u32)).collect();
         let future=prepare(&first,&second,&sources)?;
         let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
+        runtime_phase_record(&mut self.host_phase_timing, 5, phase);
         // retain_submission validates actual owner, geometry and first cookies.
         let issued=self.issued_successor.take();
         if let Err(e)=self.retain_submission(first) {self.issued_successor=issued;return Err(e);}
         self.window=Some(DecodeWindowState{successor:second,tickets:[0;2],output,complete:false});
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         let submit=(|| {
             let first=self.graph.submit_buffered_transfer(&self.input)?;
             self.window.as_mut().unwrap().tickets[0]=first;
@@ -321,6 +351,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
             Ok::<_,riley_cuda::CudaError>(())
         })();
         if submit.is_err() {self.poisoned=true;return Err(bad("window submission failed; close required before KV release"));}
+        runtime_phase_record(&mut self.host_phase_timing, 2, phase);
         Ok(())
     }
     /// Waits for both launches, then validates both outputs. No replay commit.
@@ -328,9 +359,12 @@ impl<G:VariableGraph> VariableSession<G,32> {
         if self.poisoned || self.window.as_ref().map(|w|w.complete)!=Some(false) {return Err(bad("no pending decode window"));}
         let result=(|| {
             let window=self.window.as_mut().unwrap();
+            let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
             // Same stream: second completion fences all writes from both steps.
             self.graph.query_buffered_transfer(window.tickets[1],true).map_err(|_|bad("window completion failed"))?;
             self.graph.query_buffered_transfer(window.tickets[0],true).map_err(|_|bad("predecessor completion failed"))?;
+            runtime_phase_record(&mut self.host_phase_timing, 3, phase);
+            let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
             let bytes=wire::Layout::<32>::COMPACT_RESULT_BYTES;
             self.graph.read_buffered_transfer(window.tickets[0],&mut self.output[..bytes]).map_err(|_|bad("predecessor read failed"))?;
             self.graph.read_buffered_transfer(window.tickets[1],&mut window.output).map_err(|_|bad("successor read failed"))?;
@@ -341,7 +375,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
             let mut second=window.successor.clone();second.last_accepted_replay=self.retained.as_ref().unwrap().replay_id;
             for (row,previous) in second.rows.iter_mut().zip(first.iter()) {row.input_tokens[0]=previous.token.ok_or_else(||bad("missing future input"))?;}
             let b=wire::validate_compact_result(&window.output,&second)?.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing successor output"))).collect::<Result<Vec<_>>>()?;
-            window.complete=true;Ok([a,b])
+            window.complete=true;runtime_phase_record(&mut self.host_phase_timing, 4, phase);Ok([a,b])
         })();
         if result.is_err(){self.poisoned=true;}result
     }

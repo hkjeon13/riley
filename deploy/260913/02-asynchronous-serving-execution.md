@@ -173,3 +173,6 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 
 
 후속 [paired trace 수집 시도](../../benchmarks/results/20260913-paired-trace-attempt/README.md)는 Nsight process probe와 최소 launcher 검사 단계에서 실패했다. 유효 GPU trace가 없으므로 회귀 원인을 확정하거나 새 serving 성능을 주장하지 않는다. Detached Nsight session agent를 포함하는 소유권 추적과 pair 내부/외부 gap 분석기를 준비했으며, 다음은 최소 수집기 정상화 확인 후 같은 binary의 trace 수집이다.
+
+
+[Host phase profile](../../benchmarks/results/20260913-host-phase-profile/README.md)에서는 paired 회귀 증가분의 약 84–94%가 native transfer/submit/wait 밖에서 관찰됐다. Scheduler가 생성한 future packet/reference를 버리고 runtime에서 다시 만드는 경로와 structural validation 반복을 확인했다. 다음 batch는 immutable prepared window의 소유권 전달과 검증된 borrow 기반 encoding을 묶어 개선하고, 기존 rejection·GPU/HTTP correctness 및 unprofiled single/이전 paired/새 paired/vLLM 비교를 수행한다. 이는 아직 구현·성능 승격 완료가 아니다.

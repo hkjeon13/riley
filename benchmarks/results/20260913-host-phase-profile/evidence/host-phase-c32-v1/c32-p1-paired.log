@@ -1,0 +1,8 @@
+RILEY_GRAPH prepared=true policy=Require fallback=false gpu_iteration_timing=false numerics=variable-smol-v7;decode-window=paired-experimental-v1
+riley listening on http://127.0.0.1:55507 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+riley graceful shutdown requested by SIGTERM
+RILEY_HOST_PHASE kind=decode steps=235 scheduled_tokens=6358 plan_ns=6594757 execute_wall_ns=389921922 sample_ns=2362662 commit_publish_ns=2562871
+RILEY_HOST_PHASE kind=prefill_or_mixed steps=609 scheduled_tokens=190310 plan_ns=15437327 execute_wall_ns=2931210131 sample_ns=8079915 commit_publish_ns=7004903
+RILEY_HOST_PHASE kind=paired_decode steps=911 scheduled_tokens=47492 plan_ns=41562693 execute_wall_ns=3252506877 sample_ns=16625297 commit_publish_ns=12506096
+RILEY_HOST_PHASE_FALLBACK count=844 wall_ns=1233663
+RILEY_DECODE_WINDOW completed=911 widest=32

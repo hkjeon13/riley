@@ -1,0 +1,265 @@
+{
+  "scope": "server lifetime including warmup; wall times, not CPU cycles or pure GPU time; successful steps only",
+  "records": {
+    "c32-p0-paired": {
+      "engine": {
+        "decode": {
+          "steps": 223,
+          "scheduled_tokens": 5939,
+          "plan_ns": 6154978,
+          "execute_wall_ns": 367808023,
+          "sample_ns": 2184816,
+          "commit_publish_ns": 2538917
+        },
+        "prefill_or_mixed": {
+          "steps": 616,
+          "scheduled_tokens": 190561,
+          "plan_ns": 16052634,
+          "execute_wall_ns": 2961797938,
+          "sample_ns": 8125687,
+          "commit_publish_ns": 7311946
+        },
+        "paired_decode": {
+          "steps": 903,
+          "scheduled_tokens": 47660,
+          "plan_ns": 40959621,
+          "execute_wall_ns": 3247318900,
+          "sample_ns": 16321243,
+          "commit_publish_ns": 13069385
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 1742,
+          "wall_ns": 115055141
+        },
+        "sync_transfer": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "buffered_submit": {
+          "calls": 1742,
+          "wall_ns": 58805572
+        },
+        "buffered_wait": {
+          "calls": 1742,
+          "wall_ns": 5588233427
+        },
+        "read_validate": {
+          "calls": 1742,
+          "wall_ns": 164688463
+        },
+        "future_prepare": {
+          "calls": 903,
+          "wall_ns": 188047779
+        }
+      },
+      "fallback_ns": 1292666,
+      "total_observed_ns": 6690936754,
+      "native_transfer_submit_wait_ns": 5647038999,
+      "runtime_prepare_validate_ns": 467791383,
+      "adapter_and_other_execute_ns": 462094479,
+      "outer_plan_sample_commit_ns": 114011893,
+      "scheduled_tokens": 244160,
+      "decode_mean_rows": {
+        "decode": 26.632286995515695,
+        "paired_decode": 26.389811738648948
+      }
+    },
+    "c32-p0-single": {
+      "engine": {
+        "decode": {
+          "steps": 1840,
+          "scheduled_tokens": 51650,
+          "plan_ns": 49914550,
+          "execute_wall_ns": 3052171318,
+          "sample_ns": 18372119,
+          "commit_publish_ns": 16860635
+        },
+        "prefill_or_mixed": {
+          "steps": 663,
+          "scheduled_tokens": 192510,
+          "plan_ns": 18063930,
+          "execute_wall_ns": 3166526976,
+          "sample_ns": 8821162,
+          "commit_publish_ns": 7892794
+        },
+        "paired_decode": {
+          "steps": 0,
+          "scheduled_tokens": 0,
+          "plan_ns": 0,
+          "execute_wall_ns": 0,
+          "sample_ns": 0,
+          "commit_publish_ns": 0
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 2503,
+          "wall_ns": 159511840
+        },
+        "sync_transfer": {
+          "calls": 2503,
+          "wall_ns": 5591993327
+        },
+        "buffered_submit": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "buffered_wait": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "read_validate": {
+          "calls": 2503,
+          "wall_ns": 152967508
+        },
+        "future_prepare": {
+          "calls": 0,
+          "wall_ns": 0
+        }
+      },
+      "fallback_ns": 0,
+      "total_observed_ns": 6338623484,
+      "native_transfer_submit_wait_ns": 5591993327,
+      "runtime_prepare_validate_ns": 312479348,
+      "adapter_and_other_execute_ns": 314225619,
+      "outer_plan_sample_commit_ns": 119925190,
+      "scheduled_tokens": 244160,
+      "decode_mean_rows": {
+        "decode": 28.070652173913043,
+        "paired_decode": null
+      }
+    },
+    "c32-p1-paired": {
+      "engine": {
+        "decode": {
+          "steps": 245,
+          "scheduled_tokens": 6545,
+          "plan_ns": 6583408,
+          "execute_wall_ns": 404276346,
+          "sample_ns": 2423852,
+          "commit_publish_ns": 2797622
+        },
+        "prefill_or_mixed": {
+          "steps": 609,
+          "scheduled_tokens": 190349,
+          "plan_ns": 15806161,
+          "execute_wall_ns": 2939393812,
+          "sample_ns": 7823673,
+          "commit_publish_ns": 7755458
+        },
+        "paired_decode": {
+          "steps": 907,
+          "scheduled_tokens": 47266,
+          "plan_ns": 41493850,
+          "execute_wall_ns": 3244452001,
+          "sample_ns": 16172880,
+          "commit_publish_ns": 13244231
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 1761,
+          "wall_ns": 115387759
+        },
+        "sync_transfer": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "buffered_submit": {
+          "calls": 1761,
+          "wall_ns": 58782313
+        },
+        "buffered_wait": {
+          "calls": 1761,
+          "wall_ns": 5606883514
+        },
+        "read_validate": {
+          "calls": 1761,
+          "wall_ns": 163674916
+        },
+        "future_prepare": {
+          "calls": 907,
+          "wall_ns": 186294976
+        }
+      },
+      "fallback_ns": 1271380,
+      "total_observed_ns": 6703494674,
+      "native_transfer_submit_wait_ns": 5665665827,
+      "runtime_prepare_validate_ns": 465357651,
+      "adapter_and_other_execute_ns": 457098681,
+      "outer_plan_sample_commit_ns": 115372515,
+      "scheduled_tokens": 244160,
+      "decode_mean_rows": {
+        "decode": 26.714285714285715,
+        "paired_decode": 26.056229327453142
+      }
+    },
+    "c32-p1-single": {
+      "engine": {
+        "decode": {
+          "steps": 2045,
+          "scheduled_tokens": 53676,
+          "plan_ns": 52278943,
+          "execute_wall_ns": 3319833706,
+          "sample_ns": 18354553,
+          "commit_publish_ns": 16698255
+        },
+        "prefill_or_mixed": {
+          "steps": 611,
+          "scheduled_tokens": 190484,
+          "plan_ns": 16037797,
+          "execute_wall_ns": 2941164301,
+          "sample_ns": 7818464,
+          "commit_publish_ns": 6928075
+        },
+        "paired_decode": {
+          "steps": 0,
+          "scheduled_tokens": 0,
+          "plan_ns": 0,
+          "execute_wall_ns": 0,
+          "sample_ns": 0,
+          "commit_publish_ns": 0
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 2656,
+          "wall_ns": 156129301
+        },
+        "sync_transfer": {
+          "calls": 2656,
+          "wall_ns": 5647295941
+        },
+        "buffered_submit": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "buffered_wait": {
+          "calls": 0,
+          "wall_ns": 0
+        },
+        "read_validate": {
+          "calls": 2656,
+          "wall_ns": 148761288
+        },
+        "future_prepare": {
+          "calls": 0,
+          "wall_ns": 0
+        }
+      },
+      "fallback_ns": 0,
+      "total_observed_ns": 6379114094,
+      "native_transfer_submit_wait_ns": 5647295941,
+      "runtime_prepare_validate_ns": 304890589,
+      "adapter_and_other_execute_ns": 308811477,
+      "outer_plan_sample_commit_ns": 118116087,
+      "scheduled_tokens": 244160,
+      "decode_mean_rows": {
+        "decode": 26.247432762836187,
+        "paired_decode": null
+      }
+    }
+  }
+}

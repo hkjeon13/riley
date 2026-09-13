@@ -2464,6 +2464,45 @@ mod cuda_backend {
         fn close(self)->riley_runtime::llama::LlamaBatchExecutorResult<()>{match self{Self::Eight(g)=>g.close(),Self::Sixteen(g)=>g.close(),Self::ThirtyTwo(g)=>g.close()}}
     }
 
+    #[derive(Default)]
+    struct HostPhaseTiming {
+        steps: [u64; 3],
+        scheduled_tokens: [u64; 3],
+        nanos: [[u128; 4]; 3],
+        fallback_count: u64,
+        fallback_nanos: u128,
+    }
+
+    fn host_phase_checkpoint(mark: &mut Option<Instant>) -> u128 {
+        match mark {
+            Some(previous) => {
+                let next = Instant::now();
+                let elapsed = next.duration_since(*previous).as_nanos();
+                *previous = next;
+                elapsed
+            }
+            None => 0,
+        }
+    }
+
+    impl HostPhaseTiming {
+        fn record(&mut self, kind: usize, tokens: usize, nanos: [u128; 4]) {
+            self.steps[kind] = self.steps[kind].saturating_add(1);
+            self.scheduled_tokens[kind] = self.scheduled_tokens[kind].saturating_add(tokens as u64);
+            for (total, value) in self.nanos[kind].iter_mut().zip(nanos) {
+                *total = total.saturating_add(value);
+            }
+        }
+
+        fn report(&self) {
+            for (kind, name) in ["decode", "prefill_or_mixed", "paired_decode"].iter().enumerate() {
+                let n = self.nanos[kind];
+                eprintln!("RILEY_HOST_PHASE kind={} steps={} scheduled_tokens={} plan_ns={} execute_wall_ns={} sample_ns={} commit_publish_ns={}", name, self.steps[kind], self.scheduled_tokens[kind], n[0], n[1], n[2], n[3]);
+            }
+            eprintln!("RILEY_HOST_PHASE_FALLBACK count={} wall_ns={}", self.fallback_count, self.fallback_nanos);
+        }
+    }
+
     struct CudaBackend {
         metadata: ModelMetadata,
         model: LoadedModel,
@@ -2486,6 +2525,7 @@ mod cuda_backend {
         pending_tokens: Vec<PendingToken>,
         window_pending_tokens: Vec<PendingToken>,
         decode_window: bool,
+        host_phase_timing: Option<HostPhaseTiming>,
         completed_decode_windows: u64,
         widest_decode_window: usize,
         pending_events: VecDeque<BackendEvent>,
@@ -2637,6 +2677,7 @@ mod cuda_backend {
                 pending_tokens,
                 window_pending_tokens,
                 decode_window,
+                host_phase_timing: (std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref() == Some("1")).then(HostPhaseTiming::default),
                 completed_decode_windows: 0,
                 widest_decode_window: 0,
                 pending_events,
@@ -2911,19 +2952,29 @@ mod cuda_backend {
         }
 
         fn try_decode_window(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            let mut phase_mark = self.host_phase_timing.as_ref().map(|_| Instant::now());
+            let mut phase_ns = [0; 4];
             let now=self.now_ns();
-            let Some(window)=self.scheduler_mut()?.plan_decode_window(now).map_err(|e|internal(format!("window planning failed: {e}")))? else{return Ok(None)};
+            let Some(window)=self.scheduler_mut()?.plan_decode_window(now).map_err(|e|internal(format!("window planning failed: {e}")))? else {
+                let elapsed = host_phase_checkpoint(&mut phase_mark);
+                if let Some(timing) = self.host_phase_timing.as_mut() { timing.fallback_count += 1; timing.fallback_nanos += elapsed; }
+                return Ok(None)
+            };
             let first_selection=self.sampling_selection_for_plan(window.first())?;
             let second_selection=self.sampling_selection_for_plan(window.second())?;
             if first_selection.selected_backend!=C02SamplingBackend::GpuGreedy || second_selection.selected_backend!=C02SamplingBackend::GpuGreedy {
                 let now=self.now_ns();self.scheduler_mut()?.abort_iteration(window.first().iteration_id(),ExecutionAbort::NotDispatched,now).map_err(|e|internal(format!("window fallback failed: {e}")))?;
+                let elapsed = host_phase_checkpoint(&mut phase_mark);
+                if let Some(timing) = self.host_phase_timing.as_mut() { timing.fallback_count += 1; timing.fallback_nanos += elapsed; }
                 return Ok(None);
             }
             self.snapshot_cancel_deltas(window.first())?;
+            phase_ns[0] = host_phase_checkpoint(&mut phase_mark);
             let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_decode_window(&window).map_err(|e|internal(format!("window authority failed: {e}")))?;
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("window graph unavailable"))};
             let [first,second]=riley_scheduler::execution::execute_llama_decode_window(&authority,graph).map_err(|e|internal(format!("window execution failed: {}",e.error())))?;
             drop(authority);
+            phase_ns[1] = host_phase_checkpoint(&mut phase_mark);
             self.sample_iteration(window.first(),&first,first_selection)?;
             let suppressed:Vec<_>=window.first().decode_items().iter().filter_map(|item|item.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|item.request_id())).collect();
             let first_result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window first result failed: {e}")))?;
@@ -2931,13 +2982,17 @@ mod cuda_backend {
             self.sample_iteration_with_suppression(window.second(),&second,second_selection,&suppressed)?;
             let second_result=second.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window second result failed: {e}")))?;
             self.window_pending_tokens.append(&mut self.pending_tokens);std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+            phase_ns[2] = host_phase_checkpoint(&mut phase_mark);
             let now=self.now_ns();let updates=self.scheduler_mut()?.complete_decode_window_after_drain(&first_result,&second_result,now).map_err(|e|internal(format!("window settlement failed: {e}")))?;
             if !updates.settlement_failures().is_empty(){return Err(internal("window settlement contained failures"));}
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{unreachable!()};
             graph.confirm_decode_window_commit(window.first().iteration_id().get(),window.second().iteration_id().get()).map_err(|e|internal(format!("window commit confirmation failed: {e}")))?;
             self.completed_decode_windows=self.completed_decode_windows.saturating_add(1);
             self.widest_decode_window=self.widest_decode_window.max(window.first().batch_size());
-            let mut events=Vec::new();self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
+            let mut events=Vec::new();self.publish_committed_updates(&updates,&mut events)?;
+            phase_ns[3] = host_phase_checkpoint(&mut phase_mark);
+            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(2, window.first().total_tokens() + window.second().total_tokens(), phase_ns); }
+            Ok(Some(events))
         }
 
         fn publish_committed_updates(&mut self,updates:&riley_scheduler::IterationUpdates,events:&mut Vec<BackendEvent>)->Result<(),BackendError> {
@@ -3478,6 +3533,8 @@ mod cuda_backend {
             if self.decode_window {
                 if let Some(events)=self.try_decode_window()? {return Ok(events);}
             }
+            let mut phase_mark = self.host_phase_timing.as_ref().map(|_| Instant::now());
+            let mut phase_ns = [0; 4];
             let now_ns = self.now_ns();
             let planning = self
                 .scheduler_mut()?
@@ -3492,6 +3549,8 @@ mod cuda_backend {
             let selection = self.sampling_selection_for_plan(&plan)?;
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
+            let phase_kind = if plan.prefill_items().is_empty() { 0 } else { 1 };
+            phase_ns[0] = host_phase_checkpoint(&mut phase_mark);
             let (mut downloaded, timing, staged_shape) =
                 if let Some(graph)=self.variable_graph.as_mut() {
                     let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
@@ -3582,6 +3641,7 @@ mod cuda_backend {
                         }
                     }
                 };
+            phase_ns[1] = host_phase_checkpoint(&mut phase_mark);
             let sampling = self.sample_iteration(&plan, &downloaded, selection);
             if gpu_greedy {
                 if let Err(source) =
@@ -3626,6 +3686,7 @@ mod cuda_backend {
                 }
             };
             let now_ns = self.now_ns();
+            phase_ns[2] = host_phase_checkpoint(&mut phase_mark);
             let updates = match self.scheduler_mut()?.complete_iteration(&result, now_ns) {
                 Ok(updates) => updates,
                 Err(source) => {
@@ -3672,6 +3733,8 @@ mod cuda_backend {
                 updates.iteration_metric().is_some(),
             );
             self.publish_committed_updates(&updates,&mut events)?;
+            phase_ns[3] = host_phase_checkpoint(&mut phase_mark);
+            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(phase_kind, expected_active_rows, phase_ns); }
             Ok(events)
         }
 
@@ -3723,6 +3786,10 @@ mod cuda_backend {
                 && self.context.is_none()
             {
                 return Ok(Vec::new());
+            }
+            if let Some(timing) = self.host_phase_timing.as_ref() { timing.report(); }
+            if let Some(graph) = self.variable_graph.as_ref() {
+                match graph { VariableServingSession::Eight(g) => g.report_host_phase_timing(), VariableServingSession::Sixteen(g) => g.report_host_phase_timing(), VariableServingSession::ThirtyTwo(g) => g.report_host_phase_timing() }
             }
             if self.decode_window {eprintln!("RILEY_DECODE_WINDOW completed={} widest={}",self.completed_decode_windows,self.widest_decode_window);}
             if let Some(scheduler) = self.scheduler.as_mut() {
