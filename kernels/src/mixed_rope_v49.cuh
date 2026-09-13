@@ -2,7 +2,6 @@
 // Caller retains all parents and validates a unique logical-to-physical page map,
 // its full extent, and allocation sizes before enqueue; no host publication here.
 #pragma once
-#include "packed_value_v54.cuh"
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <stdint.h>
@@ -23,7 +22,6 @@ __global__ void mixed_rope_kv_v7(const __nv_bfloat16* q,const __nv_bfloat16* k,c
  else{
   uint32_t destination=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;
   keys[destination]=first;keys[destination+32]=second;
-  uint32_t vd=riley_packed_value_v54::packed_index(pos,head-9,dim,pages);
-  values[vd]=v[row*192+base+dim];values[vd+512]=v[row*192+base+dim+32];
+  values[destination]=v[row*192+base+dim];values[destination+32]=v[row*192+base+dim+32];
  }
 }
