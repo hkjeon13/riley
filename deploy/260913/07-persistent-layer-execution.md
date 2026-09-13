@@ -68,3 +68,7 @@ C32 natural 두 역순에서 V7/후보/vLLM throughput은10,440.7/10,715.1/11,79
 [결합 결과 및 분리 대조](../../benchmarks/results/20260913-persistent-layer/README.md): score/value→projection→FFN을 한 cooperative kernel로 연결하고 score scratch 재사용 전 grid barrier를 추가했다. Native24 replay, full-model1,024토큰/12,582,912 logits는 bitwise 일치하며 native memcheck/racecheck 및 whole-model memcheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다.
 
 C32 serving에서 결합 후보는8,597.8 tokens/s로 V7 10,486.0보다18.01% 느리고 vLLM 12,265.3보다29.90% 느리다. Native 경계 대조에서도 attention/post-attention 분리로 일부 회복되지만 C32에서는 원래 연산보다 느리다. 이 비교는 grid 크기·컴파일 자원도 바꾸므로 barrier만을 원인으로 단정하지 않는다. 기본값 승격을 거부하고 monolithic kernel 확대는 중단한다. 다음 영역은 attention의 task planning/work assignment 비용과 per-column softmax 재계산이며, profiler/대조군으로 원인을 구분한 coherent execution batch를 진행한다. 전체 serving 목표와 PR07/19의 나머지 통합·안정성 조건은 미완료다.
+
+## Attention 비용 분리와 두 대안의 native 판정
+
+[비용 분석](../../benchmarks/results/20260913-attention-task-costs/README.md): C32 natural형 value graph는 기존9.08µs/task19.19µs, long ragged는46.28µs/task130.15µs로 별도 kernel에서도 회귀한다. Same-head CTA softmax 공유와 score scratch 내 normalization-state 사전 계산을 구현했으나 둘 다 C16/C32 native 성능이 나빠 모델 승격을 보류했다. 출력 bitwise/memcheck/racecheck는 통과했다. Hardware counter는 ERR_NVGPUCTRPERM으로 미수집이며 bandwidth 원인은 확정하지 않는다. 이 계열 확대를 멈추고 PR03의 미완료 native precision/backend 경로로 돌아간다. 새 serving 비교나 전체 목표 완료는 주장하지 않는다.

@@ -125,3 +125,7 @@ C32 natural·두 역순·engine별1,536 retained 비교에서 V7/후보/vLLM thr
 [Q16 비교 보고](../../benchmarks/results/20260913-prefill-q16/README.md): query tile·work slot·KV-warp shared-storage 동기화를 함께 조정했다. 수정 후 mixed memcheck/racecheck 및 whole-model memcheck는0이다. 초기 race24건과 Q32 configuration 거부는 실패 증거로 보존했다. 고정 자연어 NLL/KL은 유지됐지만 독립 생성232/1,024토큰 차이, serving reference1,033/1,536 일치로 품질 승격은 불가하다.
 
 동일 C32 natural 두 역순 비교에서 V7/Q128/Q16/vLLM은10,464.6/9,592.5/10,113.7/11,850.6 tokens/s다. Q16은 Q128보다5.43% 빠르지만 V7보다3.35%, vLLM보다14.66% 느리다. 기본값은 유지하며 이 compensation 계열의 추가 미세 tile 조정은 멈춘다. 다음 영역은 PR07/PR19 persistent layer execution feasibility이며, 기존 수치 연산·dependency/scratch ownership·full-model 호출을 함께 다룬 후 의미 있는 serving milestone에서 비교 표를 반복한다. 해당 구조의 성능 이득은 아직 미측정이다.
+
+## 다음 착수: native precision 경로의 모델 검증
+
+[Attention 실행 대안 분석](../../benchmarks/results/20260913-attention-task-costs/README.md)에서 task remapping과 두 softmax 공유안 모두 C16/C32 native 회귀를 보였다. 다음에는 기존 same-input FP16 primitive 근거를 출발점으로, pinned FlashInfer의 실제 mixed-dtype load/compute 경로를 확인한다. BF16 KV 저장·명시적 변환 및 FP16 범위/subnormal 계약·retained owner/graph identity를 하나의 batch로 다루고, 기존 full-model 수치 gate와 serving 비교를 완료한다. 현재 FP16 모델 품질·serving 이득은 미검증이며, BF16 bit reinterpret 또는 사후 tolerance 완화는 허용하지 않는다.
