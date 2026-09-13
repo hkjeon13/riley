@@ -129,3 +129,10 @@ Riley는 이전 baseline의 token/text/finish와 모든 retained 응답이 일�
 ### Cache와 기존 실행 최적화 결합 검증
 
 [결합 serving 결과](../../benchmarks/results/20260914-prefix-cache-composition/README.md): 동일 release binary에서 prefill-FFN·paired-decode·adaptive projection + cache를 실행했다. C32 공유-prefix throughput은 표준 cache-on 대비 +5.9%이나 vLLM 대비 −34.0%다. 고유 prompt는 최적화 cache-off 대비 −4.2%로 cache 기본값 승격은 보류한다. Riley retained 3,072건은 기준 출력과 일치하고 최적화 lane마다 paired 실행 완료를 확인했다. 두 반복의 screen이며 전체 품질·장시간 안정성 검증은 아니다. 다음은 결합 lane의 bounded GPU/host trace로 PR04 overlap 또는 PR06 attention 분할의 적용 근거를 확보한다. Partial-tail COW의 captured-model 연결은 여전히 미완료다.
+
+
+## 고유 물리 페이지 기준 cache 예산
+
+[구현·serving 비교](../../benchmarks/results/20260914-cache-residency/README.md): export별 중복 lease를 물리 메모리로 중복 계산하던 문제를 재현하고, 고유 page residency·lease별 authority 예약·eviction 후 참조 해제를 함께 수정했다. 동일512-page cache budget에서 공유32개 변형을489 physical pages로 유지한다. 이전 구현은16개를512 lease pages로 계산했다. Source generation·off-batch cache owner 및 live consumer 수명은 보존한다.
+
+4090 실제 모델 logits 두 검사는 완전 일치했다. C32 역순2회에서 shared throughput은8,194.24→8,666.72 tokens/s(+5.77%), TTFT는18.63→16.29ms다. vLLM은11,506.78 tokens/s로 여전히 앞선다. Unique throughput은−0.07%, TTFT는+5.94%로 전체 승격 근거가 아니다. 고유 메모리 accounting 수정은 opt-in cache에 유지하며, radix-tree index·partial-tail COW captured-model 연결·multi-GPU 및 차세대 GPU runtime 검증은 미완료다.

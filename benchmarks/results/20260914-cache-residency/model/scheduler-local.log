@@ -1,0 +1,85 @@
+warning: struct `OwnedCheckedExpectation` is never constructed
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:124:19
+    |
+124 | pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `new` and `checked` are never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:126:19
+    |
+125 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- associated items in this implementation
+126 |     pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+    |                   ^^^
+...
+129 |     pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    |                   ^^^^^^^
+
+warning: `riley-runtime` (lib) generated 2 warnings
+   Compiling riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.50s
+     Running unittests src/lib.rs (target/debug/deps/riley_scheduler-79707b6f5c34a155)
+
+running 57 tests
+test config::tests::timeout_requires_wait_policy ... ok
+test config::tests::chunk_must_fit_iteration_budget ... ok
+test config::tests::default_configuration_is_valid ... ok
+test execution::tests::downloaded_greedy_allocation_returns_to_empty_execution_placeholder ... ok
+test execution::tests::commit_failure_retains_download_and_safe_abort_data ... ok
+test execution::tests::downloaded_greedy_tokens_map_dense_slots_without_logits ... ok
+test execution::tests::downloaded_rows_map_dense_slots_to_commit_results_without_reallocation ... ok
+test execution::tests::executor_bounds_are_rechecked_without_device_work ... ok
+test execution::tests::greedy_workspace_restore_failure_preserves_both_allocations ... ok
+test execution::tests::physical_blocks_must_be_exclusive_across_rows ... ok
+test execution::tests::plan_boundary_rejects_nondense_slots_and_decode_without_output ... ok
+test execution::tests::plan_is_adapted_in_prefill_then_decode_order_without_copying_payloads ... ok
+test execution::tests::post_validation_test_fault_retains_unpublished_download_and_is_one_shot ... ok
+test authority::tests::live_scheduler_authority_encodes_exact_request_and_rejects_foreign_geometry ... ok
+test execution::tests::reusable_greedy_workspace_is_bounded_and_never_reallocated ... ok
+test execution::validated_argmax_routing_tests::validated_logits_keep_distinct_dense_argmax_and_full_rows ... ok
+test metrics::tests::iteration_metrics_are_recorded_together ... ok
+test metrics::tests::rolling_p95_uses_nearest_rank_and_stays_bounded ... ok
+test plan::tests::iteration_accepts_permuted_exactly_once_block_table_references ... ok
+test plan::tests::iteration_rejects_duplicate_block_table_references ... ok
+test plan::tests::iteration_rejects_physical_block_aliases_across_requests ... ok
+test plan::tests::iteration_requires_a_sampled_output_for_decode_work ... ok
+test plan::tests::iteration_requires_dense_zero_based_output_slots ... ok
+test plan::tests::iteration_requires_one_block_table_per_work_item ... ok
+test plan::tests::mixed_stage_output_slots_are_canonicalized_for_sampling ... ok
+test plan::tests::owned_v1_table_requires_canonical_full_and_tail_counts ... ok
+test plan::tests::reservation_window_snapshots_do_not_publish_or_expand_first_endpoint ... ok
+test plan::tests::result_rejects_duplicate_output_slots ... ok
+test plan::tests::shared_plan_rejects_aliased_writes_and_shifted_read_positions ... ok
+test plan::tests::zero_is_reserved_for_scheduler_ids ... ok
+test scheduler::decode_window::tests::invalid_successor_is_atomic_and_not_dispatched_abort_restores_pages ... ok
+test scheduler::decode_window::tests::paired_decode_commits_two_tokens_and_preserves_request_progress ... ok
+test scheduler::decode_window::tests::prefix_stop_and_deferred_cancel_drop_successor_after_drain ... ok
+test scheduler::decode_window::tests::second_step_length_limit_and_new_admission_use_normal_lifecycle ... ok
+test scheduler::decode_window::tests::window_oom_rolls_back_already_reserved_rows_and_retries_same_ids ... ok
+test scheduler::decode_window::tests::full_c32_window_handles_ragged_progress_and_dense_output_slots ... ok
+test scheduler::mixed_time::tests::bounded_recovery_and_deadband ... ok
+test scheduler::mixed_time::tests::cold_unsaturated_and_classes_are_isolated ... ok
+test scheduler::mixed_time::tests::context_boundaries ... ok
+test scheduler::prefix_cache::tests::admission_pressure_evicts_cache_without_releasing_live_consumer_pages ... ok
+test scheduler::prefix_cache::tests::automatic_cache_hit_retries_suffix_and_authorizes_cache_only_owner ... ok
+test scheduler::prefix_cache::tests::cleared_residency_accepts_reallocated_page_generations ... ok
+test scheduler::mixed_time::scheduler_tests::mixed_time_abort_and_commit_preserve_decode_and_prefill_progress ... ok
+test scheduler::prefix_cache::tests::different_prefix_misses_and_lru_replacement_reclaims_old_pages ... ok
+test scheduler::prefix_cache::tests::quiesced_unknown_mutation_invalidates_cached_prefixes ... ok
+test scheduler::prefix_cache::tests::shorter_prompt_reuses_only_its_matching_full_pages ... ok
+test scheduler::prefix_cache::tests::shared_prefix_capacity_counts_unique_pages_and_keeps_all_lease_owners ... ok
+test scheduler::tests::consuming_close_returns_a_typed_post_cleanup_metrics_snapshot ... ok
+test scheduler::tests::contained_publication_failure_is_not_a_completed_metric_sample ... ok
+test scheduler::tests::failed_tick_preserves_timeout_completion_until_exactly_once_recovery ... ok
+test scheduler::tests::post_validation_commit_fault_after_one_commit_is_contained ... ok
+test scheduler::tests::successful_commit_returns_its_exact_raw_metric_sample ... ok
+test scheduler::tests::shared_prefix_authority_preserves_off_batch_readers_retry_and_cancel ... ok
+test authority::tests::variable_policy_batches_live_decode_and_retries_without_false_progress ... ok
+test authority::tests::mixed_policy_budget_stage_partial_retry_and_cancel ... ok
+test authority::tests::packed_policy_batches_prefill_and_preserves_retry_partial_cancel ... ok
+test authority::tests::variable_authority_tracks_chunked_prefill_and_decode_from_live_scheduler ... ok
+
+test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

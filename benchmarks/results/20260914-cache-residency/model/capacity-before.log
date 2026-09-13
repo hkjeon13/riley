@@ -1,0 +1,30 @@
+warning: struct `OwnedCheckedExpectation` is never constructed
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:124:19
+    |
+124 | pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `new` and `checked` are never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:126:19
+    |
+125 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- associated items in this implementation
+126 |     pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+    |                   ^^^
+...
+129 |     pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    |                   ^^^^^^^
+
+warning: `riley-runtime` (lib) generated 2 warnings
+   Compiling riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.15s
+     Running unittests src/lib.rs (target/debug/deps/riley_scheduler-79707b6f5c34a155)
+
+running 1 test
+cache-capacity entries=2 page_charge=6 allocated_physical=4 hits=2 reused_tokens=64
+test scheduler::prefix_cache::tests::shared_prefix_capacity_reproduction ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 55 filtered out; finished in 0.00s
+
