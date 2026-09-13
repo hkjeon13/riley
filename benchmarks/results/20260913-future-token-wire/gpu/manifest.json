@@ -1,0 +1,36 @@
+{
+  "gpu": "RTX 4090 SM89",
+  "cuda": "13.0.88",
+  "native_cases": 288,
+  "rust_fixtures": [
+    "decode",
+    "mixed"
+  ],
+  "run_exit": 0,
+  "mixed_exit": 0,
+  "memcheck_errors": 0,
+  "racecheck_errors": 0,
+  "sm90a_compile_exit": 0,
+  "sm100a_compile_exit": 0,
+  "sm90a_sm100a_runtime": "skipped: hardware unavailable",
+  "source_sha256": {
+    "kernels/optional/future_token.cuh": "a7b3a871f0392700fdaf50324bbab1a28c68d69502088adfc1f08e6d61061310",
+    "benchmarks/analysis/future_token_probe.cu": "dd361e3434d8d9da987d9b800f7559867631385a9f3dcb9d345a5ce2bf100a68"
+  },
+  "log_sha256": {
+    "racecheck.log": "88116acc032a5a954e548a4f52c724576ad8584747fbd83985c1e2ee663a7616",
+    "run.log": "723e74e28e0c934587fbe4655c56e2901dfdd295313679234da69d345aa80674",
+    "mixed.log": "723e74e28e0c934587fbe4655c56e2901dfdd295313679234da69d345aa80674",
+    "mixed-memcheck.log": "cd8156f4aa2fa06aabd28050178baad685a3fce9e42cbfd5e20d201f8ef59d40",
+    "mixed-racecheck.log": "88116acc032a5a954e548a4f52c724576ad8584747fbd83985c1e2ee663a7616",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "memcheck.log": "cd8156f4aa2fa06aabd28050178baad685a3fce9e42cbfd5e20d201f8ef59d40",
+    "build-sm_100a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-sm_90a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "binary_sha256": {
+    "probe": "147e393de705a3dcfefa9df00d9af2936616a8742c6d2065a862cd1f1d37d74e",
+    "probe-sm_90a": "c210f950c0db414bdec2c4c0a1c35eda41effa30aa01288b5f8aad640490d2a8",
+    "probe-sm_100a": "6bbd2c67131e6c252cb402ff4c98e57968e17333efd25839224985f2793447e0"
+  }
+}

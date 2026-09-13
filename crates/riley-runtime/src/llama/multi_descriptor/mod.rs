@@ -6,6 +6,7 @@
 
 pub mod shape_progress;
 pub mod variable_wire;
+pub mod future_token;
 pub mod variable_wire16;
 // SIMD loads are confined to a checked, runtime-dispatched internal module.
 #[allow(unsafe_code)]

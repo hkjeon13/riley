@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
+#include <string>
 #include "../../kernels/optional/future_token.cuh"
 using namespace riley_future_token;
 #define CHECK(x) do{auto e=(x);if(e!=cudaSuccess){fprintf(stderr,"line=%d %s\n",__LINE__,cudaGetErrorString(e));exit(2);}}while(0)
@@ -11,7 +12,7 @@ template<class T>T* alloc(size_t n){T* p;CHECK(cudaMalloc(&p,n*sizeof(T)));retur
 __global__ void produce(unsigned* previous,const unsigned* epoch){
  unsigned row=threadIdx.x;if(previous[row*32+2]!=UINT32_MAX)previous[row*32+2]=100+row+*epoch;
 }
-int main(){
+int main(int argc,char** argv){
  auto* packet=alloc<unsigned>(PacketWords);auto* previous=alloc<unsigned>(1024);
  auto* refs=alloc<Reference>(32);auto* status=alloc<unsigned>(1);auto* epoch=alloc<unsigned>(1);
  cudaStream_t stream;CHECK(cudaStreamCreate(&stream));cudaGraph_t graph;cudaGraphExec_t exec;
@@ -26,10 +27,10 @@ int main(){
   m[10]=7;m[12]=11;m[14]=21;for(unsigned i=0;i<8;++i)m[16+i]=1000+i;
   for(unsigned row=0;row<32;++row){
    unsigned source=31-row;auto* s=m.data()+32+row*416;auto* p=r.data()+source*32;
-   s[1]=16;s[2]=1;s[4]=16;s[5]=17;s[6]=1;s[7]=32;s[8]=16;s[9]=4096;s[12]=700+row;s[14]=900+row;s[16]=mixed?row:0;s[18]=1;
+   s[1]=16;s[2]=1;s[4]=16;s[5]=17;s[6]=1;s[7]=32;s[8]=16;s[9]=4096;s[12]=700+row;s[14]=1000+row;s[16]=mixed?row:0;s[18]=1;
    p[1]=1;p[4]=7;p[6]=10;p[8]=20;p[10]=700+row;p[12]=900+row;p[14]=16;p[15]=16;p[17]=16;p[18]=4096;p[28]=15;p[29]=row;p[31]=0xb7524d52;
    for(unsigned i=0;i<8;++i)p[20+i]=m[16+i];
-   f[row].source_row=source;std::copy(p,p+32,f[row].expected);
+   f[row].source_row=source;std::copy(p,p+32,f[row].expected);f[row].destination_cookie[0]=1000+row;
   }
   auto* suffix=m.data()+32+(rows-1)*416;auto* old=r.data()+f[rows-1].source_row*32;
   bool fail=fault!=0 && fault!=47;
@@ -56,6 +57,18 @@ int main(){
   if(fail){if(!error || out!=m){fprintf(stderr,"failure rows=%u mixed=%d fault=%u error=%u\n",rows,mixed,fault,error);return 3;}}
   else {if(error)return 4;for(unsigned row=0;row<rows;++row)if(f[row].source_row!=HostToken){unsigned token=100+f[row].source_row+value;m[32+row*416]=token;if(mixed)m[13344+row]=token;}if(out!=m)return 5;}
   ++passed;
+ }
+ if(argc>1){
+  std::vector<unsigned> m(PacketWords),r(1024),out(PacketWords);std::vector<Reference> f(32);
+  auto read=[&](const char* name,void* dst,size_t bytes){std::string path=std::string(argv[1])+"/"+name;FILE* file=fopen(path.c_str(),"rb");if(!file || fread(dst,1,bytes,file)!=bytes || fgetc(file)!=EOF)exit(6);fclose(file);};
+  read("packet.bin",m.data(),PacketWords*4);read("previous.bin",r.data(),4096);read("references.bin",f.data(),sizeof(Reference)*32);
+  CHECK(cudaMemcpy(packet,m.data(),PacketWords*4,cudaMemcpyHostToDevice));CHECK(cudaMemcpy(previous,r.data(),4096,cudaMemcpyHostToDevice));CHECK(cudaMemcpy(refs,f.data(),sizeof(Reference)*32,cudaMemcpyHostToDevice));
+  unsigned value=7,error=0;CHECK(cudaMemcpy(epoch,&value,4,cudaMemcpyHostToDevice));CHECK(cudaMemset(status,0,4));
+  CHECK(cudaGraphLaunch(exec,stream));CHECK(cudaStreamSynchronize(stream));CHECK(cudaMemcpy(&error,status,4,cudaMemcpyDeviceToHost));CHECK(cudaMemcpy(out.data(),packet,PacketWords*4,cudaMemcpyDeviceToHost));
+  if(error)return 7;
+  for(unsigned row=0;row<m[5];++row)if(f[row].source_row!=HostToken){unsigned token=107+f[row].source_row;m[32+row*416]=token;if(m[4]!=1)m[13344+m[32+row*416+16]]=token;}
+  if(out!=m)return 8;
+  printf("rust_canonical_packet=true fresh_cookie=true native_sidecar_bytes=%zu\n",sizeof(Reference)*32);
  }
  printf("cases=%u graph_device_token=true reordered_rows=true invalid_suffix_no_mutation=true\n",passed);
  CHECK(cudaGraphExecDestroy(exec));CHECK(cudaGraphDestroy(graph));CHECK(cudaStreamDestroy(stream));

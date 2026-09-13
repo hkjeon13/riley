@@ -1,0 +1,12 @@
+   Compiling riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.84s
+     Running unittests src/lib.rs (target/debug/deps/riley_runtime-278f35c187cd6f05)
+
+running 4 tests
+test llama::multi_descriptor::future_token::tests::invalid_pairs_do_not_gain_authority ... ok
+test llama::multi_descriptor::future_token::tests::partial_prefill_can_continue_without_inventing_a_sampled_token ... ok
+test llama::multi_descriptor::future_token::tests::host_prefill_admission_keeps_previous_pages_retained ... ok
+test llama::multi_descriptor::future_token::tests::page_boundary_reorder_preserves_commit_and_encodes_distinct_cookies ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 317 filtered out; finished in 0.00s
+

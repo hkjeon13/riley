@@ -134,3 +134,10 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 [GPU 전달 검증](../../benchmarks/results/20260913-future-token-native/README.md): 선행 compact 결과 identity 및 연속 replay/progress 검사, row 재배치, descriptor/token-slab 전달, 전체 batch 검증 후 변경을 native prototype으로 구현했다. Device producer→consumer graph의 288개 검사 및 memcheck/racecheck를 통과했다. SM90a/SM100a compile 통과, runtime은 장비 부재 skip이다. 모델의 status 초기화 뒤·embedding 앞에 연결해야 한다는 기존 enqueue 순서도 확인했다.
 
 이는 scheduler 연결 전의 전달 경계다. Canonical reference를 실제 retained authority에서 생성하는 Rust 표현, 두 pending expectation, tentative KV 예약·순차 commit, EOS/cancel 후 drain과 결과 폐기, 실제 모델·serving 검증이 남아 있다. 현재 prototype을 두 iteration overlap 지원으로 표시하지 않는다. FP16 모델 품질 실패 이후 다음 구현 영역을 PR02로 전환하며 앞선 'PR03 우선'은 당시의 순서 기록으로 남긴다.
+
+
+## Future-token Rust wire와 cookie 수정
+
+[후속 ABI 검증](../../benchmarks/results/20260913-future-token-wire/README.md): 실제 session은 제출마다 cookie를 새로 발급한다. 이에 맞춰 native reference를 source identity + destination cookie로 수정하고 row140 bytes로 확장했다. Rust가 committed replay를 유지한 tentative successor packet을 준비하면서 source/progress·fresh cookie·KV page prefix/ownership을 검증한다. Rust canonical pure/mixed fixtures의 GPU 전달과 memcheck/racecheck를 통과했다. Native v1의 동일-cookie 조건은 폐기한다.
+
+두 scheduler reservation·authority와 runtime expectation queue는 아직 연결하지 않았다. 이번 checked wire 준비를 ahead scheduling 완료로 표시하지 않는다. 후행 실행은 기존 단일 in-flight API에 우회 제출하지 않는다.

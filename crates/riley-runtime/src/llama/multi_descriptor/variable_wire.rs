@@ -161,7 +161,7 @@ fn validate_result_row<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>,i
 }
 #[cfg(test)]
 fn result_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,token:u32)->Result<()>{result_row_identity_into(out,e,0,token)}
-fn result_row_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,index:usize,token:u32)->Result<()>{
+pub(super) fn result_row_identity_into<const ROWS:usize>(out:&mut[u8;128],e:&Expectation<ROWS>,index:usize,token:u32)->Result<()>{
     let row=&e.rows[index];let p=row.progress;let v=p.validate()?;out.fill(0);
     for(at,x)in[(4,u32::from(v.logits_input_row.is_some())),(8,token),(56,v.target_tokens),(60,p.prompt_tokens),(64,p.generated_index),(68,p.input_tokens),(72,p.context_tokens),(76,stage_number(p.stage)),(112,v.last_position),(116,row.output_slot),(120,e.mode as u32),(124,result_magic(e))]{u32_at(out,at,x);}
     for(at,x)in[(16,e.owner_generation),(24,e.replay_id),(32,e.iteration_id),(40,row.sequence_tag),(48,row.cookie)]{u64_at(out,at,x);}

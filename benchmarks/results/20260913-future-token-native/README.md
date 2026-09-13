@@ -28,3 +28,6 @@ Fixture는 전달 필드와 buffer 범위를 검증한다. 완전한 scheduler-a
 다음 batch는 Rust future-token 표현과 canonical result identity 생성, 최대 두 expectation/ticket 및 slot lifetime, scheduler tentative KV reservation·순차 commit을 연결한다. EOS/cancel 이후 후행 결과 공개 금지와 GPU drain 전 page 반환 금지도 포함한다. 기존 단일 in-flight authority를 우회하지 않는다.
 
 현재는 runtime/FFI/모델/서버에서 선택하지 않는 native prototype이다. 실제 모델 correctness, EOS/cancel, allocation-zero, overlap trace, 동일 조건 vLLM 표가 남아 있다. 새 serving 성능을 측정하지 않았고 기본값을 변경하지 않았다.
+
+
+후속 Rust 연결에서 실제 runtime은 매 제출 cookie를 새로 발급한다는 차이를 확인했다. 이 v1의 same-cookie 가정은 실제 session과 호환되지 않아 [v2 wire/ABI](../20260913-future-token-wire/README.md)로 수정했다. 위 수치와 manifest는 역사적 native v1 검사이며 현재 통합 계약으로 사용하지 않는다.

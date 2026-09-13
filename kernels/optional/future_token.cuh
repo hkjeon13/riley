@@ -8,8 +8,8 @@
 namespace riley_future_token {
 constexpr unsigned Rows=32, PacketWords=15392, ResultWords=32;
 constexpr unsigned Failure=64, HostToken=UINT32_MAX;
-struct Reference { unsigned source_row; unsigned expected[ResultWords]; };
-static_assert(sizeof(Reference)==132);
+struct Reference { unsigned source_row; unsigned expected[ResultWords]; unsigned destination_cookie[2]; };
+static_assert(sizeof(Reference)==140);
 __host__ __device__ inline uint64_t pair(const unsigned* p){return uint64_t(p[0])|(uint64_t(p[1])<<32);}
 __host__ __device__ inline bool next(uint64_t a,uint64_t b){return a!=UINT64_MAX && b==a+1;}
 
@@ -23,7 +23,7 @@ __device__ bool valid(const unsigned* m,unsigned row,const Reference* refs,const
  for(unsigned i=0;i<ResultWords;++i)if(i!=2 && r[i]!=ref.expected[i])return false;
  if(!pair(r+4) || pair(r+4)!=pair(m+10) || !next(pair(r+6),pair(m+12)) || !next(pair(r+8),pair(m+14)))return false;
  for(unsigned i=0;i<8;++i)if(r[20+i]!=m[16+i])return false;
- if(!pair(r+10)||!pair(r+12)||pair(r+10)!=pair(s+12)||pair(r+12)!=pair(s+14))return false;
+ if(!pair(r+10)||!pair(r+12)||pair(r+10)!=pair(s+12)||pair(ref.destination_cookie)!=pair(s+14)||pair(s+14)<=pair(r+12))return false;
  if(r[14]!=s[4] || r[15]!=s[8] || r[18]!=s[9] || !next(r[16],s[6]) || !next(r[14],s[5]))return false;
  if(s[5]==0 || s[1]!=s[5]-1 || r[28]+1!=r[14])return false;
  if(m[4]!=1 && (s[16]>=m[9] || m[13344+s[16]]!=0))return false;
