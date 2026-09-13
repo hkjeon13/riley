@@ -1,0 +1,18 @@
+benchmarks/analysis/pod_mixed_attention_probe.cu:24:92: error: macro "CK" passed 2 arguments, but takes just 1
+   24 |   else if(mode==1){if(seen)CK(riley_pod_mixed::enqueue<0,true>(stream,q,k,v,b,cap,m,p,seen));else CK(riley_pod_mixed::enqueue<0>(stream,q,k,v,b,cap,m,p));}
+      |                                                                                            ^
+benchmarks/analysis/pod_mixed_attention_probe.cu:7: note: macro "CK" defined here
+    7 | #define CK(x) do{auto e=(x);if(e!=cudaSuccess){std::fprintf(stderr,"line%d %s %s\n",__LINE__,#x,cudaGetErrorString(e));std::exit(2);}}while(0)
+      | 
+benchmarks/analysis/pod_mixed_attention_probe.cu:25:92: error: macro "CK" passed 2 arguments, but takes just 1
+   25 |   else if(mode==2){if(seen)CK(riley_pod_mixed::enqueue<1,true>(stream,q,k,v,b,cap,m,p,seen));else CK(riley_pod_mixed::enqueue<1>(stream,q,k,v,b,cap,m,p));}
+      |                                                                                            ^
+benchmarks/analysis/pod_mixed_attention_probe.cu:7: note: macro "CK" defined here
+    7 | #define CK(x) do{auto e=(x);if(e!=cudaSuccess){std::fprintf(stderr,"line%d %s %s\n",__LINE__,#x,cudaGetErrorString(e));std::exit(2);}}while(0)
+      | 
+benchmarks/analysis/pod_mixed_attention_probe.cu:26:81: error: macro "CK" passed 2 arguments, but takes just 1
+   26 |   else {if(seen)CK(riley_pod_mixed::enqueue<2,true>(stream,q,k,v,b,cap,m,p,seen));else CK(riley_pod_mixed::enqueue<2>(stream,q,k,v,b,cap,m,p));}
+      |                                                                                 ^
+benchmarks/analysis/pod_mixed_attention_probe.cu:7: note: macro "CK" defined here
+    7 | #define CK(x) do{auto e=(x);if(e!=cudaSuccess){std::fprintf(stderr,"line%d %s %s\n",__LINE__,#x,cudaGetErrorString(e));std::exit(2);}}while(0)
+      | 

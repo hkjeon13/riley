@@ -60,3 +60,9 @@ prefill의 compute 자원과 decode의 memory 자원을 함께 활용하면서 d
 [구현과 C32 비교](../../benchmarks/results/20260914-mixed-time-policy/README.md):8개 context/decode class, saturated 성공 샘플8개,20% deadband·64token 조정·128 하한, validated settlement 이후 feedback, decode 우선·기존 KV/graph capacity 계약을 연결했다. CPU scheduler48/CLI34/config7, CUDA build 및 serving stop/cancel/reference 검증을 통과했다.
 
 4ms 목표의 두 순서 C32에서 직전 동일 FFN paired 대비 throughput−8.85%, TTFT/TPOT/P95/P99도 악화했다. 비활성 opt-in으로 유지하며 기본값 승격하지 않는다. coarse reactive controller를 비용 predictor/POD 완료로 취급하지 않는다. 고부하·장기 qualification은 미실행이다. 다음 batch는 threshold 미세 튜닝보다 실제 attention prefill/decode 자원 공유와 수치/지원 계약을 다룬다.
+
+## POD-style native gate (2026-09-14)
+
+[Native 구현과 실험](../../benchmarks/results/20260914-pod-mixed-native/README.md): packed prefill/decode queue, explicit device task body,4-warp virtual 작업, SM 교대/비례 배정 및 static packing 대조군을 구현했다. Audit/release bitwise234개·coverage117회, 소규모 memcheck/racecheck, SM90a/SM100a object compile을 통과했다. 해당 장비 runtime과 multi-GPU는 미검증이다.
+
+대표 mixed native shape는 기존보다30–52% 느리며,163register/24,584B shared의 resource envelope가 남는다. 같은 SM에 역할을 배정한 사실을 동시 resident 실행/serving 이득으로 주장하지 않는다. Native gate 탈락으로 Rust recorder·serving에 연결하지 않았다. PR04 전체 완료도 아니다. 이후는 단순 CTA 상수 변경보다 phase별 resource 및 native precision/backend 계약을 함께 다뤄야 한다.
