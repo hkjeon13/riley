@@ -104,3 +104,5 @@ mod authority;
 pub use authority::{AuthorizedExecution, AuthorizedExecutionRow};
 
 use riley_runtime::llama::multi_descriptor as descriptor;
+
+pub use authority::AuthorizedDecodeWindow;

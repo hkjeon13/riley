@@ -1055,3 +1055,14 @@ mod tests {
         );
     }
 }
+
+/// Two dependent decode plans. Successor token zeros are future-token placeholders,
+/// not executable sampled inputs. Only a window-aware adapter may submit them.
+pub struct DecodeWindowPlan {pub(crate) first:IterationPlan,pub(crate) second:IterationPlan}
+impl DecodeWindowPlan {
+    pub fn first(&self)->&IterationPlan {&self.first}
+    pub fn second(&self)->&IterationPlan {&self.second}
+    pub fn successor_sources(&self)->Vec<riley_runtime::llama::multi_descriptor::future_token::TokenSource> {
+        (0..self.second.batch_size()).map(|i|riley_runtime::llama::multi_descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect()
+    }
+}

@@ -146,3 +146,10 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 ## 예약의 두 endpoint와 완료 append 폐기
 
 [KV window 검증](../../benchmarks/results/20260913-reservation-window/README.md): shared reservation의 prefix view와 scheduler용 두 endpoint snapshot을 추가했다. 완료·append-only 쓰기 증거가 있을 때 suffix를 폐기하는 경로는 committed prefix page를 유지하고 tail sidecar를 무효화한다. KV18개·scheduler38개 CPU 검사가 통과했다. 이는 GPU fence나 두 in-flight scheduler 완료가 아니다. 다음은 이 도구를 두 계획 authority·prefix publication·suffix drain에 연결하는 것이다. 기존 전체 commit/terminal reclaim 경로를 후행 GPU가 pending인 상태에 그대로 사용하지 않는다.
+
+
+## 실제 scheduler two-decode window 연결
+
+[Scheduler window 검증](../../benchmarks/results/20260913-scheduler-decode-window/README.md): 두 decode plan의 공동 최종 예약·prefix/full table, scoped pair authority→future wire, 두 결과 검증 후 prefix/suffix settlement를 구현했다. 선행 stop·cancel의 후행 출력 폐기, OOM rollback, admission fallback, C32 ragged 진행을 host 검사로 확인했다. 기존 single-plan 실행/완료 API로 window를 우회할 수 없다. 이는 더 이상 wire-only prototype은 아니지만 GPU window 실행 adapter와 serving 선택은 미구현이다.
+
+현재 완료 처리는 두 실행 drain 후 공개 방식이다. 다음은 두 staging slot·future-token resolver·source result/sidecar lifetime·graph identity를 실제 모델 경로에 연결하고, output correctness와 EOS/cancel drain을 GPU에서 검증하는 것이다. 새 serving 비교표는 그 통합 milestone에서 작성한다.

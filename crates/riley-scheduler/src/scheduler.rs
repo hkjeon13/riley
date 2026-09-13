@@ -4,6 +4,8 @@
 //! and paged-KV reservations, emits immutable executor-neutral plans, and only
 //! publishes state after versioned runtime feedback has been validated in full.
 
+mod decode_window;
+
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -482,6 +484,7 @@ struct InflightItem {
 #[derive(Debug)]
 struct InflightPlan {
     iteration_id: IterationId,
+    successor: Option<IterationId>,
     prefill_tokens: usize,
     decode_tokens: usize,
     prefill_count: usize,
@@ -909,7 +912,7 @@ impl Scheduler {
         }
 
         let iteration_id = self.peek_iteration_id()?;
-        let plan = self.prepare_plan(iteration_id, &candidates, now_ns)?;
+        let plan = self.prepare_plan(iteration_id, &candidates, now_ns, None)?;
         self.advance_iteration_id()?;
         self.aging_override_last_iteration = used_aging_override;
         if let Some(inflight) = &mut self.inflight {
@@ -1714,6 +1717,7 @@ impl Scheduler {
         iteration_id: IterationId,
         candidates: &[Candidate],
         now_ns: u64,
+        successor: Option<IterationId>,
     ) -> SchedulerResult<IterationPlan> {
         let mut prefill_items = Vec::new();
         let mut decode_items = Vec::new();
@@ -1821,6 +1825,10 @@ impl Scheduler {
 
         for payload in payloads {
             let candidate = payload.candidate;
+            let reserved_target=match payload.target_logical_length.checked_add(usize::from(successor.is_some())) {
+                Some(target)=>target,
+                None=>return self.rollback_prepared_plan(inflight_items,SchedulerError::ArithmeticOverflow{field:"window reservation target"}),
+            };
             let Some(index) = self.record_index(candidate.request_id) else {
                 return self.rollback_prepared_plan(
                     inflight_items,
@@ -1841,7 +1849,7 @@ impl Scheduler {
                 );
             };
             let reservation = match sequence
-                .reserve_to(&mut self.pool, payload.target_logical_length)
+                .reserve_to(&mut self.pool, reserved_target)
                 .map_err(SchedulerError::from)
             {
                 Ok(reservation) => reservation,
@@ -1852,7 +1860,7 @@ impl Scheduler {
             inflight_items.push(InflightItem {
                 request_id: candidate.request_id,
                 kind: candidate.kind,
-                target_logical_length: payload.target_logical_length,
+                target_logical_length: reserved_target,
                 output_slot: payload.output_slot,
                 previous_state,
                 previous_ready_since_ns,
@@ -1865,10 +1873,13 @@ impl Scheduler {
                 });
             };
             let table_result = match self.requests[index].sequence.as_ref() {
-                Some(sequence) => sequence
-                    .reserved_block_table(&active_item.reservation)
-                    .map_err(SchedulerError::from)
-                    .and_then(|table| OwnedBlockTable::copy_from_v1(candidate.request_id, table)),
+                Some(sequence) => if successor.is_some() {
+                    // Window mode is restricted to mixed32 with context <=4096.
+                    let mut valid=[0u16;256];
+                    sequence.reserved_prefix_table(&active_item.reservation,payload.target_logical_length,&mut valid)
+                        .map_err(SchedulerError::from).and_then(|table|OwnedBlockTable::copy_from_v1(candidate.request_id,table))
+                } else {sequence.reserved_block_table(&active_item.reservation).map_err(SchedulerError::from)
+                    .and_then(|table| OwnedBlockTable::copy_from_v1(candidate.request_id,table))},
                 None => Err(SchedulerError::InvalidPlan {
                     field: "sequence",
                     reason: "reserved candidate has no KV sequence",
@@ -1962,6 +1973,7 @@ impl Scheduler {
         let decode_count = plan.decode_items().len();
         self.inflight = Some(InflightPlan {
             iteration_id,
+            successor,
             prefill_tokens,
             decode_tokens,
             prefill_count,
@@ -2091,6 +2103,9 @@ impl Scheduler {
     }
 
     fn validate_iteration_result(&self, result: &IterationResult) -> SchedulerResult<()> {
+        if self.inflight.as_ref().is_some_and(|p|p.successor.is_some()) {
+            return Err(SchedulerError::InvalidPlan {field:"decode window",reason:"requires both results and window-wide device drain"});
+        }
         let inflight = self
             .inflight
             .as_ref()
@@ -2646,7 +2661,7 @@ impl Scheduler {
             pending_completions: self.completion_outbox.len(),
             completion_capacity: self.completion_outbox_capacity,
             accepting: self.accepting,
-            outstanding_iterations: usize::from(self.inflight.is_some()),
+            outstanding_iterations: self.inflight.as_ref().map_or(0,|p|1+usize::from(p.successor.is_some())),
         }
     }
 }
@@ -3208,6 +3223,9 @@ impl Scheduler {
         &'a self,
         plan: &'a IterationPlan,
     ) -> SchedulerResult<crate::AuthorizedExecution<'a>> {
+        if self.inflight.as_ref().is_some_and(|p|p.successor.is_some()) {
+            return Err(SchedulerError::InvalidPlan {field:"decode window",reason:"requires a window-aware execution adapter"});
+        }
         self.validate_inflight_reservations()?;
         let inflight = self
             .inflight

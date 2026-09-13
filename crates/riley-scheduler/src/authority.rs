@@ -147,6 +147,7 @@ impl AuthorizedExecution<'_> {
 /// Geometry/identity supplied only by the retained V3 execution adapter.
 /// This is not a catalog authorization or a GPU completion receipt.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct VariableOwnerGeometry {
     pub generation: u64,
     pub last_accepted_replay: u64,
@@ -466,5 +467,34 @@ mod tests {
             .abort_iteration(plan.iteration_id(), crate::ExecutionAbort::NotDispatched, 2)
             .unwrap();
         scheduler.close(3, None).unwrap();
+    }
+}
+
+/// Retains an immutable scheduler borrow across both dependent executions.
+/// Neither embedded single-step authority is exposed to ordinary executors.
+/// ```compile_fail
+/// use riley_scheduler::{Scheduler,RequestId};
+/// use riley_scheduler::plan::DecodeWindowPlan;
+/// fn cannot_cancel_while_authorized(s:&mut Scheduler,w:&DecodeWindowPlan) {
+///     let authority=s.authorize_decode_window(w).unwrap();
+///     s.cancel(RequestId::new(1).unwrap(),0).unwrap();
+///     drop(authority);
+/// }
+/// ```
+pub struct AuthorizedDecodeWindow<'a> {
+    pub(crate) first: AuthorizedExecution<'a>,
+    pub(crate) second: AuthorizedExecution<'a>,
+}
+impl AuthorizedDecodeWindow<'_> {
+    #[allow(dead_code)]
+    pub(crate) fn prepare_wire(&self,owner:&VariableOwnerGeometry,replay:u64,first_cookies:&[u64],second_cookies:&[u64])->crate::descriptor::Result<(crate::descriptor::variable_wire::Expectation<32>,crate::descriptor::variable_wire::Expectation<32>,crate::descriptor::future_token::PreparedFutureBatch)> {
+        let first=self.first.variable_descriptor_expectation_rows::<32>(owner,replay,first_cookies,crate::descriptor::ResultMode::Greedy)?;
+        let mut structural_owner=owner.clone();structural_owner.last_accepted_replay=replay;
+        let next=replay.checked_add(1).ok_or(crate::descriptor::Error{field:"window replay",reason:"overflow"})?;
+        let mut second=self.second.variable_descriptor_expectation_rows::<32>(&structural_owner,next,second_cookies,crate::descriptor::ResultMode::Greedy)?;
+        second.last_accepted_replay=owner.last_accepted_replay;
+        let sources=(0..second.rows.len()).map(|i|crate::descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();
+        let future=crate::descriptor::future_token::prepare(&first,&second,&sources)?;
+        Ok((first,second,future))
     }
 }
