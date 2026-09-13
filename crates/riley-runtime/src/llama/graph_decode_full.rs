@@ -2088,6 +2088,11 @@ impl PreparedLlamaBatchExecutor {
         }
         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
         let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
+        crate::llama::variable_plan::VariablePlanSignature {
+            rows: ROWS, shared: scratch.shared_head.is_some(), compact: scratch.compact,
+            packed: scratch.packed_prefill, mixed: scratch.mixed_execution,
+            native_abi: riley_cuda::EXPECTED_ABI_VERSION,
+        }.bind(&mut hash).map_err(rejected)?;
         for source in [
 include_bytes!("../../../../kernels/src/decode_shared.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared_attention.cuh").as_slice(),
@@ -2107,6 +2112,7 @@ include_bytes!("../../../../kernels/src/decode_shared16_model.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared16_result.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             include_bytes!("variable_session.rs").as_slice(),
+            include_bytes!("variable_plan.rs").as_slice(),
             include_bytes!("graph_decode_full.rs").as_slice(),
             include_bytes!("../../../../kernels/src/decode_shape.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_model.cuh").as_slice(),

@@ -1105,3 +1105,6 @@ pub mod multi_descriptor;
 
 #[cfg(feature = "cuda")]
 pub mod variable_session;
+
+#[cfg(any(feature = "cuda", test))]
+mod variable_plan;

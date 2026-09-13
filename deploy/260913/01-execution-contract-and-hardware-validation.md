@@ -84,3 +84,11 @@ owned decode executor의 evidence label을 실제 DecodeNumericalProfile과 연�
 누락·중복·선택 GPU 밖의 peer 관측은 잘못된 evidence이므로 optional 검사에서도 실패한다. 접근 불가가 정상 조회된 경우와 장비 수 부족만 optional skip이 가능하다. 수정 후 CPU 94개가 재통과했다. 원격 GPU 증거는 각 manifest의 당시 파일 hash 범위이며, 마지막 CPU 정책 보강을 새 GPU 성능 측정으로 표현하지 않는다.
 
 이 batch는 하드웨어 preflight/peer query/실행기/numerical evidence를 포함한다. PR01 전체 완료와 분리해 커밋하며, 남은 backend capability와 variable serving 계약 연결은 계속 진행한다.
+
+### Variable serving catalog 연결 — CPU 회귀·CUDA compile 완료
+
+V56의 variable catalog에는 model content·GPU/GEMM metadata·kernel source가 이미 포함되어 있었다. 실행 모드의 packed/mixed flag는 별도 identity 비교에는 있으나 catalog digest에 명시되지 않아, PR01에서 shared/compact/packed/mixed·row width·native ABI를 추가했다. 새 plan 소스 자체도 기존 source digest에 포함한다. 지원되지 않는 조합은 hash 변경 전에 거부한다.
+
+전용 CPU 테스트 2개와 원격 CUDA compile이 통과했다. 전체 runtime library 회귀는 310 passed / 0 failed / 1 ignored로 끝났다. ignored는 원래 제외된 CPU scan timing diagnostic이며 correctness 실패나 장비 부족을 숨긴 항목이 아니다. V6/V7 byte corruption 검사가 포함되어 있다. 이번 변경은 cold plan identity만 바꾸며 GPU 산술·serving 성능 개선을 주장하지 않는다.
+
+증거: [CPU 결과](../../benchmarks/results/20260913-execution-contract/variable-plan-cpu.log), [CUDA compile](../../benchmarks/results/20260913-execution-contract/variable-plan-cuda-check.log). 새 digest를 사용한 실제 full-model serving 회귀는 PR02 통합 검증에 포함해야 하며 compile만으로 완료 처리하지 않는다.
