@@ -1,0 +1,48 @@
+# PR 13 — Draft-target speculative decoding
+
+상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+
+## 문제와 가설
+
+큰 target에서 검증 한 번으로 여러 token을 진행해 순차 decode 횟수를 줄인다.
+
+## 의존성과 변경 위치
+
+선행: 01, 03; draft/target 모델 로딩 지원을 착수 전에 확인.
+
+예상 수정 위치: runtime draft/target executor, KV transaction, scheduler token accounting. 경로는 착수 시 실제 checkout과 대조한다.
+
+## 하나의 optimization batch
+
+1. 지원되는 draft-target 조합 하나와 최대 draft 길이를 고정한다.
+2. batched verification과 greedy acceptance를 구현한다.
+3. 승인 prefix commit·거절 suffix KV rollback을 연결한다.
+4. acceptance 비용 기록 및 일반 decode fallback을 추가한다.
+
+## 범위 경계
+
+EAGLE 학습 pipeline, 임의 모델 지원, stochastic sampling까지 한 PR에 넣지 않는다. greedy-only 범위를 API에 명시하고 unsupported sampling은 fallback한다.
+
+## Correctness·수명 계약
+
+greedy output은 target 단독과 같아야 한다. EOS·length limit 뒤 token을 승인하지 않는다. 향후 sampling은 target 분포 보존 검증이 별도로 필요하다.
+
+## 검증과 하드웨어 skip
+
+accept all/none/partial, page 경계 rollback, EOS, cancellation, 혼합 batch. 작은 135M뿐 아니라 지원 가능한 큰 target을 별도 축으로 평가. draft 모델 미지원은 하드웨어 skip으로 위장하지 않는다.
+
+하드웨어 부재만으로 구현을 보류하지 않는다. 미지원 runtime 검사는 이유와 capability를 명시해 skip한다. 실행된 실패를 skip으로 바꾸지 않으며 build·mock·GPU·serving 증거를 구별한다.
+
+## 완료·승격 기준
+
+draft·verification·rollback을 포함한 serving TPOT/throughput 및 acceptance length를 보고한다. 낮은 concurrency 이득과 높은 concurrency 손실을 분리해 적용 범위를 정한다.
+
+구현 완료, 장비 검증 대기, 성능 승격 여부를 각각 기록한다. PR이 병합 가능하더라도 검증되지 않은 경로는 기본값으로 켜지 않는다.
+
+## 롤백
+
+draft 경로를 끄고 target 단독으로 복귀한다.
+
+## 연구 근거
+
+[EAGLE-3](https://arxiv.org/abs/2503.01840), [Speculation limits](https://arxiv.org/abs/2601.11580). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
