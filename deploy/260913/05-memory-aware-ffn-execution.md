@@ -1,6 +1,6 @@
 # PR 05 — 메모리 수명 기반 FFN tile 실행
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **현재 serving trace로 영역 선정 완료 / kernel batch 구현 전**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -46,3 +46,17 @@ gate/up→activation→down 사이 중간 global tensor 이동을 줄인다. lau
 ## 연구 근거
 
 [Welder](https://www.usenix.org/conference/osdi23/presentation/shi), [MCFuser](https://arxiv.org/abs/2506.22169), [FLUTE](https://arxiv.org/abs/2407.10960). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+## 실제 코드·trace 기반 첫 batch 확정
+
+[현재 바이너리 영역 분석](../../benchmarks/results/20260913-serving-area-census/README.md)에서 V7 decode kernel 시간의32.90%, prefill/mixed의27.81%가 FFN gate/activation/down이다. V7의 gate/up/SwiGLU 및 merge/norm fusion은 이미 구현되어 있다. 첫 batch는 전체 FFN을 한 CTA로 합치는 대신 다음 세 변경을 함께 구현하고 검증한다.
+
+1. `decode_gate_v56.cuh`와 별도의 후보 backend에 gate/up 두-stage global→shared pipeline을 구현한다. 64-wide K tile에서32-row input4,096B와 gate/up8-column weights2,048B를 stage마다 보관한다. 두-stage 논리 예산은12,288B다. 두 warp가 weight tile을 공유하되 기존 순차 MMA, gate/up BF16 round, exp/SwiGLU 순서를 보존한다.
+2. down projection에도 같은 pipeline 소유·동기화 규칙을 적용한다. stage는 input4,096B + weight1,024B, 두-stage10,240B다. 기존320-wide 분할, 마지막256-wide chunk, partial의 BF16 반올림 후 FP32 저장과 merge 순서를 유지한다. 마지막 tile에서 기존에 수행하지 않은 MMA를 임의로 추가하지 않는다.
+3. 두 kernel을 함께 선택하는 명시적 native/runtime FFN backend와 graph signature를 연결한다. default V7는 그대로 두고 shared extent·register/spill·active-row 조건을 기록한다. 처음에는 decode에 한정하되 mixed/pure 전환 시 full logits 및 수치 일관성을 검사한다. Prefill backend 확장은 같은 자료로 별도 승격한다.
+
+비동기 copy와 MMA overlap은 [NVIDIA CUDA programming guide의 asynchronous copies](https://docs.nvidia.com/cuda/archive/12.9.1/cuda-c-programming-guide/index.html#asynchronous-data-copies) 및 [CUTLASS SM80 copy primitive](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/arch/memory_sm80.h)를 근거로 한다. 같은 primitive를 사용한다고 library의 GEMM 전체 구현을 사용했다고 표기하지 않는다. CUDA80+ 공통 경로이며 Hopper/Blackwell 최적화는 capability별 backend 확장을 유지한다. 현재 표의 byte 수는 계획 예산이며 ptxas·실제 실행 전 occupancy나 속도 개선을 주장하지 않는다.
+
+모든 CTA thread는 copy commit/wait와 shared reuse barrier에 참여해야 한다. row17 미만일 때 두 번째 warp가 기존처럼 조기 return하면 안 된다. inactive row는 zero-fill하고, source alignment 및 경계 밖 pointer를 검사한다. runtime Python 호출은 없다.
+
+검증: active1/15/16/17/31/32, K-tail, 반복 graph replay의 row 갱신, pure/mixed 전환, full-model logits·greedy·free generation, native memcheck/racecheck. 기존 MMA 순서를 유지해도 bitwise 결과는 실측으로 확인한다. register/shared spill로 이득이 사라지는 경우 원인을 기록하고 채택하지 않는다. 두 후보 kernel과 serving 선택이 연결된 시점에 기존 V7 / 새 FFN / vLLM의 자연·고정 workload C16/C32 교차 비교표를 갱신한다. kernel별 수정마다 serving 표를 반복하지 않는다.
