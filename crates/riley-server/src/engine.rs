@@ -2241,12 +2241,13 @@ mod cuda_backend {
             } else {
                 riley_scheduler::ExecutionShapePolicy::General
             };
-            let scheduler = Scheduler::new_with_execution_shape(
+            let mut scheduler = Scheduler::new_with_execution_shape(
                 config.scheduler,
                 executor.kv_layout(),
                 shape_policy,
             )
             .map_err(|source| internal(format!("scheduler preparation failed: {source}")))?;
+            if let Some(target)=executor.config().mixed_time_budget_ns() {scheduler.enable_mixed_time_budget(target).map_err(|e|internal(format!("mixed time policy preparation failed: {e}")))?;}
             let timer = LlamaIterationCudaTimer::prepare(&context)
                 .map_err(|source| internal(format!("CUDA timing preparation failed: {source}")))?;
             Ok(Self {
@@ -3589,6 +3590,7 @@ mod cuda_backend {
                 (expected_active_rows.div_ceil(16)*16,plan.decode_items().len(),plan.prefill_items().len(),context.div_ceil(128)*128)
             });
             phase_ns[0] = host_phase_checkpoint(&mut phase_mark);
+            let execution_wall_start=self.scheduler.as_ref().filter(|s|s.mixed_time_budget_enabled()).map(|_|Instant::now());
             let (mut downloaded, timing, staged_shape) =
                 if let Some(graph)=self.variable_graph.as_mut() {
                     let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_execution(&plan)
@@ -3680,6 +3682,7 @@ mod cuda_backend {
                     }
                 };
             phase_ns[1] = host_phase_checkpoint(&mut phase_mark);
+            let execution_wall_ns=execution_wall_start.map_or(0,|t|u64::try_from(t.elapsed().as_nanos()).unwrap_or(u64::MAX));
             let sampling = self.sample_iteration(&plan, &downloaded, selection);
             if gpu_greedy {
                 if let Err(source) =
@@ -3725,7 +3728,7 @@ mod cuda_backend {
             };
             let now_ns = self.now_ns();
             phase_ns[2] = host_phase_checkpoint(&mut phase_mark);
-            let updates = match self.scheduler_mut()?.complete_iteration(&result, now_ns) {
+            let updates = match self.scheduler_mut()?.complete_iteration_with_execution_wall(&result, now_ns, execution_wall_ns) {
                 Ok(updates) => updates,
                 Err(source) => {
                     let detail = format!("scheduler commit failed: {source}");
@@ -3825,6 +3828,7 @@ mod cuda_backend {
             {
                 return Ok(Vec::new());
             }
+            if let Some(state)=self.scheduler.as_ref().and_then(|s|s.mixed_time_budget_state()) {eprintln!("RILEY_MIXED_TIME_STATE {:?}",state);}
             if let Some(timing) = self.host_phase_timing.as_ref() { timing.report(); }
             if let Some(graph) = self.variable_graph.as_ref() {
                 match graph { VariableServingSession::Eight(g) => g.report_host_phase_timing(), VariableServingSession::Sixteen(g) => g.report_host_phase_timing(), VariableServingSession::ThirtyTwo(g) => g.report_host_phase_timing() }

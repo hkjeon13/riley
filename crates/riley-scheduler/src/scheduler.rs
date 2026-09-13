@@ -5,6 +5,7 @@
 //! publishes state after versioned runtime feedback has been validated in full.
 
 mod decode_window;
+mod mixed_time;
 
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -483,6 +484,7 @@ struct InflightItem {
 
 #[derive(Debug)]
 struct InflightPlan {
+    mixed_cost_bucket: usize,
     iteration_id: IterationId,
     successor: Option<IterationId>,
     prefill_tokens: usize,
@@ -505,6 +507,7 @@ struct SettledInflightItem {
 /// Bounded, deterministic scheduler and sole owner of host paged-KV state.
 #[must_use = "settle every in-flight plan and close the scheduler before discarding it"]
 pub struct Scheduler {
+    mixed_time: Option<mixed_time::MixedTimePolicy>,
     config: SchedulerConfig,
     execution_shape_policy: ExecutionShapePolicy,
     last_dispatched_shape: Option<WorkKind>,
@@ -663,6 +666,7 @@ impl Scheduler {
             })?;
         let metrics = SchedulerMetrics::new(config.metrics_window_samples)?;
         let mut scheduler = Self {
+            mixed_time: None,
             config,
             execution_shape_policy: policy,
             last_dispatched_shape: None,
@@ -689,6 +693,36 @@ impl Scheduler {
         };
         scheduler.refresh_metric_gauges();
         Ok(scheduler)
+    }
+
+    /// Enables an experimental successful-execution wall-time controller before admission.
+    pub fn enable_mixed_time_budget(&mut self, target_ns:u64)->SchedulerResult<()> {
+        if self.next_request_id!=1 || self.inflight.is_some() || self.execution_shape_policy!=ExecutionShapePolicy::MixedPrefillDecode32 || !(1_000_000..=100_000_000).contains(&target_ns) || self.config.iteration_token_budget<128 {
+            return Err(SchedulerError::InvalidConfiguration{field:"mixed_time_budget",reason:"requires cold mixed32 scheduler, budget >=128, target 1..100ms"});
+        }
+        self.mixed_time=Some(mixed_time::MixedTimePolicy::new(target_ns,self.config.iteration_token_budget));Ok(())
+    }
+    pub fn mixed_time_budget_enabled(&self)->bool {self.mixed_time.is_some()}
+    pub fn mixed_time_budget_state(&self)->Option<[(usize,u64);8]> {self.mixed_time.as_ref().map(|p|p.state())}
+    fn mixed_cost_bucket(&self)->usize {
+        let mut context=0;let mut decode=false;
+        for r in &self.requests {
+            if matches!(r.state,RequestState::Admitted|RequestState::Prefilling|RequestState::Decoding) {
+                context=context.max(r.descriptor.prompt_token_ids.len().saturating_add(r.generated_token_ids.len()));
+                decode|=r.state==RequestState::Decoding;
+            }
+        }
+        mixed_time::MixedTimePolicy::class(context,decode)
+    }
+    /// Feeds only validated, successfully committed ordinary mixed work to the controller.
+    pub fn complete_iteration_with_execution_wall(&mut self,result:&IterationResult,now_ns:u64,wall_ns:u64)->SchedulerResult<IterationUpdates> {
+        if self.mixed_time.is_none(){return self.complete_iteration(result,now_ns);}
+        let sample=self.inflight.as_ref().filter(|p|p.prefill_tokens>0).map(|p|(p.mixed_cost_bucket,p.prefill_tokens));
+        let updates=self.complete_iteration(result,now_ns)?;
+        if updates.settlement_failures().is_empty() {
+            if let (Some(policy),Some((class,tokens)))=(self.mixed_time.as_mut(),sample) {policy.observe(class,tokens,wall_ns);}
+        }
+        Ok(updates)
     }
 
     #[must_use]
@@ -1591,6 +1625,7 @@ impl Scheduler {
                 if budget==0 {break;}
                 selected.push(Candidate{request_id:item.request_id,kind:WorkKind::Decode,token_count:1});budget-=1;
             }
+            if let Some(policy)=&self.mixed_time {budget=budget.min(policy.limit(self.mixed_cost_bucket()));}
             for item in prefill.iter().take(4) {
                 if budget==0 || selected.len()==32 {break;}
                 let token_count=item.remaining_tokens.min(self.config.max_prefill_chunk_tokens).min(budget);
@@ -1972,6 +2007,7 @@ impl Scheduler {
         let prefill_count = plan.prefill_items().len();
         let decode_count = plan.decode_items().len();
         self.inflight = Some(InflightPlan {
+            mixed_cost_bucket: if self.mixed_time.is_some(){self.mixed_cost_bucket()}else{0},
             iteration_id,
             successor,
             prefill_tokens,

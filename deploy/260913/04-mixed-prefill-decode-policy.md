@@ -1,6 +1,6 @@
 # PR 04 — POD 실행과 시간 예산 기반 mixed batching
 
-상태: **정책/POD 미구현, chunk sensitivity 및 비용 calibration 완료**. 공통 계약은 [README](README.md)를 따른다.
+상태: **실험용 wall-time feedback 정책 구현·C32 회귀 확인, 비활성 유지. POD 및 전체 정책 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -53,3 +53,10 @@ prefill의 compute 자원과 decode의 memory 자원을 함께 활용하면서 d
 [측정 및 비용 자료](../../benchmarks/results/20260914-mixed-chunk-calibration/README.md): 현재 V7은 decode 우선·최대4개 prefill·고정 budget512의 mixed scheduler다. 새 prefill FFN paired를 유지한 C32 두 순서에서 chunk512→128은 throughput−9.91%,256은−1.68%였다. 전체 reference가 일치했지만 고정 chunk 축소는 채택하지 않는다.
 
 진단 모드의 bounded shape histogram을 추가해 row/decode/prefill/context 구간별 성공한 ordinary 실행 wall-time과 overflow를 보존했다. 작은 chunk의 mixed iteration 수 및 누적 실행 시간이 증가했다. 이를 순수 GPU predictor로 사용하지 않는다. 다음 구현 batch는 비용 추정과 미관측 fallback, decode 진행·prefill 최소 진행량/aging을 지키는 선택, graph/KV/admission 계약, 긴 prompt와 open-loop SLO 평가를 함께 다룬다. POD native backend와 시간 정책 완료는 여전히 별도 검증이 필요하다.
+
+
+## 첫 wall-time feedback 후보 결과
+
+[구현과 C32 비교](../../benchmarks/results/20260914-mixed-time-policy/README.md):8개 context/decode class, saturated 성공 샘플8개,20% deadband·64token 조정·128 하한, validated settlement 이후 feedback, decode 우선·기존 KV/graph capacity 계약을 연결했다. CPU scheduler48/CLI34/config7, CUDA build 및 serving stop/cancel/reference 검증을 통과했다.
+
+4ms 목표의 두 순서 C32에서 직전 동일 FFN paired 대비 throughput−8.85%, TTFT/TPOT/P95/P99도 악화했다. 비활성 opt-in으로 유지하며 기본값 승격하지 않는다. coarse reactive controller를 비용 predictor/POD 완료로 취급하지 않는다. 고부하·장기 qualification은 미실행이다. 다음 batch는 threshold 미세 튜닝보다 실제 attention prefill/decode 자원 공유와 수치/지원 계약을 다룬다.

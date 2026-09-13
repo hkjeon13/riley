@@ -47,6 +47,7 @@ serve options:
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)
+  --mixed-time-budget-us N       experimental V7 loopback wall-time target (1000..100000)
   --decode-window MODE           single or paired-experimental-v1 (V7 loopback diagnostic)
   --ffn-backend MODE             existing, pipeline-experimental-v1 or prefill-pipeline-experimental-v1 (V7 loopback diagnostic)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
@@ -99,6 +100,7 @@ struct ServeOptions {
     ffn_pipeline: bool,
     prefill_ffn_pipeline: bool,
     decode_window: bool,
+    mixed_time_budget_us: Option<u64>,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -259,6 +261,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut graph_numerics = None;
     let mut ffn_pipeline = None;
     let mut decode_window = None;
+    let mut mixed_time_budget_us = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -379,6 +382,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 let value=next_value(&mut arguments,"--decode-window")?;
                 let enabled=match value.to_str(){Some("single")=>false,Some("paired-experimental-v1")=>true,_=>return Err("--decode-window requires single or paired-experimental-v1".to_owned())};
                 set_once(&mut decode_window,enabled,"--decode-window")?;
+            }
+            "--mixed-time-budget-us" => {
+                let value=next_value(&mut arguments,"--mixed-time-budget-us")?;
+                let target=value.to_str().and_then(|s|s.parse::<u64>().ok()).filter(|v|(1000..=100000).contains(v)).ok_or_else(||"mixed time budget must be 1000..100000 us".to_owned())?;
+                set_once(&mut mixed_time_budget_us,target,"--mixed-time-budget-us")?;
             }
             "--ffn-backend" => {
                 let value = next_value(&mut arguments, "--ffn-backend")?;
@@ -538,6 +546,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
 
     let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false));
     let (ffn_pipeline,prefill_ffn_pipeline) = ffn_pipeline.unwrap_or((false,false));
+    if mixed_time_budget_us.is_some() && (!mixed_execution || flashinfer_experimental || ffn_pipeline || !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"mixed time budget requires loopback IP".to_owned())?.ip().is_loopback()) {return Err("mixed time budget requires independent V7 loopback".to_owned());}
     let decode_window=decode_window.unwrap_or(false);
     if decode_window && sampling_backend.unwrap_or(SamplingBackendMode::Cpu)!=SamplingBackendMode::GpuGreedy {return Err("decode window requires --sampling-backend gpu-greedy".to_owned());}
     if decode_window && (!mixed_execution || flashinfer_experimental || ffn_pipeline) {return Err("decode window requires independent variable-smol-v7".to_owned());}
@@ -596,6 +605,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         ffn_pipeline,
         prefill_ffn_pipeline,
         decode_window,
+        mixed_time_budget_us,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -1133,6 +1143,7 @@ fn run_serve(
     } else {
         executor
     };
+    let executor=executor.with_mixed_time_budget_ns(options.mixed_time_budget_us.map(|v|v*1000));
     // Full graph kernels use the reviewed exact grouped-head implementation.
     // Select it explicitly before deriving effective runtime facts; Disabled
     // preserves the established CLI defaults.
@@ -3008,6 +3019,13 @@ mod tests {
     }
 
     #[test]
+    fn mixed_time_cli_bounds_and_profile() {
+        for (target,profile,bind,ok) in [("999","variable-smol-v7","127.0.0.1:8080",false),("4000","variable-smol-v7","127.0.0.1:8080",true),("4000","variable-smol-v6","127.0.0.1:8080",false),("4000","variable-smol-v7","0.0.0.0:8080",false),("100001","variable-smol-v7","127.0.0.1:8080",false)] {
+            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics",profile,"--bind",bind,"--mixed-time-budget-us",target,"--execution-graph-policy","require"].map(std::ffi::OsString::from));assert_eq!(result.is_ok(),ok);
+        }
+    }
+
+    #[test]
     fn prefill_ffn_selection_checks_profile_bind_and_pairing() {
         for (profile,bind,paired,accepted) in [
             ("variable-smol-v7","127.0.0.1:8080","single",true),
@@ -4033,6 +4051,7 @@ mod tests {
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
+                mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4430,6 +4449,7 @@ mod tests {
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
+                mixed_time_budget_us: None,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4594,6 +4614,7 @@ mod tests {
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
+                mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4725,6 +4746,7 @@ mod tests {
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
+                mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
