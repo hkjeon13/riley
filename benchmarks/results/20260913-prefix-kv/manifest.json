@@ -1,0 +1,26 @@
+{
+  "recorded_at_utc": "2026-09-13T03:48:14.576304+00:00",
+  "parent_commit": "870a4d3817cc6b15edef5bf68ba08612f31a6e97",
+  "source_sha256": {
+    "crates/riley-runtime/src/paged_kv.rs": "ed882bb204ec4bfa4244420dd43cef5be055a67f7c734b7ae3009584c4a2cc8c"
+  },
+  "remote_source_matches": true,
+  "commands": [
+    "cargo test -p riley-runtime --lib paged_kv::tests -- --nocapture",
+    "cargo test -p riley-scheduler --lib",
+    "cargo test -p riley-runtime --features cuda --lib paged_kv::tests"
+  ],
+  "results": {
+    "host_kv_passed": 14,
+    "host_scheduler_passed": 37,
+    "cuda_feature_host_kv_passed": 14,
+    "failures": 0
+  },
+  "boundary_cases": 252,
+  "limitations": [
+    "CPU ownership transition only; CUDA-feature tests execute host KV tests, not GPU overlap.",
+    "Not connected to scheduler pair admission or serving.",
+    "Caller must prove prefix completion, suffix append bounds and suffix quiescence before reclamation.",
+    "No serving benchmark or performance claim."
+  ]
+}

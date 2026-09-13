@@ -107,3 +107,16 @@ GPU future-token 참조를 선행 replay·request/cookie·generation·output slo
 최종 소스로 전송 GPU 검사 2개, 실제 모델 compact32/full32/partial 3개가 통과했다. 전송 검사는 두 번의 연속 제출, 역순 결과 회수, 한 slot을 재사용하는 동안 다른 slot의 unread 결과 보존, owner 교체 이후 ticket 거절, pending close/Drop을 포함한다. 모델 검사는 출력 위치 4096/4096/224의 reference 검사 및 allocation_zero를 유지했다. 모델 partial 및 전송 각각의 Compute Sanitizer memcheck는 0 errors다. CPU riley-cuda 92개와 CUDA server check도 통과했다.
 
 [manifest 및 소스 SHA256](../../benchmarks/results/20260913-buffered-execution/manifest.json), [전송 GPU](../../benchmarks/results/20260913-buffered-execution/transfer-gpu.log), [모델 GPU](../../benchmarks/results/20260913-buffered-execution/model-gpu.log), [전송 memcheck](../../benchmarks/results/20260913-buffered-execution/transfer-memcheck.log), [모델 memcheck](../../benchmarks/results/20260913-buffered-execution/model-memcheck.log), [CUDA server check](../../benchmarks/results/20260913-buffered-execution/server-check.log). serving overlap·vLLM 대비 성능과 미보유 하드웨어 실행은 이 검사 범위에 포함하지 않는다.
+
+
+## KV 예약의 부분 commit
+
+`SequenceState::commit_prefix`는 하나의 최종 target까지 확보한 예약에서 완료된 앞부분만 logical length로 commit한다. 후행 block·tentative table·reservation 잠금은 유지한다. 기존 `commit`은 나머지를 확정하고, 실행하지 않은 후행의 `rollback` 또는 완료 후 실패한 후행의 `poison`은 이미 commit된 앞부분에 필요한 블록을 반환하지 않는다. 새로운 host block table을 추가 할당하지 않는다.
+
+prefix commit마다 detached reservation과 내부 pending reservation의 nonce를 함께 갱신한다. page 수가 같아도 이전 token을 다시 사용할 수 없다. 전체 남은 block 소유권과 nonce 여유를 먼저 확인하고, 앞부분의 변경된 block sidecar를 무효화한 후 logical length를 반영한다. 일반 `block_table`, 새 `reserve_to`, sidecar 부착은 후행 settlement까지 계속 거절한다.
+
+이 함수는 **GPU 완료를 증명하지 않는다**. 호출자는 앞부분의 device 쓰기 완료와 후행이 앞부분을 덮어쓰지 않는 append 범위를 증명해야 한다. 후행 page를 rollback·poison·close하기 전에는 후행 GPU 접근을 끝내야 한다. 기존 scheduler에는 아직 연결하지 않았으므로 두 in-flight plan이나 EOS/cancel 중의 page 해제를 자동으로 안전하게 만들지 않는다. 다음 scheduler 변경은 이 예약을 두 plan에 연결하고 첫 결과의 조기 종료 시 후행 접근 종료까지 completion/page 반환을 보류해야 한다.
+
+CPU KV 검사 14개와 기존 scheduler 검사 37개가 통과했다. 252개 경계 조합에서 prefix commit 뒤 suffix commit/rollback, block ID·valid-token 합계·pool accounting을 대조했다. 같은 page의 stale nonce, foreign 예약, 역순/중복 prefix, nonce 소진의 무변경 거절, sidecar 무효화, 후행 실패·예약 유실 후 prefix 유지도 검사했다. CUDA feature build에서도 동일 host KV 검사를 실행하며, 이를 GPU 동시 실행 검증으로 계산하지 않는다.
+
+[부분 commit 검증 manifest](../../benchmarks/results/20260913-prefix-kv/manifest.json), [CPU KV](../../benchmarks/results/20260913-prefix-kv/kv-cpu.log), [scheduler](../../benchmarks/results/20260913-prefix-kv/scheduler-cpu.log), [CUDA feature의 host 검사](../../benchmarks/results/20260913-prefix-kv/cuda-feature-host-tests.log). 최종 소스 SHA256을 원격과 대조했고, CUDA feature에서도 14개 host 검사가 통과했다.

@@ -1395,6 +1395,65 @@ impl SequenceState {
         })
     }
 
+    /// Publishes a completed append prefix while retaining the suffix reservation.
+    ///
+    /// The caller must prove that device writes to the prefix have completed and
+    /// any outstanding suffix work only writes positions at or above `prefix`.
+    /// This is a host ownership transition, not a CUDA completion fence. The
+    /// reserved table still covers the full target; ordinary table publication,
+    /// sidecar attachment and a new reservation remain blocked until settlement.
+    ///
+    /// Rollback/poison after this call retains blocks belonging to the committed
+    /// prefix. The caller must quiesce suffix work before either operation. This
+    /// method neither releases pages nor allocates a second block table.
+    ///
+    /// # Errors
+    /// Returns before logical publication for a foreign/stale reservation, a
+    /// non-strict prefix, poison, or invalid block ownership.
+    pub fn commit_prefix(
+        &mut self,
+        pool: &mut KvBlockPool,
+        reservation: &mut SequenceReservation,
+        prefix: usize,
+    ) -> PagedKvResult<ReservationCommit> {
+        self.ensure_mutable(pool)?;
+        self.validate_reservation(reservation)?;
+        if prefix <= self.logical_length as usize
+            || prefix >= reservation.target_logical_length as usize
+        {
+            return Err(PagedKvError::ReservationMismatch);
+        }
+        // The target was checked against the U32 sequence limit by reserve_to.
+        let prefix = u32::try_from(prefix).map_err(|_| PagedKvError::ReservationMismatch)?;
+        let nonce = self.next_reservation_nonce;
+        let next_nonce = nonce.checked_add(1).ok_or(PagedKvError::ReservationNonceExhausted)?;
+        let previous_logical_length = self.logical_length;
+        let first_changed = previous_logical_length as usize / KV_BLOCK_SIZE;
+        let committed_blocks = blocks_for_length(prefix as usize);
+        for index in first_changed..self.allocated_block_count {
+            pool.validate_block(self.allocated_block(index)?, self.sequence_id)?;
+        }
+        for index in first_changed..committed_blocks {
+            pool.clear_sidecar(self.allocated_block(index)?, self.sequence_id)?;
+        }
+        // Update both detached and retained authorities together, so an older
+        // reservation cannot roll back pages now owned by the committed prefix.
+        let retained_blocks = reservation.previous_block_count.max(committed_blocks);
+        reservation.previous_block_count = retained_blocks;
+        reservation.nonce = nonce;
+        let pending = self.pending.as_mut().expect("validated reservation");
+        pending.previous_block_count = retained_blocks;
+        pending.nonce = nonce;
+        self.next_reservation_nonce = next_nonce;
+        self.logical_length = prefix;
+        Ok(ReservationCommit {
+            previous_logical_length,
+            logical_length: prefix,
+            // Includes suffix pages, which remain exclusively owned and pending.
+            allocated_block_count: self.allocated_block_count,
+        })
+    }
+
     /// Abandons a reservation known not to have mutated device cache content.
     ///
     /// # Errors
@@ -1847,6 +1906,113 @@ mod tests {
             )
             .expect("small test payload")
         );
+    }
+
+    #[test]
+    fn prefix_commit_retains_suffix_pages_until_settlement() {
+        for initial in [0, 1, 15, 16, 17, 31, 32] {
+            for prefix in initial + 1..=initial + 18 {
+                for finish in [false, true] {
+                    let mut pool = pool(8);
+                    let mut sequence = pool.create_sequence(128).unwrap();
+                    reserve_and_commit(&mut sequence, &mut pool, initial);
+                    let target = prefix + 17;
+                    let mut reservation = sequence.reserve_to(&mut pool, target).unwrap();
+                    let ids = sequence.reserved_block_table(&reservation).unwrap().physical_block_ids().to_vec();
+                    let before = pool.stats();
+                    let result = sequence.commit_prefix(&mut pool, &mut reservation, prefix).unwrap();
+                    assert_eq!(result.previous_logical_length() as usize, initial);
+                    assert_eq!(result.logical_length() as usize, prefix);
+                    assert_eq!(pool.stats(), before, "prefix publication must not release pages");
+                    assert_eq!(sequence.logical_length() as usize, prefix);
+                    assert_eq!(sequence.block_table(), Err(PagedKvError::ReservationInProgress));
+                    assert!(matches!(sequence.reserve_to(&mut pool, target + 1), Err(PagedKvError::ReservationInProgress)));
+                    let table = sequence.reserved_block_table(&reservation).unwrap();
+                    assert_eq!(table.logical_length() as usize, target);
+                    assert_eq!(table.physical_block_ids(), ids);
+                    if finish { sequence.commit(&mut pool, reservation).unwrap(); }
+                    else { sequence.rollback(&mut pool, reservation).unwrap(); }
+                    let length = if finish { target } else { prefix };
+                    assert_eq!(sequence.logical_length() as usize, length);
+                    let table = sequence.block_table().unwrap();
+                    assert_eq!(table.physical_block_ids(), &ids[..blocks_for_length(length)]);
+                    assert_eq!(table.valid_tokens().iter().map(|&n|usize::from(n)).sum::<usize>(), length);
+                    sequence.close(&mut pool).unwrap();
+                    assert_eq!(pool.stats().allocated_block_count(), 0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn prefix_commit_rejects_stale_foreign_and_out_of_order_authority() {
+        let mut pool = pool(8);
+        let mut sequence = pool.create_sequence(64).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 15);
+        let mut reservation = sequence.reserve_to(&mut pool, 33).unwrap();
+        let mut other = pool.create_sequence(64).unwrap();
+        let mut foreign = other.reserve_to(&mut pool, 33).unwrap();
+        let before = pool.stats();
+        for invalid in [0, 15, 33, usize::MAX] {
+            assert!(sequence.commit_prefix(&mut pool, &mut reservation, invalid).is_err());
+            assert_eq!(sequence.logical_length(), 15);assert_eq!(pool.stats(), before);
+        }
+        assert!(sequence.commit_prefix(&mut pool, &mut foreign, 16).is_err());
+        let mut stale = SequenceReservation { pool_cookie: reservation.pool_cookie,
+            sequence_id: reservation.sequence_id, nonce: reservation.nonce,
+            previous_block_count: reservation.previous_block_count,
+            target_logical_length: reservation.target_logical_length };
+        // The block count is unchanged at 16; nonce rotation must still reject
+        // a pre-publication token that otherwise has the same geometry.
+        sequence.commit_prefix(&mut pool, &mut reservation, 16).unwrap();
+        assert!(sequence.commit_prefix(&mut pool, &mut stale, 17).is_err());
+        assert!(sequence.commit_prefix(&mut pool, &mut reservation, 16).is_err());
+        sequence.commit(&mut pool, reservation).unwrap();
+        other.rollback(&mut pool, foreign).unwrap();
+        sequence.close(&mut pool).unwrap();other.close(&mut pool).unwrap();
+    }
+
+    #[test]
+    fn prefix_nonce_exhaustion_is_atomic_and_lost_suffix_keeps_prefix() {
+        let mut pool = pool(3);
+        let mut sequence = pool.create_sequence(48).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 15);
+        sequence.attach_sidecar(&mut pool, 0, OptionalBlockMetadata::new(
+            OPTIONAL_BLOCK_METADATA_V1_VERSION, MetadataKind::KEY_BOUNDS,
+            OpaqueDeviceView::new(0x1000, 64))).unwrap();
+        let mut reservation = sequence.reserve_to(&mut pool, 17).unwrap();
+        let before = pool.stats();let nonce = reservation.nonce;
+        let next = sequence.next_reservation_nonce;
+        sequence.next_reservation_nonce = u64::MAX;
+        assert_eq!(sequence.commit_prefix(&mut pool, &mut reservation, 16), Err(PagedKvError::ReservationNonceExhausted));
+        assert_eq!(sequence.logical_length(), 15);assert_eq!(reservation.nonce, nonce);
+        assert_eq!(pool.stats(), before);
+        sequence.next_reservation_nonce = next;
+        sequence.commit_prefix(&mut pool, &mut reservation, 16).unwrap();
+        assert_eq!(pool.stats().sidecar_count(), 0);
+        drop(reservation);
+        sequence.rollback_abandoned_reservation(&mut pool).unwrap();
+        assert_eq!(sequence.logical_length(), 16);
+        assert_eq!(sequence.allocated_block_count(), 1);
+        assert!(sequence.is_poisoned());
+        sequence.reset(&mut pool).unwrap();sequence.close(&mut pool).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+    }
+
+    #[test]
+    fn suffix_failure_keeps_committed_prefix_but_poisons_publication() {
+        let mut pool = pool(4);
+        let mut sequence = pool.create_sequence(64).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 15);
+        let mut reservation = sequence.reserve_to(&mut pool, 33).unwrap();
+        sequence.commit_prefix(&mut pool, &mut reservation, 17).unwrap();
+        sequence.poison(&mut pool, reservation).unwrap();
+        assert_eq!(sequence.logical_length(), 17);
+        assert_eq!(sequence.allocated_block_count(), 2);
+        assert_eq!(pool.stats().allocated_block_count(), 2);
+        assert_eq!(sequence.block_table(), Err(PagedKvError::Poisoned));
+        sequence.reset(&mut pool).unwrap();sequence.close(&mut pool).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 0);
     }
 
     #[test]
