@@ -207,3 +207,9 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 ### 다음 영역 재평가
 
 [384-request C32/C64 profile](../../benchmarks/results/20260913-load-shape-profile/README.md)에서 두 부하의 paired decode 구성과 gap이 비슷하고 prefill/mixed graph 시간이 약53%를 차지했다. C64의 작은 이득을 prefill 비중 증가 탓으로 확정하지 않는다. 다음 pair 예약/commit 의존성 분리 범위는 남겨 두되, 다음 구현 batch는 PR05 prefill FFN의 입력/weight staging과 down projection pipeline을 우선한다.
+
+## 2026-09-14 non-profiler host pipeline 후속 batch
+
+[Composed host phase 진단](../../benchmarks/results/20260914-composed-host-phase/README.md): Nsight 없이 successor 준비 약1ms/call, retain/encode와 read/validate 약0.16–0.21ms/call을 확인했다.640 요청이 reference-exact이며 scheduler 계획·sampling·commit은 더 작다. 중첩 timer와 GPU overlap을 단순 합산해 speedup을 예측하지 않는다.
+
+다음 묶음은 immutable validated expectation 소유권, predecessor/완료 처리에서 동일 불변 authority 재사용, successor append·replay 전이와 bounded metadata buffer 재사용이다. 원시 expectation·GPU 결과 검증, live scheduler authority, off-batch reader/COW, event/drain·cancel·poisoned owner 경계를 유지한다. Mutable escape 없는 capability로 증명하며 단순 trusted bool을 쓰지 않는다. 상세 변경·검증 계약은 진단 문서를 따른다. 현재 진단은 구현 완료나 serving 성능 승격이 아니다.

@@ -1,0 +1,146 @@
+{
+  "scope": "host timers enabled, no Nsight; warmup+retained combined; nested timers overlap and are not a speedup estimate",
+  "verified_requests": 640,
+  "preparation": {
+    "hashes": {
+      "current": "1fc55a483be57e8822bd45d24f2dbfa606cee2569c031272582a907aa223646e",
+      "prior": "d85368b3bc3af73593f28cac2ea7bcb01f09c45f2888e6a5f4fb6be5c9101bab"
+    },
+    "controller_sha256": "9d731401f92b1350e36552a27b315d3cedb317fa2f21bb72bd2aaee8d4cb3989",
+    "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "concurrency": 32,
+    "warmup": 64,
+    "retained": 256,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "qualification": false,
+    "host_phase_diagnostic": true,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "archive_sha256": "43959c2769c146dee97710763b1df47e7360f58464962bd6d3328a3c9bf8aeec",
+  "results": {
+    "shared": {
+      "host": {
+        "decode": {
+          "steps": 27,
+          "scheduled_tokens": 561,
+          "plan_ns": 959830,
+          "execute_wall_ns": 49910228,
+          "sample_ns": 195026,
+          "commit_publish_ns": 350042
+        },
+        "prefill_or_mixed": {
+          "steps": 97,
+          "scheduled_tokens": 40705,
+          "plan_ns": 3734967,
+          "execute_wall_ns": 568607964,
+          "sample_ns": 959839,
+          "commit_publish_ns": 2124241
+        },
+        "paired_decode": {
+          "steps": 115,
+          "scheduled_tokens": 7278,
+          "plan_ns": 9970388,
+          "execute_wall_ns": 428711076,
+          "sample_ns": 1971613,
+          "commit_publish_ns": 2980184
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 239,
+          "wall_ns": 50672450,
+          "mean_us": 212.01861924686193
+        },
+        "sync_transfer": {
+          "calls": 0,
+          "wall_ns": 0,
+          "mean_us": null
+        },
+        "buffered_submit": {
+          "calls": 354,
+          "wall_ns": 9145167,
+          "mean_us": 25.833805084745762
+        },
+        "buffered_wait": {
+          "calls": 354,
+          "wall_ns": 733282206,
+          "mean_us": 2071.418661016949
+        },
+        "read_validate": {
+          "calls": 354,
+          "wall_ns": 70097495,
+          "mean_us": 198.01552259887006
+        },
+        "future_prepare": {
+          "calls": 115,
+          "wall_ns": 122544504,
+          "mean_us": 1065.6043826086957
+        }
+      }
+    },
+    "unique": {
+      "host": {
+        "decode": {
+          "steps": 30,
+          "scheduled_tokens": 634,
+          "plan_ns": 864172,
+          "execute_wall_ns": 61699710,
+          "sample_ns": 234362,
+          "commit_publish_ns": 386185
+        },
+        "prefill_or_mixed": {
+          "steps": 401,
+          "scheduled_tokens": 194385,
+          "plan_ns": 8863861,
+          "execute_wall_ns": 2373707644,
+          "sample_ns": 2749809,
+          "commit_publish_ns": 4168249
+        },
+        "paired_decode": {
+          "steps": 64,
+          "scheduled_tokens": 3646,
+          "plan_ns": 4263673,
+          "execute_wall_ns": 251363459,
+          "sample_ns": 1140645,
+          "commit_publish_ns": 1320108
+        }
+      },
+      "runtime": {
+        "retain_encode": {
+          "calls": 495,
+          "wall_ns": 79275424,
+          "mean_us": 160.15237171717172
+        },
+        "sync_transfer": {
+          "calls": 0,
+          "wall_ns": 0,
+          "mean_us": null
+        },
+        "buffered_submit": {
+          "calls": 559,
+          "wall_ns": 14695322,
+          "mean_us": 26.288590339892664
+        },
+        "buffered_wait": {
+          "calls": 559,
+          "wall_ns": 2346567694,
+          "mean_us": 4197.7955169946335
+        },
+        "read_validate": {
+          "calls": 559,
+          "wall_ns": 91826520,
+          "mean_us": 164.2692665474061
+        },
+        "future_prepare": {
+          "calls": 64,
+          "wall_ns": 61941331,
+          "mean_us": 967.833296875
+        }
+      }
+    }
+  }
+}
