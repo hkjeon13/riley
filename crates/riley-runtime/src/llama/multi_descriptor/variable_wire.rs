@@ -58,12 +58,24 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
     check(e.stage!=InputStage::Prefill || total<=1024,"tokens","packed token capacity exceeded")?;
     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
+    // Preserve the exclusive path's one-owner map. Extra ownership/alias nodes
+    // are allocated only for actual shared pages, not once per ordinary page.
     let mut ownership=BTreeMap::new();
+    let mut shared_owners=BTreeSet::new();
     for x in &e.block_ownership {
-        check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count && ownership.insert(x.physical_id,x.sequence_tag).is_none(),"ownership","invalid or duplicate ledger entry")?;
+        check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count,
+            "ownership","invalid owner/page pair")?;
+        match ownership.entry(x.physical_id) {
+            std::collections::btree_map::Entry::Vacant(entry)=>{entry.insert(x.sequence_tag);}
+            std::collections::btree_map::Entry::Occupied(entry)=>{
+                check(*entry.get()!=x.sequence_tag && shared_owners.insert((x.physical_id,x.sequence_tag)),
+                    "ownership","duplicate owner/page pair")?;
+            }
+        }
     }
     let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage==InputStage::Decode).count();
     let (mut tags,mut cookies,mut slots,mut used)=(BTreeSet::new(),BTreeSet::new(),BTreeSet::new(),BTreeSet::new());
+    let mut shared_positions:BTreeMap<u32,(u64,usize)>=BTreeMap::new();
     for row in &e.rows {
         check(row.sequence_tag!=0 && tags.insert(row.sequence_tag) && row.cookie!=0 && cookies.insert(row.cookie),"row_identity","duplicate or zero request identity")?;
         check(row.output_slot<e.rows.len() as u32 && slots.insert(row.output_slot),"slot","slots not unique and dense")?;
@@ -73,8 +85,22 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
         check(row.input_tokens.len()==row.progress.input_tokens as usize && row.input_tokens.iter().all(|&t|t<49152),"tokens","invalid token count or vocabulary")?;
         check(row.physical_ids.len()==v.live_pages as usize && row.valid_tokens.len()==v.live_pages as usize,"pages","page map does not cover target exactly")?;
         for (i,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
-            check(id<e.physical_block_count && used.insert(id),"pages","out of pool or aliased pages")?;
-            check(ownership.get(&id)==Some(&row.sequence_tag),"ownership","page not reserved by this request")?;
+            check(id<e.physical_block_count,"pages","out of pool")?;
+            let owner=ownership.get(&id).ok_or(super::Error{field:"ownership",reason:"page is absent from retained authority"})?;
+            check(*owner==row.sequence_tag || shared_owners.contains(&(id,row.sequence_tag)),
+                "ownership","page not reserved by this request")?;
+            let shared=!shared_owners.is_empty() && shared_owners.range((id,0)..=(id,u64::MAX)).next().is_some();
+            check(!shared || (ROWS==32 && e.mixed_execution),
+                "ownership","shared prefixes require the V7 owner capability")?;
+            let writes=i>=row.progress.committed_tokens as usize/16;
+            // The ledger includes off-batch consumers. A writer cannot ignore
+            // them merely because their rows are absent from this iteration.
+            check(!shared || !writes,"ownership","shared page requires COW before append")?;
+            if !used.insert(id) {
+                let prior=shared_positions.get(&id);
+                check(shared && prior.is_some_and(|&(tag,index)|tag!=row.sequence_tag && index==i),
+                    "pages","alias is not an immutable position-identical prefix")?;
+            } else if shared {shared_positions.insert(id,(row.sequence_tag,i));}
             check(valid==if i+1==row.physical_ids.len(){v.last_page_tokens}else{16},"valid_tokens","invalid page occupancy")?;
         }
     }
@@ -306,6 +332,46 @@ pub(crate) mod tests {
         let mut published=0;let mut partial=e.rows.iter().filter(|r|r.progress.validate().unwrap().logits_input_row.is_some()).count() as u32;
         for row in &mut e.rows{row.output_slot=if row.progress.validate().unwrap().logits_input_row.is_some(){let n=published;published+=1;n}else{let n=partial;partial+=1;n};}e
     }
+    fn shared_prefix_fixture()->Expectation<32> {
+        let mut e=fixture_rows::<32>(InputStage::Decode,2);
+        e.mixed_execution=true;e.packed_prefill=true;e.physical_block_count=8;
+        for (index,row) in e.rows.iter_mut().enumerate() {
+            row.progress=Progress{prompt_tokens:32,output_limit:8,context_tokens:64,
+                committed_tokens:32,input_tokens:1,generated_index:1,stage:InputStage::Decode};
+            row.physical_ids=vec![0,1,2+index as u32];row.valid_tokens=vec![16,16,1];
+        }
+        e.block_ownership=e.rows.iter().flat_map(|row|row.physical_ids.iter().map(move |&physical_id|
+            BlockOwnership{physical_id,sequence_tag:row.sequence_tag})).collect();
+        // A resident off-batch prefix owner is part of the authority too.
+        e.block_ownership.push(BlockOwnership{physical_id:0,sequence_tag:99});
+        e
+    }
+
+    #[test]
+    fn shared_prefix_wire_binds_all_owners_and_exports_native_fixture() {
+        let e=shared_prefix_fixture();validate(&e).unwrap();
+        let mut legacy=e.clone();legacy.mixed_execution=false;legacy.packed_prefill=false;
+        assert!(validate(&legacy).is_err(),"legacy variable wire remains exclusive");
+        let mut packet=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut packet,&e).unwrap();
+        validate_packet(&packet,&mut vec![0;MIXED_REQUEST_BYTES],&e).unwrap();
+        if let Some(path)=std::env::var_os("RILEY_SHARED_PREFIX_PACKET") {
+            std::fs::write(path,&packet).unwrap();
+        }
+        let mut wrong=e.clone();wrong.block_ownership.retain(|o|!(o.physical_id==0&&o.sequence_tag==2));
+        assert!(validate(&wrong).is_err(),"the other owner's page is not authority for this row");
+        let mut wrong=e.clone();wrong.block_ownership.push(wrong.block_ownership[0]);
+        assert!(validate(&wrong).is_err(),"duplicate owner/page pairs remain invalid");
+        let mut wrong=e.clone();wrong.rows.truncate(1);wrong.rows[0].output_slot=0;
+        wrong.block_ownership.push(BlockOwnership{physical_id:2,sequence_tag:100});
+        assert!(validate(&wrong).is_err(),"an off-batch reader still forbids writing its page");
+        for ids in [vec![0,1,2],vec![1,0,3],vec![0,0,3]] {
+            let mut wrong=e.clone();wrong.rows[1].physical_ids=ids;
+            wrong.block_ownership=wrong.rows.iter().flat_map(|r|r.physical_ids.iter().map(move |&physical_id|
+                BlockOwnership{physical_id,sequence_tag:r.sequence_tag})).collect();
+            assert!(validate(&wrong).is_err());
+        }
+    }
+
     #[test] fn mixed_v7_stage_tiles_and_result_identity(){
         for (prefills,decodes,chunk) in [(0,32,1),(1,31,128),(4,28,249),(4,0,256),(2,3,31)] {
             let e=mixed_fixture(prefills,decodes,chunk);let mut p=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut p,&e).unwrap();

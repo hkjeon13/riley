@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **구현 진행 중 — host identity·공유 import·COW 및 local CUDA event/D2D 검증 완료, captured model/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — host identity·공유 import·COW, local CUDA event/D2D 및 공유 batch/wire/native 구조 검증 완료, captured model/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -74,7 +74,7 @@ Host 검증: `cargo test -p riley-runtime --lib` 334 passed / 1 ignored / 0 fail
 
 검증: 최종 `cargo test -p riley-runtime --lib paged_kv --quiet` 31 passed; `cargo test -p riley-scheduler --lib --quiet` 48 passed; `cargo test -p riley-runtime --lib llama::batch:: --quiet` 8 passed. 초기 offset API 인자 수 컴파일 오류는 수정 후 재실행했다. 이 단계에서 GPU 실행·full-model 재검증·serving 성능 측정은 하지 않았다.
 
-Batch 연결 범위: `llama/batch.rs`와 `llama/multi_descriptor/variable_wire.rs`는 현재 cross-sequence page alias를 일괄 거부한다. 이 검증을 단순히 제거하지 말고, authoritative shared-owner ledger와 committed read-only range를 기반으로 읽기 공유를 허용하고 쓰기 충돌을 거부하도록 native 검사까지 함께 변경해야 한다. Local CUDA adapter 결과는 아래에 기록한다. Scheduler cache lookup/publication/eviction 및 model identity 연결도 남아 있으며, 아직 serving 승격 대상이 아니다.
+Batch 연결 방향: 기존 cross-sequence page alias 일괄 거부를 단순히 제거하지 않고 authoritative shared-owner ledger와 committed read-only range로 읽기 공유와 쓰기 충돌을 구별한다. 이 검증의 구현 결과는 아래에 기록한다. Scheduler cache lookup/publication/eviction 및 model identity 연결도 남아 있으며, 아직 serving 승격 대상이 아니다.
 
 ## Local CUDA 전송 검증
 
@@ -85,3 +85,11 @@ Batch 연결 범위: `llama/batch.rs`와 `llama/multi_descriptor/variable_wire.r
 Nsight 원본은 환경 정보를 담을 수 있으므로 저장소에 넣지 않는다. Runner는 최소 환경으로 profile하고 원본을 원격 private directory에 보관하며, 공개 evidence에는 numeric CUDA activity와 public API 이름만 새 DB로 추출한 SQLite를 넣는다. 이 경로를 포함한 최종 v4 gate가 통과했다.
 
 현재 local adapter는 idle K/V buffer용이다. Captured graph는 `RileyCudaGraphResources`가 parent의 active-use를 장기 보유하므로 그 ledger의 권한·in-flight 상태와 결합한 전송 seam이 추가로 필요하다. 공유 prefix를 일반 serving에 켜기 전에 위 batch/native alias 검사, 모델 identity/정확도, scheduler cache 정책과 함께 연결해야 한다. 아직 실제 model/serving 개선이나 PR10 승격을 주장하지 않는다.
+
+## 공유 batch/wire/native 검증
+
+명시적 shared-prefix metadata 설정에서 committed page의 같은 logical position 읽기만 허용하고, append 겹침·잘못된 위치·중복 owner pair를 거부한다. Wire 검사는 batch 밖 consumer를 포함한 authoritative ledger로 공유 page 쓰기도 거부한다. 실제 pool export/import/reservation을 이용한 host 검증도 통과했다. Native V7에는 기본값 false인 capability를 추가했으며 현재 captured graph 호출은 계속 false다. Packet 자체로 capability나 ownership을 주장할 수 없다.
+
+[검증 기록](../../benchmarks/results/20260914-shared-prefix-validation/README.md): runtime 347 passed / 1 기존 timing diagnostic ignored, wire 18 passed, batch 11 passed, scheduler 48 passed. Linux ASan/UBSan에서 정상·거부 사례 및 61,568 byte × 2 mode mutation traversal을 통과했다. GPU/model/serving 측정은 이 단계에서 실행하지 않았다.
+
+다음 통합 단위는 retained model owner의 capability와 전체 owner ledger 공급, captured K/V COW 권한·drain, scheduler cache lookup/publication/eviction 및 full-model parity다. 이 serving 연결이 완료되면 동일 조건의 cache-hit/cache-miss 및 cache-off regression을 vLLM과 비교하여 표로 보고한다. 검증 helper 단계마다 serving benchmark를 반복하지 않는다.

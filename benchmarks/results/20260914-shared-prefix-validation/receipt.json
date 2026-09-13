@@ -1,0 +1,25 @@
+{
+  "scope": "host batch, authoritative wire, native structural validation; no serving activation",
+  "base_commit": "f784bea2816cddae294f902fc81be5dd2a1fd0fd",
+  "source_sha256": {
+    "crates/riley-runtime/src/llama/batch.rs": "1e3d22f55744e8b2aafbfc7f085363dd72c2e98e491a345c416fa3980fad84b3",
+    "crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs": "6f623d2bec1a9fe89532da54f8a49ebdec34152932e7f4fb14f0251007e828e9",
+    "kernels/src/prefill_shape_packet.hpp": "af2b57c837fd75dc20ed4c0e260080a5df8cc54504becf5e5af6a3bc26220638",
+    "kernels/tests/shared_prefix_packet_test.cpp": "5abe950382565ae67b132519c04e08f304211ca30625f0d023a4549109c1d10e"
+  },
+  "evidence_sha256": {
+    "linux-native.log": "15bfb3944e54f487aa85092be070fc6856c3698050198d6e004814d6bf3cb86a",
+    "shared.bin": "95d710dc25fbb639ddc9b44fab07ed9ad3685ebdf41dbf80be72328efe53ebf3"
+  },
+  "observed_runtime_tests": {
+    "passed": 347,
+    "failed": 0,
+    "ignored": 1,
+    "profile": "test opt-level=2",
+    "ignored_test": "llama::multi_descriptor::result_scan::tests::scan_timing_diagnostic"
+  },
+  "native_binary_sha256": "6d279972e305996f6a74d92e78a758f7f44ad37f2d0da6b8b4b979ae44ec019f",
+  "native_exit_code": 0,
+  "gpu_executed": false,
+  "serving_executed": false
+}

@@ -278,6 +278,7 @@ pub struct LlamaBatchMetadataConfig {
     max_block_entries: usize,
     max_output_slots: usize,
     physical_block_count: usize,
+    shared_prefixes: bool,
 }
 
 impl LlamaBatchMetadataConfig {
@@ -298,6 +299,29 @@ impl LlamaBatchMetadataConfig {
         max_block_entries: usize,
         max_output_slots: usize,
         physical_block_count: usize,
+    ) -> LlamaBatchResult<Self> {
+        Self::checked(max_rows, max_input_tokens, max_block_entries, max_output_slots,
+            physical_block_count, false)
+    }
+
+    /// Enables immutable, position-identical prefix sharing. Callers must derive
+    /// tables from validated KV ownership/reservations; this geometry check alone
+    /// does not establish model/token identity or off-batch reader lifetime.
+    /// The selected execution backend must also support shared-prefix pages.
+    ///
+    /// # Errors
+    /// Rejects invalid bounds, including more entries than rows times pool size.
+    pub fn new_shared_prefixes(
+        max_rows: usize, max_input_tokens: usize, max_block_entries: usize,
+        max_output_slots: usize, physical_block_count: usize,
+    ) -> LlamaBatchResult<Self> {
+        Self::checked(max_rows, max_input_tokens, max_block_entries, max_output_slots,
+            physical_block_count, true)
+    }
+
+    fn checked(
+        max_rows: usize, max_input_tokens: usize, max_block_entries: usize,
+        max_output_slots: usize, physical_block_count: usize, shared_prefixes: bool,
     ) -> LlamaBatchResult<Self> {
         validate_positive("max_rows", max_rows)?;
         validate_positive("max_input_tokens", max_input_tokens)?;
@@ -326,10 +350,12 @@ impl LlamaBatchMetadataConfig {
                 reason: "cannot exceed max_rows",
             });
         }
-        if max_block_entries > physical_block_count {
+        let addressable_entries = physical_block_count.checked_mul(if shared_prefixes { max_rows } else { 1 })
+            .ok_or(LlamaBatchError::ArithmeticOverflow { field: "shared page table capacity" })?;
+        if max_block_entries > addressable_entries {
             return Err(LlamaBatchError::InvalidConfiguration {
                 field: "max_block_entries",
-                reason: "cannot exceed the exclusive physical block pool",
+                reason: "cannot exceed the configured row/page ownership capacity",
             });
         }
         max_rows
@@ -343,6 +369,7 @@ impl LlamaBatchMetadataConfig {
             max_block_entries,
             max_output_slots,
             physical_block_count,
+            shared_prefixes,
         })
     }
 
@@ -386,6 +413,7 @@ pub struct LlamaBatchBufferCapacities {
     block_entries: usize,
     output_slots: usize,
     physical_block_marks: usize,
+    shared_prefix_metadata_bytes: u64,
 }
 
 impl LlamaBatchBufferCapacities {
@@ -424,6 +452,12 @@ impl LlamaBatchBufferCapacities {
     pub const fn physical_block_marks(self) -> usize {
         self.physical_block_marks
     }
+
+    /// Additional cold lookup storage for shared page position/owner/write checks.
+    #[must_use]
+    pub const fn shared_prefix_metadata_bytes(self) -> u64 {
+        self.shared_prefix_metadata_bytes
+    }
 }
 
 /// Reusable owner of all host buffers needed to pack one bounded iteration.
@@ -452,6 +486,9 @@ pub struct PreparedLlamaBatchMetadata {
     validation_sequence_tags: Vec<u64>,
     output_slot_marks: Vec<u64>,
     physical_block_marks: Vec<u64>,
+    shared_page_positions: Vec<u64>,
+    shared_page_owners: Vec<u64>,
+    shared_page_writes: Vec<u64>,
     validation_epoch: u64,
 }
 
@@ -490,6 +527,9 @@ impl PreparedLlamaBatchMetadata {
             validation_sequence_tags: reserve_vec(config.max_rows, "validation sequence tags")?,
             output_slot_marks: zeroed_vec(config.max_output_slots, "output slot marks")?,
             physical_block_marks: zeroed_vec(config.physical_block_count, "physical block marks")?,
+            shared_page_positions: zeroed_vec(if config.shared_prefixes {config.physical_block_count} else {0}, "shared page positions")?,
+            shared_page_owners: zeroed_vec(if config.shared_prefixes {config.physical_block_count} else {0}, "shared page owners")?,
+            shared_page_writes: zeroed_vec(if config.shared_prefixes {config.physical_block_count} else {0}, "shared page writes")?,
             validation_epoch: 0,
         })
     }
@@ -510,6 +550,9 @@ impl PreparedLlamaBatchMetadata {
             block_entries: self.config.max_block_entries,
             output_slots: self.config.max_output_slots,
             physical_block_marks: self.config.physical_block_count,
+            shared_prefix_metadata_bytes: if self.config.shared_prefixes {
+                self.config.physical_block_count as u64 * 3 * 8
+            } else {0},
         }
     }
 
@@ -813,11 +856,30 @@ impl PreparedLlamaBatchMetadata {
                     reason: "physical block ID is outside the prepared pool",
                 });
             }
+            // An input row writes [target-input_count, target). Only whole
+            // committed pages before that range can be shared without COW.
+            let writes_page = block_index >= (target_length - row.input_token_ids.len()) / KV_BLOCK_SIZE;
             if self.physical_block_marks[physical_index] == epoch {
-                return Err(LlamaBatchError::InvalidBatch {
-                    field: "block_table.physical_block_ids",
-                    reason: "physical block IDs must be unique across the iteration",
-                });
+                if !self.config.shared_prefixes {
+                    return Err(LlamaBatchError::InvalidBatch {
+                        field: "block_table.physical_block_ids",
+                        reason: "physical block IDs must be unique across the iteration",
+                    });
+                }
+                if writes_page
+                    || self.shared_page_writes[physical_index] != 0
+                    || self.shared_page_positions[physical_index] != block_index as u64
+                    || self.shared_page_owners[physical_index] == row.sequence_tag
+                {
+                    return Err(LlamaBatchError::InvalidBatch {
+                        field: "block_table.physical_block_ids",
+                        reason: "page alias is not an immutable position-identical prefix",
+                    });
+                }
+            } else if self.config.shared_prefixes {
+                self.shared_page_positions[physical_index] = block_index as u64;
+                self.shared_page_owners[physical_index] = row.sequence_tag;
+                self.shared_page_writes[physical_index] = u64::from(writes_page);
             }
             self.physical_block_marks[physical_index] = epoch;
 
@@ -1198,6 +1260,104 @@ fn csr_row<'a, T>(offsets: &[u32], values: &'a [T], row_index: usize) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_prefix_metadata_is_opt_in_and_has_no_hot_allocations() {
+        let ids_a = [0, 1, 2];
+        let ids_b = [0, 1, 3];
+        let valid = [16, 16, 1];
+        let rows = [
+            LlamaBatchRow::new(1, LlamaBatchRowKind::Decode, &[7], 33,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION, &ids_a, &valid, 33), Some(0)),
+            LlamaBatchRow::new(2, LlamaBatchRowKind::Decode, &[8], 33,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION, &ids_b, &valid, 33), Some(1)),
+        ];
+        let mut legacy = PreparedLlamaBatchMetadata::prepare(
+            LlamaBatchMetadataConfig::new(2, 2, 6, 2, 8).unwrap()).unwrap();
+        assert!(legacy.pack(&rows).is_err());
+        assert!(legacy.shared_page_positions.is_empty());
+        assert_eq!(legacy.capacities().shared_prefix_metadata_bytes(), 0);
+        // Six logical entries fit four physical pages only in shared mode.
+        assert!(LlamaBatchMetadataConfig::new(2, 2, 6, 2, 4).is_err());
+        let mut shared = PreparedLlamaBatchMetadata::prepare(
+            LlamaBatchMetadataConfig::new_shared_prefixes(2, 2, 6, 2, 4).unwrap()).unwrap();
+        assert_eq!(shared.capacities().shared_prefix_metadata_bytes(), 96);
+        let backing = (shared.shared_page_positions.as_ptr(), shared.shared_page_owners.as_ptr(),
+            shared.shared_page_writes.as_ptr(), shared.physical_block_ids.as_ptr());
+        for _ in 0..32 {
+            let packed = shared.pack(&rows).unwrap();
+            assert_eq!(packed.physical_block_ids(), &[0,1,2,0,1,3]);
+            assert_eq!(packed.position_ids(), &[32,32]);
+            assert_eq!(backing, (shared.shared_page_positions.as_ptr(), shared.shared_page_owners.as_ptr(),
+                shared.shared_page_writes.as_ptr(), shared.physical_block_ids.as_ptr()));
+        }
+        shared.validation_epoch = u64::MAX;
+        let _ = shared.pack(&rows).unwrap(); // stale validation marks cannot survive epoch rollover
+        assert!(LlamaBatchMetadataConfig::new_shared_prefixes(2,2,9,2,4).is_err());
+    }
+
+    #[test]
+    fn shared_prefix_metadata_rejects_writes_shifted_positions_and_duplicate_rows() {
+        let valid = [16,16,1];
+        let ids_a = [0,1,2];
+        let base = LlamaBatchRow::new(1,LlamaBatchRowKind::Decode,&[7],33,
+            LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&ids_a,&valid,33),Some(0));
+        let mut shared = PreparedLlamaBatchMetadata::prepare(
+            LlamaBatchMetadataConfig::new_shared_prefixes(2,2,6,2,8).unwrap()).unwrap();
+        for ids_b in [[0,1,2], [1,0,3], [0,0,3]] {
+            let other = LlamaBatchRow::new(2,LlamaBatchRowKind::Decode,&[8],33,
+                LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&ids_b,&valid,33),Some(1));
+            assert!(shared.pack(&[base,other]).is_err());
+            assert!(shared.pack(&[other,base]).is_err());
+        }
+        let reader_ids = [0,1]; let reader_valid = [16,1];
+        let writer = LlamaBatchRow::new(2,LlamaBatchRowKind::Decode,&[8],17,
+            LlamaBatchBlockTable::new(BLOCK_TABLE_V1_VERSION,&reader_ids,&reader_valid,17),Some(1));
+        assert!(shared.pack(&[base,writer]).is_err());
+        assert!(shared.pack(&[writer,base]).is_err());
+    }
+
+    #[test]
+    fn shared_prefix_pool_reservations_pack_without_copying_committed_pages() {
+        use crate::paged_kv::{KvBlockPool,KvIdentity,KvLayout,PrefixDescriptor};
+        let layout=KvLayout::checked(2,4,2,8).unwrap();
+        let mut pool=KvBlockPool::new(layout).unwrap();
+        let mut source=pool.create_sequence(64).unwrap();
+        let initial=source.reserve_to(&mut pool,32).unwrap();
+        source.commit(&mut pool,initial).unwrap();
+        let identity=KvIdentity{model_revision:[1;32],numerical_profile:[2;32],
+            position_encoding:[3;32],partition:[4;32],layout:layout.into()};
+        let descriptor=PrefixDescriptor::new(identity,0,&[7;32]).unwrap();
+        let mut export=pool.export_prefix(&source,descriptor.clone()).unwrap();
+        let mut first=pool.create_sequence(64).unwrap();
+        let mut second=pool.create_sequence(64).unwrap();
+        first.import_prefix(&mut pool,&export,&descriptor).unwrap();
+        second.import_prefix(&mut pool,&export,&descriptor).unwrap();
+        let first_reservation=first.reserve_to(&mut pool,33).unwrap();
+        let second_reservation=second.reserve_to(&mut pool,33).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(),4);
+        for index in 0..2 {
+            assert_eq!(first.block_id(index),second.block_id(index));
+            pool.validate_block(first.block_id(index).unwrap(),first.sequence_id()).unwrap();
+            pool.validate_block(second.block_id(index).unwrap(),second.sequence_id()).unwrap();
+        }
+        let rows=[
+            LlamaBatchRow::new(first.sequence_id().value(),LlamaBatchRowKind::Decode,&[8],33,
+                LlamaBatchBlockTable::from_v1(first.reserved_block_table(&first_reservation).unwrap()),Some(0)),
+            LlamaBatchRow::new(second.sequence_id().value(),LlamaBatchRowKind::Decode,&[9],33,
+                LlamaBatchBlockTable::from_v1(second.reserved_block_table(&second_reservation).unwrap()),Some(1)),
+        ];
+        let mut metadata=PreparedLlamaBatchMetadata::prepare(
+            LlamaBatchMetadataConfig::new_shared_prefixes(2,2,6,2,4).unwrap()).unwrap();
+        let packed=metadata.pack(&rows).unwrap();
+        assert_eq!(packed.position_ids(),&[32,32]);
+        assert_ne!(packed.physical_block_ids()[2],packed.physical_block_ids()[5]);
+        first.rollback(&mut pool,first_reservation).unwrap();
+        second.rollback(&mut pool,second_reservation).unwrap();
+        first.close(&mut pool).unwrap();second.close(&mut pool).unwrap();source.close(&mut pool).unwrap();
+        pool.release_prefix(&mut export).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(),0);
+    }
 
     const FULL: u16 = 16;
 
