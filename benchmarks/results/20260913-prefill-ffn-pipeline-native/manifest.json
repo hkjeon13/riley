@@ -1,0 +1,44 @@
+{
+  "files": {
+    "/data/riley-serving-260913-recovery/source/kernels/optional/prefill_ffn_pipeline.cuh": {
+      "bytes": 4328,
+      "sha256": "efc6dc7cf141d9b830f0edc0b2b7bf7c8801b10b7ead0458fc3ff202a065c842"
+    },
+    "/data/riley-serving-260913-recovery/source/kernels/src/prefill_fused_gate_v51.cuh": {
+      "bytes": 2056,
+      "sha256": "f034bf4de260bb8b31490a0cbdf43d159af67a1fbe30c2d49932ff011676209b"
+    },
+    "/data/riley-serving-260913-recovery/source/kernels/src/prefill_shape_projection.cuh": {
+      "bytes": 2836,
+      "sha256": "2f19f42c55f4772a524537f48718a35ec99cc9041f4165486e611d1f5826664a"
+    },
+    "/data/riley-serving-260913-recovery/source/benchmarks/analysis/prefill_ffn_pipeline_probe.cu": {
+      "bytes": 4549,
+      "sha256": "06ec2ecaeb6be9527f1f6ec45da3d585d4190146a92dea4379ec005bbaec68f1"
+    },
+    "/data/riley-serving-260913-recovery/prefill-ffn-probe": {
+      "bytes": 1036128,
+      "sha256": "1562b9da72b15da750791866fd9593274cd2d89b0a4e4d2ff97a48d5d2ef0725"
+    },
+    "/data/riley-serving-260913-recovery/prefill-ffn-probe-v1": {
+      "bytes": 1036128,
+      "sha256": "04e4e902a11de99a3290ea61e511aff587013d0416fd9494b765a1680ea99e74"
+    },
+    "/data/riley-serving-260913-recovery/prefill-ffn-sm_90a.o": {
+      "bytes": 82984,
+      "sha256": "06f04cd41ff47610647cf63f2be03da1f194ccdf9eb67701886ce79a30cdf862"
+    },
+    "/data/riley-serving-260913-recovery/prefill-ffn-sm_100a.o": {
+      "bytes": 118696,
+      "sha256": "e3f40bc0ecf30889260075c050efae78da266a15246420be412c9dcab2b00c14"
+    }
+  },
+  "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "portable_compile": {
+    "sm_90a": "passed",
+    "sm_100a": "passed",
+    "runtime": "not tested: device unavailable"
+  },
+  "sanitizer_timeout_s": 90,
+  "sanitizer_scope": "two native FFN kernels and reference; four shapes; no whole-model sanitizer"
+}

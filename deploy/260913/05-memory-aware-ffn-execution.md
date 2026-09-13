@@ -83,3 +83,10 @@ gate/up→activation→down 사이 중간 global tensor 이동을 줄인다. lau
 검증은 live M1/15/16/17/31/32/64/128/398/512 및 capacity padding1024, row 갱신을 동반한 반복 graph replay, inactive 출력 미변경, BF16 bitwise 대조, native memcheck/racecheck, ptxas register/shared/spill, 전체30-layer 모델 logits/greedy·natural reference/stop/cancel 순서다. Native가 회귀하면 원인을 기록하고 모델 승격을 하지 않는다. 통과한 후보는 현재 single/직전 paired/새 paired/vLLM의 동일 natural serving을 C32 및 client C64/active32 두 순서로 비교한다. 최종 판정에는 TTFT/TPOT/P95/P99와 오류율을 포함한다.
 
 이는 CUDA asynchronous-copy 및 PR05에 이미 조사한 memory-lifetime 실행 방식의 prefill 적용이다. Counter 접근이 없으면 논리 byte 수를 실제 HBM 절감량으로 표기하지 않는다. SM89 실행과 SM90a/SM100a compile을 구분하고 후자의 runtime은 장비 부재를 명시한다. 기존 수치 gate를 낮추지 않으며 실제 실패를 skip으로 바꾸지 않는다. 기본값 승격은 serving 검증 후 별도 판정한다.
+
+
+### Prefill FFN native gate 결과
+
+[Native 구현 및 대조](../../benchmarks/results/20260913-prefill-ffn-pipeline-native/README.md): gate/up와 down 두-stage copy/MMA pipeline,16-row 입력 공유, shared-bank alias를 피하는72-element stride를 구현했다. 초기64 stride 회귀를 보존하고 padding 후26개 전체 출력/반복/inactive 검사에서 bitwise 일치, native memcheck/racecheck0, SM90a/SM100a compile 통과를 확인했다. 실제 shared는 gate20,992B/down8,704B이며 spill0이다. 두 target runtime은 장비 부재 미검증이다.
+
+Warm one-layer native 합산 시간은 M32 약−19.4%, M128−15.7%, M512−6.6%지만 M398−0.38%, M1024−1.25%는 거의 동률이다. 이를 serving 개선으로 사용하지 않는다. **아직 Rust/model recorder/serving backend에 연결하지 않았다.** 다음은 독립 profile/catalog identity와 retained model 연결, full-model gate, C32/C64 single·직전·후보·vLLM 비교다. 기본값과 기존 serving binary는 유지한다.
