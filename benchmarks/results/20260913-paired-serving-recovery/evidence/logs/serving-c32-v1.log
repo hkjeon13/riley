@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_screen.py", line 129, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/paired_decode_serving_screen.py", line 94, in main
+    assert process.poll() is None,'server exited before readiness'
+AssertionError: server exited before readiness

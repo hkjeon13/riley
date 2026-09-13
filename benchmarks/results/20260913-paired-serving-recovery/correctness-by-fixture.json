@@ -1,0 +1,506 @@
+[
+  {
+    "run": "c16-p0-single",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p0-single",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p0-single",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c16-p0-paired",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p0-paired",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p0-paired",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c16-p0-vllm",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 185,
+      "text": 185,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p0-vllm",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 253,
+      "text": 253,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p0-vllm",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 141,
+      "text": 141,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c16-p1-vllm",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 177,
+      "text": 177,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p1-vllm",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 249,
+      "text": 249,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p1-vllm",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 150,
+      "text": 150,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c16-p1-paired",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p1-paired",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p1-paired",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c16-p1-single",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c16-p1-single",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c16-p1-single",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p0-single",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p0-single",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p0-single",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p0-paired",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p0-paired",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p0-paired",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p0-vllm",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 168,
+      "text": 168,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p0-vllm",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 242,
+      "text": 242,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p0-vllm",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 129,
+      "text": 129,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p1-vllm",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 168,
+      "text": 168,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p1-vllm",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 247,
+      "text": 247,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p1-vllm",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 134,
+      "text": 134,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p1-paired",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p1-paired",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p1-paired",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  },
+  {
+    "run": "c32-p1-single",
+    "fixture": "natural-128",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      64
+    ]
+  },
+  {
+    "run": "c32-p1-single",
+    "fixture": "natural-16",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      32
+    ]
+  },
+  {
+    "run": "c32-p1-single",
+    "fixture": "natural-398",
+    "requests": 256,
+    "checks": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "lengths": [
+      128
+    ]
+  }
+]

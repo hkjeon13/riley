@@ -1,0 +1,5 @@
+Sep 13 20:00:24 psyche-MS-7D91 kernel: Free swap  = 0kB
+Sep 13 20:00:24 psyche-MS-7D91 kernel: [ 464914]  1000 464914    64099      864       96      768         0    98304        0             0 compute-sanitiz
+Sep 13 20:00:24 psyche-MS-7D91 kernel: [ 464923]  1000 464923 23893869  9781308  9604802    16608    159898 79437824        0             0 decode_window_g
+Sep 13 20:00:24 psyche-MS-7D91 kernel: oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=cri-containerd-6927d8d2c6b9b741497fe5bf41ce8c56d4f87aec764dd0bd9ed1f449f43d3eca.scope,mems_allowed=0,global_oom,task_memcg=/kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod1531ba78_2229_4192_8f07_6c1b7dc23dd2.slice/cri-containerd-acae48907a1e8665bfc684d0ce52954018a707b7b4d4995d5f89014ee8558bd6.scope,task=devtron,pid=1957980,uid=1001
+Sep 13 20:00:24 psyche-MS-7D91 kernel: Out of memory: Killed process 1957980 (devtron) total-vm:3710928kB, anon-rss:76440kB, file-rss:768kB, shmem-rss:0kB, UID:1001 pgtables:896kB oom_score_adj:1000

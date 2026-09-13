@@ -1,0 +1,170 @@
+[
+  {
+    "concurrency": 16,
+    "lane": "single",
+    "throughput_tokens_s": 7677.8920173524275,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1536,
+    "ttft_ms": {
+      "median_run_p50": 7.4068875,
+      "worst_run_p95": 22.311220549999998,
+      "worst_run_p99": 36.81200526000001
+    },
+    "tpot_ms": {
+      "median_run_p50": 1.9234612363031234,
+      "worst_run_p95": 2.17425754015748,
+      "worst_run_p99": 5.227284736630834
+    },
+    "e2e_ms": {
+      "median_run_p50": 128.82440100000002,
+      "worst_run_p95": 264.33367354999996,
+      "worst_run_p99": 372.08127929000057
+    },
+    "itl_ms": {
+      "median_run_p50": 1.41851025,
+      "worst_run_p95": 5.902106,
+      "worst_run_p99": 6.8692037500000005
+    }
+  },
+  {
+    "concurrency": 16,
+    "lane": "paired",
+    "throughput_tokens_s": 7327.30161297073,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1536,
+    "ttft_ms": {
+      "median_run_p50": 8.5259645,
+      "worst_run_p95": 21.01330289999997,
+      "worst_run_p99": 139.78345617
+    },
+    "tpot_ms": {
+      "median_run_p50": 2.0029931189226344,
+      "worst_run_p95": 2.1276852830261137,
+      "worst_run_p99": 4.501766319523818
+    },
+    "e2e_ms": {
+      "median_run_p50": 135.44352750000002,
+      "worst_run_p95": 273.81616335,
+      "worst_run_p99": 378.4029284700001
+    },
+    "itl_ms": {
+      "median_run_p50": 2.62635125,
+      "worst_run_p95": 5.809374,
+      "worst_run_p99": 6.838819750000001
+    }
+  },
+  {
+    "concurrency": 16,
+    "lane": "vllm",
+    "throughput_tokens_s": 7681.086565991785,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1155,
+    "ttft_ms": {
+      "median_run_p50": 13.7217375,
+      "worst_run_p95": 31.88153835,
+      "worst_run_p99": 48.468686760000004
+    },
+    "tpot_ms": {
+      "median_run_p50": 1.8039276923136625,
+      "worst_run_p95": 2.1662052607270863,
+      "worst_run_p99": 4.4648394223809555
+    },
+    "e2e_ms": {
+      "median_run_p50": 128.8342755,
+      "worst_run_p95": 270.33949294999996,
+      "worst_run_p99": 352.3799488700008
+    },
+    "itl_ms": {
+      "median_run_p50": 1.3470214999999999,
+      "worst_run_p95": 5.09514125,
+      "worst_run_p99": 6.841249749999999
+    }
+  },
+  {
+    "concurrency": 32,
+    "lane": "single",
+    "throughput_tokens_s": 10399.269145655271,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1536,
+    "ttft_ms": {
+      "median_run_p50": 10.691027,
+      "worst_run_p95": 56.083873199999985,
+      "worst_run_p99": 77.32729490000007
+    },
+    "tpot_ms": {
+      "median_run_p50": 2.8675123074303213,
+      "worst_run_p95": 3.2472960629032257,
+      "worst_run_p99": 5.993103793845378
+    },
+    "e2e_ms": {
+      "median_run_p50": 191.65788925,
+      "worst_run_p95": 401.8861088,
+      "worst_run_p99": 493.31752068000026
+    },
+    "itl_ms": {
+      "median_run_p50": 1.8977024999999998,
+      "worst_run_p95": 7.0871665,
+      "worst_run_p99": 7.8854615
+    }
+  },
+  {
+    "concurrency": 32,
+    "lane": "paired",
+    "throughput_tokens_s": 9948.442202001395,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1536,
+    "ttft_ms": {
+      "median_run_p50": 10.97186875,
+      "worst_run_p95": 56.15205235,
+      "worst_run_p99": 75.56393886000002
+    },
+    "tpot_ms": {
+      "median_run_p50": 2.9661983170561337,
+      "worst_run_p95": 3.562908678740156,
+      "worst_run_p99": 7.718958798709688
+    },
+    "e2e_ms": {
+      "median_run_p50": 200.4138565,
+      "worst_run_p95": 411.7598238,
+      "worst_run_p99": 519.5616376700007
+    },
+    "itl_ms": {
+      "median_run_p50": 3.53915675,
+      "worst_run_p95": 7.018955,
+      "worst_run_p99": 7.935839
+    }
+  },
+  {
+    "concurrency": 32,
+    "lane": "vllm",
+    "throughput_tokens_s": 10797.333128670381,
+    "errors": 0,
+    "requests": 1536,
+    "reference_matches": 1088,
+    "ttft_ms": {
+      "median_run_p50": 24.4981735,
+      "worst_run_p95": 68.92318419999997,
+      "worst_run_p99": 119.44050735000002
+    },
+    "tpot_ms": {
+      "median_run_p50": 2.4130404340102647,
+      "worst_run_p95": 3.4926194327956988,
+      "worst_run_p99": 6.432426040000001
+    },
+    "e2e_ms": {
+      "median_run_p50": 182.156161,
+      "worst_run_p95": 421.23836289999997,
+      "worst_run_p99": 494.69503399000115
+    },
+    "itl_ms": {
+      "median_run_p50": 1.60577625,
+      "worst_run_p95": 6.36392425,
+      "worst_run_p99": 13.51679775
+    }
+  }
+]

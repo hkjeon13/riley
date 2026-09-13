@@ -1,0 +1,18 @@
+{
+  "binary_sha256": "cc075e359277b9578f8d1e1318c01bc19a39753b03177581caca5da9a76042b3",
+  "fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+  "controller_sha256": "50d080692bd2188649c901269d0bf21d6333c3fae360dfd5a6c9b696437bfcbc",
+  "concurrency": 32,
+  "warmup": 192,
+  "retained": 768,
+  "smoke": false,
+  "timing_scope": "client-observed SSE frames; no token timestamp interpolation",
+  "qualified": false,
+  "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564 MiB",
+  "model_files": {
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/riley-checkpoint.json": "01f3949cb54947416e66ee8cb162b96287ecc2f2e85ccfae0c20d0fa82ea34a0",
+    "/data/riley-benchmark/20260827T051948Z-d7ad713a/model/config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843"
+  }
+}

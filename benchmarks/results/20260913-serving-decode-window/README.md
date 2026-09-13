@@ -1,4 +1,4 @@
-# Serving decode window: opt-in integration, GPU/HTTP validation pending
+# Serving decode window: opt-in integration and recovered GPU/HTTP validation
 
 `--decode-window paired-experimental-v1`으로 V7 serving의 두-step 경로를 선택하도록 구현했다. 기본값 `single`은 기존 단일 iteration 경로다. paired 옵션은 독립 `variable-smol-v7`, GPU greedy, loopback diagnostic 조건을 요구한다. FFN/FlashInfer 실험 profile과 혼합하지 않는다.
 
@@ -16,10 +16,10 @@
 - CUDA feature Rust typecheck (library + binary + tests): passed. **이 검사는 CUDA 빌드·링크·GPU 실행 증거가 아니다.** 원격 SSH가 응답하지 않아 `/tmp/riley-serving-window-typecheck`의 별도 복사본에서만 CUDA build script의 native 빌드를 생략하고 `cargo check --features cuda,server --tests`를 실행했다. 실제 checkout의 build script는 변경하지 않았다. 동일 소스와 schema fixture를 복사했으며 GPU 검사를 통과한 것으로 처리하지 않는다.
 - 선행 [native model window](../20260913-native-decode-window/README.md)는 실제 4090 generation exact 및 memcheck 0 errors를 확인했지만, 이번 HTTP integration의 증거를 대신하지 않는다.
 
-## Pending validation and measurement
+## Recovered native build and HTTP validation
 
-원격 racecheck handle `42095`의 완료 상태와 SSH 연결을 먼저 확인한다. 그 전에는 GPU 검사를 중복 실행하지 않는다. 원격에는 이번 server 소스를 아직 반영하지 않았다.
+원격 재부팅으로 `/tmp`의 소스·toolkit·실행 결과가 유실되어 `/data/riley-serving-260913-recovery`에 빌드 환경을 복구했다. CUDA 13.0.88, cuBLAS 13.0.2.14와 현재 드라이버로 실제 `cargo build --release -p riley-server --features cuda,server`가 통과했다. 기존 typecheck의 한계를 대신하는 native 빌드·링크 증거다.
 
-복구 후 실제 native CUDA build를 수행하고 paired HTTP smoke와 token-ID reference를 검증한다. 직렬/paired의 ragged prompt, 반복 decode, page 경계, EOS/stop-string, cancellation, terminal reclaim, GPU-greedy 부적격 fallback, audit 순번·SSE 순번을 확인한다. 오류 경로에서는 graph close/drain 전에 KV를 재사용하지 않는지 확인한다.
+`http-smoke-v3`에서 single/paired 각각 C32 warmup 96개와 retained 96개의 prompt ID·출력 token ID·text hash·finish를 기존 natural reference와 대조했다. 3종 prompt마다 32개씩 stop-string 요청을 보내 두 경로의 token·text·finish·usage가 일치함을 확인했다. 각 경로에서 32개 연결을 출력 완료 전에 닫고, 이후 retained 요청이 reference와 일치함을 확인했다. Paired 종료 로그의 완료 window는 251회, 최대 폭은 32다. 이 검사는 실제 모델의 자연 EOS 발생이나 모든 장애 경로를 포괄하지 않는다.
 
-이 통합이 통과한 뒤 frozen workload의 C16/C32 natural serving을 직전 Riley·paired Riley·vLLM의 반복 교차 순서로 측정한다. binary/checkpoint/workload hash, correctness, 오류율, throughput, TTFT/TPOT 및 P95/P99를 비교표로 기록한다. 두-token drain 뒤 공개하는 방식의 전달 간격과 tail 악화를 포함해 판단한다. 현재 새 serving 성능은 **미측정**이며 기본 경로로 승격하지 않는다. 전체 목표는 미완료다.
+실제 serving 성능은 새 환경의 single·paired·vLLM을 같은 client와 workload로 재측정한다. 원본 자료와 비교표는 [복구 후 serving 보고서](../20260913-paired-serving-recovery/README.md)에 기록한다. 기본값은 single이며, 전체 성능 목표는 미완료다.

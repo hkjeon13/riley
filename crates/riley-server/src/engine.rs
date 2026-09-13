@@ -2486,6 +2486,8 @@ mod cuda_backend {
         pending_tokens: Vec<PendingToken>,
         window_pending_tokens: Vec<PendingToken>,
         decode_window: bool,
+        completed_decode_windows: u64,
+        widest_decode_window: usize,
         pending_events: VecDeque<BackendEvent>,
         batch_shapes: EngineBatchShapeMetricsSnapshot,
         final_metrics: EngineMetricsSnapshot,
@@ -2635,6 +2637,8 @@ mod cuda_backend {
                 pending_tokens,
                 window_pending_tokens,
                 decode_window,
+                completed_decode_windows: 0,
+                widest_decode_window: 0,
                 pending_events,
                 batch_shapes,
                 final_metrics: EngineMetricsSnapshot::default(),
@@ -2931,6 +2935,8 @@ mod cuda_backend {
             if !updates.settlement_failures().is_empty(){return Err(internal("window settlement contained failures"));}
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{unreachable!()};
             graph.confirm_decode_window_commit(window.first().iteration_id().get(),window.second().iteration_id().get()).map_err(|e|internal(format!("window commit confirmation failed: {e}")))?;
+            self.completed_decode_windows=self.completed_decode_windows.saturating_add(1);
+            self.widest_decode_window=self.widest_decode_window.max(window.first().batch_size());
             let mut events=Vec::new();self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
         }
 
@@ -3718,6 +3724,7 @@ mod cuda_backend {
             {
                 return Ok(Vec::new());
             }
+            if self.decode_window {eprintln!("RILEY_DECODE_WINDOW completed={} widest={}",self.completed_decode_windows,self.widest_decode_window);}
             if let Some(scheduler) = self.scheduler.as_mut() {
                 scheduler.begin_shutdown();
             }

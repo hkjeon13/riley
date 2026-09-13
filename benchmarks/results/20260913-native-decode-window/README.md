@@ -26,8 +26,8 @@ HTTP engine에서 이 API를 명시적 opt-in 경로로 선택하고, 기존 gre
 
 Throughput·TTFT·TPOT·P95/P99의 새 serving 측정은 **미측정**이다. Hopper/Blackwell/multi-GPU 실행은 이 검사에서 수행하지 않았다. PR02와 최종 성능 목표는 미완료다.
 
-## Pending remote observation
+## Reboot recovery and sanitizer outcome
 
-추가 full-model racecheck를 실행한 후 SSH banner exchange까지 응답하지 않는 상태가 관찰됐다. racecheck의 성공·실패·종료는 아직 확인하지 못했으며 원인은 확정하지 않는다. 실행 handle은 `42095`, 원격 예상 로그는 `/tmp/riley-opt-260912/native-window-v1/racecheck.log`이다. 원격 상태 확인 전에는 GPU 작업을 다시 시작하지 않는다. 원본 memcheck 로그를 가져오는 scp handle `86058`은 이후 exit 0으로 완료됐다. [원본 로그](memcheck.log)와 [exit](memcheck.exit)를 보존한다. 위 memcheck console은 그 전에 exit 0으로 완료된 실행의 tool 출력이다.
+원격은 새 boot ID `3dcc85ad-7ff5-4b0a-884a-8fd47195ba57`로 복구됐으며, 이전 racecheck 프로세스와 `/tmp` 결과는 남아 있지 않았다. racecheck 결과는 **유실·미확인**이다. 이전 boot의 2026-09-13 20:00:24 커널 로그에서 `decode_window_g`의 RSS 9,781,308 pages(약 37.3 GiB), swap 잔여 0, global OOM과 별도 `devtron` 프로세스의 OOM 종료를 확인했다. 이 증거만으로 재부팅의 직접 원인을 확정하지 않는다. 전체 모델 racecheck는 재실행하지 않았으며 이후 sanitizer는 좁은 kernel 범위와 시간·메모리 제한을 먼저 적용해야 한다.
 
-[소스 snapshot](source-hashes.json)은 업로드에 사용한 로컬 소스를 기록한다. 추가 원격 hash readback은 연결 복구 후 수행한다. 이번 통합은 serving 성능 승격을 의미하지 않는다.
+원본 [memcheck 로그](memcheck.log)와 [exit](memcheck.exit)는 재부팅 전에 로컬 보존됐으며 0 errors 증거가 유효하다. [소스 snapshot](source-hashes.json)은 당시 업로드한 로컬 파일의 기록이다. 유실된 예전 `/tmp` 소스의 readback은 수행할 수 없다. 새 persistent source에서 실제 release 빌드·HTTP 검증과 serving 비교를 진행한 결과는 [복구 후 serving 보고서](../20260913-paired-serving-recovery/README.md)에 따로 기록한다.
