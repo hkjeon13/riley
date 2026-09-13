@@ -141,3 +141,8 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 [후속 ABI 검증](../../benchmarks/results/20260913-future-token-wire/README.md): 실제 session은 제출마다 cookie를 새로 발급한다. 이에 맞춰 native reference를 source identity + destination cookie로 수정하고 row140 bytes로 확장했다. Rust가 committed replay를 유지한 tentative successor packet을 준비하면서 source/progress·fresh cookie·KV page prefix/ownership을 검증한다. Rust canonical pure/mixed fixtures의 GPU 전달과 memcheck/racecheck를 통과했다. Native v1의 동일-cookie 조건은 폐기한다.
 
 두 scheduler reservation·authority와 runtime expectation queue는 아직 연결하지 않았다. 이번 checked wire 준비를 ahead scheduling 완료로 표시하지 않는다. 후행 실행은 기존 단일 in-flight API에 우회 제출하지 않는다.
+
+
+## 예약의 두 endpoint와 완료 append 폐기
+
+[KV window 검증](../../benchmarks/results/20260913-reservation-window/README.md): shared reservation의 prefix view와 scheduler용 두 endpoint snapshot을 추가했다. 완료·append-only 쓰기 증거가 있을 때 suffix를 폐기하는 경로는 committed prefix page를 유지하고 tail sidecar를 무효화한다. KV18개·scheduler38개 CPU 검사가 통과했다. 이는 GPU fence나 두 in-flight scheduler 완료가 아니다. 다음은 이 도구를 두 계획 authority·prefix publication·suffix drain에 연결하는 것이다. 기존 전체 commit/terminal reclaim 경로를 후행 GPU가 pending인 상태에 그대로 사용하지 않는다.

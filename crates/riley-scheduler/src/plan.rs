@@ -75,6 +75,28 @@ pub struct OwnedBlockTable {
 }
 
 impl OwnedBlockTable {
+    /// Snapshots the two endpoints of one scheduler-owned append reservation.
+    /// Request/sequence association and GPU lifetime remain scheduler duties.
+    /// Neither endpoint is committed and the reservation remains exclusively held.
+    pub fn copy_reserved_window(
+        request_id: RequestId,
+        sequence: &riley_runtime::paged_kv::SequenceState,
+        reservation: &riley_runtime::paged_kv::SequenceReservation,
+        prefix: usize,
+    ) -> SchedulerResult<(Self, Self)> {
+        let full=sequence.reserved_block_table(reservation)?;
+        if prefix<=sequence.logical_length() as usize || prefix>=reservation.target_logical_length() as usize {
+            return Err(SchedulerError::InvalidPlan {field:"reservation window",reason:"requires two strictly increasing append endpoints"});
+        }
+        let blocks=prefix.div_ceil(KV_BLOCK_SIZE);
+        let mut valid=Vec::new();
+        valid.try_reserve_exact(blocks).map_err(|_|SchedulerError::HostAllocation {resource:"prefix table valid counts",requested_elements:blocks})?;
+        valid.resize(blocks,0);
+        let first=Self::copy_from_v1(request_id,sequence.reserved_prefix_table(reservation,prefix,&mut valid)?)?;
+        let second=Self::copy_from_v1(request_id,full)?;
+        Ok((first,second))
+    }
+
     /// Creates and validates an immutable V1 executor transport table.
     ///
     /// # Errors
@@ -784,6 +806,23 @@ mod tests {
         IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot, OwnedBlockTable,
         RequestId, WorkItem, WorkKind,
     };
+
+    #[test]
+    fn reservation_window_snapshots_do_not_publish_or_expand_first_endpoint() {
+        use riley_runtime::paged_kv::{KvBlockPool,KvLayout};
+        let mut pool=KvBlockPool::new(KvLayout::checked(2,8,3,64).unwrap()).unwrap();
+        let mut seq=pool.create_sequence(64).unwrap();let initial=seq.reserve_to(&mut pool,15).unwrap();seq.commit(&mut pool,initial).unwrap();
+        let mut reservation=seq.reserve_to(&mut pool,17).unwrap();let request=RequestId::new(1).unwrap();
+        let(a,b)=OwnedBlockTable::copy_reserved_window(request,&seq,&reservation,16).unwrap();
+        assert_eq!(a.logical_length(),16);assert_eq!(a.valid_tokens(),[16]);
+        assert_eq!(b.logical_length(),17);assert_eq!(b.valid_tokens(),[16,1]);
+        assert_eq!(a.physical_block_ids(),&b.physical_block_ids()[..1]);assert_eq!(seq.logical_length(),15);
+        for wrong in [15,17,18] {assert!(OwnedBlockTable::copy_reserved_window(request,&seq,&reservation,wrong).is_err());}
+        seq.commit_prefix(&mut pool,&mut reservation,16).unwrap();
+        assert_eq!(b.valid_tokens(),[16,1]);assert_eq!(pool.stats().allocated_block_count(),2);
+        seq.discard_completed_append(&mut pool,reservation).unwrap();assert_eq!(pool.stats().allocated_block_count(),1);
+        seq.close(&mut pool).unwrap();
+    }
 
     fn table(request: u64, physical_block_id: u32) -> OwnedBlockTable {
         OwnedBlockTable::new(

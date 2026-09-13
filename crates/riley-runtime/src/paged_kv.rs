@@ -1269,6 +1269,41 @@ impl SequenceState {
         ))
     }
 
+    /// Views an earlier endpoint of a shared append reservation without
+    /// publishing it or changing the full target's occupancy array.
+    /// Caller-owned scratch holds only prefix valid counts; physical IDs remain
+    /// borrowed from this sequence. Rejection leaves the scratch untouched.
+    pub fn reserved_prefix_table<'a>(
+        &'a self,
+        reservation: &SequenceReservation,
+        prefix: usize,
+        valid_scratch: &'a mut [u16],
+    ) -> PagedKvResult<BlockTableV1<'a>> {
+        if self.poisoned {return Err(PagedKvError::Poisoned);}
+        self.validate_reservation(reservation)?;
+        if prefix < self.logical_length as usize {
+            return Err(PagedKvError::LengthRegression {
+                committed_tokens: self.logical_length as usize, requested_tokens: prefix,
+            });
+        }
+        if prefix > reservation.target_logical_length as usize {
+            return Err(PagedKvError::CapacityExceeded {
+                requested_tokens: prefix, maximum_tokens: reservation.target_logical_length as usize,
+            });
+        }
+        let count=blocks_for_length(prefix);
+        if valid_scratch.len()<count {
+            return Err(PagedKvError::InvalidConfiguration {
+                field: "prefix valid-token scratch", reason: "capacity does not cover the prefix",
+            });
+        }
+        for (i, valid) in valid_scratch[..count].iter_mut().enumerate() {
+            *valid=if i+1<count {KV_BLOCK_SIZE as u16} else {((prefix-1)%KV_BLOCK_SIZE+1) as u16};
+        }
+        Ok(BlockTableV1 {physical_block_ids:&self.physical_block_ids[..count],
+            valid_tokens:&valid_scratch[..count],logical_length:prefix as u32})
+    }
+
     /// Reserves all physical blocks required by `target_logical_length`.
     ///
     /// The committed logical length is unchanged. All arrays and free-list
@@ -1466,6 +1501,31 @@ impl SequenceState {
     ) -> PagedKvResult<()> {
         self.ensure_pool(pool)?;
         self.validate_reservation(&reservation)?;
+        drop(reservation);
+        self.rollback_pending(pool)
+    }
+
+    /// Discards a completed append suffix while preserving the committed prefix.
+    ///
+    /// Caller must establish GPU quiescence AND that writes were confined to
+    /// positions at or above the current committed length. EOS/cancel alone is
+    /// not this proof. Unknown mutation must use poison instead. Unlike rollback,
+    /// this permits known append writes, so changed retained-tail sidecars are
+    /// invalidated before the reservation is released. It is not a CUDA fence.
+    pub fn discard_completed_append(
+        &mut self,
+        pool: &mut KvBlockPool,
+        reservation: SequenceReservation,
+    ) -> PagedKvResult<()> {
+        self.ensure_mutable(pool)?;
+        self.validate_reservation(&reservation)?;
+        let first_changed=self.logical_length as usize/KV_BLOCK_SIZE;
+        for index in first_changed..self.allocated_block_count {
+            pool.validate_block(self.allocated_block(index)?,self.sequence_id)?;
+        }
+        for index in first_changed..self.allocated_block_count {
+            pool.clear_sidecar(self.allocated_block(index)?,self.sequence_id)?;
+        }
         drop(reservation);
         self.rollback_pending(pool)
     }
@@ -1795,6 +1855,72 @@ fn next_pool_cookie() -> PagedKvResult<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reserved_prefix_views_preserve_full_target_and_reject_before_write() {
+        let mut pool=pool(8);let mut sequence=pool.create_sequence(64).unwrap();
+        reserve_and_commit(&mut sequence,&mut pool,15);
+        let reservation=sequence.reserve_to(&mut pool,33).unwrap();
+        let full=sequence.reserved_block_table(&reservation).unwrap();
+        let ids=full.physical_block_ids().to_vec();let counts=full.valid_tokens().to_vec();
+        let before=pool.stats();
+        for prefix in [15,16,17,31,32,33] {
+            let mut scratch=[0xa5u16;4];let n=blocks_for_length(prefix);
+            let view=sequence.reserved_prefix_table(&reservation,prefix,&mut scratch).unwrap();
+            assert_eq!(view.physical_block_ids(),&ids[..n]);assert_eq!(view.logical_length() as usize,prefix);
+            assert_eq!(view.valid_tokens().iter().map(|&x|x as usize).sum::<usize>(),prefix);
+            assert_eq!(&scratch[n..],&[0xa5u16;4][n..]);
+            assert_eq!(sequence.reserved_block_table(&reservation).unwrap().valid_tokens(),counts);
+            assert_eq!(pool.stats(),before);assert_eq!(sequence.logical_length(),15);
+        }
+        for prefix in [14,34] {let mut scratch=[0xa5;4];assert!(sequence.reserved_prefix_table(&reservation,prefix,&mut scratch).is_err());assert_eq!(scratch,[0xa5;4]);}
+        let mut scratch=[0xa5;1];assert!(sequence.reserved_prefix_table(&reservation,33,&mut scratch).is_err());assert_eq!(scratch,[0xa5;1]);
+        sequence.rollback(&mut pool,reservation).unwrap();sequence.close(&mut pool).unwrap();
+    }
+    #[test]
+    fn completed_append_discard_retains_prefix_and_returns_only_suffix_pages() {
+        for initial in [0,1,15,16,17,31,32] {for extra in [1,2,16,17] {
+            let prefix=initial+1;let target=prefix+extra;
+            let mut pool=pool(8);let mut sequence=pool.create_sequence(96).unwrap();
+            reserve_and_commit(&mut sequence,&mut pool,initial);
+            let mut reservation=sequence.reserve_to(&mut pool,target).unwrap();
+            let ids=sequence.reserved_block_table(&reservation).unwrap().physical_block_ids().to_vec();
+            let before=pool.stats();sequence.commit_prefix(&mut pool,&mut reservation,prefix).unwrap();
+            assert_eq!(pool.stats(),before,"prefix commit cannot release in-use suffix pages");
+            assert!(sequence.block_table().is_err());
+            // Caller supplies append-only completion proof; this is a host test.
+            sequence.discard_completed_append(&mut pool,reservation).unwrap();
+            let table=sequence.block_table().unwrap();assert_eq!(table.logical_length() as usize,prefix);
+            assert_eq!(table.physical_block_ids(),&ids[..blocks_for_length(prefix)]);
+            assert_eq!(pool.stats().allocated_block_count(),blocks_for_length(prefix));
+            assert_eq!(table.valid_tokens().iter().map(|&x|x as usize).sum::<usize>(),prefix);
+            let next=sequence.reserve_to(&mut pool,prefix+1).unwrap();sequence.commit(&mut pool,next).unwrap();
+            sequence.close(&mut pool).unwrap();assert_eq!(pool.stats().allocated_block_count(),0);
+        }}
+    }
+    #[test]
+    fn completed_append_discard_rejects_stale_authority_without_releasing_pages() {
+        let mut pool=pool(4);let mut sequence=pool.create_sequence(48).unwrap();
+        let mut reservation=sequence.reserve_to(&mut pool,33).unwrap();
+        let stale=SequenceReservation {pool_cookie:reservation.pool_cookie,sequence_id:reservation.sequence_id,nonce:reservation.nonce,previous_block_count:reservation.previous_block_count,target_logical_length:reservation.target_logical_length};
+        sequence.commit_prefix(&mut pool,&mut reservation,17).unwrap();let before=pool.stats();
+        let mut scratch=[0xa5;3];assert!(sequence.reserved_prefix_table(&stale,18,&mut scratch).is_err());assert_eq!(scratch,[0xa5;3]);
+        assert_eq!(sequence.discard_completed_append(&mut pool,stale),Err(PagedKvError::ReservationMismatch));
+        assert_eq!(pool.stats(),before);assert_eq!(sequence.logical_length(),17);assert!(sequence.block_table().is_err());
+        sequence.discard_completed_append(&mut pool,reservation).unwrap();sequence.close(&mut pool).unwrap();
+    }
+
+    #[test]
+    fn completed_append_discard_clears_changed_tail_sidecar_without_poisoning() {
+        let mut pool=pool(4);let mut sequence=pool.create_sequence(48).unwrap();
+        reserve_and_commit(&mut sequence,&mut pool,15);
+        sequence.attach_sidecar(&mut pool,0,OptionalBlockMetadata::new(OPTIONAL_BLOCK_METADATA_V1_VERSION,MetadataKind::KEY_BOUNDS,OpaqueDeviceView::new(0x1000,64))).unwrap();
+        let reservation=sequence.reserve_to(&mut pool,17).unwrap();
+        assert_eq!(pool.stats().sidecar_count(),1);
+        sequence.discard_completed_append(&mut pool,reservation).unwrap();
+        assert_eq!(pool.stats().sidecar_count(),0);assert_eq!(sequence.block_table().unwrap().valid_tokens(),[15]);
+        sequence.close(&mut pool).unwrap();
+    }
 
     fn pool(blocks: usize) -> KvBlockPool {
         KvBlockPool::new(KvLayout::checked(2, blocks, 3, 64).expect("valid test layout"))
