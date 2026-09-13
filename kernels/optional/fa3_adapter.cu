@@ -10,6 +10,7 @@ struct RileyFa3Plan {
     CUcontext context{};
     void *workspace = nullptr;
     bool decode = false;
+    bool close_failed = false;
 };
 namespace {
 struct ApiError { int code; };
@@ -125,11 +126,14 @@ extern "C" int riley_fa3_create(const RileyFa3Spec *s, const RileyFa3Buffers *bu
     });
 }
 extern "C" int riley_fa3_enqueue(RileyFa3Plan *p) noexcept {
-    return boundary([&] { require(p); context_check(*p,false); dispatch(*p,false); });
+    return boundary([&] { require(p); require(!p->close_failed,RILEY_FA3_CUDA); context_check(*p,false); dispatch(*p,false); });
 }
 extern "C" int riley_fa3_destroy(RileyFa3Plan **p) noexcept {
     return boundary([&] {
-        require(p && *p); context_check(**p,true);
+        require(p && *p); require(!(*p)->close_failed,RILEY_FA3_CUDA); context_check(**p,true);
+        // CUDA free can report a deferred error after an uncertain side effect.
+        // Never issue a second destructive free after any close-stage failure.
+        (*p)->close_failed=true;
         runtime(cudaStreamSynchronize((*p)->stream));
         runtime(cudaFree((*p)->workspace)); delete *p; *p=nullptr;
     });

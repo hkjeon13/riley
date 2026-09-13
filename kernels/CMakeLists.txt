@@ -145,3 +145,4 @@ set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--
 
 
 include(optional/flashinfer.cmake)
+include(optional/fa3.cmake)

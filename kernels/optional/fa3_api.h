@@ -39,7 +39,8 @@ int riley_fa3_create(const RileyFa3Spec *, const RileyFa3Buffers *, void *stream
 // Enqueue success is not completion; downstream work observes stream ordering.
 int riley_fa3_enqueue(RileyFa3Plan *) RILEY_FA3_NOEXCEPT;
 // Cold operation. Destroy all graphs retaining this plan FIRST. Synchronizes the
-// bound stream before freeing. On failure, retain the pointer and its leases.
+// bound stream before freeing. A close-stage CUDA failure permanently poisons
+// the plan: retain pointer/leases, never retry a possibly completed free.
 int riley_fa3_destroy(RileyFa3Plan **) RILEY_FA3_NOEXCEPT;
 #ifdef __cplusplus
 }

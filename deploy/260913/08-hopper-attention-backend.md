@@ -1,6 +1,6 @@
 # PR 08 — Hopper 비동기 attention backend
 
-상태: **구현 중 — FA3 native plan C ABI와 호스트·4090 거부 계약 검사 통과; Rust serving 연결과 Hopper 실행 미완료**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — optional Cargo/CMake 및 Rust primitive owner 연결·4090 거부/해제 검증 통과; model/graph serving 연결과 Hopper 실행 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -58,3 +58,9 @@ Hopper의 data movement·Tensor Core overlap을 활용하는 실행 경로를 �
 [plan 검증 기록](../../benchmarks/results/20260914-fa3-native-plan/README.md): BF16 Q9/KV3/head64/HND/page16 입력 검증, immutable metadata 및 scheduler/LSE workspace 소유, cold 커널 준비와 반복 enqueue 분리, context/stream/capture 검사 및 동기화 후 해제 C ABI를 구현했다. 실제 SM90a build/link와 호스트 경계·최대 shape·4090 지원 거부·capture 중 생성 거부 검사가 통과했다. Enqueue 성공과 완료를 구분하며 buffer 및 graph 수명은 raw caller 계약이다.
 
 Rust retained owner, optional production build, 동적 serving metadata 연결과 실제 Hopper 수치·lifetime·graph·serving 검증은 미완료다. 현재 plan은 shape/page table/길이를 고정하므로 serving의 dynamic batch cache를 완성한 것으로 보지 않는다. 새 성능 수치나 기본 backend 승격은 없다.
+
+### Optional build와 Rust owner
+
+[Rust owner 검증](../../benchmarks/results/20260914-fa3-rust-owner/README.md): `RILEY_FA3_SOURCE`로 분리 SM90a object를 빌드하고 Rust exclusive borrow와 native stream/buffer 사용권을 연결했다. Enqueue·완료 확인·close를 분리하며 불명확한 close 후 destructive free 재시도를 막는다. Cargo enabled 링크, 4090 거부 3회 후 전체 자원 해제, 같은 build directory의 disabled 복귀 및 archive symbol 제거를 확인했다.
+
+현재 safe owner는 고정 입력 primitive이며 graph capture나 다른 모델 primitive를 통한 buffer 갱신을 노출하지 않는다. Retained graph session, 동적 metadata, workspace 통계, model recorder/profile 및 실제 Hopper 정상·오류·수치·serving 검증은 다음 범위다. 실제 Hopper CUDA fault injection이나 성능 개선을 입증한 상태가 아니다.

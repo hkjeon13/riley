@@ -7,6 +7,7 @@ use std::process::Command;
 const DEFAULT_CUDA_ARCHITECTURES: &str = "89";
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(riley_fa3)");
     println!("cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES");
     let architectures = match cuda_architectures() {
         Ok(architectures) => architectures,
@@ -36,6 +37,7 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         "CUDACXX",
         "CMAKE",
         "RILEY_FLASHINFER_DATA",
+        "RILEY_FA3_SOURCE",
     ] {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -89,6 +91,22 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     }
     // Always set the cache entry, including OFF, so a reused build cannot retain it.
     configure.arg(format!("-DRILEY_FLASHINFER_DATA={}", PathBuf::from(flashinfer_data).display()));
+    let fa3_source = env::var_os("RILEY_FA3_SOURCE").unwrap_or_default();
+    if !fa3_source.is_empty() {
+        let path = PathBuf::from(&fa3_source);
+        if !path.is_absolute() || !path.is_dir() {
+            return Err("RILEY_FA3_SOURCE must be an absolute pinned dependency checkout".into());
+        }
+        println!("cargo:rerun-if-changed={}", path.display());
+        println!("cargo:rustc-cfg=riley_fa3");
+    }
+    configure.arg(format!("-DRILEY_FA3_SOURCE={}", PathBuf::from(fa3_source).display()));
+    for path in ["optional/fa3.cmake", "optional/fa3_adapter.cu", "optional/fa3_owner.cu",
+                 "optional/fa3_contract.hpp", "optional/fa3_api.h",
+                 "../benchmarks/analysis/build_fa3_native_adapter.py",
+                 "../benchmarks/analysis/build_fa3_native_probe.py"] {
+        println!("cargo:rerun-if-changed={}", kernels_dir.join(path).display());
+    }
     configure_fault_injection(&mut configure);
     configure_nvml_probe(&mut configure);
     run(&mut configure, "configure the native CUDA library")?;

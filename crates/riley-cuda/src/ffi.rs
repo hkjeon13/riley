@@ -4,6 +4,10 @@ use std::mem::{offset_of, size_of};
 use std::ptr::{self, NonNull};
 
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+#[cfg(riley_fa3)]
+mod fa3_owner;
+#[cfg(riley_fa3)]
+pub(super) use fa3_owner::Fa3OwnerHandle;
 use crate::graph::{
     CudaGraphCaptureCapability, CudaGraphFailureInfo, CudaGraphStage, RawGraphErrorInfo,
     decode_graph_failure_info,

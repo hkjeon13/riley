@@ -1,0 +1,24 @@
+   Compiling riley-cuda v0.1.0 (/data/riley-serving-260913-recovery/source/crates/riley-cuda)
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13 nvcc=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcuda.so
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1551:8
+     |
+1551 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `riley-cuda` (lib test) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.50s
+     Running unittests src/lib.rs (/data/riley-serving-260913-recovery/target/release/deps/riley_cuda-336215072b091a22)
+
+running 2 tests
+test fa3::tests::malformed_offsets_and_physical_pages_rejected ... ok
+test fa3::tests::ragged_suffix_and_decode_contract ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.00s
+
