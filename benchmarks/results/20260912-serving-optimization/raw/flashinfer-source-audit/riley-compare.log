@@ -1,0 +1,24 @@
+{"torch": "2.13.0+cu130", "flashinfer": "0.6.16.post3", "gpu": "NVIDIA GeForce RTX 4090", "capability": [8, 9]}
+{"context": 1, "riley_finite": true, "riley_max_abs_vs_fp32": 0.0, "riley_rmse_vs_fp32": 0.0}
+{"context": 1, "tensor_cores": false, "riley_exact": true, "riley_different_elements": 0, "elements": 18432, "max_abs_vs_riley": 0.0}
+{"tensor_cores": false, "finite": true, "max_abs_vs_fp32": 0.0, "rmse_vs_fp32": 0.0, "exact_vs_rounded_fp32": true, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"context": 1, "tensor_cores": true, "riley_exact": true, "riley_different_elements": 0, "elements": 18432, "max_abs_vs_riley": 0.0}
+{"tensor_cores": true, "finite": true, "max_abs_vs_fp32": 0.0, "rmse_vs_fp32": 0.0, "exact_vs_rounded_fp32": true, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"torch": "2.13.0+cu130", "flashinfer": "0.6.16.post3", "gpu": "NVIDIA GeForce RTX 4090", "capability": [8, 9]}
+{"context": 16, "riley_finite": true, "riley_max_abs_vs_fp32": 0.004809856414794922, "riley_rmse_vs_fp32": 0.0007279185228981078}
+{"context": 16, "tensor_cores": false, "riley_exact": false, "riley_different_elements": 5946, "elements": 18432, "max_abs_vs_riley": 0.0078125}
+{"tensor_cores": false, "finite": true, "max_abs_vs_fp32": 0.0038743019104003906, "rmse_vs_fp32": 0.0006092778057791293, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"context": 16, "tensor_cores": true, "riley_exact": false, "riley_different_elements": 1063, "elements": 18432, "max_abs_vs_riley": 0.0078125}
+{"tensor_cores": true, "finite": true, "max_abs_vs_fp32": 0.00459742546081543, "rmse_vs_fp32": 0.0007151050376705825, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"torch": "2.13.0+cu130", "flashinfer": "0.6.16.post3", "gpu": "NVIDIA GeForce RTX 4090", "capability": [8, 9]}
+{"context": 398, "riley_finite": true, "riley_max_abs_vs_fp32": 0.0017139315605163574, "riley_rmse_vs_fp32": 0.000182608695467934}
+{"context": 398, "tensor_cores": false, "riley_exact": false, "riley_different_elements": 8942, "elements": 18432, "max_abs_vs_riley": 0.001953125}
+{"tensor_cores": false, "finite": true, "max_abs_vs_fp32": 0.0017139315605163574, "rmse_vs_fp32": 0.000196523847989738, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"context": 398, "tensor_cores": true, "riley_exact": false, "riley_different_elements": 9358, "elements": 18432, "max_abs_vs_riley": 0.001953125}
+{"tensor_cores": true, "finite": true, "max_abs_vs_fp32": 0.0017244517803192139, "rmse_vs_fp32": 0.00022122106747701764, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"torch": "2.13.0+cu130", "flashinfer": "0.6.16.post3", "gpu": "NVIDIA GeForce RTX 4090", "capability": [8, 9]}
+{"context": 4096, "riley_finite": true, "riley_max_abs_vs_fp32": 0.00032532215118408203, "riley_rmse_vs_fp32": 5.9249890909995884e-05}
+{"context": 4096, "tensor_cores": false, "riley_exact": false, "riley_different_elements": 9120, "elements": 18432, "max_abs_vs_riley": 0.00048828125}
+{"tensor_cores": false, "finite": true, "max_abs_vs_fp32": 0.00044517219066619873, "rmse_vs_fp32": 6.122399645391852e-05, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
+{"context": 4096, "tensor_cores": true, "riley_exact": false, "riley_different_elements": 9884, "elements": 18432, "max_abs_vs_riley": 0.00048828125}
+{"tensor_cores": true, "finite": true, "max_abs_vs_fp32": 0.0004646405577659607, "rmse_vs_fp32": 7.124426338123158e-05, "exact_vs_rounded_fp32": false, "graph_exact_eager": true, "updated_q_graph_exact_eager": true}
