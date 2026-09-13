@@ -175,6 +175,7 @@ pub struct VariableGraphBuffers {
     pub(crate) ffn_pipeline:bool,
     pub(crate) prefill_ffn_pipeline:bool,
     pub(crate) adaptive_decode:bool,
+    pub(crate) query_reuse:bool,
     pub(crate) devices:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) tiled:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) shared_devices:Vec<riley_cuda::CudaDeviceBuffer>,
@@ -201,7 +202,7 @@ impl VariableGraphBuffers {
         for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
-        Ok(Self{fa3_attention:false,flashinfer_prefill_only:false,ffn_pipeline:false,prefill_ffn_pipeline:false,adaptive_decode:false,attention_workspace:None,devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
+        Ok(Self{fa3_attention:false,flashinfer_prefill_only:false,ffn_pipeline:false,prefill_ffn_pipeline:false,adaptive_decode:false,query_reuse:false,attention_workspace:None,devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
             buffered_staging:Vec::new(),head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,shared_prefixes:false,mixed_execution:false})
     }
     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
@@ -314,23 +315,27 @@ impl super::PreparedLlamaBatchExecutor {
         self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true)
     }
     fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
-        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false,false)
+        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false,false,false)
     }
     /// Experimental Hopper FA3 model graph. Not an exact numerical profile.
     pub fn into_owned_variable_fa3_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         if !riley_cuda::FA3_COMPILED {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"FA3 backend",reason:"FA3 was not compiled"});}
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false,false,false)
     }
     /// Exact-order adaptive row tiles for pure decode, including paired graphs.
     pub fn into_owned_variable_adaptive_decode_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true,false,false)
     }
     /// Opt-in immutable shared prefixes with the existing V7 numerical profile.
     /// Automatic cache policy and captured-buffer COW are separate integrations.
     pub fn into_owned_variable_prefix_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool,adaptive:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,adaptive,true)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,adaptive,true,false)
     }
-    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+    /// Experimental exact-order mixed attention, composed with prefill FFN/adaptive decode.
+    pub fn into_owned_variable_query_reuse_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,true)
+    }
+    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool,query_reuse:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
@@ -339,7 +344,7 @@ impl super::PreparedLlamaBatchExecutor {
         parents.scratch.prefill_ffn_pipeline=prefill_ffn_pipeline;
         parents.scratch.flashinfer_prefill_only=prefill_only;
         parents.scratch.fa3_attention=fa3;
-        parents.scratch.adaptive_decode=adaptive;parents.scratch.shared_prefixes=shared_prefixes;
+        parents.scratch.query_reuse=query_reuse;parents.scratch.adaptive_decode=adaptive;parents.scratch.shared_prefixes=shared_prefixes;
         if fa3 {parents.scratch.attention_workspace=Some(context.allocate_device_buffer(riley_cuda::FA3_MODEL_WORKSPACE_BYTES).map_err(cuda)?);}
         if flashinfer || prefill_only {parents.scratch.attention_workspace=Some(context.allocate_device_buffer(if prefill_only{33996}else{78256}).map_err(cuda)?);}
         if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}

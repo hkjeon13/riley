@@ -80,3 +80,7 @@ Direct native는 대표 shape에서1.6–3.7% 낮지만 긴 prefill은 거의 �
 ## Query reuse native batch
 
 [구현·검증 결과](../../benchmarks/results/20260914-query-reuse-native/README.md): 기존 task map에서 인접8-query 작업을16-query로 묶고 K/V 재사용·compact probability 저장·audit coverage를 연결했다.153 audit+153 graph replay 비교가 bitwise 일치하고 bounded memcheck/racecheck 및 SM90a/SM100a 컴파일이 통과했다. Serving capacity512의 긴 mixed prefill은 compact16이9–11% 빠르나 짧은 suffix는동률, pure prefill은약2%에 그친다. Register/shared envelope가 커져 shape별 효과를 구분한다. 다음은 명시적 retained-model option과 source/catalog identity, 모델·cache·stop/cancel 검증 후 실제 serving 비교다. 현재 production release와 기본값은 변경하지 않았다.
+
+## Query reuse 모델·serving 통합 결과
+
+[모델 통합](../../benchmarks/results/20260914-query-reuse-model/README.md)과 [matched serving](../../benchmarks/results/20260914-query-reuse-serving/README.md): C ABI recorder→Rust retained owner→명시적 serving env 옵션까지 연결했고 source/catalog identity 및 cache·paired 호환성을 유지했다.2,359,296 BF16 logits bytes가 일치하고 serving retained Riley3,072건·stop96건·취소96건·복구96건 검증을 통과했다. 그러나 동일 직전 composed cache-on 대비 throughput은 공유prefix−0.26%,고유prompt+0.96%로 유의미한 개선을 확인하지 못했다. `RILEY_MIXED_QUERY_REUSE`는 기본 비활성이고 native의 유리한 mixed shape로 전체 성공을 대체하지 않는다. 동일 query tile의 작은 변형을 이어가지 않고, pure-prefill 자원 사용과 retained 실행 pipeline 중 전체 workload에 영향을 주는 다음 구조를 선택한다. 기존 POD/수치 quality 실패와 미완료 hardware qualification은 그대로 남는다.

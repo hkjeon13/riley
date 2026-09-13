@@ -5,16 +5,16 @@ use riley_runtime::llama::{PreparedLlamaBatchExecutor,PreparedLlamaBatchExecutor
 use riley_scheduler::{Scheduler,SchedulerConfig,RequestDescriptor,OverloadPolicy,SampledIterationToken,IterationTiming,ExecutionShapePolicy};
 type TestResult<T> = Result<T,Box<dyn std::error::Error>>;
 
-fn run(cached:bool,prompts:&[Vec<u32>])->TestResult<Vec<Vec<u8>>> {
+fn run(cached:bool,prompts:&[Vec<u32>],query_reuse:bool)->TestResult<Vec<Vec<u8>>> {
     let model=LoadedModel::load(std::path::Path::new(&std::env::var("RILEY_REAL_CHECKPOINT")?),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
     let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
     let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,8,1,64)?,PreparedLlamaForwardConfig::default());
     let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;
-    let mut session=if cached {executor.into_owned_variable_prefix_session(&context,64,false,false,false,false)?}
-        else {executor.into_owned_variable_mixed_session(&context,64,false)?};
+    let mut session=if query_reuse {executor.into_owned_variable_query_reuse_session(&context,512,false,false,cached)?}else if cached {executor.into_owned_variable_prefix_session(&context,512,false,false,false,false)?}
+        else {executor.into_owned_variable_mixed_session(&context,512,false)?};
     let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{
-        max_waiting_requests:4,max_waiting_prompt_tokens:512,max_active_sequences:2,max_sequence_tokens:128,
-        iteration_token_budget:64,max_prefill_chunk_tokens:64,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,
+        max_waiting_requests:4,max_waiting_prompt_tokens:512,max_active_sequences:2,max_sequence_tokens:1024,
+        iteration_token_budget:512,max_prefill_chunk_tokens:512,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,
         admission_timeout_ns:None,max_promised_kv_blocks:64,metrics_window_samples:8,
     },riley_runtime::paged_kv::KvLayout::checked(30,64,3,64)?,ExecutionShapePolicy::MixedPrefillDecode32)?;
     if cached {scheduler.enable_prefix_cache(session.prefix_cache_identity()?,4,8)?;}
@@ -50,7 +50,22 @@ fn automatic_cache_matches_uncached_model_logits()->TestResult<()> {
     let mut suffix=vec![17;33];suffix[32]=18;
     let mut shorter=vec![17;25];shorter[20]=19;
     let prompts=vec![vec![17;33],vec![17;33],suffix,shorter,vec![18;33]];
-    let cold=run(false,&prompts)?;let cached=run(true,&prompts)?;
+    let cold=run(false,&prompts,false)?;let cached=run(true,&prompts,false)?;
     for (index,(a,b)) in cold.iter().zip(&cached).enumerate(){assert_eq!(a,b,"cached request {index} changed BF16 logits");}
     println!("automatic-prefix-cache exact_logits_bytes={} requests={} outputs_per_request=3",cold.iter().map(Vec::len).sum::<usize>(),prompts.len());Ok(())
+}
+
+#[test]
+#[ignore="requires CUDA13 SM89 and real SmolLM2 checkpoint"]
+fn query_reuse_matches_full_model_logits()->TestResult<()> {
+    let mut suffix=vec![17;398];suffix[397]=18;
+    let prompts=vec![vec![17;398],suffix,vec![19;47],vec![20;512]];
+    let cold=run(false,&prompts,false)?;
+    let candidate=run(false,&prompts,true)?;
+    for (a,b) in cold.iter().zip(&candidate){assert_eq!(a,b,"query reuse changed full model logits");}
+    // Repeated long prefixes cover cache-only owners and shorter suffix prefill.
+    let shared=vec![vec![17;128];4];
+    let baseline=run(true,&shared,false)?;let reuse=run(true,&shared,true)?;
+    for (a,b) in baseline.iter().zip(&reuse){assert_eq!(a,b,"cached query reuse changed full model logits");}
+    println!("query-reuse exact_logits_bytes={}",cold.iter().chain(&baseline).map(Vec::len).sum::<usize>());Ok(())
 }

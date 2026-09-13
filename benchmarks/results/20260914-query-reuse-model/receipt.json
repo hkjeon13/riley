@@ -1,0 +1,27 @@
+{
+  "scope": "native recorder/runtime/server integration, exact real-model logits; serving measured separately",
+  "local_runtime": {
+    "passed": 349,
+    "ignored_existing_timing_diagnostic": 1
+  },
+  "local_scheduler_passed": 155,
+  "cuda_scheduler_passed": 55,
+  "gpu_tests_executed": 2,
+  "query_reuse_exact_logits_bytes": 2359296,
+  "automatic_cache_regression_exact_logits_bytes": 1474560,
+  "server_feature_check": "passed",
+  "release_binary_sha256": "1fc55a483be57e8822bd45d24f2dbfa606cee2569c031272582a907aa223646e",
+  "files": {
+    "build.log": "1d2878b289f03ca0feab495bb7ca72cd187d26018b0fd10e945b85b098f41867",
+    "changed-source-sha256.txt": "d3493e7344b3995341c1deee4d7c919c4a0bae85e51c1e156deda8db1b4c8afb",
+    "compute-after.csv": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "local-runtime-tests.log": "e128959adffe7f2b530452efd6ad16684b4362b78cb89b9dbf549bae68b6b713",
+    "local-scheduler-tests.log": "2a86b25f3b9842ecb7a80b5b0b0340c110e9da499ebd635ab7799adbf1a2eed5",
+    "model-tests.log": "8f1b0c37a5ee6d5ac076d9bcf24b4c9abe902d52820d208b8772571df0d9c559",
+    "release-build.log": "0bd126c1ebf27e053131125d7530c70334f61aad02843af973f9bd98b6f9763a",
+    "release-sha256.txt": "85b97cffc4d7b5f83a1bc6e29b87c3c949af1fda7367a26d20e83dee2225e5e4",
+    "server-feature-check.log": "90c9dd68e8040bf80b122a66880648db04260d600c6e528a15235f429494c69c",
+    "session-tests.log": "344b6fb54bbb799e43c66a55b0e1eceea28af2d64ea302f36331dcad431c2cd9",
+    "source-sha256.txt": "1d0a713b417c5235ef95924100596374a79fd8a573252558a14f5dba2bffeca0"
+  }
+}
