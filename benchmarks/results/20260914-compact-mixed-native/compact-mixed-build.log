@@ -1,0 +1,33 @@
+benchmarks/analysis/../../kernels/optional/compact_mixed_attention.cuh(245): error: more than one instance of function "riley_compact_mixed::prepare" matches the argument list:
+            function "riley_pod_mixed::prepare(const unsigned int *, unsigned int, riley_pod_mixed::Plan *, __nv_bool)" (declared at line 127 of benchmarks/analysis/../../kernels/optional/pod_mixed_attention.cuh)
+            function "riley_compact_mixed::prepare(const unsigned int *, unsigned int, riley_compact_mixed::Plan *, __nv_bool)" (declared at line 193)
+            argument types are: (const unsigned int *, unsigned int, riley_compact_mixed::Plan *, __nv_bool)
+   prepare<<<1,256,0,s>>>(meta,capacity,p,Audit);
+   ^
+          detected during instantiation of "cudaError_t riley_compact_mixed::enqueue<Mode,Audit>(cudaStream_t, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *) [with Mode=1U, Audit=true]" at line 26 of benchmarks/analysis/compact_mixed_attention_probe.cu
+
+benchmarks/analysis/../../kernels/optional/compact_mixed_attention.cuh(247): error: more than one instance of function template "riley_compact_mixed::execute" matches the argument list:
+            function template "void riley_pod_mixed::execute<Mode,Audit>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_pod_mixed::Plan *, unsigned int *)" (declared at line 144 of benchmarks/analysis/../../kernels/optional/pod_mixed_attention.cuh)
+            function template "void riley_compact_mixed::execute<Mode,Audit>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *)" (declared at line 210)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *)
+   execute<Mode,Audit><<<(capacity*9+WARPS-1)/WARPS,32*WARPS,0,s>>>(q,k,v,out,capacity,meta,p,coverage);
+   ^
+          detected during instantiation of "cudaError_t riley_compact_mixed::enqueue<Mode,Audit>(cudaStream_t, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *) [with Mode=1U, Audit=true]" at line 26 of benchmarks/analysis/compact_mixed_attention_probe.cu
+
+benchmarks/analysis/../../kernels/optional/compact_mixed_attention.cuh(245): error: more than one instance of function "riley_compact_mixed::prepare" matches the argument list:
+            function "riley_pod_mixed::prepare(const unsigned int *, unsigned int, riley_pod_mixed::Plan *, __nv_bool)" (declared at line 127 of benchmarks/analysis/../../kernels/optional/pod_mixed_attention.cuh)
+            function "riley_compact_mixed::prepare(const unsigned int *, unsigned int, riley_compact_mixed::Plan *, __nv_bool)" (declared at line 193)
+            argument types are: (const unsigned int *, unsigned int, riley_compact_mixed::Plan *, __nv_bool)
+   prepare<<<1,256,0,s>>>(meta,capacity,p,Audit);
+   ^
+          detected during instantiation of "cudaError_t riley_compact_mixed::enqueue<Mode,Audit>(cudaStream_t, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *) [with Mode=1U, Audit=false]" at line 26 of benchmarks/analysis/compact_mixed_attention_probe.cu
+
+benchmarks/analysis/../../kernels/optional/compact_mixed_attention.cuh(247): error: more than one instance of function template "riley_compact_mixed::execute" matches the argument list:
+            function template "void riley_pod_mixed::execute<Mode,Audit>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_pod_mixed::Plan *, unsigned int *)" (declared at line 144 of benchmarks/analysis/../../kernels/optional/pod_mixed_attention.cuh)
+            function template "void riley_compact_mixed::execute<Mode,Audit>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *)" (declared at line 210)
+            argument types are: (const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *)
+   execute<Mode,Audit><<<(capacity*9+WARPS-1)/WARPS,32*WARPS,0,s>>>(q,k,v,out,capacity,meta,p,coverage);
+   ^
+          detected during instantiation of "cudaError_t riley_compact_mixed::enqueue<Mode,Audit>(cudaStream_t, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, unsigned int, const unsigned int *, riley_compact_mixed::Plan *, unsigned int *) [with Mode=1U, Audit=false]" at line 26 of benchmarks/analysis/compact_mixed_attention_probe.cu
+
+4 errors detected in the compilation of "benchmarks/analysis/compact_mixed_attention_probe.cu".

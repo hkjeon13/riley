@@ -66,3 +66,9 @@ prefill의 compute 자원과 decode의 memory 자원을 함께 활용하면서 d
 [Native 구현과 실험](../../benchmarks/results/20260914-pod-mixed-native/README.md): packed prefill/decode queue, explicit device task body,4-warp virtual 작업, SM 교대/비례 배정 및 static packing 대조군을 구현했다. Audit/release bitwise234개·coverage117회, 소규모 memcheck/racecheck, SM90a/SM100a object compile을 통과했다. 해당 장비 runtime과 multi-GPU는 미검증이다.
 
 대표 mixed native shape는 기존보다30–52% 느리며,163register/24,584B shared의 resource envelope가 남는다. 같은 SM에 역할을 배정한 사실을 동시 resident 실행/serving 이득으로 주장하지 않는다. Native gate 탈락으로 Rust recorder·serving에 연결하지 않았다. PR04 전체 완료도 아니다. 이후는 단순 CTA 상수 변경보다 phase별 resource 및 native precision/backend 계약을 함께 다뤄야 한다.
+
+## Probability storage compaction (2026-09-14)
+
+[Native resource batch](../../benchmarks/results/20260914-compact-mixed-native/README.md): small-query/prefill 모두 exponential FP32 저장을 재사용하고 PV operand load 때 BF16 round를 적용했다. Direct와 POD를 분리 비교했다.234개 bitwise·117 coverage, bounded sanitizer, SM90a/SM100a compile은 통과했다. Direct shared6144→4096B, POD24584→16392B로 감소했다.
+
+Direct native는 대표 shape에서1.6–3.7% 낮지만 긴 prefill은 거의 동률이며, compact POD는159register/3CTA 상한과 주요 mixed 회귀가 남는다. Native 저장 규약 후보만 보존하고 Rust/serving에 연결하지 않았다. 작은 native 이득을 serving 완료로 승격하지 않는다. 다음은 phase별 live register·native backend precision 계약을 함께 다루는 영역이다.
