@@ -14,6 +14,18 @@ pub enum DecodeNumericalProfile {
     VllmSmolP128V1 = 2,
 }
 
+impl DecodeNumericalProfile {
+    /// Stable arithmetic label for execution evidence, not a quality assertion.
+    #[must_use]
+    pub const fn evidence_id(self) -> &'static str {
+        match self {
+            Self::Canonical => "canonical-v1",
+            Self::HuggingFaceSmolLm2 => "hf-smollm2-v1",
+            Self::VllmSmolP128V1 => "vllm-smol-p128-v1",
+        }
+    }
+}
+
 /// Owns the Rust parents of a recorded graph. Native handles point to independent
 /// CUDA allocations, never into the Rust container, so moving the container is safe.
 /// No parent access is exposed until native graph destruction succeeds.

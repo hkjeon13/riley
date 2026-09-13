@@ -1137,6 +1137,11 @@ RileyCudaStatus riley_cuda_device_properties(
     int32_t ordinal,
     RileyCudaDeviceProperties* out_properties,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Queries directed peer accessibility without enabling access or creating contexts.
+// Distinct valid device ordinals are required. Output is zeroed before failure.
+RileyCudaStatus riley_cuda_device_can_access_peer(
+    int32_t source, int32_t destination, uint32_t* out_accessible,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Performs one in-process NVML snapshot. It does not create a CUDA context or
 // launch CUDA work. On any error the compatible output record is zeroed except
 // for struct_size, and a successful NVML initialization is always shut down.
