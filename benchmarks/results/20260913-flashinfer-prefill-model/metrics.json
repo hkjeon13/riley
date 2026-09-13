@@ -1,0 +1,128 @@
+{
+  "passages": [
+    {
+      "index": 0,
+      "baseline": {
+        "nll": 3.6059322357177734,
+        "kl_from_fp32": 0.0005870318855158985,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 3.586136817932129,
+        "kl_from_fp32": 0.0007039540214464068,
+        "argmax_fp32_matches": 28
+      }
+    },
+    {
+      "index": 1,
+      "baseline": {
+        "nll": 1.4390511512756348,
+        "kl_from_fp32": 0.0006218000780791044,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 1.4435542821884155,
+        "kl_from_fp32": 0.0005936943925917149,
+        "argmax_fp32_matches": 30
+      }
+    },
+    {
+      "index": 2,
+      "baseline": {
+        "nll": 3.346670627593994,
+        "kl_from_fp32": 0.0006914784316904843,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 3.33499813079834,
+        "kl_from_fp32": 0.0007597786607220769,
+        "argmax_fp32_matches": 30
+      }
+    },
+    {
+      "index": 3,
+      "baseline": {
+        "nll": 3.3076648712158203,
+        "kl_from_fp32": 0.0008274210849776864,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 3.3045177459716797,
+        "kl_from_fp32": 0.0006096219876781106,
+        "argmax_fp32_matches": 31
+      }
+    },
+    {
+      "index": 4,
+      "baseline": {
+        "nll": 2.8481898307800293,
+        "kl_from_fp32": 0.0009353547357022762,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 2.844548225402832,
+        "kl_from_fp32": 0.0008898742380551994,
+        "argmax_fp32_matches": 29
+      }
+    },
+    {
+      "index": 5,
+      "baseline": {
+        "nll": 2.9148387908935547,
+        "kl_from_fp32": 0.0009392678621225059,
+        "argmax_fp32_matches": 32
+      },
+      "candidate": {
+        "nll": 2.923192262649536,
+        "kl_from_fp32": 0.0010792614193633199,
+        "argmax_fp32_matches": 32
+      }
+    },
+    {
+      "index": 6,
+      "baseline": {
+        "nll": 3.0211753845214844,
+        "kl_from_fp32": 0.0007388876983895898,
+        "argmax_fp32_matches": 30
+      },
+      "candidate": {
+        "nll": 3.0264577865600586,
+        "kl_from_fp32": 0.0011094644432887435,
+        "argmax_fp32_matches": 30
+      }
+    },
+    {
+      "index": 7,
+      "baseline": {
+        "nll": 3.1907925605773926,
+        "kl_from_fp32": 0.0007319735013879836,
+        "argmax_fp32_matches": 32
+      },
+      "candidate": {
+        "nll": 3.1871895790100098,
+        "kl_from_fp32": 0.0009544456843286753,
+        "argmax_fp32_matches": 32
+      }
+    }
+  ],
+  "aggregate": {
+    "baseline": {
+      "nll": 2.9592894315719604,
+      "kl_from_fp32": 0.0007591519097331911,
+      "argmax_fp32_matches": 244.0
+    },
+    "candidate": {
+      "nll": 2.956324353814125,
+      "kl_from_fp32": 0.0008375118559342809,
+      "argmax_fp32_matches": 242.0
+    }
+  },
+  "relative_screen_passed": false,
+  "general_quality_accepted": false,
+  "serving_measured": false,
+  "targets": 256,
+  "logit_hashes": {
+    "baseline": "492a46578581d131ab67c8c1cdb2d70f36a6539c868530e36269f1484f19f939",
+    "candidate": "147124aae0513d206ac7b42e38ade550ade30fd854c5df17711aac92c631f2df"
+  }
+}

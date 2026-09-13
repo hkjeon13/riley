@@ -1337,7 +1337,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  return status;
 }
 
-template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false>
+template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false,bool PrefillFlashinfer=false>
 static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
@@ -1347,6 +1347,7 @@ static RileyCudaStatus record_variable_shared(
  static_assert(!Packed||Rows==32,"V6 requires32 rows");
  static_assert(!Mixed||(Packed&&Rows==32),"mixed V7 requires packed32");
  static_assert(!FfnPipeline||Mixed,"FFN pipeline requires mixed32");
+ static_assert(!PrefillFlashinfer||Mixed,"FlashInfer prefill requires mixed32");
  if(FfnPipeline && (weight_count!=363 || attention_workspace))return reject(error,"FFN pipeline requires tiled V7 without FlashInfer",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  constexpr uint64_t request_bytes=128+Rows*1664+4096+(Mixed?4096:0);
  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
@@ -1365,7 +1366,7 @@ static RileyCudaStatus record_variable_shared(
 #ifndef RILEY_CUDA_ENABLE_FLASHINFER
   return reject(error,"FlashInfer was not compiled",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
 #else
-  if(!Mixed||!same_context(attention_workspace->owner,r->owner)||!holds_counter(r,&attention_workspace->active_uses)||attention_workspace->byte_len!=riley_flashinfer_decode_workspace_bytes())return reject(error,"FlashInfer workspace parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(!Mixed||!same_context(attention_workspace->owner,r->owner)||!holds_counter(r,&attention_workspace->active_uses)||attention_workspace->byte_len!=(PrefillFlashinfer?riley_flashinfer_prefill_workspace_bytes():riley_flashinfer_decode_workspace_bytes()))return reject(error,"FlashInfer workspace parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<weight_count;++i)if(w[i]==attention_workspace)return reject(error,"FlashInfer weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
 #endif
@@ -1397,7 +1398,7 @@ static RileyCudaStatus record_variable_shared(
   auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
   if(row_capacity==1){
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
-   if(attention_workspace){
+   if(attention_workspace&&!PrefillFlashinfer){
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FlashInfer model");
    }else
 #endif
@@ -1416,7 +1417,7 @@ static RileyCudaStatus record_variable_shared(
   if constexpr(Packed){
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
    if(attention_workspace){
-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental consistent decode attention");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((PrefillFlashinfer?enqueue_compiled_v7_flashinfer_prefill_only_model:enqueue_compiled_v7_flashinfer_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,PrefillFlashinfer?"experimental prefill attention":"experimental consistent decode attention");
    }else
 #endif
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
@@ -1523,6 +1524,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_exper
  if(!attention_workspace||compact>1)return reject(error,"FlashInfer explicit workspace/profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if(compact)return record_variable_shared<32,true,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
  return record_variable_shared<32,false,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_prefill_only(
+ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+ uint32_t capacity,uint32_t physical,RileyCudaDeviceBuffer* attention_workspace,uint32_t compact,RileyCudaErrorInfo* error) noexcept {
+ if(!attention_workspace||compact>1)return reject(error,"FlashInfer explicit workspace/profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(compact)return record_variable_shared<32,true,true,true,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
+ return record_variable_shared<32,false,true,true,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_ffn_pipeline(

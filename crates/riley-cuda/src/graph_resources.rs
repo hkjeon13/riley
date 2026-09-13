@@ -1320,6 +1320,22 @@ pub fn record_v7_flashinfer_experimental(&mut self,devices:&[usize;25],workspace
         }
         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,attention_workspace,compact);Err(crate::CudaError::unavailable("record V7 mixed"))}
     }
+/// Records experimental prefill arithmetic; decode keeps the existing V7 backend.
+/// The retained workspace must have the exact native prefill extent (33,996 bytes).
+pub fn record_v7_flashinfer_prefill_only(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,attention_workspace:usize,compact:bool)->CudaResult<()> {
+        #[cfg(feature="cuda")]{
+            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
+            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
+            let attention_workspace=self.parents.devices.get(attention_workspace).ok_or_else(bad)?.native_handle();
+            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
+            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
+            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
+            self.native.record_v7_flashinfer_prefill_only(&devices,workspace,&weights,head,shared_head,staging,capacity,physical,attention_workspace,compact)
+        }
+        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,attention_workspace,compact);Err(crate::CudaError::unavailable("record V7 mixed"))}
+    }
 /// Records the explicit exact-order FFN pipeline candidate.
 pub fn record_v7_ffn_pipeline(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,compact:bool)->CudaResult<()> {
         #[cfg(feature="cuda")]{

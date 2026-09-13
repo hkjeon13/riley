@@ -103,3 +103,9 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 ## Mixed prefill-only metadata 준비
 
 [Routing 검증](../../benchmarks/results/20260913-flashinfer-prefill-routing/README.md): 별도 native planner가 V7 요청별 stage를 기준으로 prefill tile만 등록한다. Packed offset은 유지하며 decode 출력은 건드리지 않는다. 1-token prefill과 decode를 구분하고, all-decode·invalid stage·잘못된 decode 길이·오류 후 graph 재사용을 포함한10 replay를 검증했다. 기존 prefill849,600개 값 bitwise 일치, matched decode18,432개 값 미변경, memcheck/racecheck0이다. 모델 owner/recorder 연결 전 단계이며 기존 decode 품질 gate 실패와 serving 기본값은 그대로다.
+
+## Prefill-only 전체 모델 연결과 수치 gate
+
+[전체 모델 결과](../../benchmarks/results/20260913-flashinfer-prefill-model/README.md): 별도 retained workspace·native recorder·Rust factory·graph identity를 연결했다. Mixed의 prefill만 FlashInfer로 처리하고 pure/mixed decode는 기존 V7을 유지한다. 30-layer full-model 실행과 native memcheck0 errors, 종료 후 allocation0을 확인했다. 기존 V7 자연어 logits는 이전 baseline과 bitwise 일치한다.
+
+Strict free generation은32요청 중8요청·1,024토큰 중56토큰 불일치로 실패했다. 반복 prompt invariance는 통과했다. 고정 자연어256 target의 NLL은2.95928943→2.95632435로 낮아졌지만 KL은0.0007591519→0.0008375119로10.32% 증가해 기존 사전 gate도 실패했다. 서버 선택/기본값 승격은 하지 않는다. 다음 검토는 동일 intermediate Q/K/V의 수치 차이와 정밀도/backend 대안이며, 기존 gate를 완화하거나 primitive 통과로 대체하지 않는다. 실제 serving 비교와 최종 성능 목표는 여전히 미완료다.

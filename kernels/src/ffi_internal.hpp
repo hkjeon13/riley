@@ -2422,6 +2422,7 @@ cudaError_t enqueue_compiled_v5_prefill_model(cudaStream_t,void*const*,const voi
 cudaError_t enqueue_compiled_v6_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
 cudaError_t enqueue_compiled_v7_flashinfer_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t,uint32_t,bool,void*,uint64_t,uint32_t) noexcept;
+cudaError_t enqueue_compiled_v7_flashinfer_prefill_only_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t,uint32_t,bool,void*,uint64_t,uint32_t) noexcept;
 #endif
 cudaError_t enqueue_compiled_v7_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v5_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;

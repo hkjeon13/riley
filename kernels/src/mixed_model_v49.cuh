@@ -22,7 +22,7 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* 
 template<uint32_t WireRows=8>
 inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
- uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096){
+ uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false){
  static_assert(WireRows==8||WireRows==16||WireRows==32,"wire capacity");
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
@@ -36,7 +36,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace){
-  err=static_cast<cudaError_t>(riley_flashinfer_mixed_prepare(stream,metadata,attention_workspace,attention_bytes,physical,context,capacity,status));
+  err=static_cast<cudaError_t>((prefill_only?riley_flashinfer_prefill_only_prepare(stream,metadata,attention_workspace,attention_bytes,physical,capacity,status):riley_flashinfer_mixed_prepare(stream,metadata,attention_workspace,attention_bytes,physical,context,capacity,status)));
   if(err!=cudaSuccess)return err;
  }
 #else
@@ -54,10 +54,10 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
   auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
   mixed_rope_kv_v7<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),meta,capacity);
-  riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,attention_workspace!=nullptr);
+  riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,attention_workspace!=nullptr&&!prefill_only,attention_workspace!=nullptr&&prefill_only);
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
   if(attention_workspace){
-   err=static_cast<cudaError_t>(riley_flashinfer_mixed_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes));
+   err=static_cast<cudaError_t>((prefill_only?riley_flashinfer_prefill_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes):riley_flashinfer_mixed_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes)));
    if(err!=cudaSuccess)return err;
   }
 #endif

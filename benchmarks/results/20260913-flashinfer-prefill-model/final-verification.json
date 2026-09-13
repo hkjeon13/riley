@@ -1,0 +1,36 @@
+{
+  "binaries": {
+    "flashinfer_prefill_free_generation_gpu": {
+      "path": "/tmp/riley-opt-260912/flashinfer-cargo-target/release/deps/flashinfer_prefill_free_generation_gpu-98339bc3942b8b72",
+      "sha256": "4bc5c6a0eb7ad7f21ece861685655dd72906fbfb42fe9ed938d7ee017ee79762"
+    },
+    "flashinfer_prefill_natural_logits_gpu": {
+      "path": "/tmp/riley-opt-260912/flashinfer-cargo-target/release/deps/flashinfer_prefill_natural_logits_gpu-fa4418cd5cc70da8",
+      "sha256": "81d4f625b8bf49ecbc39f5b497a8206bcbd48cc13325ed64b1e2caa9c25802c0"
+    }
+  },
+  "commands": [
+    {
+      "command": [
+        "/tmp/riley-opt-260912/flashinfer-cargo-target/release/deps/flashinfer_prefill_free_generation_gpu-98339bc3942b8b72",
+        "--ignored",
+        "--nocapture"
+      ],
+      "exit_code": 101
+    },
+    {
+      "command": [
+        "/data/cuda-12.8.1/bin/compute-sanitizer",
+        "--tool",
+        "memcheck",
+        "--error-exitcode",
+        "99",
+        "/tmp/riley-opt-260912/flashinfer-cargo-target/release/deps/flashinfer_prefill_natural_logits_gpu-fa4418cd5cc70da8",
+        "--ignored",
+        "--nocapture"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "baseline_logits_equal_previous_v7": true
+}

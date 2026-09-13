@@ -190,12 +190,12 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
   if(valid[h])for(int b=0;b<8;++b)for(int z=0;z<2;++z)out[(qr[h]*9+qh)*64+b*8+2*t+z]=__float2bfloat16_rn(accum[b][h*2+z]*inverse);
  }
 }
-__global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta,bool skip_decode=false){
+__global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta,bool skip_decode=false,bool skip_prefill=false){
  const uint32_t active=meta[5],total=meta[9],tiles=meta[24],tile=blockIdx.x;
  if(!active||active>32||!total||total>capacity||!tiles||tiles>total||tile>=tiles)return;
  const uint32_t entry=meta[32+32*416+1024+tile],owner=entry>>16,local=entry&0xffffU;
  if(owner>=active)return;const uint32_t* shape=meta+32+owner*416;const uint32_t count=shape[2],offset=shape[16],nt=count<32?count:(count+7)/8;
- if(skip_decode&&shape[18]==1)return;
+ if((skip_decode&&shape[18]==1)||(skip_prefill&&shape[18]==0))return;
  if(!count||offset>total||count>total-offset||local>=nt)return;
  attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
 }
