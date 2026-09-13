@@ -2630,6 +2630,16 @@ RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 // Copies fresh host bytes into the leased pinned input, launches once and
 // synchronizes. A failed launch/sync retains every parent until completion is
 // known. Wrong-size calls are rejected before mutation. No separate stale launch.
+// Stages input synchronously, then submits without waiting. Retained parents
+// stay unavailable until query/wait succeeds; close drains a pending submission.
+RileyCudaStatus riley_cuda_graph_resources_submit_transfer(
+    RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_query_transfer(
+    RileyCudaGraphResources* resources, uint32_t* ready,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_wait_transfer(
+    RileyCudaGraphResources* resources, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

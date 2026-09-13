@@ -9866,6 +9866,21 @@ unsafe extern "C" {
         output: *mut RawPinnedHostBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_submit_transfer(
+        resources: *mut RawGraphResources,
+        source: *const u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_query_transfer(
+        resources: *mut RawGraphResources,
+        ready: *mut u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_resources_wait_transfer(
+        resources: *mut RawGraphResources,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_resources_replay_transfer(
         resources: *mut RawGraphResources,
         source: *const u8,
@@ -9900,6 +9915,44 @@ impl GraphResourcesHandle {
             )
         };
         status_result(status, "record aggregate transfer", &error)
+    }
+    pub(super) fn submit_transfer(&mut self, source: &[u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: native copies the input before returning and retains all GPU parents.
+        let status = unsafe {
+            riley_cuda_graph_resources_submit_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                source.as_ptr(),
+                source.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "submit aggregate transfer", &error)
+    }
+    pub(super) fn query_transfer(&mut self) -> CudaResult<bool> {
+        let mut error = ErrorInfo::new();
+        let mut ready = 0;
+        // SAFETY: the native owner and writable output remain valid for this call.
+        let status = unsafe {
+            riley_cuda_graph_resources_query_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                &mut ready,
+                &mut error,
+            )
+        };
+        status_result(status, "query aggregate transfer", &error)?;
+        Ok(ready != 0)
+    }
+    pub(super) fn wait_transfer(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: owner is retained; native waits before exposing output or parents.
+        let status = unsafe {
+            riley_cuda_graph_resources_wait_transfer(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                &mut error,
+            )
+        };
+        status_result(status, "wait aggregate transfer", &error)
     }
     pub(super) fn replay_transfer(&mut self, source: &[u8]) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
@@ -10002,7 +10055,18 @@ mod aggregate_transfer_gpu_tests {
                 owner.replay_transfer(&payload)?;
                 owner.read_transfer(&mut result)?;
                 assert_eq!(result, payload);
+                owner.submit_transfer(&payload)?;
+                assert!(owner.read_transfer(&mut result).is_err());
+                assert!(owner.submit_transfer(&payload).is_err());
+                assert!(first.close().is_err());
+                let _ready = owner.query_transfer()?;
+                owner.wait_transfer()?;
+                assert!(owner.query_transfer()?);
+                owner.read_transfer(&mut result)?;
+                assert_eq!(result, payload);
             }
+            // Both explicit close and Drop must drain the last submitted copy.
+            owner.submit_transfer(&[cycle; 257])?;
             if cycle % 2 == 0 {
                 owner.close()?;
             }

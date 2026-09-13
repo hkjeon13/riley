@@ -61,6 +61,25 @@ impl<P> OwnedGraphResourceReservation<P> {
         self.native.replay_transfer(input)
     }
 
+    /// Copies input into retained staging and submits the graph without waiting.
+    /// # Errors
+    /// Rejects pending work or invalid input and propagates CUDA failures.
+    pub fn submit_transfer(&mut self, input: &[u8]) -> CudaResult<()> {
+        self.native.submit_transfer(input)
+    }
+    /// Checks completion without blocking. Output is readable only after true.
+    /// # Errors
+    /// Rejects missing work or propagates CUDA completion errors.
+    pub fn query_transfer(&mut self) -> CudaResult<bool> {
+        self.native.query_transfer()
+    }
+    /// Waits for pending work. Close/drop also drain before releasing parents.
+    /// # Errors
+    /// On unknown completion native retains the parents instead of releasing them.
+    pub fn wait_transfer(&mut self) -> CudaResult<()> {
+        self.native.wait_transfer()
+    }
+
     /// Reads only a successfully completed replay.
     /// # Errors
     /// Returns an error for stale, failed, or incorrectly sized output.
@@ -1337,4 +1356,20 @@ pub fn record_v7_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<us
         }
         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V7 mixed"))}
     }
+}
+
+#[cfg(feature = "cuda")]
+impl BorrowedGraphResourceReservation<'_> {
+    /// Submit using retained parents; input is staged before return.
+    /// # Errors
+    /// Propagates validation and CUDA submission failures.
+    pub fn submit_transfer(&mut self, input: &[u8]) -> CudaResult<()> { self.native.submit_transfer(input) }
+    /// Query the retained completion event.
+    /// # Errors
+    /// Propagates absent or failed completion.
+    pub fn query_transfer(&mut self) -> CudaResult<bool> { self.native.query_transfer() }
+    /// Wait for the retained completion event.
+    /// # Errors
+    /// Failed completion keeps native parents retained.
+    pub fn wait_transfer(&mut self) -> CudaResult<()> { self.native.wait_transfer() }
 }

@@ -70,8 +70,12 @@ struct RileyCudaGraphResources {
   bool vllm_smol_p128 = false;
   bool prefill128 = false;
   bool completion_unknown = false;
+  cudaEvent_t completion_event = nullptr;
+  bool async_pending = false;
   RileyCudaGraphCapture* scoped_capture = nullptr;
 };
+
+static RileyCudaStatus finish_async_transfer(RileyCudaGraphResources*, bool, uint32_t*, RileyCudaErrorInfo*) noexcept;
 
 namespace {
 using namespace riley_cuda_internal;
@@ -201,6 +205,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
   if ((*resources)->thread != native_thread_token())
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "aggregate owner belongs to another thread");
+  if ((*resources)->async_pending) {
+    uint32_t ready = 0;
+    auto status = finish_async_transfer(*resources, true, &ready, error);
+    if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+  }
   if ((*resources)->completion_unknown)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
@@ -264,6 +273,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
         status=runtime_error(cudaGraphDestroy(entry.graph),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
         if(status==RILEY_CUDA_STATUS_SUCCESS)entry.graph=nullptr;else (*resources)->completion_unknown=true;
       }
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->completion_event != nullptr) {
+      status = runtime_error(cudaEventDestroy((*resources)->completion_event), error,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+      if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->completion_event = nullptr;
+      else (*resources)->completion_unknown = true;
     }
     status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
     if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
@@ -346,9 +361,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 
 #include "graph_multisequence_packet.inc"
 
-extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+static RileyCudaStatus replay_transfer_impl(
     RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
-    RileyCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error, bool asynchronous) noexcept {
   clear_error(error);
   auto status = transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
@@ -427,6 +442,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kTransfer);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   r->terminal = true;
+  if (asynchronous && r->completion_event == nullptr) {
+    status = runtime_error(cudaEventCreateWithFlags(&r->completion_event, cudaEventDisableTiming),
+                           error, RILEY_CUDA_ERROR_STAGE_PREPARE, kTransfer);
+    if (status != RILEY_CUDA_STATUS_SUCCESS)
+      return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE, kTransfer);
+  }
   r->catalog_sealed=true;
   std::memmove(r->input->host_data, source, static_cast<size_t>(bytes));
   if (r->bound_attention) {
@@ -438,6 +459,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
   }
   r->completion_unknown = true;
   auto launched = cudaGraphLaunch(selected_exec, r->stream->stream);
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+  // Fault overrides use the existing drain-first failure path.
+  if (r->test_replay_fault != 0) asynchronous = false;
+#endif
+  if (asynchronous && launched == cudaSuccess) {
+    const auto recorded = cudaEventRecord(r->completion_event, r->stream->stream);
+    if (recorded == cudaSuccess) {
+      r->async_pending = true;
+      return scope.leave(RILEY_CUDA_STATUS_SUCCESS, error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kTransfer);
+    }
+    launched = recorded; // Drain submitted work on event-record failure.
+  }
   // Synchronize even on launch error; that is the only authority to release
   // possibly submitted work. A failed synchronization intentionally pins owners.
   auto completed = cudaStreamSynchronize(r->stream->stream);
@@ -457,6 +490,61 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     r->completion_visible = true;
   }
   return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
+    RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
+    RileyCudaErrorInfo* error) noexcept {
+  return replay_transfer_impl(r, source, bytes, error, false);
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_submit_transfer(
+    RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
+    RileyCudaErrorInfo* error) noexcept {
+  return replay_transfer_impl(r, source, bytes, error, true);
+}
+static RileyCudaStatus finish_async_transfer(RileyCudaGraphResources* r, bool wait,
+    uint32_t* ready, RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (ready == nullptr) return reject(error, "null completion output", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  *ready = 0;
+  if (r == nullptr || r->thread != native_thread_token() ||
+      r->owner->restoration_failed.load(std::memory_order_acquire))
+    return reject(error, "async owner unavailable");
+  if (!r->async_pending) {
+    if (r->terminal || !r->completion_visible) return reject(error, "no async completion");
+    *ready = 1;
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  CaptureDomainControlLease admission(r->owner->capture_domain);
+  if (!admission.active()) return reject(error, "capture domain busy");
+  CurrentContext scope(r->owner);
+  auto status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kTransfer);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+  const auto completed = wait ? cudaEventSynchronize(r->completion_event) : cudaEventQuery(r->completion_event);
+  if (completed == cudaErrorNotReady && !wait)
+    return scope.leave(RILEY_CUDA_STATUS_SUCCESS, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kTransfer);
+  status = runtime_error(completed, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kTransfer);
+  r->async_pending = false; // On failure completion stays unknown; close must retain parents.
+  if (completed == cudaSuccess) {
+    r->async_pending = false;
+    r->completion_unknown = false;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kTransfer);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    r->terminal = false;
+    r->completion_visible = true;
+    *ready = 1;
+  }
+  return status;
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_query_transfer(
+    RileyCudaGraphResources* r, uint32_t* ready, RileyCudaErrorInfo* error) noexcept {
+  return finish_async_transfer(r, false, ready, error);
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_wait_transfer(
+    RileyCudaGraphResources* r, RileyCudaErrorInfo* error) noexcept {
+  uint32_t ready = 0;
+  return finish_async_transfer(r, true, &ready, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(

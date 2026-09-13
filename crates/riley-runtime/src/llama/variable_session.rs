@@ -13,7 +13,7 @@ pub struct VariableSessionIdentity {
 pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
     issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
-    compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
+    async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
 impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
@@ -23,7 +23,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
-            compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+            async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
     pub(crate) fn new_shared_compact(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{if !matches!(ROWS,16|32){return Err(bad("compact requires sixteen or thirty-two rows"));}let mut s=Self::new_shared(graph,digest,physical,context)?;s.compact=true;Ok(s)}
@@ -52,20 +52,53 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if e.rows.len()!=1{return Err(bad("single result requires one row"));}
         let rows=self.execute_rows(e)?;Ok((rows[0].token,rows[0].logits))
     }
-    pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
+    /// Select event completion for the compatibility execute_rows path.
+    /// This does not enable scheduling ahead; it may only change while idle.
+    pub fn set_async_completion(&mut self, enabled: bool)->Result<()> {
+        if self.poisoned || self.retained.is_some() || self.issued.is_some() { return Err(bad("session busy or poisoned")); }
+        self.async_completion=enabled; Ok(())
+    }
+    fn retain_submission(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
         let i=self.identity;
         if e.mixed_execution!=i.mixed_execution || e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
-        let compact=self.compact && e.mode==super::multi_descriptor::ResultMode::Greedy;
-        let output_bytes=if compact{wire::Layout::<ROWS>::COMPACT_RESULT_BYTES}else{self.output.len()};
         wire::encode_into(&mut self.input,&e)?;
         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
-        if self.graph.replay_transfer(&self.input).and_then(|()|self.graph.read_transfer(&mut self.output[..output_bytes])).is_err() {
+        Ok(())
+    }
+    pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
+        if self.async_completion { self.submit_rows(e)?; return self.wait_rows(); }
+        self.retain_submission(e)?;
+        if self.graph.replay_transfer(&self.input).is_err() {
             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
         }
+        self.collect_rows()
+    }
+    /// Stage and submit one iteration. Its buffers remain owned until commit.
+    pub fn submit_rows(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
+        self.retain_submission(e)?;
+        if self.graph.submit_transfer(&self.input).is_err() {
+            self.poisoned=true;return Err(bad("native submission failed; close required before KV release"));
+        }
+        Ok(())
+    }
+    pub fn query_completion(&mut self)->Result<bool> {
+        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        self.graph.query_transfer().map_err(|_|{self.poisoned=true;bad("native completion failed; close required")})
+    }
+    pub fn wait_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
+        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        if self.graph.wait_transfer().is_err() {self.poisoned=true;return Err(bad("native completion failed; close required"));}
+        self.collect_rows()
+    }
+    fn collect_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
+        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        let compact=self.compact && self.retained.as_ref().unwrap().mode==super::multi_descriptor::ResultMode::Greedy;
+        let output_bytes=if compact{wire::Layout::<ROWS>::COMPACT_RESULT_BYTES}else{self.output.len()};
+        if self.graph.read_transfer(&mut self.output[..output_bytes]).is_err() {self.poisoned=true;return Err(bad("native read failed; close required"));}
         let e=self.retained.as_ref().unwrap();
         match if compact {wire::validate_compact_result(&self.output[..output_bytes],e)}else if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
             Ok(result)=>{self.completed=true;Ok(result)},
@@ -133,13 +166,22 @@ mod sealed {
 /// Native reservation operations; sealed so a caller cannot fabricate completion.
 pub trait VariableGraph: sealed::Sealed {
     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
+    fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
+    fn query_transfer(&mut self)->riley_cuda::CudaResult<bool>;
+    fn wait_transfer(&mut self)->riley_cuda::CudaResult<()>;
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()>;
 }
 impl VariableGraph for BorrowedGraphResourceReservation<'_> {
+    fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::submit_transfer(self,input)}
+    fn query_transfer(&mut self)->riley_cuda::CudaResult<bool> {BorrowedGraphResourceReservation::query_transfer(self)}
+    fn wait_transfer(&mut self)->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::wait_transfer(self)}
     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::replay_transfer(self,input)}
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_transfer(self,output)}
 }
 impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelParents> {
+    fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::submit_transfer(self,input)}
+    fn query_transfer(&mut self)->riley_cuda::CudaResult<bool> {riley_cuda::OwnedGraphResourceReservation::query_transfer(self)}
+    fn wait_transfer(&mut self)->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::wait_transfer(self)}
     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::replay_transfer(self,input)}
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_transfer(self,output)}
 }

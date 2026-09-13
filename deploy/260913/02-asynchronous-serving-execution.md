@@ -1,6 +1,6 @@
 # PR 02 — 비동기 iteration 실행과 응답 처리 중첩
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중**. native submit/query/wait와 variable session을 연결했다. GPU token 전달·이중 buffer·ahead scheduling은 남아 있다. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -46,3 +46,19 @@ page 경계에서 추가 decode 예약, cancel/EOS와 admission 교차, 늦은 c
 ## 연구 근거
 
 [SGLang overlap](https://www.lmsys.org/blog/2024-12-04-sglang-v0-4/), [TRT-LLM overlap](https://nvidia.github.io/TensorRT-LLM/features/overlap-scheduler.html). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+## 첫 실행 경계 검증
+
+기존 synchronous replay와 별개로 submit/query/wait를 추가했다. input은 제출 함수가 반환하기 전에 retained staging으로 복사한다. 정상 async 제출은 event를 기록한 후 반환하며, 완료 전 read/re-submit은 거부한다. close/Drop은 pending event를 기다린 뒤 graph와 parents를 해제한다. 완료 여부가 오류로 불명확하면 owner를 보유한다. event는 재사용하며 동기 API에는 event 생성을 추가하지 않았다.
+
+4090 GPU transfer lifecycle 검사 1개가 통과했고 같은 검사에 대한 Compute Sanitizer memcheck는 0 errors다. 반복 replay와 명시적 close/Drop 경로가 포함된다. [GPU 로그](../../benchmarks/results/20260913-async-execution/transfer-gpu.log), [memcheck](../../benchmarks/results/20260913-async-execution/transfer-memcheck.log).
+
+이 검사는 전송 graph의 lifecycle 증거다. actual model·dynamic admission·EOS/cancel·GPU future-token 전달·metadata 이중화·serving 성능은 아직 검증하지 않았다. 이 API만으로 한 iteration 앞서는 scheduler가 완성되지는 않는다. fault-injection 설정은 기존 drain-first 동기 오류 경로를 사용하며 실제 async event 실패의 포괄적 주입 검사는 남아 있다.
+
+## Variable session 통합 검증
+
+submit_rows/query_completion/wait_rows를 추가하고 기존 execute_rows를 event 완료 경로로 실행하는 선택 옵션을 제공했다. 기본값은 기존 동기 경로다. 제출 이후 결과 검증 및 scheduler commit까지 기존 retained owner를 유지하고 다음 issue를 거부한다. 아직 두 iteration을 동시에 허용하지 않는다.
+
+SmolLM2 실제 모델의 loaded_v7_compact32/full32/partial 3개 GPU 테스트가 통과했다. 각각 4096/4096/224 출력 위치의 기존 reference 검사와 scheduler settlement, pending close/abort, allocation_zero 검증이 포함되어 있다. compact 경로는 greedy token, full 경로는 BF16 logits를 대조한다. partial 경로에 대한 Compute Sanitizer memcheck는 0 errors다. [모델 GPU 결과](../../benchmarks/results/20260913-async-execution/model-gpu.log), [모델 memcheck](../../benchmarks/results/20260913-async-execution/model-memcheck.log).
+
+이는 비동기 제출 경계의 correctness 증거다. 테스트의 compatibility 경로는 제출 후 대기하므로 CPU/GPU overlap이나 serving 성능 향상을 입증하지 않는다. 다음 batch는 GPU token 전달, completion/metadata 이중화, 두 iteration ticket과 scheduler 반영 순서를 함께 구현하고 실제 serving으로 비교한다.
