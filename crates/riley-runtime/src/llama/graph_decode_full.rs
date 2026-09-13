@@ -2096,7 +2096,7 @@ impl PreparedLlamaBatchExecutor {
         }.bind(&mut hash).map_err(rejected)?;
         if scratch.flashinfer_workspace.is_some() {
             if !scratch.mixed_execution || ROWS!=32 {return Err(rejected("FlashInfer experimental profile requires mixed32"));}
-            hash.update(b"riley.experimental.flashinfer-0.6.16.post3.unsplit-decode.v1");
+            hash.update(b"riley.experimental.flashinfer-0.6.16.post3.consistent-decode.v2");
             hash.update(include_bytes!("../../../../kernels/optional/flashinfer_decode.cu"));
             hash.update(include_bytes!("../../../../kernels/optional/flashinfer_api.h"));
             hash.update(include_bytes!("../../../../kernels/optional/verify_flashinfer.py"));

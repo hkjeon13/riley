@@ -1,6 +1,6 @@
 # PR 03 — FlashInfer paged attention 실행층 통합
 
-상태: **구현 중 — Rust/native 모델 연결 및 관측 완료, 수치 gate 실패·serving 미검증**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — Rust/native 연결 및 관측 반례 수정, 일반 품질·serving 미검증**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -69,3 +69,11 @@ Native-only memcheck는 0 errors. Python FlashInfer 포함 memcheck는 cuGetProc
 [모델 관측 증거](../../benchmarks/results/20260913-flashinfer-model-observation/README.md): 별도 retained workspace를 검증하는 Rust/native recorder와 explicit experimental factory를 연결했다. Partial 224개 argmax는 reference와 같았지만 32-request 관측은 4,096개 중 16개 불일치했다. 동일 prompt·teacher-forced history의 요청끼리도 서로 다른 argmax를 내어 batch invariance 반례가 확인됐다. Native 모델 partial memcheck는 0 errors다.
 
 **수치 gate는 실패이며 기본값 승격 및 serving 성능 주장은 하지 않는다.** Pure-decode FlashInfer와 mixed 기존 backend 사이 연산 일관성을 다음에 조사한다. 이것은 아직 원인 확정이 아니다. 관측 harness 종료 성공을 수치 계약 통과로 해석하거나 tolerance를 사후 완화하지 않는다.
+
+## Mixed/pure decode 연산 통일 결과
+
+[Stage consistency 증거](../../benchmarks/results/20260913-flashinfer-stage-consistency/README.md): stage 분리 대조군에서는 기존 experimental FlashInfer도 토큰/요청 간 logits 불일치가 사라졌다. Mixed batch의 decode 행까지 같은 FlashInfer 연산을 적용한 v2에서는 원래 mixed scheduler를 유지하면서 4,096/4,096 argmax 일치와 3,968/3,968 요청 간 full-logit 일치를 확인했다. Full32 native memcheck는 0 errors다. Metadata의 final indptr 및 임시 출력 정렬 오류도 실제 실패를 보존하고 수정했다.
+
+Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 추가됐다. 이 비용은 serving에서 측정해야 한다. 독립 prompt/free-running 품질 및 serving 비교는 미완료이며 numerical_profile_accepted=false를 유지한다.
+
+사용자 제약: 실제 실행은 Rust → C/C++ ABI → CUDA로 유지하며 Rust ↔ Python serving 흐름은 도입하지 않는다. Python은 빌드 및 오프라인 검증에만 허용한다.

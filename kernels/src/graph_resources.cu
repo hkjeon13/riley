@@ -1412,6 +1412,11 @@ static RileyCudaStatus record_variable_shared(
    return result;
   }
   if constexpr(Packed){
+#ifdef RILEY_CUDA_ENABLE_FLASHINFER
+   if(attention_workspace){
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental consistent decode attention");
+   }else
+#endif
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V6 packed head");
    if(compact){

@@ -1,0 +1,12 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+test flashinfer_consistent_full32 has been running for over 60 seconds
+STAGE_CONTROL exact_backend=false separate_stages=false mixed_iterations=13 pure_decode_iterations=127 cross_request_token_differences=0 token_comparisons=3968 cross_request_logit_differences=0 logit_comparisons=3968
+FLASHINFER_OBSERVATION values=201326592 exact_values=32472224 max_abs=0.78125 rmse=0.1158794790782448 argmax_agreements=4096 outputs=4096 numerical_profile_accepted=false teacher_forced=true
+LOADED_MIXED rows_max=32 logits_checked=4096 iterations=141 pending_close_abort=true allocation_zero=true
+test flashinfer_consistent_full32 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 62.78s
+
+========= ERROR SUMMARY: 0 errors

@@ -79,3 +79,11 @@ Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 
 17~19는 후속 구조 PR이다. MoE 모델 지원은 17의 명시적 선행이며 현재 dense 모델 범위와 구별한다. 18은 고정 worker pool의 신규 요청 routing, 19는 iteration 단위 persistent 실행으로 제한한다. 전체 GPU serving scheduler나 클러스터 autoscaler를 한 PR에 넣지 않는다. Fast-TurboQuant는 초록 수준 선별이므로 본문·구현 검토 이후 적용 계획을 정한다.
 
 상세 근거는 [전체 연구](../../benchmarks/results/20260912-serving-optimization/RESEARCH_20260913.md), [HBM·CUDA 연구](../../benchmarks/results/20260912-serving-optimization/HBM_CUDA_RESEARCH_20260913.md), [현재 코드 접점](../../benchmarks/results/20260912-serving-optimization/RESEARCH_CODE_FIT_20260913.md)을 참조한다. 각 PR은 위 연구의 Riley 적용 제안이며 논문 주장을 현재 구현의 사실로 취급하지 않는다.
+
+## Serving 언어 경계 — 사용자 확정 제약
+
+Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Scheduler, model 실행, attention/KV 관리, sampling 등 요청 처리 중 Python interpreter, PyO3, Python subprocess, Python worker/RPC에 의존하지 않는다. 외부 kernel 라이브러리는 Rust → C/C++ ABI → CUDA 경로로 연결한다. Python은 필요한 빌드·오프라인 연구·검증 도구에서만 사용할 수 있다. 이는 2026-09-13 사용자 지시이며 후속 PR에도 적용한다.
+
+## 비교표 보고 주기 — 사용자 확정 지시
+
+작은 수정마다 반복하지 않고 Scheduler·attention·KV 등 의미 있는 구현/도입 묶음이 serving에서 실행·검증 가능한 수준에 도달할 때, 직전 Riley baseline·새 Riley·vLLM을 동일 조건에서 비교하고 결과를 표로 남긴다. Throughput, TTFT/TPOT, P95/P99 latency, 오류율, correctness, revision·모델·하드웨어·workload·수치 profile·반복 횟수 및 raw 증거를 포함한다. 새 측정이 없으면 미측정으로 표시하며 primitive/모델 검사 시간을 serving 수치로 대체하지 않는다. 보고 형식은 [비교표 양식](BENCHMARK_REPORT_TEMPLATE.md)을 따른다.

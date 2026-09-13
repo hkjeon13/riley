@@ -1,0 +1,23 @@
+{
+  "numerical_profile_accepted": false,
+  "serving_measured": false,
+  "runtime_python_dependency": false,
+  "workspace_bytes": 78256,
+  "current_fixture_gates": {
+    "greedy": "4096/4096",
+    "cross_request_tokens": "3968/3968",
+    "cross_request_full_logits": "3968/3968",
+    "full32_memcheck_errors": 0,
+    "exact_factory_regression": "224 outputs, 129 iterations passed"
+  },
+  "initial_failure_logs": [
+    "flashinfer-consistent-misaligned.log",
+    "flashinfer-consistent-missing-indptr-end.log"
+  ],
+  "remaining": [
+    "independent prompts",
+    "free-running generation quality",
+    "matched serving baseline/vLLM comparison",
+    "Hopper/Blackwell/multi-GPU runtime"
+  ]
+}

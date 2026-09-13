@@ -243,7 +243,7 @@ impl super::PreparedLlamaBatchExecutor {
         self.into_variable_session_mode::<ROWS>(context,capacity,shared,compact,packed,mixed,false,false)
     }
     /// Explicit experimental numerical profile: FlashInfer 0.6.16.post3 unsplit
-    /// pure decode; existing packed/mixed prefill arithmetic. Quality is unaccepted.
+    /// decode rows in pure and mixed stages; existing prefill arithmetic. Quality is unaccepted.
     /// Fails if optional native build support is absent; never falls back silently.
     pub fn into_owned_variable_flashinfer_experimental_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,false,true)
@@ -253,7 +253,7 @@ impl super::PreparedLlamaBatchExecutor {
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
         parents.scratch.compact=compact;parents.scratch.packed_prefill=packed;parents.scratch.mixed_execution=mixed;
-        if flashinfer {parents.scratch.flashinfer_workspace=Some(context.allocate_device_buffer(33456).map_err(cuda)?);}
+        if flashinfer {parents.scratch.flashinfer_workspace=Some(context.allocate_device_buffer(78256).map_err(cuda)?);}
         if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}
         if buffered {for _ in 0..1 {parents.scratch.buffered_staging.push(context.allocate_pinned_host_buffer(wire::Layout::<ROWS>::STAGING_BYTES as u64).map_err(cuda)?);}}
         let mut identity=None;

@@ -2793,7 +2793,7 @@ RileyCudaStatus riley_cuda_graph_resources_record_v6_shared(
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
     RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 /* Experimental arithmetic; no exact-profile substitution. Metadata is a retained,
- * non-aliasing device parent of exactly 33456 bytes. Build support is opt-in. */
+ * non-aliasing device parent of exactly 78256 bytes. Build support is opt-in. */
 RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_experimental(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
