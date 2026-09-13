@@ -3,6 +3,14 @@
 #include "decode_shape.cuh"
 namespace riley_gqa50_attention {
 
+// The caller supplies an allocated aligned pair in a valid physical KV page.
+// Mask integer bits after loading; future BF16 NaN/Inf must become exact zero.
+__device__ __forceinline__ uint32_t masked(const __nv_bfloat16* p,int pos,int end){
+ uint32_t bits=*reinterpret_cast<const uint32_t*>(p);
+ uint32_t mask=(0xffffU*uint32_t(pos<end))|(0xffff0000U*uint32_t(pos+1<end));
+ return bits&mask;
+}
+
 // Parallel QK score tiles, preserving the exact four K16 MMA recurrence.
 __global__ void scores(const __nv_bfloat16* q,const __nv_bfloat16* k,float* result,const uint32_t* shape,const uint32_t* pages,const uint32_t* live_rows){
  int row=blockIdx.y/3;uint32_t active=*live_rows;if(active<1||active>32||row>=active)return;
@@ -56,8 +64,8 @@ __global__ void independent_values(const float* scores,const __nv_bfloat16* v,__
     paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
     // Each lane reads an aligned adjacent-token pair from the packed V tile.
     int vi=live?(pages[at/16]*3+head/3)*1024+block*128:0;
-    vb[part]=live?riley_packed_value_v54::masked_pair(v+vi+lane*2,at+2*t,end):0;
-    vbb[part]=live?riley_packed_value_v54::masked_pair(v+vi+64+lane*2,at+2*t+8,end):0;
+    if(at+16<=end){vb[part]=*reinterpret_cast<const uint32_t*>(v+vi+lane*2);vbb[part]=*reinterpret_cast<const uint32_t*>(v+vi+64+lane*2);}
+    else{vb[part]=live?masked(v+vi+lane*2,at+2*t,end):0;vbb[part]=live?masked(v+vi+64+lane*2,at+2*t+8,end):0;}
    }
    #pragma unroll
    for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);
