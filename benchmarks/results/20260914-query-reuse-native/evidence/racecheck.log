@@ -1,0 +1,32 @@
+========= COMPUTE-SANITIZER
+CHECK prefill=0 decode=0 start=0 context=1 repeat=0 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=0 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=0 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=1 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=1 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=1 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=2 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=2 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=0 decode=0 start=0 context=1 repeat=2 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=0 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=0 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=0 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=1 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=1 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=1 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=2 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=2 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=17 decode=4 start=0 context=129 repeat=2 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=0 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=0 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=0 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=1 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=1 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=1 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=2 mode=1 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=2 mode=2 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+CHECK prefill=128 decode=8 start=16 context=256 repeat=2 mode=3 mismatches=0 coverage_errors=0 release_mismatches=0 error=0 sms_saw_both_roles=0
+OCCUPANCY original_ctas_per_sm=14 candidate_ctas_per_sm=11 original_warps_per_sm=14 candidate_warps_per_sm=11
+DIRECT registers=127 shared_bytes=12288 local_bytes=0
+DONE cases=9 registers=128 shared_bytes=8192 local_bytes=0 workspace_bytes=122900
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)

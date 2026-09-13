@@ -76,3 +76,7 @@ Direct native는 대표 shape에서1.6–3.7% 낮지만 긴 prefill은 거의 �
 ## Cache 결합 후 attention 우선순위 재확인
 
 [Composed profile](../../benchmarks/results/20260914-prefix-cache-profile/README.md): 고유 prompt에서 prefill/mixed는 선택 graph span의83.8%, mapped attention은 kernel 누적시간의31.1%다. 공유 prefix에서도 mapped attention이 최대 단일 kernel family다. Warmup 파일쓰기 공백을 제거해 재측정했고 profiler/client 영향이 남는 gap을 순수 CPU 병목으로 주장하지 않는다. 다음 batch는 query 작업 mapping, K/V reuse, resource-bounded native dispatch를 함께 다룬다. 기존 POD CTA 상수/시간 threshold 반복은 하지 않는다. 실제 register/shared usage·exact causal/page/nonfinite native gate 이후 retained graph·serving 검증으로 진행한다. 상세 수치 계약과 미완료 범위는 profile 문서를 따른다.
+
+## Query reuse native batch
+
+[구현·검증 결과](../../benchmarks/results/20260914-query-reuse-native/README.md): 기존 task map에서 인접8-query 작업을16-query로 묶고 K/V 재사용·compact probability 저장·audit coverage를 연결했다.153 audit+153 graph replay 비교가 bitwise 일치하고 bounded memcheck/racecheck 및 SM90a/SM100a 컴파일이 통과했다. Serving capacity512의 긴 mixed prefill은 compact16이9–11% 빠르나 짧은 suffix는동률, pure prefill은약2%에 그친다. Register/shared envelope가 커져 shape별 효과를 구분한다. 다음은 명시적 retained-model option과 source/catalog identity, 모델·cache·stop/cancel 검증 후 실제 serving 비교다. 현재 production release와 기본값은 변경하지 않았다.
