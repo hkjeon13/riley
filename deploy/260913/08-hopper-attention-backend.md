@@ -1,6 +1,6 @@
 # PR 08 — Hopper 비동기 attention backend
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — pinned FA3 native build/link 및 호스트 오류 검사 통과; production adapter와 Hopper 실행 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -46,3 +46,9 @@ Hopper의 data movement·Tensor Core overlap을 활용하는 실행 경로를 �
 ## 연구 근거
 
 [FlashAttention-3](https://arxiv.org/abs/2407.08608), [ThunderKittens](https://arxiv.org/abs/2410.20399). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+## Native build 착수 결과 (2026-09-14)
+
+[검증 기록](../../benchmarks/results/20260914-fa3-native-build/README.md): FA3/CUTLASS commit 고정, 라이선스 보존 export, upstream process exit의 예외 전환, BF16/head64 dense 및 paged ragged prefill/decode 실제 SM90a 커널과 scheduler의 native build/link를 검증했다. Python은 offline 빌드 도구이며 실행 파일에 Python/Torch runtime 의존성은 없다.
+
+호스트 오류 주입 2종은 통과했다. Paged 변형은 KV non-TMA 경로이며 register spill과 WGMMA 직렬화 가능성 경고가 있다. 이를 숨기거나 성능 개선으로 해석하지 않는다. C ABI/Rust owner, HND/page16 extent 및 shape 검사, cold plan·workspace·stream·graph 계약, fallback 연결은 다음 구현 범위다. Hopper runtime numerical/sanitizer/serving은 장비 부재로 미실행이며 production backend 완료 또는 승격으로 간주하지 않는다.

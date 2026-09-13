@@ -1,0 +1,29 @@
+{
+  "fa3_commit": "98eb7998a0eba4047c7a30375522569d4b8efb20",
+  "cutlass_commit": "7127592069c2fe01b041e174ba4345ef9b279671",
+  "command": [
+    "/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc",
+    "-std=c++17",
+    "-O3",
+    "-arch=sm_90a",
+    "--expt-relaxed-constexpr",
+    "--expt-extended-lambda",
+    "-Xptxas=-v",
+    "-I/data/riley-serving-260913-recovery/fa3-native-build-v2/fa3/hopper",
+    "-I/data/riley-serving-260913-recovery/fa3-native-build-v2/cutlass/include",
+    "-I/data/riley-serving-260913-recovery/fa3-native-build-v2/cutlass/tools/util/include",
+    "/data/riley-serving-260913-recovery/fa3_native_compile_probe.cu",
+    "/data/riley-serving-260913-recovery/fa3-native-build-v2/fa3/hopper/flash_prepare_scheduler.cu",
+    "-lcuda",
+    "-o",
+    "/data/riley-serving-260913-recovery/fa3-native-build-v2/fa3-native-probe"
+  ],
+  "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "original_error_header_sha256": "f93a4a55e528edaa3b51a26e26e33f6b52e2b26a30b8e325b2c5121db70d8df0",
+  "patched_error_header_sha256": "97a26693411e4e47f4a106101225c4a4b1b0d40dd29c9988d44b713f40f5dcf5",
+  "probe_sha256": "e18800289a482a43b1e0c9ed9b0a9e945e788d8feb60e442d9e41d5db75342c9",
+  "scope": "BF16 head64 dense causal and paged ragged prefill/decode native compile/link; host error contract",
+  "build_exit": 0,
+  "binary_sha256": "e433167842053dd689621be2a15e2c3f5a1e4ebb797e0a0433f652c183bc97a1",
+  "host_contract_exit": 0
+}

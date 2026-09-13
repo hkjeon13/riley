@@ -1,0 +1,85 @@
+ptxas info    : (C7510) Potential Performance Loss: wgmma.mma_async instructions are serialized due to wgmma pipeline crossing function boundary at a function call in the function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb0ELb1ELb1EEEEEEEEEvNT_6ParamsE'
+ptxas info    : (C7510) Potential Performance Loss: wgmma.mma_async instructions are serialized due to wgmma pipeline crossing function boundary at a function call in the function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb1ELb1ELb1EEEEEEEEEvNT_6ParamsE'
+ptxas info    : (C7510) Potential Performance Loss: wgmma.mma_async instructions are serialized due to wgmma pipeline crossing function boundary at a function call in the function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb0ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb0ELb0ELb0ELb0EEENS1_30DynamicPersistentTileSchedulerILi384ELi32ELb0ELb0ELb1EEEEEEEEEvNT_6ParamsE'
+ptxas info    : 2286 bytes gmem
+ptxas info    : Compiling entry function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb0ELb1ELb1EEEEEEEEEvNT_6ParamsE' for 'sm_90a'
+ptxas info    : Function properties for _ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb0ELb1ELb1EEEEEEEEEvNT_6ParamsE
+    64 bytes stack frame, 96 bytes spill stores, 132 bytes spill loads
+ptxas info    : Used 128 registers, used 16 barriers, 64 bytes cumulative stack size
+ptxas info    : Compile time = 174.497 ms
+ptxas info    : Compiling entry function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb1ELb1ELb1EEEEEEEEEvNT_6ParamsE' for 'sm_90a'
+ptxas info    : Function properties for _ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb1ELb1ELb0ELb0ELb1ELb1ELb1ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb1ELb1ELb0ELb0EEENS1_36VarlenDynamicPersistentTileSchedulerILi192ELi128ELi384ELi128ELb0ELb1ELb1ELb1ELb1ELb1EEEEEEEEEvNT_6ParamsE
+    64 bytes stack frame, 100 bytes spill stores, 136 bytes spill loads
+ptxas info    : Used 128 registers, used 16 barriers, 64 bytes cumulative stack size
+ptxas info    : Compile time = 227.515 ms
+ptxas info    : Compiling entry function '_ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb0ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb0ELb0ELb0ELb0EEENS1_30DynamicPersistentTileSchedulerILi384ELi32ELb0ELb0ELb1EEEEEEEEEvNT_6ParamsE' for 'sm_90a'
+ptxas info    : Function properties for _ZN7cutlass13device_kernelIN5flash11enable_sm90INS1_16FlashAttnFwdSm90INS1_25CollectiveMainloopFwdSm90ILi2EN4cute5tupleIJNS5_1CILi1EEES8_S8_EEENS6_IJNS7_ILi192EEENS7_ILi128EEENS7_ILi64EEEEEELi64ENS_10bfloat16_tEfNS_4arch4Sm90ELb1ELb0ELb0ELb0ELb0ELb0ELb0ELb1ELb1ELb0ELb0ELb0EEENS1_21CollectiveEpilogueFwdINS6_IJSA_SC_SB_EEES9_SE_SG_Li384ELb0ELb0ELb0ELb0EEENS1_30DynamicPersistentTileSchedulerILi384ELi32ELb0ELb0ELb1EEEEEEEEEvNT_6ParamsE
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 16 barriers
+ptxas info    : Compile time = 159.126 ms
+ptxas info    : 41 bytes gmem
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi32ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi32ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 10.156 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi16ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi16ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 9.331 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi8ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi8ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 9.029 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi4ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi4ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 9.010 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi2ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi2ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 9.016 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi1ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi1ELb0EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 17 registers, used 1 barriers, 4 bytes smem
+ptxas info    : Compile time = 9.225 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi32ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi32ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 20 registers, used 1 barriers, 16416 bytes smem
+ptxas info    : Compile time = 12.105 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi16ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi16ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 20 registers, used 1 barriers, 8224 bytes smem
+ptxas info    : Compile time = 11.943 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi8ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi8ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 20 registers, used 1 barriers, 4128 bytes smem
+ptxas info    : Compile time = 11.859 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi4ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi4ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 20 registers, used 1 barriers, 2080 bytes smem
+ptxas info    : Compile time = 11.906 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi2ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi2ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 20 registers, used 1 barriers, 1056 bytes smem
+ptxas info    : Compile time = 11.940 ms
+ptxas info    : Compiling entry function '_ZN5flash32prepare_varlen_num_blocks_kernelILi1ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash32prepare_varlen_num_blocks_kernelILi1ELb1EEEviiiPKiS2_S2_S2_S2_S2_iiiiiN7cutlass10FastDivmodES4_PiS5_S5_S5_S5_bbbi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 27 registers, used 1 barriers, 544 bytes smem
+ptxas info    : Compile time = 15.106 ms
+ptxas info    : Compiling entry function '_ZN3cub17CUB_300001_SM_9006detail11EmptyKernelIvEEvv' for 'sm_90a'
+ptxas info    : Function properties for _ZN3cub17CUB_300001_SM_9006detail11EmptyKernelIvEEvv
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 4 registers, used 0 barriers
+ptxas info    : Compile time = 0.332 ms
