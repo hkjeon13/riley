@@ -1,0 +1,15 @@
+{
+  "source_sha256": {
+    "kernels/src/mixed_attention_v49.cuh": "366ea4ec69d55fcd8110b67ad434d6d0ca19cb6cd3ba5a600a84f6abf60a05e0",
+    "kernels/src/prefill_shape_attention.cuh": "6d476f74c8cf5afc498862dc1a892c59ba1259fc0b641eec86b1e3fb459a4d12",
+    "kernels/optional/flashinfer_prefill.cu": "4394421e1c93864550eafa646d9a41af54596ddeb3f5c0694a3eade44248ed87",
+    "kernels/optional/flashinfer_api.h": "12bc0a03fc32d7d1674a6235ef8e12d9770b351dfba8e94f60c514778368d1e4",
+    "kernels/optional/prepare_flashinfer_prefill_overlay.py": "0b441b23d157fd6bd5106a907b5eda3af53e728d76bd2cd75437e7249a28ae1a",
+    "kernels/optional/verify_flashinfer.py": "4930f311fe6991b812dbbba95272c903abb700fd69052b4f5e2f7b95ed3ba294",
+    "benchmarks/analysis/flashinfer_prefill_probe.cu": "9535a7a5e84527237788a235e47ee606e9fd0c7356b4265c25393f4892eb6e85"
+  },
+  "generator_sha256": "e9632de32a719c2c890b5bd81f269ac82fdbd5743011c02d2a77739ffd9412a6",
+  "sanitizer_outputs_bitwise_equal": true,
+  "unchanged_flashinfer_bf16_output": true,
+  "compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n"
+}

@@ -109,3 +109,7 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 [전체 모델 결과](../../benchmarks/results/20260913-flashinfer-prefill-model/README.md): 별도 retained workspace·native recorder·Rust factory·graph identity를 연결했다. Mixed의 prefill만 FlashInfer로 처리하고 pure/mixed decode는 기존 V7을 유지한다. 30-layer full-model 실행과 native memcheck0 errors, 종료 후 allocation0을 확인했다. 기존 V7 자연어 logits는 이전 baseline과 bitwise 일치한다.
 
 Strict free generation은32요청 중8요청·1,024토큰 중56토큰 불일치로 실패했다. 반복 prompt invariance는 통과했다. 고정 자연어256 target의 NLL은2.95928943→2.95632435로 낮아졌지만 KL은0.0007591519→0.0008375119로10.32% 증가해 기존 사전 gate도 실패했다. 서버 선택/기본값 승격은 하지 않는다. 다음 검토는 동일 intermediate Q/K/V의 수치 차이와 정밀도/backend 대안이며, 기존 gate를 완화하거나 primitive 통과로 대체하지 않는다. 실제 serving 비교와 최종 성능 목표는 여전히 미완료다.
+
+## 동일 입력 정밀도 대조
+
+[정밀도 screen](../../benchmarks/results/20260913-prefill-precision/README.md): 기존 attention body, FlashInfer BF16, 동일 BF16 입력값을 FP16으로 계산 후 BF16 출력으로 되돌리는 별도 native 실험을 비교했다. 입력값은 float32 dump hash로 동일함을 확인했다. 3개 Q/K scale에서 FP16 실험의 FP64-reference RMSE는 FI BF16보다0.90~24.41% 낮았다. 새 FP16 primitive memcheck/racecheck는0이다. 이는 합성 attention 오차 감소이며 serving speedup이나 모델 품질 통과가 아니다. 이전 full-model KL 실패는 유지한다. 다음 batch는 BF16 KV 저장을 유지하는 명시적 변환, FP16 범위/정밀도 계약, 독립 graph identity 및 full-model gate를 함께 평가하고 변환 비용까지 serving에서 측정한다.
