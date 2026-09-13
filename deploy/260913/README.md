@@ -99,3 +99,5 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 원격 `/data/riley-serving-260913-recovery/blender-restoration-260914`의 `launch.json`, `xvfb-launch.json`, `verified.json`에 실행 및 검증 기록이 있다. 인증 cookie는 이 원격 폴더의 private 파일로만 보관하며 저장소에 복사하지 않는다. 다음 측정은 해당 receipt의 프로세스 identity와 현재 상태를 재확인한 뒤 기존 세 작업만 종료하고, GPU 작업 종료 시 복구한다. 가상 디스플레이를 사용하는 현재 세션은 이전 실제 화면의 GUI 세션이나 미저장 상태 복구를 의미하지 않는다.
 
 `3d.fin-ally.net`은 별도 정적 웹 뷰어다. Cloudflare origin은 localhost:31840이며 기존 `/home/psyche/lotte-tower/output/scripts/serve_local.py --directory /home/psyche/lotte-tower/output/web/site --port 31840`로 복구했다. 공개 HTTP200, GLB Range206, 실제 브라우저의 타워 렌더·탐색 가능 상태를 확인했다. 해당 웹 서버는 Blender MCP나 서버 GPU에 의존하지 않으므로 이후 GPU 측정 중에도 유지한다. 실행 기록은 위 원격 폴더의 `viewer-launch.json`이다.
+
+비교 뷰어도 복구했다: `3dsol.fin-ally.net`→127.0.0.1:31970 (`codex_gpt5_20260908_132327/output/web/site`), `3dfable.fin-ally.net`→127.0.0.1:32010 (`claude_fable51_20260908_1410/output/web`). 각 기존 문서의 Python 정적 서버 명령을 사용했다. 두 공개 사이트 HTTP200 및 브라우저 모델 로딩 완료·실제 타워 렌더를 확인했다. 실행 기록은 `3dsol-launch.json`, `3dfable-launch.json`이다. 세 웹 서버 모두 GPU 측정 대상에서 제외하고 계속 유지한다.
