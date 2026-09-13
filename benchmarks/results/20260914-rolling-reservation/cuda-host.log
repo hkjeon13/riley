@@ -1,0 +1,93 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13 nvcc=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10339:19
+      |
+10338 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10339 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10349 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10643:19
+      |
+10642 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10643 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10654 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10666 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1551:8
+     |
+1551 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+   Compiling riley-runtime v0.1.0 (/data/riley-serving-260913-recovery/source/crates/riley-runtime)
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.12s
+     Running unittests src/lib.rs (/data/riley-serving-260913-recovery/target/debug/deps/riley_runtime-138433ad99c0f618)
+
+running 37 tests
+test paged_kv::prefix::tests::descriptor_rejects_missing_identity_and_invalid_position_ranges ... ok
+test paged_kv::prefix::tests::cow_oom_and_wrong_target_preserve_source_and_ticket ... ok
+test paged_kv::prefix::tests::import_from_retained_orphan_and_released_export_fails_closed ... ok
+test paged_kv::prefix::tests::failed_cow_and_late_completion_do_not_publish_or_mutate_new_transactions ... ok
+test paged_kv::prefix::tests::orphan_copy_retains_both_buffers_until_cancelled_transfer_quiesces ... ok
+test paged_kv::prefix::tests::prefix_identity_binds_every_semantic_field_before_import ... ok
+test paged_kv::prefix::tests::completed_cow_copies_all_valid_kv_slices_before_publication ... ok
+test paged_kv::prefix::tests::rolling_append_keeps_cached_and_off_batch_prefix_owners ... ok
+test paged_kv::prefix::tests::range_import_binds_source_tokens_and_survives_source_and_cache_release ... ok
+test paged_kv::prefix::tests::shared_owners_survive_source_reclaim_cache_eviction_and_arbitrary_close_order ... ok
+test paged_kv::tests::block_boundaries_publish_exact_v1_tables_and_reuse_deterministically ... ok
+test paged_kv::tests::completed_append_discard_clears_changed_tail_sidecar_without_poisoning ... ok
+test paged_kv::tests::completed_append_discard_rejects_stale_authority_without_releasing_pages ... ok
+test paged_kv::tests::device_failure_poison_rolls_back_tentative_blocks_and_invalidates_sidecars ... ok
+test paged_kv::tests::execution_table_rechecks_all_generations_and_external_write_holds ... ok
+test paged_kv::tests::extension_allocator_failure_restores_old_table_after_partial_allocation ... ok
+test paged_kv::tests::completed_append_discard_retains_prefix_and_returns_only_suffix_pages ... ok
+test paged_kv::tests::extension_errors_preserve_authority_and_reject_stale_tokens ... ok
+test paged_kv::tests::layout_is_checked_layer_block_head_token_major ... ok
+test paged_kv::tests::lease_overflow_and_stale_completion_are_atomic ... ok
+test paged_kv::tests::hot_reservation_source_contains_no_heap_preparation ... ok
+test paged_kv::tests::lost_reservation_requires_poisoned_recovery_then_reset ... ok
+test paged_kv::tests::oom_and_explicit_rollback_leave_committed_state_unchanged ... ok
+test paged_kv::tests::prefix_commit_rejects_stale_foreign_and_out_of_order_authority ... ok
+test paged_kv::tests::prefix_nonce_exhaustion_is_atomic_and_lost_suffix_keeps_prefix ... ok
+test paged_kv::tests::read_lease_rejects_pending_and_foreign_release_without_changes ... ok
+test paged_kv::tests::read_leases_retain_orphans_until_last_completion ... ok
+test paged_kv::tests::read_lease_blocks_partial_page_append_but_not_full_page_append ... ok
+test paged_kv::tests::reserved_prefix_views_preserve_full_target_and_reject_before_write ... ok
+test paged_kv::tests::deterministic_property_sequence_preserves_accounting_and_tables ... ok
+test paged_kv::tests::sidecar_is_optional_versioned_generation_bound_and_invalidated ... ok
+test paged_kv::tests::stale_double_free_wrong_owner_and_foreign_pool_are_distinct ... ok
+test paged_kv::tests::suffix_failure_keeps_committed_prefix_but_poisons_publication ... ok
+test paged_kv::tests::truncate_reset_close_and_dropped_owner_account_exactly ... ok
+test paged_kv::tests::truncation_cannot_make_a_leased_page_writable ... ok
+test paged_kv::tests::rolling_extension_preserves_pending_pages_and_committed_prefix ... ok
+test paged_kv::tests::prefix_commit_retains_suffix_pages_until_settlement ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 366 filtered out; finished in 0.00s
+

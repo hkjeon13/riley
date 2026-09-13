@@ -1,6 +1,6 @@
 # PR20 — Rolling one-step-ahead decode pipeline
 
-상태: **최신 실행 추적·코드 접점 확인 완료 / 구현 미착수**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
+상태: **KV 예약 연장·연속 prefix 정산 기반 구현 / scheduler·GPU·serving 연결 진행 전**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
 
 ## 근거와 목표
 
@@ -30,3 +30,12 @@ Serving: 동일 모델·하드웨어·workload·720MiB KV의 prior/new/vLLM, sha
 ## 범위와 롤백
 
 Greedy dense path의 rolling execution에 한정한다. Draft 모델 speculation, GPU 무한 scheduler, 임의 window 길이, 모든 모델·수치 backend 지원은 별도다. 이는 전체 serving 목표의 대체 기준이 아니다. Opt-in 정책으로 연결하고 rollback은 신규 요청부터 기존 pair 정책으로 전환하되 진행 중 ticket은 drain한다.
+
+
+## 구현 진행 — 예약 수명 기반
+
+`SequenceState::extend_reservation`을 추가했다. 기존 pending append의 물리 페이지는 유지하면서 목표 길이를 늘리고 detached/pending nonce를 함께 갱신한다. OOM·nonce 소진·중간 page-generation 실패 시 기존 예약과 table을 보존한다. 이미 완료된 prefix는 기존 `commit_prefix`로 정산하며 suffix를 계속 보유한다. Dispatch된 GPU 작업은 이전 table의 immutable snapshot을 사용해야 하고 새 suffix 실행은 의존성을 따라 순서화해야 한다. 이 host 연산은 GPU fence나 token publication을 수행하지 않는다.
+
+연속48회 진행과15/16/17·31 page 경계, 오래된 권한, 부분 할당 후 실패·재시도, poison 후 prefix 보존, cache/off-batch reader 수명을 검사했다. [검증 기록](../../benchmarks/results/20260914-rolling-reservation/README.md)에 실제 실행 결과를 기록한다. 아직 scheduler rolling 정산, result ring, native future-input 소비 수명 및 server streaming 통합은 미완료이며 새로운 serving benchmark는 실행하지 않았다.
+
+다음 scheduler 연결에서는 `publish_committed_item`의 terminal 처리에 주의한다. 현재 helper는 stop/length/cancel이면 sequence를 닫을 수 있어 successor 실행 중 그대로 호출하면 안 된다. 앞 step의 token 발행과 GPU에서 사용하는 suffix의 retirement를 분리해야 한다. Batch 중간 정산 오류에서도 진행 중 페이지를 reclaim하지 않도록 실패 상태를 보유하고 전체 drain 이후 정리한다. 단순한 pair API 반복이나 terminal 경로 우회로 완료 처리하지 않는다.

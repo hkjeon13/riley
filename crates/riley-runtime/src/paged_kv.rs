@@ -1597,6 +1597,81 @@ impl SequenceState {
         })
     }
 
+    /// Extends an existing append reservation without retiring its pending suffix.
+    ///
+    /// Already submitted work must retain an immutable copy of its old table and
+    /// write only below its old target. This changes host metadata only; it does
+    /// not fence GPU work, publish tokens, move existing blocks or release pages.
+    /// The caller must order new suffix execution after its predecessor.
+    ///
+    /// Allocation failure preserves the previous reservation and table. A fresh
+    /// nonce invalidates stale detached authorities even within the same page.
+    /// Rollback after a prefix commit retains that prefix, including across
+    /// repeated extensions. No host allocation occurs in this operation.
+    pub fn extend_reservation(
+        &mut self,
+        pool: &mut KvBlockPool,
+        reservation: &mut SequenceReservation,
+        target_logical_length: usize,
+    ) -> PagedKvResult<()> {
+        self.ensure_mutable(pool)?;
+        self.validate_reservation(reservation)?;
+        if target_logical_length <= reservation.target_logical_length as usize {
+            return Err(PagedKvError::ReservationMismatch);
+        }
+        if target_logical_length > self.maximum_logical_length as usize {
+            return Err(PagedKvError::CapacityExceeded {
+                requested_tokens: target_logical_length,
+                maximum_tokens: self.maximum_logical_length as usize,
+            });
+        }
+        let target = u32::try_from(target_logical_length)
+            .map_err(|_| PagedKvError::ReservationMismatch)?;
+        let target_blocks = blocks_for_length(target_logical_length);
+        let previous_blocks = self.allocated_block_count;
+        let additional = target_blocks.saturating_sub(previous_blocks);
+        if additional > pool.free_list.len() {
+            return Err(PagedKvError::OutOfBlocks {
+                requested_blocks: additional, free_blocks: pool.free_list.len(),
+            });
+        }
+        // Existing pending pages must still be writable. In particular, an
+        // extension must never turn an immutable read lease into append authority.
+        for index in self.logical_length as usize / KV_BLOCK_SIZE..previous_blocks {
+            let block = self.allocated_block(index)?;
+            pool.validate_block(block, self.sequence_id)?;
+            let slot = &pool.slots[block.physical_index as usize];
+            if slot.read_leases != 0 || !slot.shared_owners.is_empty() {
+                return Err(PagedKvError::ImmutableBlock { physical_index: block.physical_index });
+            }
+        }
+        let nonce = self.next_reservation_nonce;
+        let next_nonce = nonce.checked_add(1).ok_or(PagedKvError::ReservationNonceExhausted)?;
+        while self.allocated_block_count < target_blocks {
+            match pool.allocate_block(self.sequence_id) {
+                Ok(block) => {
+                    let index = self.allocated_block_count;
+                    self.block_ids[index] = Some(block);
+                    self.physical_block_ids[index] = block.physical_index();
+                    self.valid_tokens[index] = 0;
+                    self.allocated_block_count += 1;
+                }
+                Err(error) => {
+                    self.rollback_new_blocks(pool, previous_blocks)?;
+                    return Err(error);
+                }
+            }
+        }
+        self.fill_valid_tokens(target_logical_length, target_blocks);
+        reservation.target_logical_length = target;
+        reservation.nonce = nonce;
+        let pending = self.pending.as_mut().expect("validated reservation");
+        pending.target_logical_length = target;
+        pending.nonce = nonce;
+        self.next_reservation_nonce = next_nonce;
+        Ok(())
+    }
+
     /// Publishes the tentative logical length after successful device execution.
     ///
     /// Sidecars for blocks whose content range changed are invalidated before
@@ -2414,6 +2489,90 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn rolling_extension_preserves_pending_pages_and_committed_prefix() {
+        for start in [0, 1, 15, 16, 17, 31] {
+            let mut pool = pool(8);
+            let mut sequence = pool.create_sequence(128).unwrap();
+            reserve_and_commit(&mut sequence, &mut pool, start);
+            let mut reservation = sequence.reserve_to(&mut pool, start + 2).unwrap();
+            for prefix in start + 1..start + 49 {
+                let ids = sequence.reserved_block_table(&reservation).unwrap().physical_block_ids().to_vec();
+                let nonce = reservation.nonce;
+                sequence.commit_prefix(&mut pool, &mut reservation, prefix).unwrap();
+                sequence.extend_reservation(&mut pool, &mut reservation, prefix + 2).unwrap();
+                assert!(reservation.nonce > nonce);
+                let table = sequence.reserved_block_table(&reservation).unwrap();
+                assert_eq!(&table.physical_block_ids()[..ids.len()], ids);
+                assert_eq!(table.logical_length() as usize, prefix + 2);
+                assert_eq!(sequence.logical_length() as usize, prefix);
+                assert_eq!(sequence.block_table(), Err(PagedKvError::ReservationInProgress));
+            }
+            let prefix = sequence.logical_length() as usize;
+            sequence.discard_completed_append(&mut pool, reservation).unwrap();
+            assert_eq!(sequence.logical_length() as usize, prefix);
+            assert_eq!(sequence.allocated_block_count(), blocks_for_length(prefix));
+            sequence.close(&mut pool).unwrap();
+            assert_eq!(pool.stats().allocated_block_count(), 0);
+        }
+    }
+
+    #[test]
+    fn extension_errors_preserve_authority_and_reject_stale_tokens() {
+        let mut pool = pool(3);
+        let mut sequence = pool.create_sequence(64).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 15);
+        let mut reservation = sequence.reserve_to(&mut pool, 17).unwrap();
+        let mut stale = SequenceReservation { pool_cookie: reservation.pool_cookie,
+            sequence_id: reservation.sequence_id, nonce: reservation.nonce,
+            previous_block_count: reservation.previous_block_count,
+            target_logical_length: reservation.target_logical_length };
+        let before = pool.stats();
+        for invalid in [0, 16, 17, 49, 65, usize::MAX] {
+            assert!(sequence.extend_reservation(&mut pool, &mut reservation, invalid).is_err());
+            assert_eq!(pool.stats(), before);
+            assert_eq!(reservation.target_logical_length(), 17);
+            assert_eq!(sequence.reserved_block_table(&reservation).unwrap().valid_tokens(), [16, 1]);
+        }
+        let next = sequence.next_reservation_nonce;
+        sequence.next_reservation_nonce = u64::MAX;
+        assert_eq!(sequence.extend_reservation(&mut pool, &mut reservation, 18), Err(PagedKvError::ReservationNonceExhausted));
+        assert_eq!(pool.stats(), before);
+        sequence.next_reservation_nonce = next;
+        sequence.extend_reservation(&mut pool, &mut reservation, 18).unwrap();
+        assert_eq!(sequence.extend_reservation(&mut pool, &mut stale, 19), Err(PagedKvError::ReservationMismatch));
+        assert_eq!(sequence.discard_completed_append(&mut pool, stale), Err(PagedKvError::ReservationMismatch));
+        sequence.commit_prefix(&mut pool, &mut reservation, 17).unwrap();
+        sequence.extend_reservation(&mut pool, &mut reservation, 33).unwrap();
+        sequence.poison(&mut pool, reservation).unwrap();
+        assert_eq!(sequence.logical_length(), 17);
+        assert_eq!(sequence.allocated_block_count(), 2);
+        sequence.reset(&mut pool).unwrap();sequence.close(&mut pool).unwrap();
+    }
+
+    #[test]
+    fn extension_allocator_failure_restores_old_table_after_partial_allocation() {
+        let mut pool = pool(4);
+        let mut sequence = pool.create_sequence(64).unwrap();
+        let mut reservation = sequence.reserve_to(&mut pool, 1).unwrap();
+        let failed_index = pool.free_list[pool.free_list.len() - 2];
+        pool.slots[failed_index as usize].generation = u64::MAX;
+        let ids = sequence.reserved_block_table(&reservation).unwrap().physical_block_ids().to_vec();
+        let nonce = reservation.nonce;
+        assert!(matches!(sequence.extend_reservation(&mut pool, &mut reservation, 33), Err(PagedKvError::GenerationExhausted { .. })));
+        assert_eq!(reservation.nonce, nonce);
+        assert_eq!(reservation.target_logical_length(), 1);
+        assert_eq!(sequence.reserved_block_table(&reservation).unwrap().physical_block_ids(), ids);
+        assert_eq!(sequence.reserved_block_table(&reservation).unwrap().valid_tokens(), [1]);
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        assert_eq!(pool.stats().free_block_count(), 3);
+        pool.slots[failed_index as usize].generation = 0;
+        sequence.extend_reservation(&mut pool, &mut reservation, 33).unwrap();
+        sequence.commit(&mut pool, reservation).unwrap();
+        assert_eq!(sequence.logical_length(), 33);
+        sequence.close(&mut pool).unwrap();
     }
 
     #[test]

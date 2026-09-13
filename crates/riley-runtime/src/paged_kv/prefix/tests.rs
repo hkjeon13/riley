@@ -335,3 +335,33 @@ fn cow_oom_and_wrong_target_preserve_source_and_ticket() {
     pool.release_prefix(&mut export).unwrap();
     assert_eq!(pool.stats().allocated_block_count(), 0);
 }
+
+#[test]
+fn rolling_append_keeps_cached_and_off_batch_prefix_owners() {
+    let mut pool = pool(8);
+    let mut source = pool.create_sequence(64).unwrap();
+    let initial = source.reserve_to(&mut pool, 16).unwrap();
+    source.commit(&mut pool, initial).unwrap();
+    let d = descriptor(&pool, 16);
+    let mut export = pool.export_prefix(&source, d.clone()).unwrap();
+    let mut active = pool.create_sequence(64).unwrap();
+    let mut reader = pool.create_sequence(64).unwrap();
+    active.import_prefix(&mut pool, &export, &d).unwrap();
+    reader.import_prefix(&mut pool, &export, &d).unwrap();
+    let shared = active.block_table().unwrap().physical_block_ids()[0];
+    let mut reservation = active.reserve_to(&mut pool, 18).unwrap();
+    for prefix in 17..34 {
+        active.commit_prefix(&mut pool, &mut reservation, prefix).unwrap();
+        active.extend_reservation(&mut pool, &mut reservation, prefix + 2).unwrap();
+        assert_eq!(active.execution_block_table(&pool, Some(&reservation)).unwrap().physical_block_ids()[0], shared);
+        assert_eq!(reader.execution_block_table(&pool, None).unwrap().physical_block_ids(), [shared]);
+        assert_eq!(export.blocks()[0].physical_index(), shared);
+    }
+    active.discard_completed_append(&mut pool, reservation).unwrap();
+    active.close(&mut pool).unwrap();source.close(&mut pool).unwrap();
+    pool.release_prefix(&mut export).unwrap();
+    assert_eq!(pool.stats().allocated_block_count(), 1);
+    assert_eq!(reader.block_table().unwrap().physical_block_ids(), [shared]);
+    reader.close(&mut pool).unwrap();
+    assert_eq!(pool.stats().allocated_block_count(), 0);
+}
