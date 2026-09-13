@@ -54,6 +54,19 @@ impl<P> OwnedGraphResourceReservation<P> {
         Ok(Self { native, parents })
     }
 
+    /// Submit into the next free prepared staging slot on the retained stream.
+    /// # Errors
+    /// Rejects full slots, invalid input or an unprepared/failed owner.
+    pub fn submit_buffered_transfer(&mut self, input: &[u8]) -> CudaResult<u64> { self.native.submit_buffered_transfer(input) }
+    /// Poll or wait for this owner's exact ticket; does not consume output.
+    /// # Errors
+    /// Rejects stale tickets and propagates CUDA completion errors.
+    pub fn query_buffered_transfer(&mut self, ticket: u64, wait: bool) -> CudaResult<bool> { self.native.query_buffered_transfer(ticket, wait) }
+    /// Copy completed output and release only its staging slot for reuse.
+    /// # Errors
+    /// Rejects stale/pending tickets or an incorrect destination size.
+    pub fn read_buffered_transfer(&mut self, ticket: u64, output: &mut [u8]) -> CudaResult<()> { self.native.read_buffered_transfer(ticket, output) }
+
     /// Stages fresh input and waits for completion; errors never expose output.
     /// # Errors
     /// Returns validation or CUDA errors from the retained native graph.
@@ -1360,6 +1373,30 @@ pub fn record_v7_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<us
 
 #[cfg(feature = "cuda")]
 impl BorrowedGraphResourceReservation<'_> {
+    /// Cold preparation using two pinned parents already in the ledger.
+    /// Slot zero may reuse an existing combined model input/output staging parent.
+    /// Each slot must cover the recorded input/output staging extent.
+    /// # Errors
+    /// Rejects invalid parent indices, extents or graph state; CUDA errors propagate.
+    pub fn prepare_buffered_transfers(&mut self, first: usize, second: usize) -> CudaResult<()> {
+        let bad = || crate::CudaError::invalid_argument("prepare buffered transfers", "staging index outside retained parents");
+        let first = self.parents.pinned.get(first).ok_or_else(bad)?.native_handle();
+        let second = self.parents.pinned.get(second).ok_or_else(bad)?.native_handle();
+        self.native.prepare_buffered_transfers(first, second)
+    }
+    /// Submit into the next free prepared staging slot on the retained stream.
+    /// # Errors
+    /// Rejects full slots, invalid input or an unprepared/failed owner.
+    pub fn submit_buffered_transfer(&mut self, input: &[u8]) -> CudaResult<u64> { self.native.submit_buffered_transfer(input) }
+    /// Poll or wait for this owner's exact ticket; does not consume output.
+    /// # Errors
+    /// Rejects stale tickets and propagates CUDA completion errors.
+    pub fn query_buffered_transfer(&mut self, ticket: u64, wait: bool) -> CudaResult<bool> { self.native.query_buffered_transfer(ticket, wait) }
+    /// Copy completed output and release only its staging slot for reuse.
+    /// # Errors
+    /// Rejects stale/pending tickets or an incorrect destination size.
+    pub fn read_buffered_transfer(&mut self, ticket: u64, output: &mut [u8]) -> CudaResult<()> { self.native.read_buffered_transfer(ticket, output) }
+
     /// Submit using retained parents; input is staged before return.
     /// # Errors
     /// Propagates validation and CUDA submission failures.

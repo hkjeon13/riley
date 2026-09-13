@@ -239,6 +239,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/graph_multisequence_precise.cu"),
         kernels_dir.join("src/graph_multisequence_io.cu"),
         kernels_dir.join("src/graph_multisequence_packet.inc"),
+        kernels_dir.join("src/graph_buffered_transfer.inc"),
         kernels_dir.join("src/graph_multisequence_record.inc"),
         kernels_dir.join("src/graph_multisequence_catalog.inc"),
         kernels_dir.join("src/host_runtime.cu"),

@@ -1,6 +1,6 @@
 # PR 02 — 비동기 iteration 실행과 응답 처리 중첩
 
-상태: **구현 진행 중**. native submit/query/wait, variable session, scheduler authority를 보유하는 제출 ticket을 연결했다. GPU token 전달·이중 buffer·ahead scheduling은 남아 있다. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중**. native submit/query/wait, variable session, scheduler authority를 보유하는 제출 ticket을 연결했다. 두 staging slot의 native 제출·회수 및 모델 session 선택 경로를 연결했다. GPU token 전달과 ahead scheduling은 남아 있다. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -85,3 +85,25 @@ SmolLM2 실제 모델의 loaded_v7_compact32/full32/partial 3개 GPU 테스트�
 4090 actual-model compact32/full32/partial 3개 검사가 통과했다(출력 위치 4096/4096/224). compact/full 결과 대조, 부족한 workspace의 제출 전 거절 후 정상 재제출, workspace allocation 반환, pending ticket Drop 후 재사용 거절 및 close/abort의 allocation_zero를 확인했다. partial model Compute Sanitizer는 0 errors였다. CPU 실행 adapter 12개와 Rustdoc 2개(진행 중 ticket의 scheduler 변경을 막는 compile-fail 포함)가 통과했다.
 
 [검증 manifest](../../benchmarks/results/20260913-async-execution/ticket-manifest.json), [모델 GPU](../../benchmarks/results/20260913-async-execution/ticket-model-gpu.log), [memcheck](../../benchmarks/results/20260913-async-execution/ticket-model-memcheck.log), [Rustdoc](../../benchmarks/results/20260913-async-execution/ticket-doc.log), [CPU](../../benchmarks/results/20260913-async-execution/ticket-cpu.log). 원격 테스트 소스는 V56 대비 변경된 crates/kernels 파일의 SHA256을 로컬과 대조했다. 로컬 macOS CUDA check는 nvcc 부재로 실패했고 원격 CUDA build·실행으로 검증했다. Hopper/Blackwell/multi-GPU 실행 증거와 serving overlap 성능 증거는 이번 결과에 포함하지 않는다.
+
+
+## 두 staging slot의 실행 경로
+
+native graph owner에 두 slot의 ticket·event·staging 수명을 구현했다. 서로 다른 두 입력을 대기 없이 같은 stream에 연속 제출할 수 있으며, 각 slot의 결과를 읽기 전에는 해당 slot을 덮어쓸 수 없다. ticket은 owner generation과 순번을 포함하므로 owner 교체 후 이전 값도 거절한다. query/wait는 device completion만 확인하고 read가 해당 staging slot을 소비한다. read 순서는 허용하지만 이는 scheduler commit 순서를 변경하는 권한이 아니다.
+
+모델 경로는 기존 combined input/output staging과 DAG를 첫 slot으로 재사용한다. 두 번째 staging에 맞춰 H2D/D2H node의 host 주소를 바꾼 DAG를 준비한다. 공유 model activation·device metadata·KV는 같은 stream에서 순서대로 실행한다. 32-row full-logit 호환성을 위해 추가 pinned staging은 `2 × 32 × (128 + 49152 × 2) = 6,299,648 bytes`다. 이는 소스에서 계산한 버퍼 크기이며 CUDA graph 내부 driver 메모리까지 측정한 수치가 아니다. compact-only staging 축소는 아직 하지 않았다.
+
+close/Drop은 두 event를 기다린 후 graph·event·retained parents를 해제한다. CUDA 완료가 불명확하면 다른 slot의 성공으로 오류를 지우지 않고 전체 owner를 보유한다. 기존 synchronous/단일-event API와 buffered API의 혼용은 거절한다. child graph, 외부 host pointer, bound-attention metadata 보정 등 지원하지 않는 기록 형태를 자동 추정해서 변환하지 않는다.
+
+runtime에는 명시적으로 선택하는 `into_owned_buffered_variable_mixed_session`을 추가했다. 준비한 buffer mode를 catalog digest에 포함하고 compact/full/prefill/decode stage 선택을 유지한다. **runtime expectation과 scheduler는 여전히 단일 in-flight다.** 실제 모델 테스트는 두 staging slot을 번갈아 쓰며 순서대로 settlement하는 경로를 검증한다. native의 두 pending 제출 검사와 실제 모델의 두 iteration ahead 실행 증거를 혼동하지 않는다.
+
+### 남은 PR 02 범위
+
+GPU future-token 참조를 선행 replay·request/cookie·generation·output slot에 연결하고, scheduler의 두 tentative plan·KV 예약 및 순차 commit을 구현해야 한다. 그 뒤 EOS/cancel 뒤의 후행 결과 폐기, page-boundary 예약 정리, 실제 serving overlap trace와 V56/vLLM 비교를 한 batch로 수행한다. 현재 serving 기본값은 변경하지 않았으며 성능 승격은 하지 않는다.
+
+
+### 두 slot 검증 결과
+
+최종 소스로 전송 GPU 검사 2개, 실제 모델 compact32/full32/partial 3개가 통과했다. 전송 검사는 두 번의 연속 제출, 역순 결과 회수, 한 slot을 재사용하는 동안 다른 slot의 unread 결과 보존, owner 교체 이후 ticket 거절, pending close/Drop을 포함한다. 모델 검사는 출력 위치 4096/4096/224의 reference 검사 및 allocation_zero를 유지했다. 모델 partial 및 전송 각각의 Compute Sanitizer memcheck는 0 errors다. CPU riley-cuda 92개와 CUDA server check도 통과했다.
+
+[manifest 및 소스 SHA256](../../benchmarks/results/20260913-buffered-execution/manifest.json), [전송 GPU](../../benchmarks/results/20260913-buffered-execution/transfer-gpu.log), [모델 GPU](../../benchmarks/results/20260913-buffered-execution/model-gpu.log), [전송 memcheck](../../benchmarks/results/20260913-buffered-execution/transfer-memcheck.log), [모델 memcheck](../../benchmarks/results/20260913-buffered-execution/model-memcheck.log), [CUDA server check](../../benchmarks/results/20260913-buffered-execution/server-check.log). serving overlap·vLLM 대비 성능과 미보유 하드웨어 실행은 이 검사 범위에 포함하지 않는다.

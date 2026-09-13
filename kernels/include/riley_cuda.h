@@ -2632,6 +2632,23 @@ RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 // known. Wrong-size calls are rejected before mutation. No separate stale launch.
 // Stages input synchronously, then submits without waiting. Retained parents
 // stay unavailable until query/wait succeeds; close drains a pending submission.
+// Cold opt-in: use two distinct leased pinned slots (slot zero may reuse a
+// combined model input/output staging parent and its original DAG). Model
+// device buffers remain shared and all launches execute serially on one stream.
+// Read consumes a completed ticket. Until consumed its slot cannot be reused.
+RileyCudaStatus riley_cuda_graph_resources_prepare_buffered_transfers(
+    RileyCudaGraphResources* resources, RileyCudaPinnedHostBuffer* first,
+    RileyCudaPinnedHostBuffer* second, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_submit_buffered_transfer(
+    RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
+    uint64_t* ticket, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_query_buffered_transfer(
+    RileyCudaGraphResources* resources, uint64_t ticket, uint32_t wait,
+    uint32_t* ready, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_read_buffered_transfer(
+    RileyCudaGraphResources* resources, uint64_t ticket, uint8_t* destination,
+    uint64_t bytes, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_graph_resources_submit_transfer(
     RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

@@ -2067,6 +2067,7 @@ impl PreparedLlamaBatchExecutor {
         use sha2::{Digest,Sha256};
         if !matches!(ROWS,8|16|32) || scratch.wire_rows!=ROWS || (ROWS>=16 && scratch.shared_head.is_none()) {return Err(rejected("wire capacity differs from prepared buffers"));}
         if scratch.compact && (!matches!(ROWS,16|32) || scratch.shared_head.is_none()){return Err(rejected("compact requires shared sixteen-row buffers"));}
+        let buffered=scratch.buffered_staging.len()==1;
         let context=self.maximum_position_count()?.min(4096);
         let physical=self.owner.layout.physical_block_count();
         let f=&mut self.owner.forward;
@@ -2087,7 +2088,7 @@ impl PreparedLlamaBatchExecutor {
                 l.post_attention_norm_weight(),l.gate_weight(),l.up_weight(),l.down_weight()].map(|w|w.index()));
         }
         let cuda=|e|cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion),e);
-        let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");
+        let mut hash=Sha256::new();hash.update(b"riley.v3.loaded-smol.variable.v1");hash.update([u8::from(buffered)]);
         crate::llama::variable_plan::VariablePlanSignature {
             rows: ROWS, shared: scratch.shared_head.is_some(), compact: scratch.compact,
             packed: scratch.packed_prefill, mixed: scratch.mixed_execution,
@@ -2133,6 +2134,7 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_pointwise.cuh").as_slice(),
             include_bytes!("../../../../kernels/src/prefill_shape_packet.hpp").as_slice(),
             include_bytes!("../../../../kernels/src/graph_resources.cu").as_slice(),
+            include_bytes!("../../../../kernels/src/graph_buffered_transfer.inc").as_slice(),
             include_bytes!("../../../../kernels/src/graph_numerics_precise.cu").as_slice(),
             include_bytes!("multi_descriptor/result_scan.rs").as_slice(),
             include_bytes!("multi_descriptor/variable_wire.rs").as_slice()] {hash.update((source.len() as u64).to_le_bytes());hash.update(source);}
@@ -2187,10 +2189,13 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
         weights.extend(devices.len()..devices.len()+scratch.tiled.len());
         devices.extend(scratch.tiled.iter_mut());
         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
+        let mut pinned=vec![&mut scratch.staging];pinned.extend(scratch.buffered_staging.iter_mut());
         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
-            pinned:vec![&mut scratch.staging],plans}).map_err(cuda)?;
+            pinned,plans}).map_err(cuda)?;
         if scratch.mixed_execution && scratch.compact {graph.record_v7_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.mixed_execution {graph.record_v7_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill && scratch.compact {graph.record_v6_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill {graph.record_v6_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
-        (if scratch.mixed_execution {crate::llama::variable_session::BorrowedVariableSession::new_shared_mixed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.packed_prefill {crate::llama::variable_session::BorrowedVariableSession::new_shared_packed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
-            .map_err(|_|rejected("V3 session identity rejected"))
+        if buffered {graph.prepare_buffered_transfers(0,1).map_err(cuda)?;}
+        let mut session=(if scratch.mixed_execution {crate::llama::variable_session::BorrowedVariableSession::new_shared_mixed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.packed_prefill {crate::llama::variable_session::BorrowedVariableSession::new_shared_packed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})
+            .map_err(|_|rejected("V3 session identity rejected"))?;
+        session.set_buffered_completion(buffered);Ok(session)
     }
 }

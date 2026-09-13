@@ -13,7 +13,7 @@ pub struct VariableSessionIdentity {
 pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
     issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
-    async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
+    buffered:bool, buffered_ticket:Option<u64>, async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
 impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
@@ -23,7 +23,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
         Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
-            async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
+            buffered:false,buffered_ticket:None,async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
     pub(crate) fn new_shared_compact(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{if !matches!(ROWS,16|32){return Err(bad("compact requires sixteen or thirty-two rows"));}let mut s=Self::new_shared(graph,digest,physical,context)?;s.compact=true;Ok(s)}
@@ -32,6 +32,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         let mut s=if compact{Self::new_shared_compact(graph,digest,physical,context)?}else{Self::new_shared(graph,digest,physical,context)?};s.identity.packed_prefill=true;Ok(s)
     }
     pub(crate) fn new_shared_mixed(graph:G,digest:[u8;32],physical:u32,context:u32,compact:bool)->Result<Self>{let mut s=Self::new_shared_packed(graph,digest,physical,context,compact)?;s.identity.mixed_execution=true;s.input.resize(wire::MIXED_REQUEST_BYTES,0);Ok(s)}
+    pub(crate) fn set_buffered_completion(&mut self,enabled:bool) {self.buffered=enabled;}
     pub fn supports_mixed_execution(&self)->bool{self.identity.mixed_execution}
     pub fn supports_packed_prefill(&self)->bool{self.identity.packed_prefill}
     pub fn supports_compact_greedy(&self)->bool{self.compact}
@@ -70,7 +71,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         Ok(())
     }
     pub fn execute_rows(&mut self,e:wire::Expectation<ROWS>)->Result<Vec<wire::RowResult<'_>>> {
-        if self.async_completion { self.submit_rows(e)?; return self.wait_rows(); }
+        if self.async_completion || self.buffered { self.submit_rows(e)?; return self.wait_rows(); }
         self.retain_submission(e)?;
         if self.graph.replay_transfer(&self.input).is_err() {
             self.poisoned=true;return Err(bad("native execution failed; close required before KV release"));
@@ -80,25 +81,32 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// Stage and submit one iteration. Its buffers remain owned until commit.
     pub fn submit_rows(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
         self.retain_submission(e)?;
-        if self.graph.submit_transfer(&self.input).is_err() {
+        let result=if self.buffered {
+            self.graph.submit_buffered_transfer(&self.input).map(|ticket|self.buffered_ticket=Some(ticket))
+        } else {self.graph.submit_transfer(&self.input)};
+        if result.is_err() {
             self.poisoned=true;return Err(bad("native submission failed; close required before KV release"));
         }
         Ok(())
     }
     pub fn query_completion(&mut self)->Result<bool> {
         if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
-        self.graph.query_transfer().map_err(|_|{self.poisoned=true;bad("native completion failed; close required")})
+        let result=if let Some(ticket)=self.buffered_ticket {self.graph.query_buffered_transfer(ticket,false)} else {self.graph.query_transfer()};
+        result.map_err(|_|{self.poisoned=true;bad("native completion failed; close required")})
     }
     pub fn wait_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
         if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
-        if self.graph.wait_transfer().is_err() {self.poisoned=true;return Err(bad("native completion failed; close required"));}
+        let result=if let Some(ticket)=self.buffered_ticket {self.graph.query_buffered_transfer(ticket,true).map(|_|())} else {self.graph.wait_transfer()};
+        if result.is_err() {self.poisoned=true;return Err(bad("native completion failed; close required"));}
         self.collect_rows()
     }
     fn collect_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
         if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
         let compact=self.compact && self.retained.as_ref().unwrap().mode==super::multi_descriptor::ResultMode::Greedy;
         let output_bytes=if compact{wire::Layout::<ROWS>::COMPACT_RESULT_BYTES}else{self.output.len()};
-        if self.graph.read_transfer(&mut self.output[..output_bytes]).is_err() {self.poisoned=true;return Err(bad("native read failed; close required"));}
+        let result=if let Some(ticket)=self.buffered_ticket {self.graph.read_buffered_transfer(ticket,&mut self.output[..output_bytes])} else {self.graph.read_transfer(&mut self.output[..output_bytes])};
+        if result.is_err() {self.poisoned=true;return Err(bad("native read failed; close required"));}
+        self.buffered_ticket=None;
         let e=self.retained.as_ref().unwrap();
         match if compact {wire::validate_compact_result(&self.output[..output_bytes],e)}else if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
             Ok(result)=>{self.completed=true;Ok(result)},
@@ -121,6 +129,7 @@ pub struct VariableGraphBuffers {
     pub(crate) shared_devices:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) shared_head:Option<riley_cuda::CudaPreparedGemm>,
     pub(crate) staging:riley_cuda::CudaPinnedHostBuffer,
+    pub(crate) buffered_staging:Vec<riley_cuda::CudaPinnedHostBuffer>,
     pub(crate) head:riley_cuda::CudaPreparedGemm,
     pub(crate) capacity:u32,
     pub(crate) wire_rows:usize,
@@ -142,7 +151,7 @@ impl VariableGraphBuffers {
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
         Ok(Self{devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
-            head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,mixed_execution:false})
+            buffered_staging:Vec::new(),head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,mixed_execution:false})
     }
     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
     pub fn prepare_shared16(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<16>(context,capacity)}
@@ -165,6 +174,9 @@ mod sealed {
 }
 /// Native reservation operations; sealed so a caller cannot fabricate completion.
 pub trait VariableGraph: sealed::Sealed {
+    fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64>;
+    fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool>;
+    fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()>;
     fn replay_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
     fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()>;
     fn query_transfer(&mut self)->riley_cuda::CudaResult<bool>;
@@ -172,6 +184,9 @@ pub trait VariableGraph: sealed::Sealed {
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()>;
 }
 impl VariableGraph for BorrowedGraphResourceReservation<'_> {
+    fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64> {BorrowedGraphResourceReservation::submit_buffered_transfer(self,input)}
+    fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool> {BorrowedGraphResourceReservation::query_buffered_transfer(self,ticket,wait)}
+    fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_buffered_transfer(self,ticket,output)}
     fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::submit_transfer(self,input)}
     fn query_transfer(&mut self)->riley_cuda::CudaResult<bool> {BorrowedGraphResourceReservation::query_transfer(self)}
     fn wait_transfer(&mut self)->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::wait_transfer(self)}
@@ -179,6 +194,9 @@ impl VariableGraph for BorrowedGraphResourceReservation<'_> {
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_transfer(self,output)}
 }
 impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelParents> {
+    fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64> {riley_cuda::OwnedGraphResourceReservation::submit_buffered_transfer(self,input)}
+    fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool> {riley_cuda::OwnedGraphResourceReservation::query_buffered_transfer(self,ticket,wait)}
+    fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_buffered_transfer(self,ticket,output)}
     fn submit_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::submit_transfer(self,input)}
     fn query_transfer(&mut self)->riley_cuda::CudaResult<bool> {riley_cuda::OwnedGraphResourceReservation::query_transfer(self)}
     fn wait_transfer(&mut self)->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::wait_transfer(self)}
@@ -217,19 +235,27 @@ impl super::PreparedLlamaBatchExecutor {
     pub fn into_owned_variable_shared16_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<16>>{self.into_variable_session::<16>(context,capacity,true,true,false,false)}
     pub fn into_owned_variable_packed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,false)}
     pub fn into_owned_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,true)}
+    /// Opt-in staging double buffering. Scheduler admission still permits only
+    /// one retained expectation; this does not enable GPU future-token decoding.
+    pub fn into_owned_buffered_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,true)}
     fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+        self.into_variable_session_mode::<ROWS>(context,capacity,shared,compact,packed,mixed,false)
+    }
+    fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
         parents.scratch.compact=compact;parents.scratch.packed_prefill=packed;parents.scratch.mixed_execution=mixed;
         if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}
+        if buffered {for _ in 0..1 {parents.scratch.buffered_staging.push(context.allocate_pinned_host_buffer(wire::Layout::<ROWS>::STAGING_BYTES as u64).map_err(cuda)?);}}
         let mut identity=None;
         let graph=riley_cuda::OwnedGraphResourceReservation::prepare(parents,|p| {
             let session=p.executor.prepare_variable_session_rows::<ROWS>(&mut p.stream,&mut p.scratch)?;
             let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
         })?;
         let i=identity.expect("successful recording provides identity");
-        (if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
-            .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})
+        let mut session=(if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
+            .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})?;
+        session.set_buffered_completion(buffered);Ok(session)
     }
 }

@@ -72,10 +72,24 @@ struct RileyCudaGraphResources {
   bool completion_unknown = false;
   cudaEvent_t completion_event = nullptr;
   bool async_pending = false;
+  struct BufferedSlot {
+    RileyCudaPinnedHostBuffer* staging = nullptr;
+    cudaGraph_t graph[4]{};
+    cudaGraphExec_t exec[4]{};
+    cudaEvent_t event = nullptr;
+    uint64_t ticket = 0, result_bytes = 0;
+    bool pending = false, borrows_original_graphs = false;
+  };
+  BufferedSlot buffered[2]{};
+  bool buffered_ready = false;
+  uint64_t next_buffered_ticket = 1, buffered_output_offset = 0;
   RileyCudaGraphCapture* scoped_capture = nullptr;
 };
 
 static RileyCudaStatus finish_async_transfer(RileyCudaGraphResources*, bool, uint32_t*, RileyCudaErrorInfo*) noexcept;
+
+static RileyCudaStatus finish_buffered_transfer(RileyCudaGraphResources*, unsigned, bool, uint32_t*, RileyCudaErrorInfo*) noexcept;
+static RileyCudaStatus destroy_buffered_transfers(RileyCudaGraphResources*, RileyCudaErrorInfo*) noexcept;
 
 namespace {
 using namespace riley_cuda_internal;
@@ -210,6 +224,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
     auto status = finish_async_transfer(*resources, true, &ready, error);
     if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   }
+  for (unsigned i = 0; i < 2; ++i) if ((*resources)->buffered[i].pending) {
+    uint32_t ready = 0;
+    auto status = finish_buffered_transfer(*resources, i, true, &ready, error);
+    if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
+  }
   if ((*resources)->completion_unknown)
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_CLOSE, kClose, "completion unknown; graph and parents retained");
@@ -230,7 +249,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
     CurrentContext scope((*resources)->owner);
     auto status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
     if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
-    if ((*resources)->exec != nullptr) {
+    status = destroy_buffered_transfers(*resources, error);
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->exec != nullptr) {
       status = runtime_error(cudaGraphExecDestroy((*resources)->exec), error,
                              RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->exec = nullptr;
@@ -295,7 +315,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
 namespace {
 constexpr const char* kTransfer = "aggregate transfer graph";
 RileyCudaStatus transfer_ready(RileyCudaGraphResources* r, RileyCudaErrorInfo* error) noexcept {
-  if (r == nullptr || r->thread != native_thread_token() || r->terminal ||
+  if (r == nullptr || r->thread != native_thread_token() || r->terminal || r->buffered_ready ||
       r->owner->restoration_failed.load(std::memory_order_acquire))
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kTransfer, "owner unavailable, foreign-thread or terminal");
@@ -309,6 +329,8 @@ bool holds_counter(RileyCudaGraphResources* r, std::atomic<uint32_t>* counter) n
   return false;
 }
 }  // namespace
+
+#include "graph_buffered_transfer.inc"
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
     RileyCudaGraphResources* r, RileyCudaPinnedHostBuffer* input,
@@ -363,9 +385,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 
 static RileyCudaStatus replay_transfer_impl(
     RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
-    RileyCudaErrorInfo* error, bool asynchronous) noexcept {
+    RileyCudaErrorInfo* error, bool asynchronous, uint64_t* buffered_ticket = nullptr) noexcept {
   clear_error(error);
-  auto status = transfer_ready(r, error);
+  auto status = buffered_ticket ? buffered_transfer_ready(r, error) : transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
   // Any attempted replay invalidates the previous result, even preflight errors.
   r->completion_visible = false;
@@ -436,6 +458,7 @@ static RileyCudaStatus replay_transfer_impl(
     if (position >= r->rope_table_positions)
       return reject(error, "RoPE replay position outside table", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   }
+  if (buffered_ticket) return launch_buffered_transfer(r, source, bytes, selected_exec, buffered_ticket, error);
   CaptureDomainControlLease admission(r->owner->capture_domain);
   if (!admission.active()) return reject(error, "capture domain busy");
   CurrentContext scope(r->owner);
@@ -490,6 +513,15 @@ static RileyCudaStatus replay_transfer_impl(
     r->completion_visible = true;
   }
   return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_submit_buffered_transfer(
+    RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
+    uint64_t* ticket, RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (!ticket) return reject(error, "null buffered ticket output", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  *ticket = 0;
+  return replay_transfer_impl(r, source, bytes, error, true, ticket);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(

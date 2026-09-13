@@ -1,0 +1,75 @@
+{
+  "recorded_at_utc": "2026-09-13T03:39:34.091592+00:00",
+  "baseline": "030c207565eda3ec45533a166e6d9a201c8d1831",
+  "parent_commit": "3c3ab24873b4db12c741caef6c7c43be01bfb69c",
+  "source_overlay_sha256": {
+    "crates/riley-cuda/build.rs": "2d74b1a7e69c0195eccb6cf922eed0babf1a51698e3a9ea0ca69ba20dcb0453b",
+    "crates/riley-cuda/examples/hardware_validation.rs": "3168eee9a978f8317082456b3e9bceba3f6af7c3cff013e88cf5fc29995548e8",
+    "crates/riley-cuda/src/ffi.rs": "29527fc7600277d32815e6bb80041cbb90a578ab6e6fc9894691442b937a0cdf",
+    "crates/riley-cuda/src/graph_resources.rs": "d23463e14a78038b9756627dc67eb14bc2bd6050330665e113cf660d6af3f695",
+    "crates/riley-cuda/src/hardware_validation.rs": "ecd5e03efbe018839bb41429a6675bda8d179f7649adf692eff8b9770e90efa9",
+    "crates/riley-cuda/src/lib.rs": "05aafb02dbf30340f3587442d0b437f6880a8e2c88c1c0255203cf610a026431",
+    "crates/riley-cuda/src/runtime.rs": "b336fc6265143a6e4b7476993fb858103c510e22e28997b975355985244ae6c2",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "570e7ba62f2a7b07052c74a4397d8c9425379b5c339ff6e242c5e8cd0e89b202",
+    "crates/riley-runtime/src/llama/mod.rs": "3ef42ba39a78584ca2583ce15250cc33d222629c8c26d4cbdd4ddf7c7b9c0b96",
+    "crates/riley-runtime/src/llama/variable_plan.rs": "69af9530f1bcf5f441952f22751660ca43dd68f4bc3a711b6e9b383b0a0dd8be",
+    "crates/riley-runtime/src/llama/variable_session.rs": "5675d7c4b7f107a13ba798bc8264ae2aa9fe200fbb9988830d99b9baeafe1a1a",
+    "crates/riley-scheduler/src/execution.rs": "8213acde864bc065123e50bb7f7da8efb97d55905d294e5262ea94c04f714243",
+    "crates/riley-scheduler/tests/v3_shared_owned_gpu.rs": "55dc38742b4179240879a8a05fe7bfaf52c22130f218ed2d09de4d0330b485f8",
+    "kernels/include/riley_cuda.h": "89c0b6e0aff63d059016884f072f93a7a161c815bbfa48e98d0713b4e99e3245",
+    "kernels/src/graph_buffered_transfer.inc": "7da7955caee730090948b5da054beee1165f51af9ed02d59fe5c4188185dedd0",
+    "kernels/src/graph_resources.cu": "3718d4bc64450a0edb09fd8d66276daaaabca7240de2e5ce501beb9fc10609f0",
+    "kernels/src/host_runtime.cu": "ebcb308ef295dfcfd523c0d719b911bd6025e4db3d3c9942bab8498c9aaf256c"
+  },
+  "remote_source_matches_local_overlay": true,
+  "test_binary_sha256": {
+    "/tmp/riley-opt-260912/hardware-validation-target/debug/deps/v3_shared_owned_gpu-6db3b0fd131047ce": "4a5a381a06e10bf3a428084f1c1da65bdae5b11f8c389a38bbf642d2a2b79fd7",
+    "/tmp/riley-opt-260912/hardware-validation-target/debug/deps/riley_cuda-6dbae6b0417c0677": "f5c32e942e2fc7675ea46031229c8dfb2729d69740dc7558ce6238ebadab19bc"
+  },
+  "hardware": "single RTX 4090 SM89",
+  "model": "SmolLM2-135M BF16 /data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+  "fixture": "/tmp/riley-opt-260912/loaded-rope-fixture-v11",
+  "commands": {
+    "transfer": "cargo test -p riley-cuda --features cuda --lib aggregate_transfer_gpu_tests -- --ignored --test-threads=1 --nocapture",
+    "model": "cargo test -p riley-scheduler --features cuda --test v3_shared_owned_gpu loaded_v7 -- --ignored --test-threads=1 --nocapture",
+    "server": "cargo check -p riley-server --features cuda",
+    "cpu": "cargo test -p riley-cuda --lib",
+    "memcheck_prefix": "/data/cuda-12.8.1/bin/compute-sanitizer --tool memcheck --error-exitcode 86",
+    "memcheck_filters": [
+      "loaded_v7_partial",
+      "buffered_transfer_two"
+    ]
+  },
+  "results": {
+    "transfer_gpu": {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    "model_gpu": {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    "cpu": {
+      "passed": 92,
+      "failed": 0
+    },
+    "transfer_memcheck_errors": 0,
+    "model_memcheck_errors": 0,
+    "cuda_server_check": "passed"
+  },
+  "coverage": [
+    "Two native submissions before waiting; unread output preserved across slot reuse and out-of-order reads.",
+    "Consumed and previous-owner tickets rejected. Legacy replay mixing and parent close rejected.",
+    "Native close/Drop drains two pending submissions.",
+    "Model compact/full/mixed stages alternate staging slots with one runtime expectation at a time; exact reference checks retained."
+  ],
+  "limitations": [
+    "No GPU future-token path or two-plan scheduler reservation/commit yet.",
+    "No serving throughput, TTFT, TPOT or tail-latency claim; production default unchanged.",
+    "No new actual async event-failure injection coverage.",
+    "Hopper, Blackwell and multi-GPU tests not run: corresponding hardware unavailable.",
+    "Additional 6299648 pinned bytes calculated from source, not a measured total GPU-memory delta."
+  ]
+}

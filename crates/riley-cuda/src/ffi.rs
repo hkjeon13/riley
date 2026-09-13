@@ -9866,6 +9866,10 @@ unsafe extern "C" {
         output: *mut RawPinnedHostBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_prepare_buffered_transfers(resources: *mut RawGraphResources, first: *mut RawPinnedHostBuffer, second: *mut RawPinnedHostBuffer, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_resources_submit_buffered_transfer(resources: *mut RawGraphResources, source: *const u8, bytes: u64, ticket: *mut u64, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_resources_query_buffered_transfer(resources: *mut RawGraphResources, ticket: u64, wait: u32, ready: *mut u32, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_resources_read_buffered_transfer(resources: *mut RawGraphResources, ticket: u64, destination: *mut u8, bytes: u64, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_submit_transfer(
         resources: *mut RawGraphResources,
         source: *const u8,
@@ -9915,6 +9919,30 @@ impl GraphResourcesHandle {
             )
         };
         status_result(status, "record aggregate transfer", &error)
+    }
+    pub(super) fn prepare_buffered_transfers(&mut self, first: &PinnedHostBufferHandle, second: &PinnedHostBufferHandle) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: native checks live parent membership, nonaliasing and extents.
+        let status = unsafe { riley_cuda_graph_resources_prepare_buffered_transfers(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), first.as_ptr(), second.as_ptr(), &mut error) };
+        status_result(status, "prepare buffered transfers", &error)
+    }
+    pub(super) fn submit_buffered_transfer(&mut self, source: &[u8]) -> CudaResult<u64> {
+        let mut error = ErrorInfo::new(); let mut ticket = 0;
+        // SAFETY: source is copied before return; writable ticket is call-local.
+        let status = unsafe { riley_cuda_graph_resources_submit_buffered_transfer(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), source.as_ptr(), source.len() as u64, &mut ticket, &mut error) };
+        status_result(status, "submit buffered transfer", &error)?; Ok(ticket)
+    }
+    pub(super) fn query_buffered_transfer(&mut self, ticket: u64, wait: bool) -> CudaResult<bool> {
+        let mut error = ErrorInfo::new(); let mut ready = 0;
+        // SAFETY: native validates the ticket against this retained owner.
+        let status = unsafe { riley_cuda_graph_resources_query_buffered_transfer(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), ticket, u32::from(wait), &mut ready, &mut error) };
+        status_result(status, "query buffered transfer", &error)?; Ok(ready != 0)
+    }
+    pub(super) fn read_buffered_transfer(&mut self, ticket: u64, output: &mut [u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: native validates ticket, completion and exact writable extent.
+        let status = unsafe { riley_cuda_graph_resources_read_buffered_transfer(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), ticket, output.as_mut_ptr(), output.len() as u64, &mut error) };
+        status_result(status, "read buffered transfer", &error)
     }
     pub(super) fn submit_transfer(&mut self, source: &[u8]) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
@@ -9985,6 +10013,72 @@ impl GraphResourcesHandle {
 #[cfg(test)]
 mod aggregate_transfer_gpu_tests {
     use super::*;
+    #[test]
+    #[ignore = "requires CUDA GPU"]
+    fn buffered_transfer_two_submissions_preserve_unread_output_and_drain() -> CudaResult<()> {
+        let _runtime = crate::CudaRuntime::initialize()?;
+        let mut context = ContextHandle::create(0)?;
+        let mut stream = StreamHandle::create(&context)?;
+        let mut first = DeviceBufferHandle::create(&context, 257)?;
+        let mut second = DeviceBufferHandle::create(&context, 257)?;
+        let mut input = PinnedHostBufferHandle::create(&context, 257)?;
+        let mut output = PinnedHostBufferHandle::create(&context, 257)?;
+        let mut slot0 = PinnedHostBufferHandle::create(&context, 514)?;
+        let mut slot1 = PinnedHostBufferHandle::create(&context, 514)?;
+        let mut absent = PinnedHostBufferHandle::create(&context, 514)?;
+        let mut small = PinnedHostBufferHandle::create(&context, 513)?;
+        let mut previous_ticket = 0;
+        for cycle in 0..8_u8 {
+            let mut owner = GraphResourcesHandle::reserve(&stream, &[&first, &second], &[&input, &output, &slot0, &slot1, &small], &[])?;
+            owner.record_transfer(&input, &first, &second, &output)?;
+            assert!(owner.prepare_buffered_transfers(&slot0, &absent).is_err());
+            assert!(owner.prepare_buffered_transfers(&slot0, &slot0).is_err());
+            assert!(owner.prepare_buffered_transfers(&slot0, &small).is_err());
+            owner.prepare_buffered_transfers(&slot0, &slot1)?;
+            assert!(owner.prepare_buffered_transfers(&slot0, &slot1).is_err());
+            for step in 0..32_u8 {
+                let a = [cycle.wrapping_add(step); 257]; let b = [a[0].wrapping_add(99); 257];
+                let ta = owner.submit_buffered_transfer(&a)?;
+                assert!(ta > previous_ticket, "ticket generation must survive owner replacement");
+                assert!(owner.query_buffered_transfer(previous_ticket, false).is_err());
+                let tb = owner.submit_buffered_transfer(&b)?;
+                assert!(tb > ta);previous_ticket = tb;
+                assert!(owner.submit_buffered_transfer(&a).is_err());
+                assert!(owner.submit_transfer(&a).is_err());
+                assert!(owner.replay_transfer(&a).is_err());
+                assert!(slot0.close().is_err()); assert!(first.close().is_err());
+                let mut result = [0; 257];
+                assert!(owner.read_buffered_transfer(ta, &mut result).is_err());
+                if step % 2 == 0 {
+                    assert!(owner.query_buffered_transfer(ta, true)?);
+                    owner.read_buffered_transfer(ta, &mut result)?;assert_eq!(result, a);
+                    let c = [b[0].wrapping_add(71); 257];
+                    let tc = owner.submit_buffered_transfer(&c)?;previous_ticket = tc;
+                    // Reuse slot zero while slot one's old output is unread.
+                    assert!(owner.query_buffered_transfer(tb, true)?);
+                    owner.read_buffered_transfer(tb, &mut result)?;assert_eq!(result, b);
+                    assert!(owner.query_buffered_transfer(tc, true)?);
+                    owner.read_buffered_transfer(tc, &mut result)?;assert_eq!(result, c);
+                    assert!(owner.read_buffered_transfer(ta, &mut result).is_err());
+                    continue;
+                }
+                let _ = owner.query_buffered_transfer(tb, false)?;
+                assert!(owner.query_buffered_transfer(tb, true)?);
+                // Complete/read the second first; it must not overwrite the first.
+                owner.read_buffered_transfer(tb, &mut result)?; assert_eq!(result, b);
+                assert!(owner.query_buffered_transfer(tb, true).is_err());
+                assert!(owner.query_buffered_transfer(ta, true)?);
+                assert!(owner.read_buffered_transfer(ta, &mut result[..256]).is_err());
+                owner.read_buffered_transfer(ta, &mut result)?; assert_eq!(result, a);
+                assert!(owner.read_buffered_transfer(ta, &mut result).is_err());
+            }
+            owner.submit_buffered_transfer(&[1;257])?; owner.submit_buffered_transfer(&[2;257])?;
+            if cycle % 2 == 0 { owner.close()?; } else { drop(owner); }
+        }
+        first.close()?; second.close()?; input.close()?; output.close()?;
+        slot0.close()?; slot1.close()?; absent.close()?; small.close()?;
+        stream.close()?; context.close()?; Ok(())
+    }
     #[test]
     #[ignore = "requires CUDA GPU"]
     fn aggregate_transfer_fresh_replay_membership_completion_and_cleanup() -> CudaResult<()> {
