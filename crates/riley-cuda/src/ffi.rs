@@ -11438,6 +11438,7 @@ fn riley_cuda_graph_resources_record_v6_shared(owner:*mut RawGraphResources,devi
 fn riley_cuda_graph_resources_record_v7_flashinfer_experimental(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,attention_workspace:*mut RawDeviceBuffer,compact:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_flashinfer_prefill_only(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,attention_workspace:*mut RawDeviceBuffer,compact:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_ffn_pipeline(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,error:*mut ErrorInfo)->i32;
+fn riley_cuda_graph_resources_record_v7_prefill_ffn_pipeline(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_shared(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
     fn riley_cuda_graph_resources_record_v4_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v5_shared_greedy(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,error:*mut ErrorInfo)->i32;
@@ -11507,6 +11508,14 @@ pub(super) fn record_v7_ffn_pipeline(&mut self,devices:&[&DeviceBufferHandle],wo
         let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
         // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
         let status=unsafe{riley_cuda_graph_resources_record_v7_ffn_pipeline(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,u32::from(compact),&mut error)};
+        status_result(status,"record V7 mixed",&error)
+    }
+pub(super) fn record_v7_prefill_ffn_pipeline(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32,compact:bool)->CudaResult<()> {
+        if devices.len()!=25||(weights.len()!=273&&weights.len()!=363) {return Err(CudaError::invalid_argument("record V7 mixed","parent count mismatch"));}
+        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
+        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
+        let status=unsafe{riley_cuda_graph_resources_record_v7_prefill_ffn_pipeline(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,u32::from(compact),&mut error)};
         status_result(status,"record V7 mixed",&error)
     }
 pub(super) fn record_v7_shared(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32)->CudaResult<()> {

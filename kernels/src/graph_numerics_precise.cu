@@ -388,6 +388,9 @@ namespace riley_cuda_internal {
 cudaError_t enqueue_compiled_v7_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
  return enqueue_mixed_model_v7<32>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
 }
+cudaError_t enqueue_compiled_v7_prefill_ffn_pipeline_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+ return enqueue_mixed_model_v7<32,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+}
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
 cudaError_t enqueue_compiled_v7_flashinfer_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t rows,uint32_t physical,bool tiled,void* workspace,uint64_t bytes,uint32_t context) noexcept {
  if(!workspace)return cudaErrorInvalidValue;

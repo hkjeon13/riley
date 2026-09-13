@@ -6,6 +6,7 @@
 #pragma once
 #include "prefill_shape_projection.cuh"
 #include "prefill_fused_gate_v51.cuh"
+#include "../optional/prefill_ffn_pipeline.cuh"
 #include "prefill_shape_rope_kv.cuh"
 #include "prefill_shape_attention.cuh"
 #include "prefill_shape_pointwise.cuh"
@@ -19,7 +20,7 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* 
  if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
 }
-template<uint32_t WireRows=8>
+template<uint32_t WireRows=8,bool PrefillFfnPipeline=false>
 inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false){
@@ -65,7 +66,8 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);
   if(capacity>1&&tiled){
-   riley_prefill51::gate_up<4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),w(base+7),b(11),capacity,shape+2);
+   if constexpr(PrefillFfnPipeline)riley_prefill_ffn_pipeline::gate_up<<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),w(base+7),b(11),capacity,shape+2);
+   else riley_prefill51::gate_up<4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+6),w(base+7),b(11),capacity,shape+2);
   }else{
   if(capacity==1&&tiled)enqueue_tile_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
   else if(capacity==1)enqueue_decode_projection<1536,576,0>(stream,b(1),w(base+6),b(8),static_cast<float*>(scratch[7]));
@@ -77,7 +79,8 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   else gemm_prefill_shape_vector<1536,576,0,4><<<dim3(48,(capacity+15)/16),128,0,stream>>>(b(1),w(base+7),b(9),capacity,shape+2);
   riley_prefill_pointwise::swiglu_rows<<<dim3(6,capacity),256,0,stream>>>(b(8),b(9),b(11),shape,capacity);
   }
-  if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
+  if(PrefillFfnPipeline && capacity>1 && tiled)riley_prefill_ffn_pipeline::down<<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
+  else if(capacity==1&&tiled)enqueue_tile_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
   else if(capacity==1)enqueue_decode_projection<576,1536,320>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]));
   else if(tiled)gemm_prefill_shape_vector<576,1536,320,2,true><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);
   else gemm_prefill_shape_vector<576,1536,320,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(11),w(base+8),b(4),capacity,shape+2);

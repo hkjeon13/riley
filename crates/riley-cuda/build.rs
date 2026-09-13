@@ -202,6 +202,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("optional/flashinfer_prefill.cu"),
         kernels_dir.join("optional/prepare_flashinfer_prefill_overlay.py"),
         kernels_dir.join("optional/ffn_pipeline.cuh"),
+        kernels_dir.join("optional/prefill_ffn_pipeline.cuh"),
         kernels_dir.join("optional/future_token.cuh"),
         kernels_dir.join("src/ffi_internal.hpp"),
         kernels_dir.join("src/attention_online.cu"),

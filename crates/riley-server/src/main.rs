@@ -48,7 +48,7 @@ serve options:
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)
   --decode-window MODE           single or paired-experimental-v1 (V7 loopback diagnostic)
-  --ffn-backend MODE             existing or pipeline-experimental-v1 (V7 loopback diagnostic)
+  --ffn-backend MODE             existing, pipeline-experimental-v1 or prefill-pipeline-experimental-v1 (V7 loopback diagnostic)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
@@ -97,6 +97,7 @@ struct ServeOptions {
     mixed_execution: bool,
     flashinfer_experimental: bool,
     ffn_pipeline: bool,
+    prefill_ffn_pipeline: bool,
     decode_window: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -382,9 +383,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--ffn-backend" => {
                 let value = next_value(&mut arguments, "--ffn-backend")?;
                 let enabled = match value.to_str() {
-                    Some("existing") => false,
-                    Some("pipeline-experimental-v1") => true,
-                    _ => return Err("--ffn-backend requires existing or pipeline-experimental-v1".to_owned()),
+                    Some("existing") => (false,false),
+                    Some("pipeline-experimental-v1") => (true,false),
+                    Some("prefill-pipeline-experimental-v1") => (false,true),
+                    _ => return Err("--ffn-backend requires existing, pipeline-experimental-v1 or prefill-pipeline-experimental-v1".to_owned()),
                 };
                 set_once(&mut ffn_pipeline, enabled, "--ffn-backend")?;
             }
@@ -535,15 +537,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false));
-    let ffn_pipeline = ffn_pipeline.unwrap_or(false);
+    let (ffn_pipeline,prefill_ffn_pipeline) = ffn_pipeline.unwrap_or((false,false));
     let decode_window=decode_window.unwrap_or(false);
     if decode_window && sampling_backend.unwrap_or(SamplingBackendMode::Cpu)!=SamplingBackendMode::GpuGreedy {return Err("decode window requires --sampling-backend gpu-greedy".to_owned());}
     if decode_window && (!mixed_execution || flashinfer_experimental || ffn_pipeline) {return Err("decode window requires independent variable-smol-v7".to_owned());}
     if decode_window && !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"decode window requires loopback IP socket address".to_owned())?.ip().is_loopback() {return Err("decode window is restricted to loopback diagnostics".to_owned());}
-    if ffn_pipeline && (!mixed_execution || flashinfer_experimental) {
+    if (ffn_pipeline || prefill_ffn_pipeline) && (!mixed_execution || flashinfer_experimental) {
         return Err("FFN pipeline requires the independent variable-smol-v7 graph profile".to_owned());
     }
-    if ffn_pipeline && !bind_address.parse::<std::net::SocketAddr>()
+    if (ffn_pipeline || prefill_ffn_pipeline) && !bind_address.parse::<std::net::SocketAddr>()
         .map_err(|_| "FFN pipeline requires loopback IP socket address".to_owned())?.ip().is_loopback() {
         return Err("FFN pipeline is restricted to loopback diagnostics".to_owned());
     }
@@ -592,6 +594,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         mixed_execution,
         flashinfer_experimental,
         ffn_pipeline,
+        prefill_ffn_pipeline,
         decode_window,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
@@ -1119,7 +1122,7 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+    let executor = if options.prefill_ffn_pipeline {executor.with_prefill_ffn_pipeline(options.decode_window)} else if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
         executor.with_variable_graph16()
     } else if options.variable_graph {
         executor.with_variable_graph()
@@ -3005,6 +3008,21 @@ mod tests {
     }
 
     #[test]
+    fn prefill_ffn_selection_checks_profile_bind_and_pairing() {
+        for (profile,bind,paired,accepted) in [
+            ("variable-smol-v7","127.0.0.1:8080","single",true),
+            ("variable-smol-v7","127.0.0.1:8080","paired-experimental-v1",true),
+            ("variable-smol-v7","0.0.0.0:8080","single",false),
+            ("variable-smol-v6","127.0.0.1:8080","single",false),
+            ("flashinfer-smol-experimental-v2","127.0.0.1:8080","single",false),
+        ] {
+            let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics",profile,"--bind",bind,"--decode-window",paired,"--sampling-backend","gpu-greedy","--ffn-backend","prefill-pipeline-experimental-v1","--execution-graph-policy","require"].map(std::ffi::OsString::from));
+            assert_eq!(result.is_ok(),accepted);
+            if let Ok(super::CliCommand::Serve(options))=result {assert!(options.prefill_ffn_pipeline && !options.ffn_pipeline);}
+        }
+    }
+
+    #[test]
     fn ffn_pipeline_requires_independent_v7_and_loopback() {
         for (profile, bind, accepted) in [
             ("variable-smol-v7", "127.0.0.1:8080", true),
@@ -4013,6 +4031,7 @@ mod tests {
                 mixed_execution: false,
                 flashinfer_experimental: false,
                 ffn_pipeline: false,
+                prefill_ffn_pipeline: false,
                 decode_window: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4409,6 +4428,7 @@ mod tests {
                 mixed_execution: false,
                 flashinfer_experimental: false,
                 ffn_pipeline: false,
+                prefill_ffn_pipeline: false,
                 decode_window: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -4572,6 +4592,7 @@ mod tests {
                 mixed_execution: false,
                 flashinfer_experimental: false,
                 ffn_pipeline: false,
+                prefill_ffn_pipeline: false,
                 decode_window: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4702,6 +4723,7 @@ mod tests {
                 mixed_execution: false,
                 flashinfer_experimental: false,
                 ffn_pipeline: false,
+                prefill_ffn_pipeline: false,
                 decode_window: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,

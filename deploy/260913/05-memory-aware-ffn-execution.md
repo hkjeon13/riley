@@ -89,4 +89,11 @@ gate/up→activation→down 사이 중간 global tensor 이동을 줄인다. lau
 
 [Native 구현 및 대조](../../benchmarks/results/20260913-prefill-ffn-pipeline-native/README.md): gate/up와 down 두-stage copy/MMA pipeline,16-row 입력 공유, shared-bank alias를 피하는72-element stride를 구현했다. 초기64 stride 회귀를 보존하고 padding 후26개 전체 출력/반복/inactive 검사에서 bitwise 일치, native memcheck/racecheck0, SM90a/SM100a compile 통과를 확인했다. 실제 shared는 gate20,992B/down8,704B이며 spill0이다. 두 target runtime은 장비 부재 미검증이다.
 
-Warm one-layer native 합산 시간은 M32 약−19.4%, M128−15.7%, M512−6.6%지만 M398−0.38%, M1024−1.25%는 거의 동률이다. 이를 serving 개선으로 사용하지 않는다. **아직 Rust/model recorder/serving backend에 연결하지 않았다.** 다음은 독립 profile/catalog identity와 retained model 연결, full-model gate, C32/C64 single·직전·후보·vLLM 비교다. 기본값과 기존 serving binary는 유지한다.
+Warm one-layer native 합산 시간은 M32 약−19.4%, M128−15.7%, M512−6.6%지만 M398−0.38%, M1024−1.25%는 거의 동률이다. 이를 serving 개선으로 사용하지 않는다. **이 native gate 시점에는 Rust/model recorder/serving backend에 연결하지 않았다.** 다음은 독립 profile/catalog identity와 retained model 연결, full-model gate, C32/C64 single·직전·후보·vLLM 비교다. 기본값과 기존 serving binary는 유지한다.
+
+
+### Prefill FFN 모델·serving 통합 결과 (2026-09-14)
+
+[통합 결과와 비교표](../../benchmarks/results/20260913-prefill-ffn-model-serving/README.md): retained C ABI recorder, 별도 graph fingerprint, Rust session 및 loopback CLI 선택을 연결했다. Pure decode를 유지하며 paired execution과 결합할 수 있다. 자유 생성1,024토큰 및 자연어12,582,912 BF16 logits가 기존 경로와 일치하고 stop/cancel·C32/C64 두 순서 serving도 통과했다.
+
+현재 paired 대비 throughput은 C32 +2.57%, C64/active32 +1.69%다. 같은 screen vLLM 대비 각각−6.43%/−5.90%이며 E2E P99는 직전 대비 악화돼 기본값으로 승격하지 않는다. Native 이득을 serving 이득으로 과장하지 않는다. PR05의 일반 shape 및 장기 안정성은 남아 있으며 다음 영역은 PR04 mixed batching·시간 예산 실행 계약과 평가 workload 검토다.
