@@ -28,6 +28,6 @@ Throughput·TTFT·TPOT·P95/P99의 새 serving 측정은 **미측정**이다. Ho
 
 ## Pending remote observation
 
-추가 full-model racecheck를 실행한 후 SSH banner exchange까지 응답하지 않는 상태가 관찰됐다. racecheck의 성공·실패·종료는 아직 확인하지 못했으며 원인은 확정하지 않는다. 실행 handle은 `42095`, 원격 예상 로그는 `/tmp/riley-opt-260912/native-window-v1/racecheck.log`이다. 원격 상태 확인 전에는 GPU 작업을 다시 시작하지 않는다. 원본 memcheck 로그를 가져오는 scp handle `86058`도 완료 확인 전이다. 위 memcheck console은 그 전에 exit 0으로 완료된 실행의 tool 출력이다.
+추가 full-model racecheck를 실행한 후 SSH banner exchange까지 응답하지 않는 상태가 관찰됐다. racecheck의 성공·실패·종료는 아직 확인하지 못했으며 원인은 확정하지 않는다. 실행 handle은 `42095`, 원격 예상 로그는 `/tmp/riley-opt-260912/native-window-v1/racecheck.log`이다. 원격 상태 확인 전에는 GPU 작업을 다시 시작하지 않는다. 원본 memcheck 로그를 가져오는 scp handle `86058`은 이후 exit 0으로 완료됐다. [원본 로그](memcheck.log)와 [exit](memcheck.exit)를 보존한다. 위 memcheck console은 그 전에 exit 0으로 완료된 실행의 tool 출력이다.
 
 [소스 snapshot](source-hashes.json)은 업로드에 사용한 로컬 소스를 기록한다. 추가 원격 hash readback은 연결 복구 후 수행한다. 이번 통합은 serving 성능 승격을 의미하지 않는다.

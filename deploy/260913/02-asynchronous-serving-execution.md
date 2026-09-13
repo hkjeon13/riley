@@ -159,3 +159,7 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 [GPU window 검증](../../benchmarks/results/20260913-native-decode-window/README.md): buffered V7 decode graph에 status reset 뒤/embedding 앞 future-token resolver를 연결했다. 첫 device result·두 pinned output·reference scratch의 dependency와 수명을 고정하고, native predecessor ticket 검사·runtime pair expectation/commit·scheduler pair authority adapter를 함께 구현했다. 32개 ragged 요청의 반복 window 생성은 직렬 V7과 exact이며, 선행 stop/cancel의 출력 폐기 및 context allocation 회수도 GPU에서 확인했다.
 
 다음 구현은 HTTP engine의 명시적 window 선택과 기존 sampling/audit/cancel 계약 연결이다. 양쪽 drain 후 공개하는 현재 방식은 serving TPOT/tail 결과를 보고 판단한다. 그 통합 milestone에서 직전 Riley·새 Riley·vLLM 비교표를 작성한다.
+
+## Serving opt-in 연결 — 실행 검증 대기
+
+[Serving window 구현·검사 범위](../../benchmarks/results/20260913-serving-decode-window/README.md): `--decode-window paired-experimental-v1`을 추가하고 GPU greedy 선택, 선행 stop에 대한 후행 GenerationState 수용 억제, 요청·생성 순번별 audit/SSE publication, 재사용 staging을 함께 연결했다. 기본값은 single이다. Host 검사와 별도 복사본의 CUDA-feature Rust typecheck는 통과했으나 원격 SSH가 응답하지 않아 이 serving 연결의 native build·HTTP/GPU 실행·vLLM 비교는 아직 수행하지 못했다.

@@ -2027,7 +2027,7 @@ mod cuda_backend {
             debug_assert_eq!(pool.physical_block_count(), layout.physical_block_count());
 
             Self {
-                execution_completion_mode: executor.execution_completion_mode_id(),
+                execution_completion_mode: if executor.config().decode_window(){"paired-decode-event-drain-v1"}else{executor.execution_completion_mode_id()},
                 batch_shape_policy: executor.batch_shape_policy_id(),
                 batch_shape_buckets,
                 batch_shape_bucket_count: prepared_buckets.len(),
@@ -2444,6 +2444,7 @@ mod cuda_backend {
 
     struct PendingToken {
         scheduler_id: SchedulerRequestId,
+        generated_index: usize,
         token_id: u32,
         text_delta: String,
         selection: C02CommittedSamplingSelection,
@@ -2483,6 +2484,8 @@ mod cuda_backend {
         requests: Vec<CudaRequest>,
         samples: Vec<SampledIterationToken>,
         pending_tokens: Vec<PendingToken>,
+        window_pending_tokens: Vec<PendingToken>,
+        decode_window: bool,
         pending_events: VecDeque<BackendEvent>,
         batch_shapes: EngineBatchShapeMetricsSnapshot,
         final_metrics: EngineMetricsSnapshot,
@@ -2520,9 +2523,11 @@ mod cuda_backend {
             samples
                 .try_reserve_exact(output_capacity)
                 .map_err(|_| internal("sample staging allocation failed"))?;
+            let mut window_pending_tokens=Vec::new();
+            if resources.executor.config().decode_window() {window_pending_tokens.try_reserve_exact(output_capacity).map_err(|_|internal("window staging allocation failed"))?;}
             let mut pending_tokens = Vec::new();
             pending_tokens
-                .try_reserve_exact(output_capacity)
+                .try_reserve_exact(output_capacity.checked_mul(if resources.executor.config().decode_window(){2}else{1}).ok_or_else(||internal("window capacity overflow"))?)
                 .map_err(|_| internal("token publication staging allocation failed"))?;
             let request_capacity = resources
                 .scheduler
@@ -2555,6 +2560,8 @@ mod cuda_backend {
                 ));
             }
             let use_variable=resources.executor.config().variable_graph();
+            let decode_window=resources.executor.config().decode_window();
+            if decode_window && (!resources.executor.config().mixed_execution() || resources.executor.config().ffn_pipeline() || resources.executor.config().flashinfer_experimental() || !resources.gpu_greedy) {return Err(internal("decode window requires V7 GPU greedy configuration"));}
             let use_ffn_pipeline = resources.executor.config().ffn_pipeline();
             let use_flashinfer_experimental = resources.executor.config().flashinfer_experimental();
             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
@@ -2573,7 +2580,7 @@ mod cuda_backend {
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
-                let graph=if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                let graph=if decode_window {resources.executor.into_owned_buffered_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,true).map(VariableServingSession::ThirtyTwo)}else if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
                 (None,None,None,Some(graph))
             } else if use_multi {
@@ -2598,7 +2605,7 @@ mod cuda_backend {
                 !use_graph,
                 !use_graph,
                 decode_graph.as_ref().map_or(
-                    if use_ffn_pipeline { "variable-smol-v7;ffn=pipeline-experimental-v1" } else if use_flashinfer_experimental { "flashinfer-smol-experimental-v2;quality=unqualified" } else if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(g))=>if g.supports_mixed_execution(){"variable-smol-v7"}else if g.supports_packed_prefill(){"variable-smol-v6"}else{"variable-smol-v5"},Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
+                    if decode_window { "variable-smol-v7;decode-window=paired-experimental-v1" } else if use_ffn_pipeline { "variable-smol-v7;ffn=pipeline-experimental-v1" } else if use_flashinfer_experimental { "flashinfer-smol-experimental-v2;quality=unqualified" } else if use_variable { match variable_graph.as_ref(){Some(VariableServingSession::ThirtyTwo(g))=>if g.supports_mixed_execution(){"variable-smol-v7"}else if g.supports_packed_prefill(){"variable-smol-v6"}else{"variable-smol-v5"},Some(VariableServingSession::Sixteen(_))=>"variable-smol-v4",_=>"variable-smol-v3"} } else if use_multi {
                         "vllm-smol-p128-multi-v1"
                     } else {
                         "existing"
@@ -2626,6 +2633,8 @@ mod cuda_backend {
                 requests,
                 samples,
                 pending_tokens,
+                window_pending_tokens,
+                decode_window,
                 pending_events,
                 batch_shapes,
                 final_metrics: EngineMetricsSnapshot::default(),
@@ -2770,6 +2779,15 @@ mod cuda_backend {
             downloaded: &riley_scheduler::DownloadedLlamaIteration,
             selection: C02CommittedSamplingSelection,
         ) -> Result<(), BackendError> {
+            self.sample_iteration_with_suppression(plan,downloaded,selection,&[])
+        }
+
+        fn sample_iteration_with_suppression(
+            &mut self, plan:&riley_scheduler::IterationPlan,
+            downloaded:&riley_scheduler::DownloadedLlamaIteration,
+            selection:C02CommittedSamplingSelection,
+            suppressed:&[SchedulerRequestId],
+        )->Result<(),BackendError> {
             self.samples.clear();
             self.pending_tokens.clear();
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
@@ -2837,6 +2855,11 @@ mod cuda_backend {
                             .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
                     (sample.token_id(), sample.token_logprob())
                 };
+                if suppressed.contains(&item.request_id()) {
+                    self.samples.push(SampledIterationToken::new(token_id,true));
+                    continue;
+                }
+                let generated_index=request.state.generated_token_ids().len();
                 let needs_decoding = request
                     .state
                     .token_needs_decoding(token_id)
@@ -2873,11 +2896,93 @@ mod cuda_backend {
                     .push(SampledIterationToken::new(token_id, stop));
                 self.pending_tokens.push(PendingToken {
                     scheduler_id: item.request_id(),
+                    generated_index,
                     token_id,
                     text_delta: generated.text_delta().to_owned(),
                     selection,
                     native_fallback_request_local,
                 });
+            }
+            Ok(())
+        }
+
+        fn try_decode_window(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            let now=self.now_ns();
+            let Some(window)=self.scheduler_mut()?.plan_decode_window(now).map_err(|e|internal(format!("window planning failed: {e}")))? else{return Ok(None)};
+            let first_selection=self.sampling_selection_for_plan(window.first())?;
+            let second_selection=self.sampling_selection_for_plan(window.second())?;
+            if first_selection.selected_backend!=C02SamplingBackend::GpuGreedy || second_selection.selected_backend!=C02SamplingBackend::GpuGreedy {
+                let now=self.now_ns();self.scheduler_mut()?.abort_iteration(window.first().iteration_id(),ExecutionAbort::NotDispatched,now).map_err(|e|internal(format!("window fallback failed: {e}")))?;
+                return Ok(None);
+            }
+            self.snapshot_cancel_deltas(window.first())?;
+            let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_decode_window(&window).map_err(|e|internal(format!("window authority failed: {e}")))?;
+            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("window graph unavailable"))};
+            let [first,second]=riley_scheduler::execution::execute_llama_decode_window(&authority,graph).map_err(|e|internal(format!("window execution failed: {}",e.error())))?;
+            drop(authority);
+            self.sample_iteration(window.first(),&first,first_selection)?;
+            let suppressed:Vec<_>=window.first().decode_items().iter().filter_map(|item|item.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|item.request_id())).collect();
+            let first_result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window first result failed: {e}")))?;
+            self.window_pending_tokens.clear();std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+            self.sample_iteration_with_suppression(window.second(),&second,second_selection,&suppressed)?;
+            let second_result=second.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window second result failed: {e}")))?;
+            self.window_pending_tokens.append(&mut self.pending_tokens);std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+            let now=self.now_ns();let updates=self.scheduler_mut()?.complete_decode_window_after_drain(&first_result,&second_result,now).map_err(|e|internal(format!("window settlement failed: {e}")))?;
+            if !updates.settlement_failures().is_empty(){return Err(internal("window settlement contained failures"));}
+            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{unreachable!()};
+            graph.confirm_decode_window_commit(window.first().iteration_id().get(),window.second().iteration_id().get()).map_err(|e|internal(format!("window commit confirmation failed: {e}")))?;
+            let mut events=Vec::new();self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
+        }
+
+        fn publish_committed_updates(&mut self,updates:&riley_scheduler::IterationUpdates,events:&mut Vec<BackendEvent>)->Result<(),BackendError> {
+            self.record_committed_audit_tokens(updates.token_events())?;
+
+            // External publication starts only after the authoritative commit
+            // above returns successfully.
+            for token in updates.token_events() {
+                let pending = self
+                    .pending_tokens
+                    .iter()
+                    .find(|pending| pending.scheduler_id == token.request_id() && pending.generated_index == token.generated_index())
+                    .ok_or_else(|| internal("committed token has no staged publication"))?;
+                if pending.token_id != token.token_id() {
+                    return Err(internal("committed token differs from staged sample"));
+                }
+                let request_index = self
+                    .request_index_by_scheduler(token.request_id())
+                    .ok_or_else(|| internal("committed token targets unknown request"))?;
+                let text = pending.text_delta.clone();
+                let request = &mut self.requests[request_index];
+                let event = if request.include_token_ids {
+                    if token.generated_index() != request.next_delivery_index
+                        || (token.generated_index() == 0)
+                            != request.prompt_ids_for_delivery.is_some()
+                    {
+                        return Err(internal(
+                            "committed token delivery metadata is inconsistent",
+                        ));
+                    }
+                    request.next_delivery_index = request
+                        .next_delivery_index
+                        .checked_add(1)
+                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
+                    GenerationEvent::CommittedToken {
+                        text,
+                        token_id: token.token_id(),
+                        generated_index: token.generated_index(),
+                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
+                    }
+                } else {
+                    GenerationEvent::TokenDelta { text }
+                };
+                events.push(BackendEvent::new(request.engine_id, event));
+            }
+            events.extend(self.process_completions(updates.completions())?);
+            if !updates.settlement_failures().is_empty() {
+                eprintln!(
+                    "riley scheduler contained {} settlement failure(s)",
+                    updates.settlement_failures().len()
+                );
             }
             Ok(())
         }
@@ -2960,7 +3065,7 @@ mod cuda_backend {
             for (index, token) in token_events.iter().enumerate() {
                 if token_events[..index]
                     .iter()
-                    .any(|earlier| earlier.request_id() == token.request_id())
+                    .any(|earlier| earlier.request_id() == token.request_id() && earlier.generated_index() == token.generated_index())
                 {
                     return Err(internal(
                         "scheduler committed duplicate C02 audit request token",
@@ -2969,7 +3074,7 @@ mod cuda_backend {
                 let pending_count = self
                     .pending_tokens
                     .iter()
-                    .filter(|pending| pending.scheduler_id == token.request_id())
+                    .filter(|pending| pending.scheduler_id == token.request_id() && pending.generated_index == token.generated_index())
                     .count();
                 if pending_count != 1 {
                     return Err(internal(
@@ -2979,7 +3084,7 @@ mod cuda_backend {
                 let pending = self
                     .pending_tokens
                     .iter()
-                    .find(|pending| pending.scheduler_id == token.request_id())
+                    .find(|pending| pending.scheduler_id == token.request_id() && pending.generated_index == token.generated_index())
                     .ok_or_else(|| internal("C02 audit staging lookup failed"))?;
                 if pending.token_id != token.token_id() {
                     return Err(internal("C02 audit token differs from scheduler commit"));
@@ -2991,8 +3096,9 @@ mod cuda_backend {
                     .generation_audit
                     .as_ref()
                     .ok_or_else(|| internal("C02 audit sink has no request staging"))?;
-                if request_audit.output_tokens.len() == request_audit.output_tokens.capacity()
-                    || request_audit.selections.len() == request_audit.selections.capacity()
+                let additions=token_events.iter().filter(|event|event.request_id()==token.request_id()).count();
+                if request_audit.output_tokens.capacity().saturating_sub(request_audit.output_tokens.len()) < additions
+                    || request_audit.selections.capacity().saturating_sub(request_audit.selections.len()) < additions
                 {
                     return Err(internal("C02 audit request staging capacity exhausted"));
                 }
@@ -3002,7 +3108,7 @@ mod cuda_backend {
                     let pending = self
                         .pending_tokens
                         .iter()
-                        .find(|pending| pending.scheduler_id == token.request_id())
+                        .find(|pending| pending.scheduler_id == token.request_id() && pending.generated_index == token.generated_index())
                         .ok_or_else(|| internal("C02 audit staging lookup failed"))?;
                     (
                         pending.token_id,
@@ -3363,6 +3469,9 @@ mod cuda_backend {
             if let Some(event) = self.pending_events.pop_front() {
                 return Ok(vec![event]);
             }
+            if self.decode_window {
+                if let Some(events)=self.try_decode_window()? {return Ok(events);}
+            }
             let now_ns = self.now_ns();
             let planning = self
                 .scheduler_mut()?
@@ -3556,55 +3665,7 @@ mod cuda_backend {
                 staged_shape,
                 updates.iteration_metric().is_some(),
             );
-            self.record_committed_audit_tokens(updates.token_events())?;
-
-            // External publication starts only after the authoritative commit
-            // above returns successfully.
-            for token in updates.token_events() {
-                let pending = self
-                    .pending_tokens
-                    .iter()
-                    .find(|pending| pending.scheduler_id == token.request_id())
-                    .ok_or_else(|| internal("committed token has no staged publication"))?;
-                if pending.token_id != token.token_id() {
-                    return Err(internal("committed token differs from staged sample"));
-                }
-                let request_index = self
-                    .request_index_by_scheduler(token.request_id())
-                    .ok_or_else(|| internal("committed token targets unknown request"))?;
-                let text = pending.text_delta.clone();
-                let request = &mut self.requests[request_index];
-                let event = if request.include_token_ids {
-                    if token.generated_index() != request.next_delivery_index
-                        || (token.generated_index() == 0)
-                            != request.prompt_ids_for_delivery.is_some()
-                    {
-                        return Err(internal(
-                            "committed token delivery metadata is inconsistent",
-                        ));
-                    }
-                    request.next_delivery_index = request
-                        .next_delivery_index
-                        .checked_add(1)
-                        .ok_or_else(|| internal("committed token delivery index overflowed"))?;
-                    GenerationEvent::CommittedToken {
-                        text,
-                        token_id: token.token_id(),
-                        generated_index: token.generated_index(),
-                        prompt_token_ids: request.prompt_ids_for_delivery.take(),
-                    }
-                } else {
-                    GenerationEvent::TokenDelta { text }
-                };
-                events.push(BackendEvent::new(request.engine_id, event));
-            }
-            events.extend(self.process_completions(updates.completions())?);
-            if !updates.settlement_failures().is_empty() {
-                eprintln!(
-                    "riley scheduler contained {} settlement failure(s)",
-                    updates.settlement_failures().len()
-                );
-            }
+            self.publish_committed_updates(&updates,&mut events)?;
             Ok(events)
         }
 
