@@ -9,7 +9,7 @@ from overlap_headroom import analyze
 
 def area(name):
     lower = name.lower()
-    if 'gate' in lower or ('<(int)576, (int)1536' in lower and ('projection' in lower or 'gemm_prefill_shape_vector' in lower)):
+    if 'riley_ffn_pipeline::' in lower or 'gate' in lower or ('<(int)576, (int)1536' in lower and ('projection' in lower or 'gemm_prefill_shape_vector' in lower)):
         return 'ffn_gate_activation_down'
     if 'attention' in lower or 'batchdecodewithpaged' in lower:
         return 'attention'

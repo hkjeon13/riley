@@ -10,8 +10,9 @@ from pathlib import Path
 import sys
 
 source, destination = map(Path, sys.argv[1:3])
+expected_runs = int(sys.argv[3]) if len(sys.argv) > 3 else 6
 completion = json.loads((source / 'completion.json').read_text())
-assert len(completion['records']) == 6, 'screen is incomplete'
+assert len(completion['records']) == expected_runs, 'screen is incomplete'
 destination.mkdir()
 manifest = {}
 for path in sorted(source.glob('*-rows.json')):

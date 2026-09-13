@@ -125,6 +125,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
 /// in the loaded model owner and are exclusively borrowed during the session.
 pub struct VariableGraphBuffers {
     pub(crate) flashinfer_workspace:Option<riley_cuda::CudaDeviceBuffer>,
+    pub(crate) ffn_pipeline:bool,
     pub(crate) devices:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) tiled:Vec<riley_cuda::CudaDeviceBuffer>,
     pub(crate) shared_devices:Vec<riley_cuda::CudaDeviceBuffer>,
@@ -151,7 +152,7 @@ impl VariableGraphBuffers {
         for (i,bytes) in sizes.into_iter().enumerate() {let bytes=bytes*capacity as u64;devices.push(context.allocate_device_buffer(if i==7 {bytes.max(9*4096*4)}else{bytes})?);}
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
-        Ok(Self{flashinfer_workspace:None,devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
+        Ok(Self{ffn_pipeline:false,flashinfer_workspace:None,devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
             buffered_staging:Vec::new(),head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,mixed_execution:false})
     }
     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
@@ -238,21 +239,26 @@ impl super::PreparedLlamaBatchExecutor {
     pub fn into_owned_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,true)}
     /// Opt-in staging double buffering. Scheduler admission still permits only
     /// one retained expectation; this does not enable GPU future-token decoding.
-    pub fn into_owned_buffered_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,true,false)}
+    pub fn into_owned_buffered_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,true,false,false)}
     fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
-        self.into_variable_session_mode::<ROWS>(context,capacity,shared,compact,packed,mixed,false,false)
+        self.into_variable_session_mode::<ROWS>(context,capacity,shared,compact,packed,mixed,false,false,false)
     }
     /// Explicit experimental numerical profile: FlashInfer 0.6.16.post3 unsplit
     /// decode rows in pure and mixed stages; existing prefill arithmetic. Quality is unaccepted.
     /// Fails if optional native build support is absent; never falls back silently.
     pub fn into_owned_variable_flashinfer_experimental_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,false,true)
+        self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,false,true,false)
     }
-    fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+    /// Experimental FFN transport, existing attention and prefill arithmetic.
+    pub fn into_owned_variable_ffn_pipeline_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,false,false,true)
+    }
+    fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
         parents.scratch.compact=compact;parents.scratch.packed_prefill=packed;parents.scratch.mixed_execution=mixed;
+        parents.scratch.ffn_pipeline=ffn_pipeline;
         if flashinfer {parents.scratch.flashinfer_workspace=Some(context.allocate_device_buffer(78256).map_err(cuda)?);}
         if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}
         if buffered {for _ in 0..1 {parents.scratch.buffered_staging.push(context.allocate_pinned_host_buffer(wire::Layout::<ROWS>::STAGING_BYTES as u64).map_err(cuda)?);}}

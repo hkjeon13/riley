@@ -357,6 +357,10 @@ cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t s,void*const* d,const 
 cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
  return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
 }
+cudaError_t enqueue_compiled_v7_ffn_pipeline_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
+ if(!tiled)return cudaErrorInvalidValue;
+ return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true,nullptr,0,true);
+}
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
 // Explicit experimental entry. Existing exact entry points never select it.
 cudaError_t enqueue_compiled_v7_flashinfer_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled,void* workspace,uint64_t workspace_bytes) noexcept {

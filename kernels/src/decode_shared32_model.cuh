@@ -1,3 +1,4 @@
+#include "../optional/ffn_pipeline.cuh"
 #pragma once
 #include "prefill_shape_model.cuh"
 #include "decode_shared32.cuh"
@@ -55,7 +56,7 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
 }
-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,void* attention_workspace=nullptr,uint64_t attention_workspace_bytes=0){
+inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,void* attention_workspace=nullptr,uint64_t attention_workspace_bytes=0,bool ffn_pipeline=false){
 #ifndef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace||attention_workspace_bytes)return cudaErrorNotSupported;
 #else
@@ -98,11 +99,13 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
  }
- if(grouped_attention&&tiled)riley_gate_v56::split_rows<4><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+ if(ffn_pipeline)riley_ffn_pipeline::gate_up<<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+ else if(grouped_attention&&tiled)riley_gate_v56::split_rows<4><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
  else if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
  else shared32_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
  if(grouped_attention){
-  if(tiled)shared32_projection_parts<576,1536,320,true><<<dim3(72,5),32,0,stream>>>(b(11),w(273+layer*3+2),static_cast<float*>(scratch[7]),b(4),active);
+  if(ffn_pipeline)riley_ffn_pipeline::down_parts<<<dim3(72,5),32,0,stream>>>(b(11),w(273+layer*3+2),static_cast<float*>(scratch[7]),active);
+  else if(tiled)shared32_projection_parts<576,1536,320,true><<<dim3(72,5),32,0,stream>>>(b(11),w(273+layer*3+2),static_cast<float*>(scratch[7]),b(4),active);
   else shared32_projection_parts<576,1536,320,false><<<dim3(72,5),32,0,stream>>>(b(11),w(base+8),static_cast<float*>(scratch[7]),b(4),active);
   riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
  }else{

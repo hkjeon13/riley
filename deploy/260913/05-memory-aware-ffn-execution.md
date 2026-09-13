@@ -1,6 +1,6 @@
 # PR 05 — 메모리 수명 기반 FFN tile 실행
 
-상태: **FFN native kernel batch 구현·검증 완료 / 모델·serving 연결 전**. 공통 계약은 [README](README.md)를 따른다.
+상태: **decode FFN 모델·serving 검증 완료 / 실험 옵션 유지·미승격**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -64,3 +64,7 @@ gate/up→activation→down 사이 중간 global tensor 이동을 줄인다. lau
 ## Native batch 구현 결과
 
 [FFN pipeline 검증](../../benchmarks/results/20260913-ffn-pipeline-native/README.md): gate/up과 down 두 kernel을 이중 shared stage로 구현했다. 24 graph replay 경우에서 기존 kernel의 전체 gate 출력·down partial과 bitwise 일치했고, memcheck0 errors / racecheck0 hazards다. 실제 shared 예산은12,288B/10,240B, register38/30, spill0이다. SM89 실행 및 SM90a/100a AOT 빌드는 통과했지만 latter runtime은 장비 부재 skip이다. 명시적 runtime/backend·graph identity·full-model·serving 연결이 다음 필수 단계이며, 아직 성능 개선이나 PR05 완료를 주장하지 않는다.
+
+## 모델·serving 통합 결과
+
+[최종 첫 batch 비교표](../../benchmarks/results/20260913-ffn-serving-screen/README.md): 독립 FFN recorder·graph fingerprint·loopback CLI 옵션을 연결했다. 자유 생성1,024토큰 및 자연어12,582,912 BF16 logits가 V7과 일치하며 full-model memcheck0 errors다. C16/C32 고정/자연어24-run screen의 throughput 이득은 V7 대비2.20–3.64%다. C32 natural은 vLLM보다 throughput9.22% 낮고 median TPOT21.21% 길어 최종 목표 미달이다. 기존 경로를 기본값으로 유지하며, prefill tile 전달·일반 shape 확장·장기 안정성은 완료되지 않았다. 다음 주요 영역은 반복적인 FFN 미세 튜닝보다 prefill/mixed attention·자원 정책으로 둔다.

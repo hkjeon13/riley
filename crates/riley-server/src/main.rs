@@ -47,6 +47,7 @@ serve options:
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)
+  --ffn-backend MODE             existing or pipeline-experimental-v1 (V7 loopback diagnostic)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
@@ -94,6 +95,7 @@ struct ServeOptions {
     packed_prefill: bool,
     mixed_execution: bool,
     flashinfer_experimental: bool,
+    ffn_pipeline: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
@@ -252,6 +254,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut sampling_backend = None;
     let mut execution_graph_policy = None;
     let mut graph_numerics = None;
+    let mut ffn_pipeline = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -368,6 +371,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_metadata_transport(next_value(&mut arguments, "--metadata-transport")?)?,
                 "--metadata-transport",
             )?,
+            "--ffn-backend" => {
+                let value = next_value(&mut arguments, "--ffn-backend")?;
+                let enabled = match value.to_str() {
+                    Some("existing") => false,
+                    Some("pipeline-experimental-v1") => true,
+                    _ => return Err("--ffn-backend requires existing or pipeline-experimental-v1".to_owned()),
+                };
+                set_once(&mut ffn_pipeline, enabled, "--ffn-backend")?;
+            }
             "--graph-numerics" => {
                 let value = next_value(&mut arguments, "--graph-numerics")?;
                 let enabled = match value.to_str() {
@@ -515,6 +527,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false));
+    let ffn_pipeline = ffn_pipeline.unwrap_or(false);
+    if ffn_pipeline && (!mixed_execution || flashinfer_experimental) {
+        return Err("FFN pipeline requires the independent variable-smol-v7 graph profile".to_owned());
+    }
+    if ffn_pipeline && !bind_address.parse::<std::net::SocketAddr>()
+        .map_err(|_| "FFN pipeline requires loopback IP socket address".to_owned())?.ip().is_loopback() {
+        return Err("FFN pipeline is restricted to loopback diagnostics".to_owned());
+    }
     if flashinfer_experimental {
         let address = bind_address.parse::<std::net::SocketAddr>()
             .map_err(|_| "experimental FlashInfer requires a loopback IP socket address".to_owned())?;
@@ -559,6 +579,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         packed_prefill,
         mixed_execution,
         flashinfer_experimental,
+        ffn_pipeline,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
@@ -1085,7 +1106,7 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+    let executor = if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
         executor.with_variable_graph16()
     } else if options.variable_graph {
         executor.with_variable_graph()
@@ -2955,6 +2976,25 @@ mod tests {
     }
 
     #[test]
+    fn ffn_pipeline_requires_independent_v7_and_loopback() {
+        for (profile, bind, accepted) in [
+            ("variable-smol-v7", "127.0.0.1:8080", true),
+            ("variable-smol-v7", "[::1]:8080", true),
+            ("variable-smol-v7", "0.0.0.0:8080", false),
+            ("variable-smol-v6", "127.0.0.1:8080", false),
+            ("flashinfer-smol-experimental-v2", "127.0.0.1:8080", false),
+        ] {
+            let result = super::parse_arguments([
+                "serve", "--model", "/tmp/model", "--graph-numerics", profile,
+                "--ffn-backend", "pipeline-experimental-v1", "--bind", bind,
+                "--execution-graph-policy", "require",
+            ].map(std::ffi::OsString::from));
+            assert_eq!(result.is_ok(), accepted);
+            if let Ok(super::CliCommand::Serve(options)) = result { assert!(options.ffn_pipeline); }
+        }
+    }
+
+    #[test]
     fn flashinfer_diagnostic_is_explicit_loopback_and_requires_graph() {
         for (bind, policy, accepted) in [
             ("127.0.0.1:8080", "require", true),
@@ -3943,6 +3983,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                ffn_pipeline: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4337,6 +4378,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                ffn_pipeline: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
@@ -4498,6 +4540,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                ffn_pipeline: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
@@ -4626,6 +4669,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                ffn_pipeline: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,

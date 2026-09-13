@@ -7,11 +7,13 @@ import statistics
 import sys
 
 root = Path(sys.argv[1])
+case = sys.argv[2] if len(sys.argv) > 2 else 'c32-natural'
+candidate = sys.argv[3] if len(sys.argv) > 3 else 'flashinfer'
 report = {'qualification': False, 'percentile_method': 'nearest rank over pooled retained requests', 'lanes': {}}
-for lane in ('baseline', 'flashinfer', 'vllm'):
+for lane in ('baseline', candidate, 'vllm'):
     rows, summaries = [], []
     for pair in range(2):
-        prefix = f'c32-natural-p{pair}-{lane}'
+        prefix = f'{case}-p{pair}-{lane}'
         part = json.loads(gzip.decompress((root / 'compact' / (prefix + '-retained-rows.json.gz')).read_bytes()))
         summary = json.loads((root / (prefix + '-summary.json')).read_text())
         assert summary['completed'] and summary['failed'] == 0
@@ -39,5 +41,5 @@ for lane in ('baseline', 'flashinfer', 'vllm'):
         'run_tokens_per_second': [s['successful_output_tokens_per_wall_second'] for s in summaries],
         'ttft_ms': stats('token_ttft_ns'), 'tpot_ms': stats('token_tpot_ns'), 'e2e_ms': stats('e2e_ns'),
     }
-(root / 'comparison.json').write_text(json.dumps(report, indent=2) + '\n')
+(root / (f'comparison-{case}.json' if len(sys.argv)>2 else 'comparison.json')).write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))
