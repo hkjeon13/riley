@@ -1,0 +1,181 @@
+{
+  "scope": "nested host diagnostics, warmup+retained; call mixes differ; not a speedup estimate",
+  "results": {
+    "prior": {
+      "preparation": {
+        "hashes": {
+          "current": "1fc55a483be57e8822bd45d24f2dbfa606cee2569c031272582a907aa223646e",
+          "prior": "d85368b3bc3af73593f28cac2ea7bcb01f09c45f2888e6a5f4fb6be5c9101bab"
+        },
+        "controller_sha256": "9d731401f92b1350e36552a27b315d3cedb317fa2f21bb72bd2aaee8d4cb3989",
+        "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+        "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+        "concurrency": 32,
+        "warmup": 64,
+        "retained": 256,
+        "kv_payload_bytes_per_engine": 754974720,
+        "riley_cache_page_limit": 512,
+        "vllm_prefix_caching": true,
+        "qualification": false,
+        "host_phase_diagnostic": true,
+        "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+        "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+      },
+      "archive_sha256": "43959c2769c146dee97710763b1df47e7360f58464962bd6d3328a3c9bf8aeec",
+      "stages": {
+        "shared": {
+          "retain_encode": {
+            "calls": 239,
+            "wall_ns": 50672450,
+            "mean_us": 212.01861924686193
+          },
+          "sync_transfer": {
+            "calls": 0,
+            "wall_ns": 0,
+            "mean_us": null
+          },
+          "buffered_submit": {
+            "calls": 354,
+            "wall_ns": 9145167,
+            "mean_us": 25.833805084745762
+          },
+          "buffered_wait": {
+            "calls": 354,
+            "wall_ns": 733282206,
+            "mean_us": 2071.418661016949
+          },
+          "read_validate": {
+            "calls": 354,
+            "wall_ns": 70097495,
+            "mean_us": 198.01552259887006
+          },
+          "future_prepare": {
+            "calls": 115,
+            "wall_ns": 122544504,
+            "mean_us": 1065.6043826086957
+          }
+        },
+        "unique": {
+          "retain_encode": {
+            "calls": 495,
+            "wall_ns": 79275424,
+            "mean_us": 160.15237171717172
+          },
+          "sync_transfer": {
+            "calls": 0,
+            "wall_ns": 0,
+            "mean_us": null
+          },
+          "buffered_submit": {
+            "calls": 559,
+            "wall_ns": 14695322,
+            "mean_us": 26.288590339892664
+          },
+          "buffered_wait": {
+            "calls": 559,
+            "wall_ns": 2346567694,
+            "mean_us": 4197.7955169946335
+          },
+          "read_validate": {
+            "calls": 559,
+            "wall_ns": 91826520,
+            "mean_us": 164.2692665474061
+          },
+          "future_prepare": {
+            "calls": 64,
+            "wall_ns": 61941331,
+            "mean_us": 967.833296875
+          }
+        }
+      }
+    },
+    "new": {
+      "preparation": {
+        "hashes": {
+          "current": "a5dda5e9d8260c3797d61cd13477f756c35bbec5716c4d50ec3685f990df6a1e",
+          "prior": "d85368b3bc3af73593f28cac2ea7bcb01f09c45f2888e6a5f4fb6be5c9101bab"
+        },
+        "controller_sha256": "9d731401f92b1350e36552a27b315d3cedb317fa2f21bb72bd2aaee8d4cb3989",
+        "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+        "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+        "concurrency": 32,
+        "warmup": 64,
+        "retained": 256,
+        "kv_payload_bytes_per_engine": 754974720,
+        "riley_cache_page_limit": 512,
+        "vllm_prefix_caching": true,
+        "qualification": false,
+        "host_phase_diagnostic": true,
+        "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+        "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+      },
+      "archive_sha256": "a195a7ff6afec51b6bfeb36837f7fac90f348b18d490e30c77162a1566f70669",
+      "stages": {
+        "shared": {
+          "retain_encode": {
+            "calls": 237,
+            "wall_ns": 51376504,
+            "mean_us": 216.77849789029534
+          },
+          "sync_transfer": {
+            "calls": 0,
+            "wall_ns": 0,
+            "mean_us": null
+          },
+          "buffered_submit": {
+            "calls": 354,
+            "wall_ns": 9177316,
+            "mean_us": 25.924621468926553
+          },
+          "buffered_wait": {
+            "calls": 354,
+            "wall_ns": 803653584,
+            "mean_us": 2270.2078644067797
+          },
+          "read_validate": {
+            "calls": 354,
+            "wall_ns": 28912073,
+            "mean_us": 81.67252259887006
+          },
+          "future_prepare": {
+            "calls": 117,
+            "wall_ns": 66311583,
+            "mean_us": 566.7656666666667
+          }
+        },
+        "unique": {
+          "retain_encode": {
+            "calls": 495,
+            "wall_ns": 80845464,
+            "mean_us": 163.3241696969697
+          },
+          "sync_transfer": {
+            "calls": 0,
+            "wall_ns": 0,
+            "mean_us": null
+          },
+          "buffered_submit": {
+            "calls": 558,
+            "wall_ns": 14253569,
+            "mean_us": 25.54403046594982
+          },
+          "buffered_wait": {
+            "calls": 558,
+            "wall_ns": 2393883210,
+            "mean_us": 4290.113279569892
+          },
+          "read_validate": {
+            "calls": 558,
+            "wall_ns": 14923438,
+            "mean_us": 26.744512544802866
+          },
+          "future_prepare": {
+            "calls": 63,
+            "wall_ns": 34095299,
+            "mean_us": 541.1952222222222
+          }
+        }
+      }
+    }
+  }
+}

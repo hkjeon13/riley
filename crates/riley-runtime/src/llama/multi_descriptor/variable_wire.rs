@@ -117,12 +117,38 @@ pub fn encode_into<const ROWS:usize>(packet:&mut [u8],e:&Expectation<ROWS>)->Res
 }
 
 /// The immutable borrow prevents changing the expectation after validation.
-pub(super) struct CheckedExpectation<'a, const ROWS: usize> { expectation: &'a Expectation<ROWS> }
-pub(super) fn checked_expectation<const ROWS: usize>(e: &Expectation<ROWS>) -> Result<CheckedExpectation<'_, ROWS>> {
+pub(crate) struct CheckedExpectation<'a, const ROWS: usize> { expectation: &'a Expectation<ROWS> }
+/// Owns an already-validated immutable host expectation. This proves neither
+/// device completion nor live scheduler authorization; those remain external.
+/// No mutable access to the expectation or its ownership ledger is provided.
+pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+        validate(&expectation)?;Ok(Self{expectation})
+    }
+    pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    #[cfg(test)]
+    pub(crate) fn into_unchecked(self)->Expectation<ROWS> {self.expectation}
+}
+impl<const ROWS:usize> std::ops::Deref for OwnedCheckedExpectation<ROWS> {
+    type Target=Expectation<ROWS>;
+    fn deref(&self)->&Self::Target {&self.expectation}
+}
+impl<const ROWS:usize> CheckedExpectation<'_,ROWS> {
+    pub(crate) fn expectation(&self)->&Expectation<ROWS> {self.expectation}
+    /// Check the whole predecessor ledger, including cache-only/off-batch owners.
+    /// Sorting once replaces a quadratic scan for every predecessor pair.
+    pub(super) fn retains_ownership(&self, previous:&Expectation<ROWS>)->bool {
+        let mut pairs:Vec<_>=self.expectation.block_ownership.iter().map(|p|(p.physical_id,p.sequence_tag)).collect();
+        pairs.sort_unstable();
+        previous.block_ownership.iter().all(|p|pairs.binary_search(&(p.physical_id,p.sequence_tag)).is_ok())
+    }
+}
+pub(crate) fn checked_expectation<const ROWS: usize>(e: &Expectation<ROWS>) -> Result<CheckedExpectation<'_, ROWS>> {
     validate(e)?;
     Ok(CheckedExpectation { expectation: e })
 }
-pub(super) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked: &CheckedExpectation<'_, ROWS>) -> Result<()> {
+pub(crate) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked: &CheckedExpectation<'_, ROWS>) -> Result<()> {
     let e = checked.expectation;
     check(packet.len()==request_bytes(e),"bytes","exact versioned request extent required")?;
     packet.fill(0);
@@ -182,7 +208,11 @@ pub(super) fn scalar_finite_argmax(logits:&[u8])->Result<u32>{
  Ok(token)
 }
 pub fn validate_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>)->Result<(Option<u32>,&'a[u8])>{
-    validate(e)?;
+    let checked=checked_expectation(e)?;
+    validate_result_checked(bytes,&checked)
+}
+pub(crate) fn validate_result_checked<'a,const ROWS:usize>(bytes:&'a[u8],checked:&CheckedExpectation<'_,ROWS>)->Result<(Option<u32>,&'a[u8])>{
+    let e=checked.expectation;
     check(e.rows.len()==1 && bytes.len()==RESULT_BYTES,"result","unsupported result shape")?;
     validate_result_row(bytes,e,0)
 }
@@ -213,7 +243,11 @@ pub const BATCH_RESULT_BYTES:usize=8*RESULT_BYTES;
 #[derive(Debug)]
 pub struct RowResult<'a>{pub output_slot:u32,pub token:Option<u32>,pub logits:&'a[u8]}
 pub fn validate_batch_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>)->Result<Vec<RowResult<'a>>>{
-    validate(e)?;
+    let checked=checked_expectation(e)?;
+    validate_batch_result_checked(bytes,&checked)
+}
+pub(crate) fn validate_batch_result_checked<'a,const ROWS:usize>(bytes:&'a[u8],checked:&CheckedExpectation<'_,ROWS>)->Result<Vec<RowResult<'a>>>{
+    let e=checked.expectation;
     check(bytes.len()==Layout::<ROWS>::BATCH_RESULT_BYTES,"result","exact capacity result extent required")?;
     let mut result=Vec::with_capacity(e.rows.len());
     for (index,row) in e.rows.iter().enumerate(){
@@ -231,7 +265,11 @@ pub fn validate_batch_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<R
 /// callers must not treat arbitrary bytes as evidence of device completion.
 /// No record escapes before all active and inactive records have validated.
 pub fn validate_compact_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation<ROWS>)->Result<Vec<RowResult<'a>>>{
-    validate(e)?;
+    let checked=checked_expectation(e)?;
+    validate_compact_result_checked(bytes,&checked)
+}
+pub(crate) fn validate_compact_result_checked<'a,const ROWS:usize>(bytes:&'a[u8],checked:&CheckedExpectation<'_,ROWS>)->Result<Vec<RowResult<'a>>>{
+    let e=checked.expectation;
     check(e.mode==ResultMode::Greedy,"mode","compact result requires greedy mode")?;
     check(bytes.len()==Layout::<ROWS>::COMPACT_RESULT_BYTES,"result","exact compact result extent required")?;
     let mut result=Vec::with_capacity(e.rows.len());
@@ -375,6 +413,24 @@ pub(crate) mod tests {
         }
     }
 
+    #[test]
+    fn owned_expectation_preserves_authority_and_checked_result_validation() {
+        let original=shared_prefix_fixture();
+        let owned=OwnedCheckedExpectation::new(original.clone()).unwrap();
+        let mut changed=original.clone();changed.block_ownership.clear();
+        assert!(OwnedCheckedExpectation::new(changed).is_err());
+        let mut bytes=compact_fixture(&original);
+        let plain=validate_compact_result(&bytes,&original).unwrap();
+        let checked=validate_compact_result_checked(&bytes,&owned.checked()).unwrap();
+        assert_eq!(plain.iter().map(|r|(r.output_slot,r.token)).collect::<Vec<_>>(),checked.iter().map(|r|(r.output_slot,r.token)).collect::<Vec<_>>());
+        for at in 0..bytes.len() {
+            bytes[at]^=1;
+            assert_eq!(validate_compact_result(&bytes,&original).is_ok(),validate_compact_result_checked(&bytes,&owned.checked()).is_ok(),"byte {at}");
+            bytes[at]^=1;
+        }
+        let mut a=vec![0;request_bytes(&original)];let mut b=a.clone();
+        encode_into(&mut a,&original).unwrap();encode_checked_into(&mut b,&owned.checked()).unwrap();assert_eq!(a,b);
+    }
     #[test] fn mixed_v7_stage_tiles_and_result_identity(){
         for (prefills,decodes,chunk) in [(0,32,1),(1,31,128),(4,28,249),(4,0,256),(2,3,31)] {
             let e=mixed_fixture(prefills,decodes,chunk);let mut p=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut p,&e).unwrap();

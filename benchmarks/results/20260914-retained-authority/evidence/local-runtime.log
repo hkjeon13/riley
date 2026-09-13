@@ -1,0 +1,20 @@
+warning: method `into_unchecked` is never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:131:19
+    |
+125 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- method in this implementation
+...
+131 |     pub(crate) fn into_unchecked(self)->Expectation<ROWS> {self.expectation}
+    |                   ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+
+running 352 tests
+....................................................................................... 87/352
+....................................................................................... 174/352
+......................i................................................................ 261/352
+....................................................................................... 348/352
+....
+test result: ok. 351 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.04s
+

@@ -213,3 +213,9 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 [Composed host phase 진단](../../benchmarks/results/20260914-composed-host-phase/README.md): Nsight 없이 successor 준비 약1ms/call, retain/encode와 read/validate 약0.16–0.21ms/call을 확인했다.640 요청이 reference-exact이며 scheduler 계획·sampling·commit은 더 작다. 중첩 timer와 GPU overlap을 단순 합산해 speedup을 예측하지 않는다.
 
 다음 묶음은 immutable validated expectation 소유권, predecessor/완료 처리에서 동일 불변 authority 재사용, successor append·replay 전이와 bounded metadata buffer 재사용이다. 원시 expectation·GPU 결과 검증, live scheduler authority, off-batch reader/COW, event/drain·cancel·poisoned owner 경계를 유지한다. Mutable escape 없는 capability로 증명하며 단순 trusted bool을 쓰지 않는다. 상세 변경·검증 계약은 진단 문서를 따른다. 현재 진단은 구현 완료나 serving 성능 승격이 아니다.
+
+## Retained expectation batch 구현·측정
+
+[구현/검증](../../benchmarks/results/20260914-retained-authority/README.md), [serving 비교](../../benchmarks/results/20260914-retained-authority-serving/README.md): 불변 owned checked expectation, 인코딩·ordinary/predecessor 완료 검사 재사용, successor의 전체 predecessor-owner 보존 확인을 정렬 인덱스로 바꿨다. Raw 입력/결과·live scheduler authority·event/drain·poison 경계는 유지했다. Successor 토큰 바인딩 후 검사는 그대로 전체 검증하며 buffer 재사용은 구현했다고 주장하지 않는다.
+
+Runtime351/기존 timing ignore1, scheduler155, CUDA scheduler55, staged-session7, 실제 모델2검사와 serving/stop/cancel/recovery가 통과했다. Future 준비와 read/validate 비용은 줄었지만 GPU wait 증가와 함께 serving throughput은 공유prefix+0.51%,고유prompt+2.12%에 그쳤다. 목표 달성이나 큰 성능 승격이 아니다. 추가 작은 host 최적화보다 공유 prefix cache의 lease합산 예산과 실제 고유 물리 page residency 차이를 다음 구조 검토 대상으로 삼는다.

@@ -23,7 +23,7 @@ pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
     host_phase_timing: Option<HostRuntimeTiming>,
     window_predecessor_ticket:Option<u64>, issued_successor:Option<Vec<u64>>, window:Option<DecodeWindowState<ROWS>>,
-    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
+    issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::OwnedCheckedExpectation<ROWS>>,
     buffered:bool, buffered_ticket:Option<u64>, async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 struct DecodeWindowState<const ROWS:usize> {
@@ -103,7 +103,8 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
-        wire::encode_into(&mut self.input,&e)?;
+        let e=wire::OwnedCheckedExpectation::new(e)?;
+        wire::encode_checked_into(&mut self.input,&e.checked())?;
         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
         runtime_phase_record(&mut self.host_phase_timing, 0, phase);
         Ok(())
@@ -153,7 +154,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if result.is_err() {self.poisoned=true;return Err(bad("native read failed; close required"));}
         self.buffered_ticket=None;
         let e=self.retained.as_ref().unwrap();
-        match if compact {wire::validate_compact_result(&self.output[..output_bytes],e)}else if self.shared {wire::validate_batch_result(&self.output,e)}else{wire::validate_result(&self.output,e).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
+        match if compact {wire::validate_compact_result_checked(&self.output[..output_bytes],&e.checked())}else if self.shared {wire::validate_batch_result_checked(&self.output,&e.checked())}else{wire::validate_result_checked(&self.output,&e.checked()).map(|(token,logits)|vec![wire::RowResult{output_slot:0,token,logits}])} {
             Ok(result)=>{self.completed=true;runtime_phase_record(&mut self.host_phase_timing, 4, phase);Ok(result)},
             Err(_)=>{self.poisoned=true;Err(bad("invalid GPU completion; close required"))}
         }
@@ -416,7 +417,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
                 return Err(bad("successor differs from issued window"));
             }
             let sources=(0..second.rows.len()).map(|i|super::multi_descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();
-            let future=super::multi_descriptor::future_token::prepare(first,&second,&sources)?;
+            let future=super::multi_descriptor::future_token::prepare_checked(&first.checked(),&second,&sources)?;
             let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
             runtime_phase_record(&mut self.host_phase_timing,5,phase);
             let first_ticket=self.window_predecessor_ticket.take().unwrap();
@@ -480,7 +481,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
             let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
             let bytes=wire::Layout::<32>::COMPACT_RESULT_BYTES;
             self.graph.read_buffered_transfer(window.tickets[0],&mut self.output[..bytes]).map_err(|_|bad("predecessor read failed"))?;
-            let first=wire::validate_compact_result(&self.output[..bytes],self.retained.as_ref().unwrap())?;
+            let first=wire::validate_compact_result_checked(&self.output[..bytes],&self.retained.as_ref().unwrap().checked())?;
             let rows=first.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing decode output"))).collect::<Result<Vec<_>>>()?;
             // Bind the successor to validated GPU predecessor tokens while its
             // device execution continues. This expectation is host-owned only.
@@ -547,11 +548,11 @@ mod staged_window_tests {
         let graph=FakeGraph{outputs:[wire::tests::compact_fixture(&first),wire::tests::compact_fixture(&second)],calls:vec![]};
         second.last_accepted_replay=first.last_accepted_replay;second.rows[0].input_tokens[0]=0;
         let mut s=VariableSession::new_shared_mixed(graph,first.catalog_digest,first.physical_block_count,first.rows[0].progress.context_tokens,true,false).unwrap();
-        s.identity.last_accepted_replay=first.last_accepted_replay;s.retained=Some(first);s.buffered=true;
+        s.identity.last_accepted_replay=first.last_accepted_replay;s.retained=Some(wire::OwnedCheckedExpectation::new(first).unwrap());s.buffered=true;
         s.window=Some(DecodeWindowState{successor:second,tickets:[1,2],output:vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES],predecessor_validated:false,complete:false});s
     }
     fn issued()->(VariableSession<FakeGraph,32>,wire::Expectation<32>,wire::Expectation<32>){
-        let mut s=pending();let mut first=s.retained.take().unwrap();let mut second=s.window.take().unwrap().successor;
+        let mut s=pending();let mut first=s.retained.take().unwrap().into_unchecked();let mut second=s.window.take().unwrap().successor;
         first.owner_generation=s.identity.generation;second.owner_generation=s.identity.generation;
         s.issued=Some(first.rows.iter().map(|r|r.cookie).collect());s.issued_successor=Some(second.rows.iter().map(|r|r.cookie).collect());
         s.graph.outputs[0]=wire::tests::compact_fixture(&first);

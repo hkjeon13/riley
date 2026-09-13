@@ -56,7 +56,11 @@ impl PreparedFutureWindow {
 /// expectation. Future tokens use an explicit zero placeholder. This object
 /// cannot be submitted through the existing single-inflight session API.
 pub fn prepare(previous: &Expectation<32>, successor: &Expectation<32>, sources: &[TokenSource]) -> Result<PreparedFutureBatch> {
-    wire::validate(previous)?;
+    let checked=wire::checked_expectation(previous)?;
+    prepare_checked(&checked,successor,sources)
+}
+pub(crate) fn prepare_checked(checked_previous:&wire::CheckedExpectation<'_,32>, successor:&Expectation<32>, sources:&[TokenSource])->Result<PreparedFutureBatch> {
+    let previous=checked_previous.expectation();
     check(previous.shared_prefixes==successor.shared_prefixes && previous.mixed_execution && successor.mixed_execution && previous.mode==ResultMode::Greedy && successor.mode==ResultMode::Greedy,
           "future_profile", "requires V7 mixed32 greedy expectations")?;
     check(previous.owner_generation==successor.owner_generation && previous.catalog_digest==successor.catalog_digest && previous.physical_block_count==successor.physical_block_count,
@@ -73,10 +77,8 @@ pub fn prepare(previous: &Expectation<32>, successor: &Expectation<32>, sources:
     let checked_structural = wire::checked_expectation(&structural)?;
     let last_cookie=previous.rows.iter().map(|r|r.cookie).max().unwrap();
     check(successor.rows.iter().all(|r|r.cookie>last_cookie), "future_cookie", "successor cookies must be freshly issued")?;
-    for owner in &previous.block_ownership {
-        check(successor.block_ownership.iter().any(|n|n.physical_id==owner.physical_id && n.sequence_tag==owner.sequence_tag),
-              "future_pages", "predecessor ownership must remain retained")?;
-    }
+    check(checked_structural.retains_ownership(previous),
+          "future_pages", "predecessor ownership must remain retained")?;
     let mut references=vec![0u8;SIDECAR_BYTES];
     for row in 0..32 {references[row*REFERENCE_BYTES..row*REFERENCE_BYTES+4].copy_from_slice(&u32::MAX.to_le_bytes());}
     let mut used=0u32;
@@ -180,6 +182,20 @@ mod tests {
         assert!(prepare(&old,&new,&[TokenSource::Host;2]).is_ok());
         new.rows[0].physical_ids.swap(0,1);
         assert!(prepare(&old,&new,&[TokenSource::Host;2]).is_err());
+    }
+    #[test]
+    fn indexed_owner_retention_keeps_off_batch_readers_and_is_order_independent() {
+        let(mut old,mut new)=pair();
+        let extra=BlockOwnership{physical_id:7,sequence_tag:77};
+        old.block_ownership.push(extra);new.block_ownership.push(extra);
+        let sources=[TokenSource::PreviousRow(1),TokenSource::PreviousRow(0)];
+        let expected=prepare(&old,&new,&sources).unwrap();
+        new.block_ownership.reverse();
+        let owned=wire::OwnedCheckedExpectation::new(old).unwrap();
+        let indexed=prepare_checked(&owned.checked(),&new,&sources).unwrap();
+        assert_eq!(expected.packet(),indexed.packet());assert_eq!(expected.references(),indexed.references());
+        new.block_ownership.retain(|p|p.sequence_tag!=77);
+        assert_eq!(prepare_checked(&owned.checked(),&new,&sources).err().unwrap().field,"future_pages");
     }
     #[test] fn invalid_pairs_do_not_gain_authority(){
         let(old,new)=pair();let sources=[TokenSource::PreviousRow(1),TokenSource::PreviousRow(0)];
