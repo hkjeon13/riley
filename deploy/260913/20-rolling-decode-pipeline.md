@@ -1,6 +1,6 @@
 # PR20 — Rolling one-step-ahead decode pipeline
 
-상태: **KV·scheduler·runtime ticket 전이 및 4090 모델 검사 완료 / server·serving 비교 미완료**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
+상태: **KV·scheduler·runtime·server 통합 및 C8/C32/C64 serving screen 완료 / 기본값 승격·전체 qualification 미완료**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
 
 ## 근거와 목표
 
@@ -55,3 +55,12 @@ Greedy dense path의 rolling execution에 한정한다. Draft 모델 speculation
 4090 실제 모델4개 요청에서 rolling21회, 총96개 생성 token이 직렬 실행과 같았다. 취소 mode는[5,24,24,24] token이 각각 직렬 prefix와 일치하며, 잘못된 cookie를 주입한 별도 mode도 GPU drain 후4개 요청 정리·allocation0을 확인했다. 이는 greedy 모델·수명 검사이며 full-logit·HTTP serving·C32·장시간 qualification은 아니다. 첫 private-type build 오류는 수정했고 GPU 실패를 skip으로 바꾸지 않았다.
 
 다음 server 연결은 worker tick 사이에 rolling state를 유지해야 한다. 각 앞 token 정산 후 새 successor를 제출하고 해당 token event를 반환한다. 모든 rolling step을 한 호출에서 반복한 뒤 출력을 한꺼번에 반환하면 streaming 지연과 TPOT 측정이 왜곡되므로 금지한다. Prefix를 먼저 발행한 drain fallback은 첫 결과를 보존한 채 다음 tick에서 suffix를 정산한다. 기존 pair 경로는 유지하고 opt-in serving 비교 후 승격을 판단한다.
+
+
+## Server 통합 및 milestone 결과
+
+앞의 구현 진행 절은 단계별 당시 기록이다. 현재 server는 worker tick 사이에 window와 첫 결과·발행 상태를 유지하며 앞 token event를 매 tick 반환한다. `RILEY_ROLLING_DECODE=1`로만 활성화한다. Rust → C ABI → CUDA 경계를 유지한다.
+
+[전체 비교표와 검증](../../benchmarks/results/20260914-rolling-serving/README.md): C8 shared throughput은 vLLM 대비13.78% 높지만 unique 및 C32/C64는 미달이다. C32 shared의 이전 Riley 대비 throughput12.52% 개선과 token interval P99의4.53% 악화를 함께 기록했다. C64는 client64/active32 대기 요청 조건이다. 세 조건 총12288개 retained 요청이 protocol-valid이고 Riley9216개는 이전 binary의 출력과 일치했다. Server105개·CUDA runtime9개 검사와 release build가 통과했다.
+
+기본값 승격은 보류한다. Full-logit·광범위 모델 quality·장시간/open-loop·추가 fault injection은 남아 있다. Multi-GPU/Hopper/Blackwell runtime 검사는 해당 장비 부재로 미실행이다. 다음 영역은 기존 profile의 unique prefill/mixed 지배 및 high-concurrency GPU 실행 비용을 근거로 선택한다.

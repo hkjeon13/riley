@@ -487,10 +487,12 @@ pub struct AuthorizedDecodeWindow<'a> {
     pub(crate) second: AuthorizedExecution<'a>,
 }
 impl AuthorizedDecodeWindow<'_> {
-    pub(crate) fn prepare_wire_first(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
+    /// Prepare the first descriptor from the live window authority.
+    pub fn prepare_wire_first(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
         self.first.variable_descriptor_expectation_rows::<32>(owner,replay,cookies,crate::descriptor::ResultMode::Greedy)
     }
-    pub(crate) fn prepare_wire_second(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
+    /// Prepare only the dependent descriptor while its predecessor may execute.
+    pub fn prepare_wire_second(&self,owner:&VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
         let mut structural_owner=owner.clone();structural_owner.last_accepted_replay=replay;
         let next=replay.checked_add(1).ok_or(crate::descriptor::Error{field:"window replay",reason:"overflow"})?;
         let mut second=self.second.variable_descriptor_expectation_rows::<32>(&structural_owner,next,cookies,crate::descriptor::ResultMode::Greedy)?;

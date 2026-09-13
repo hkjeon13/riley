@@ -2520,6 +2520,13 @@ mod cuda_backend {
         }
     }
 
+    struct RollingDecodeState {
+        window:riley_scheduler::DecodeWindowPlan,
+        first_result:Option<riley_scheduler::IterationResult>,
+        prefix_published:bool,
+        suppressed:Vec<SchedulerRequestId>,
+    }
+
     struct CudaBackend {
         metadata: ModelMetadata,
         model: LoadedModel,
@@ -2542,6 +2549,9 @@ mod cuda_backend {
         pending_tokens: Vec<PendingToken>,
         window_pending_tokens: Vec<PendingToken>,
         decode_window: bool,
+        rolling_decode: bool,
+        rolling_state: Option<RollingDecodeState>,
+        rolling_steps: u64,
         host_phase_timing: Option<HostPhaseTiming>,
         completed_decode_windows: u64,
         widest_decode_window: usize,
@@ -2621,6 +2631,13 @@ mod cuda_backend {
             let use_variable=resources.executor.config().variable_graph();
             let decode_window=resources.executor.config().decode_window();
             if decode_window && (!resources.executor.config().mixed_execution() || resources.executor.config().ffn_pipeline() || resources.executor.config().flashinfer_experimental() || !resources.gpu_greedy) {return Err(internal("decode window requires V7 GPU greedy configuration"));}
+            let rolling_decode=match std::env::var("RILEY_ROLLING_DECODE") {
+                Ok(v) if v=="1"=>true, Ok(v) if v=="0"=>false,
+                Err(std::env::VarError::NotPresent)=>false,
+                _=>return Err(internal("RILEY_ROLLING_DECODE must be 0 or 1")),
+            };
+            if rolling_decode && !decode_window {return Err(internal("rolling decode requires paired V7 GPU greedy configuration"));}
+            if rolling_decode {eprintln!("RILEY_ROLLING_DECODE prepared=true policy=one-step-ahead-v1");}
             let use_adaptive_decode = resources.executor.config().adaptive_decode();
             let use_prefill_ffn_pipeline = resources.executor.config().prefill_ffn_pipeline();
             let use_ffn_pipeline = resources.executor.config().ffn_pipeline();
@@ -2726,6 +2743,7 @@ mod cuda_backend {
                 pending_tokens,
                 window_pending_tokens,
                 decode_window,
+                rolling_decode, rolling_state:None, rolling_steps:0,
                 host_phase_timing: (std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref() == Some("1")).then(HostPhaseTiming::default),
                 completed_decode_windows: 0,
                 widest_decode_window: 0,
@@ -3000,7 +3018,77 @@ mod cuda_backend {
             Ok(())
         }
 
+        fn rolling_owner(identity:riley_runtime::llama::variable_session::VariableSessionIdentity)->riley_scheduler::VariableOwnerGeometry {
+            riley_scheduler::VariableOwnerGeometry{generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,
+                physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens,max_active_rows:32,
+                packed_prefill:identity.packed_prefill,mixed_execution:identity.mixed_execution,shared_prefixes:identity.shared_prefixes}
+        }
+        fn try_rolling_decode(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            let mut state=if let Some(state)=self.rolling_state.take(){state}else{
+                let now=self.now_ns();
+                let Some(window)=self.scheduler_mut()?.plan_decode_window(now).map_err(|e|internal(format!("rolling planning failed: {e}")))? else{return Ok(None)};
+                if self.sampling_selection_for_plan(window.first())?.selected_backend!=C02SamplingBackend::GpuGreedy
+                    || self.sampling_selection_for_plan(window.second())?.selected_backend!=C02SamplingBackend::GpuGreedy {
+                    self.scheduler_mut()?.abort_iteration(window.first().iteration_id(),ExecutionAbort::NotDispatched,now).map_err(|e|internal(format!("rolling fallback failed: {e}")))?;return Ok(None);
+                }
+                self.snapshot_cancel_deltas(window.first())?;
+                let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
+                let(identity,replay,a,b)=graph.issue_decode_window(window.first().batch_size()).map_err(|e|internal(format!("rolling issue failed: {e}")))?;
+                let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_decode_window(&window).map_err(|e|internal(format!("rolling authority failed: {e}")))?;
+                let owner=Self::rolling_owner(identity);
+                let first=authority.prepare_wire_first(&owner,replay,&a).map_err(|e|internal(format!("rolling preparation failed: {e}")))?;
+                graph.submit_decode_window_predecessor(first).map_err(|e|internal(format!("rolling submit failed: {e}")))?;
+                graph.submit_decode_window_successor(||authority.prepare_wire_second(&owner,replay,&b)).map_err(|e|internal(format!("rolling successor preparation failed: {e}")))?;
+                self.widest_decode_window=self.widest_decode_window.max(window.first().batch_size());
+                RollingDecodeState{window,first_result:None,prefix_published:false,suppressed:Vec::new()}
+            };
+            let mut events=Vec::new();
+            if state.first_result.is_none() {
+                self.snapshot_cancel_deltas(state.window.first())?;
+                let selection=self.sampling_selection_for_plan(state.window.first())?;
+                let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
+                let first=riley_scheduler::execution::read_llama_decode_window_step(state.window.first(),graph,true).map_err(|e|internal(format!("rolling first read failed: {}",e.error())))?;
+                self.sample_iteration(state.window.first(),&first,selection)?;
+                state.suppressed=state.window.first().decode_items().iter().filter_map(|i|i.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|i.request_id())).collect();
+                let result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("rolling first result failed: {e}")))?;
+                let now=self.now_ns();
+                let prefix=self.scheduler_mut()?.complete_decode_window_prefix(&result,now).map_err(|e|internal(format!("rolling prefix settlement failed: {e}")))?;
+                state.first_result=Some(result);
+                if let Some(updates)=prefix {
+                    state.prefix_published=true;self.publish_committed_updates(&updates,&mut events)?;
+                    let now=self.now_ns();
+                    if let Some(next)=self.scheduler_mut()?.roll_decode_window(now).map_err(|e|internal(format!("rolling extension failed: {e}")))? {
+                        let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
+                        let(identity,replay,cookies)=graph.promote_decode_window_successor(state.window.first().iteration_id().get(),next.first().iteration_id().get()).map_err(|e|internal(format!("rolling promotion failed: {e}")))?;
+                        let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_decode_window(&next).map_err(|e|internal(format!("rolling next authority failed: {e}")))?;
+                        let owner=Self::rolling_owner(identity);
+                        graph.submit_decode_window_successor(||authority.prepare_wire_second(&owner,replay-1,&cookies)).map_err(|e|internal(format!("rolling successor failed: {e}")))?;
+                        state=RollingDecodeState{window:next,first_result:None,prefix_published:false,suppressed:Vec::new()};
+                        self.rolling_steps=self.rolling_steps.saturating_add(1);
+                    }
+                }else{
+                    self.window_pending_tokens.clear();std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+                }
+                // Return each prefix event on this worker tick, even when the next
+                // GPU step is still running. Never accumulate a whole decode run.
+                self.rolling_state=Some(state);return Ok(Some(events));
+            }
+            let selection=self.sampling_selection_for_plan(state.window.second())?;
+            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
+            let second=riley_scheduler::execution::read_llama_decode_window_step(state.window.second(),graph,false).map_err(|e|internal(format!("rolling second read failed: {}",e.error())))?;
+            self.sample_iteration_with_suppression(state.window.second(),&second,selection,&state.suppressed)?;
+            let result=second.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("rolling second result failed: {e}")))?;
+            if !state.prefix_published {self.window_pending_tokens.append(&mut self.pending_tokens);std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);}
+            let now=self.now_ns();let updates=self.scheduler_mut()?.complete_decode_window_after_drain(state.first_result.as_ref().unwrap(),&result,now).map_err(|e|internal(format!("rolling drain settlement failed: {e}")))?;
+            if !updates.settlement_failures().is_empty(){return Err(internal("rolling drain contained settlement failures"));}
+            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
+            graph.confirm_decode_window_commit(state.window.first().iteration_id().get(),state.window.second().iteration_id().get()).map_err(|e|internal(format!("rolling commit failed: {e}")))?;
+            self.completed_decode_windows=self.completed_decode_windows.saturating_add(1);
+            self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
+        }
+
         fn try_decode_window(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            if self.rolling_decode {return self.try_rolling_decode();}
             let mut phase_mark = self.host_phase_timing.as_ref().map(|_| Instant::now());
             let mut phase_ns = [0; 4];
             let now=self.now_ns();
@@ -3309,6 +3397,7 @@ mod cuda_backend {
         }
 
         fn close_resources(&mut self) -> Result<(), BackendError> {
+            if self.rolling_decode {eprintln!("RILEY_ROLLING_DECODE completed_steps={} drains={}",self.rolling_steps,self.completed_decode_windows);}
             if let Some(scheduler)=self.scheduler.as_ref() {
                 let (entries,pages,hits,reused)=scheduler.prefix_cache_stats();
                 if scheduler.prefix_cache_host_bytes()!=0 {

@@ -1,0 +1,64 @@
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13 nvcc=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+warning: riley-cuda@0.1.0: riley-cuda: cuBLASLt strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcublasLt.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Runtime strategy=shared linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcudart.so
+warning: riley-cuda@0.1.0: riley-cuda: CUDA Driver linker=/data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcuda.so
+warning: methods `record_mlp` and `record_mlp_with_norm` are never used
+     --> crates/riley-cuda/src/ffi.rs:10339:19
+      |
+10338 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10339 |     pub(super) fn record_mlp(
+      |                   ^^^^^^^^^^
+...
+10349 |     pub(super) fn record_mlp_with_norm(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `record_norm_qkv`, `record_qkv_with_rope`, and `record_qkv_with_cache` are never used
+     --> crates/riley-cuda/src/ffi.rs:10643:19
+      |
+10642 | impl GraphResourcesHandle {
+      | ------------------------- methods in this implementation
+10643 |     pub(super) fn record_norm_qkv(
+      |                   ^^^^^^^^^^^^^^^
+...
+10654 |     pub(super) fn record_qkv_with_rope(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10666 |     pub(super) fn record_qkv_with_cache(
+      |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `riley_cuda_graph_capture_begin_indexed_rope_bf16` is never used
+    --> crates/riley-cuda/src/ffi.rs:1551:8
+     |
+1551 |     fn riley_cuda_graph_capture_begin_indexed_rope_bf16(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `riley-cuda` (lib) generated 3 warnings
+warning: constant `BF16_BYTES` is never used
+  --> crates/riley-runtime/src/llama/batch_executor.rs:62:7
+   |
+62 | const BF16_BYTES: u64 = 2;
+   |       ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (/data/riley-serving-260913-recovery/target/debug/deps/riley_runtime-138433ad99c0f618)
+
+running 9 tests
+test llama::variable_session::staged_window_tests::corrupt_predecessor_never_reads_successor ... ok
+test llama::variable_session::staged_window_tests::failed_late_preparation_quarantines_live_predecessor ... ok
+test llama::variable_session::staged_window_tests::late_foreign_cookie_cannot_attach_successor ... ok
+test llama::variable_session::staged_window_tests::corrupt_successor_keeps_pair_retained_and_poisoned ... ok
+test llama::variable_session::staged_window_tests::predecessor_processing_does_not_wait_successor_or_release_reservations ... ok
+test llama::variable_session::staged_window_tests::rolling_rejects_wrong_phase_and_keeps_live_ticket_on_late_failure ... ok
+test llama::variable_session::staged_window_tests::successor_preparation_follows_first_submit_and_keeps_pair_exclusive ... ok
+test llama::variable_session::staged_window_tests::rolling_promotes_live_tickets_without_resubmit_or_successor_wait ... ok
+test llama::variable_session::staged_window_tests::shared_prefix_capability_cannot_be_changed_by_submission ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 396 filtered out; finished in 0.00s
+

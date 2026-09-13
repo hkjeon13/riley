@@ -82,7 +82,7 @@ pub use metrics::{
     IterationMetricSample, MetricWindowSnapshot, SchedulerGauges, SchedulerMetricsSnapshot,
 };
 pub use plan::{
-    ITERATION_SCHEMA_VERSION, IterationId, IterationOutput, IterationPlan, IterationResult,
+    DecodeWindowPlan, ITERATION_SCHEMA_VERSION, IterationId, IterationOutput, IterationPlan, IterationResult,
     OutputSlot, OwnedBlockTable, RequestId, WorkItem, WorkKind,
 };
 pub use scheduler::{

@@ -463,6 +463,13 @@ impl<G:VariableGraph> VariableSession<G,32> {
         runtime_phase_record(&mut self.host_phase_timing, 2, phase);
         Ok(())
     }
+    /// Immutable iteration identities retained by the current decode pair.
+    pub fn decode_window_iteration_ids(&self)->Result<(u64,u64)> {
+        let w=self.window.as_ref().ok_or_else(||bad("no retained decode window"))?;
+        let first=self.retained.as_ref().ok_or_else(||bad("missing retained predecessor"))?;
+        if self.poisoned {return Err(bad("poisoned decode window"));}
+        Ok((first.iteration_id,w.successor.iteration_id))
+    }
     /// Compatibility drain. Validation of the first result overlaps the second graph.
     pub fn wait_decode_window(&mut self)->Result<[Vec<(u32,u32)>;2]> {
         let first=self.wait_decode_window_first()?;

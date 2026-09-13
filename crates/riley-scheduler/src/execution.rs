@@ -2381,3 +2381,28 @@ pub fn execute_llama_decode_window_with_first<G:riley_runtime::llama::variable_s
     let rows=executor.wait_decode_window_second().map_err(|e|variable_ticket_failure(id,e))?;
     Ok((first,fill(second,rows)?))
 }
+
+/// Read one runtime-validated rolling result using its original immutable plan.
+/// The scheduler reservations must remain retained across this call. Completion
+/// of the first step does not establish successor quiescence.
+#[cfg(feature="cuda")]
+pub fn read_llama_decode_window_step<G:riley_runtime::llama::variable_session::VariableGraph>(
+    plan:&IterationPlan, executor:&mut riley_runtime::llama::variable_session::VariableSession<G,32>, first:bool,
+)->Result<DownloadedLlamaIteration,IterationExecutionFailure> {
+    let id=plan.iteration_id();
+    let failure=|reason|variable_ticket_failure(id,crate::descriptor::Error{field:"rolling result",reason});
+    let ids=executor.decode_window_iteration_ids().map_err(|_|failure("no live runtime pair"))?;
+    if id.get()!=if first{ids.0}else{ids.1} {return Err(failure("plan differs from retained iteration"));}
+    let prepared=PreparedLlamaIteration::prepare(plan).map_err(|e|IterationExecutionFailure::new(id,None,e))?;
+    let mut tokens=reserve_vec(prepared.output_count,"rolling output").map_err(|e|IterationExecutionFailure::new(id,None,e))?;
+    tokens.resize(prepared.output_count,0);
+    let rows=if first{executor.wait_decode_window_first()}else{executor.wait_decode_window_second()}.map_err(|e|variable_ticket_failure(id,e))?;
+    if rows.len()!=tokens.len() {return Err(failure("output count differs"));}
+    let mut seen=0u32;
+    for (slot,token) in rows {
+        if slot>=32 || seen&(1<<slot)!=0 || token>=49152 {return Err(failure("invalid output slot or token"));}
+        *tokens.get_mut(slot as usize).ok_or_else(||failure("slot outside plan"))?=token;seen|=1<<slot;
+    }
+    Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
+        output:DownloadedLlamaOutput::GreedyTokens(tokens),commit_outputs:prepared.commit_outputs})
+}
