@@ -46,3 +46,9 @@ cache/transfer를 끄고 local KV를 사용한다. in-flight transfer drain 이�
 ## 연구 근거
 
 [Mooncake](https://arxiv.org/abs/2407.00079), [NIXL](https://github.com/ai-dynamo/nixl), [RadixAttention](https://www.lmsys.org/blog/2024-01-17-sglang/). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+## 착수 방향 — 2026-09-14
+
+[Adaptive projection 결과](../../benchmarks/results/20260914-adaptive-decode-serving/README.md)는 낮은 concurrency에서만 약4% 개선되고 고부하 격차는 남는다. 다음 구조 영역으로 본 PR을 선택한다. 현재 `paged_kv.rs`의 block 소유권은 sequence 단위이므로, frontend 응답 재사용으로 우회하지 않고 descriptor identity·immutable page 참조/generation·COW·완료 후 publication을 기존 reservation/commit/reclaim과 함께 연결해야 한다.
+
+현재 serving 기준은 vLLM prefix caching이 명시적으로 꺼져 있다. 새 cache-hit 및 cache-miss 실험에서는 양쪽 caching 설정, KV memory 상한과 workload를 맞추고 기존 cache-off 결과를 별도 유지한다. 세 개 반복 prompt만으로 일반화하지 않고 공유 prefix·고유 suffix 및 고유 prompt를 포함한다. Network/peer 성능은 실제 transport 및 장비 검증 전에는 주장하지 않는다. 본 PR의 구현 상태는 아직 미구현이다.

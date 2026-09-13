@@ -1,6 +1,6 @@
 # PR 06 — Stream-K·LeanAttention 방식 작업 분할
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **attention split 계획 미구현 / 후속 adaptive projection 모델 통합·측정 완료, 기본값 비승격**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -54,3 +54,7 @@ unsplit backend로 복귀한다.
 [Native gate](../../benchmarks/results/20260914-decode-adaptive-native/README.md): device active count로 1/2 tile을 선택하는 격리 후보, active0..33 graph102건 bitwise partial 일치, memcheck/racecheck, SM89 실행 및 SM90a/SM100a compile 통과. 30개 weight 집합의 세 연산 시간은 active8 약−21%, active16 약−14%였다. 모델·serving에는 아직 연결되지 않았다.
 
 다음 묶음은 ordinary/paired future decode 연결, source/profile identity, full-model 자유 생성·logits parity, C8/C16 및 C32/C64 serving 비교다. K reduction·BF16 partial rounding·scratch stride를 유지한다. Native 시간 비율을 serving 개선율로 환산하거나 기본값을 승격하지 않는다.
+
+### Adaptive 모델·serving 결과
+
+[통합 및 비교표](../../benchmarks/results/20260914-adaptive-decode-serving/README.md): 위 후속 묶음을 구현했다. 자유 생성3,616토큰·자연어12,582,912 BF16 logits가 baseline과 일치했고 paired terminal/cancel·자원 회수가 통과했다. 실제 ordinary472개/future430개 graph에서 각각 새 커널90개를 확인했다. C8/C16 throughput은 직전 대비 약4% 개선됐지만 C32+0.64%, C64−0.06%이고 고부하 P99도 높아 기본값으로 승격하지 않는다. 동일 projection family의 작은 variant를 이어가기보다 PR10의 prefix ownership/transfer를 다음 구조 영역으로 선택한다. 기존 cache-off 격차와 attention split 미구현 범위는 남아 있다.

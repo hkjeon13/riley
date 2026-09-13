@@ -37,3 +37,5 @@ timeout 90 compute-sanitizer --tool racecheck --error-exitcode 9 /tmp/decode-ada
 Compile the same source with `-arch=sm_90a -c` and `-arch=sm_100a -c` for hardware-specific build checks. Kernel runtime remains native CUDA; Python is only an external analysis tool.
 
 Next: integrate ordinary and future paired decode, include candidate source in model/profile identity, run full-model free-generation and logit equivalence, then perform matched serving measurements at low and high concurrency. The native result supports that experiment; it does not complete PR06 or the vLLM goal. Rollback leaves the current model recorder unchanged or removes this unselected optional candidate.
+
+Follow-up: [model/serving integration and comparison](../20260914-adaptive-decode-serving/README.md) completed these gates. Low-concurrency throughput improved about4%; high-concurrency performance and P99 did not support default promotion. The native percentages above remain primitive measurements.

@@ -12,7 +12,11 @@ use riley_scheduler::{
 
 #[test]
 #[ignore = "requires checkpoint and CUDA GPU; two-graph dependent decode"]
-fn paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn std::error::Error>>
+fn paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn std::error::Error>> { run_paired(false) }
+#[test]
+#[ignore = "requires checkpoint and CUDA GPU; adaptive dependent decode and terminal rollback"]
+fn adaptive_paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn std::error::Error>> { run_paired(true) }
+fn run_paired(adaptive:bool) -> Result<(), Box<dyn std::error::Error>>
 {
     let path =
         std::path::PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?);
@@ -30,12 +34,12 @@ fn paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn
         );
         let executor = PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config)?;
         let mut session =
-            executor.into_owned_buffered_variable_mixed_session(&context, 128, true)?;
+            if adaptive && window_mode {executor.into_owned_variable_adaptive_decode_session(&context,128,true,true,false)?}else{executor.into_owned_buffered_variable_mixed_session(&context, 128, true)?};
         let mut scheduler = Scheduler::new_with_execution_shape(
             SchedulerConfig {
                 max_waiting_requests: 32,
                 max_waiting_prompt_tokens: 4096,
-                max_active_sequences: 32,
+                max_active_sequences: if adaptive {16}else{32},
                 max_sequence_tokens: 128,
                 iteration_token_budget: 128,
                 max_prefill_chunk_tokens: 32,

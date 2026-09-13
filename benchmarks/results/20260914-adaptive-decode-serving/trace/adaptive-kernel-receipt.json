@@ -1,0 +1,28 @@
+{
+  "decode_graphs": {
+    "ordinary": 472,
+    "future": 430
+  },
+  "adaptive_kernels_per_decode_graph": 90,
+  "kernels": {
+    "riley_adaptive_decode::qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 27060,
+    "void riley_adaptive_decode::projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 27060,
+    "void riley_adaptive_decode::projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 27060
+  },
+  "paired_receipt": {
+    "peak_owned_tree_rss_bytes": 1533526016,
+    "requests": 96,
+    "reference_exact": true,
+    "exit_code": 0,
+    "remaining_owned_pids": []
+  },
+  "single_receipt": {
+    "peak_owned_tree_rss_bytes": 1509621760,
+    "requests": 96,
+    "reference_exact": true,
+    "exit_code": 0,
+    "remaining_owned_pids": []
+  },
+  "sqlite_sha256": "cdf557468af5b19a04921036aa29ba758bcdbe6d3c0c2ebcb94a751298b6b5a6",
+  "scope": "all observed decode graph launches, not a throughput measurement"
+}

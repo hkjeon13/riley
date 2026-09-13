@@ -49,6 +49,7 @@ serve options:
   --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2, fa3-smol-experimental-v1 (unqualified; loopback only)
   --mixed-time-budget-us N       experimental V7 loopback wall-time target (1000..100000)
   --decode-window MODE           single or paired-experimental-v1 (V7 loopback diagnostic)
+  --decode-projection MODE       existing or adaptive-rows-experimental-v1 (V7 loopback diagnostic)
   --ffn-backend MODE             existing, pipeline-experimental-v1 or prefill-pipeline-experimental-v1 (V7 loopback diagnostic)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
@@ -100,6 +101,7 @@ struct ServeOptions {
     fa3_experimental: bool,
     ffn_pipeline: bool,
     prefill_ffn_pipeline: bool,
+    adaptive_decode: bool,
     decode_window: bool,
     mixed_time_budget_us: Option<u64>,
     max_weight_bytes: u64,
@@ -261,6 +263,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut execution_graph_policy = None;
     let mut graph_numerics = None;
     let mut ffn_pipeline = None;
+    let mut adaptive_decode = None;
     let mut decode_window = None;
     let mut mixed_time_budget_us = None;
     let mut reduction_profile = None;
@@ -388,6 +391,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 let value=next_value(&mut arguments,"--mixed-time-budget-us")?;
                 let target=value.to_str().and_then(|s|s.parse::<u64>().ok()).filter(|v|(1000..=100000).contains(v)).ok_or_else(||"mixed time budget must be 1000..100000 us".to_owned())?;
                 set_once(&mut mixed_time_budget_us,target,"--mixed-time-budget-us")?;
+            }
+            "--decode-projection" => {
+                let value=next_value(&mut arguments,"--decode-projection")?;
+                let enabled=match value.to_str() {Some("existing")=>false,Some("adaptive-rows-experimental-v1")=>true,_=>return Err("--decode-projection requires existing or adaptive-rows-experimental-v1".to_owned())};
+                set_once(&mut adaptive_decode,enabled,"--decode-projection")?;
             }
             "--ffn-backend" => {
                 let value = next_value(&mut arguments, "--ffn-backend")?;
@@ -548,6 +556,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
 
     let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental, fa3_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false, false));
     let (ffn_pipeline,prefill_ffn_pipeline) = ffn_pipeline.unwrap_or((false,false));
+    let adaptive_decode=adaptive_decode.unwrap_or(false);
+    if adaptive_decode && (!mixed_execution || flashinfer_experimental || fa3_experimental || ffn_pipeline || mixed_time_budget_us.is_some() || !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"adaptive decode requires loopback IP".to_owned())?.ip().is_loopback()) {return Err("adaptive decode requires independent V7 loopback, without decode FFN or wall-time policy".to_owned());}
     if mixed_time_budget_us.is_some() && (!mixed_execution || flashinfer_experimental || fa3_experimental || ffn_pipeline || !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"mixed time budget requires loopback IP".to_owned())?.ip().is_loopback()) {return Err("mixed time budget requires independent V7 loopback".to_owned());}
     let decode_window=decode_window.unwrap_or(false);
     if decode_window && sampling_backend.unwrap_or(SamplingBackendMode::Cpu)!=SamplingBackendMode::GpuGreedy {return Err("decode window requires --sampling-backend gpu-greedy".to_owned());}
@@ -607,6 +617,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         fa3_experimental,
         ffn_pipeline,
         prefill_ffn_pipeline,
+        adaptive_decode,
         decode_window,
         mixed_time_budget_us,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
@@ -1135,7 +1146,7 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.prefill_ffn_pipeline {executor.with_prefill_ffn_pipeline(options.decode_window)} else if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.fa3_experimental {executor.with_fa3_experimental()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+    let executor = if options.adaptive_decode {executor.with_adaptive_decode(options.prefill_ffn_pipeline,options.decode_window)} else if options.prefill_ffn_pipeline {executor.with_prefill_ffn_pipeline(options.decode_window)} else if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.fa3_experimental {executor.with_fa3_experimental()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
         executor.with_variable_graph16()
     } else if options.variable_graph {
         executor.with_variable_graph()
@@ -3085,6 +3096,23 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_decode_requires_independent_loopback_v7() {
+        for (profile,bind,ffn,paired,policy,accepted) in [
+            ("variable-smol-v7","127.0.0.1:8080","existing","single","require",true),
+            ("variable-smol-v7","[::1]:8080","prefill-pipeline-experimental-v1","paired-experimental-v1","require",true),
+            ("variable-smol-v7","0.0.0.0:8080","existing","single","require",false),
+            ("variable-smol-v7","127.0.0.1:8080","pipeline-experimental-v1","single","require",false),
+            ("fa3-smol-experimental-v1","127.0.0.1:8080","existing","single","require",false),
+            ("variable-smol-v6","127.0.0.1:8080","existing","single","require",false),
+            ("variable-smol-v7","127.0.0.1:8080","existing","single","disabled",false),
+        ] {
+            let parsed=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics",profile,"--bind",bind,"--ffn-backend",ffn,"--decode-window",paired,"--sampling-backend","gpu-greedy","--execution-graph-policy",policy,"--decode-projection","adaptive-rows-experimental-v1"].map(std::ffi::OsString::from));
+            assert_eq!(parsed.is_ok(),accepted,"{profile} {bind} {ffn} {paired} {policy}");
+            if let Ok(super::CliCommand::Serve(options))=parsed {assert!(options.adaptive_decode);}
+        }
+    }
+
+    #[test]
     fn fa3_diagnostic_is_explicit_loopback_and_requires_graph() {
         for (bind, policy, accepted) in [
             ("127.0.0.1:8080", "require", true),
@@ -4076,6 +4104,7 @@ mod tests {
                 fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
+                adaptive_decode: false,
                 decode_window: false,
                 mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -4475,6 +4504,7 @@ mod tests {
                 fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
+                adaptive_decode: false,
                 decode_window: false,
                 mixed_time_budget_us: None,
                 max_weight_bytes: 4096,
@@ -4641,6 +4671,7 @@ mod tests {
                 fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
+                adaptive_decode: false,
                 decode_window: false,
                 mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
@@ -4774,6 +4805,7 @@ mod tests {
                 fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
+                adaptive_decode: false,
                 decode_window: false,
                 mixed_time_budget_us: None,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
