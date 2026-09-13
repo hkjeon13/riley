@@ -68,3 +68,18 @@ gate/up→activation→down 사이 중간 global tensor 이동을 줄인다. lau
 ## 모델·serving 통합 결과
 
 [최종 첫 batch 비교표](../../benchmarks/results/20260913-ffn-serving-screen/README.md): 독립 FFN recorder·graph fingerprint·loopback CLI 옵션을 연결했다. 자유 생성1,024토큰 및 자연어12,582,912 BF16 logits가 V7과 일치하며 full-model memcheck0 errors다. C16/C32 고정/자연어24-run screen의 throughput 이득은 V7 대비2.20–3.64%다. C32 natural은 vLLM보다 throughput9.22% 낮고 median TPOT21.21% 길어 최종 목표 미달이다. 기존 경로를 기본값으로 유지하며, prefill tile 전달·일반 shape 확장·장기 안정성은 완료되지 않았다. 다음 주요 영역은 반복적인 FFN 미세 튜닝보다 prefill/mixed attention·자원 정책으로 둔다.
+
+
+## 다음 batch: prefill FFN shared staging과 copy/MMA pipeline
+
+[현재 C32/C64 matched-request profile](../../benchmarks/results/20260913-load-shape-profile/README.md)에서 paired의 prefill/mixed는 두 부하 모두 graph envelope 시간의 약53%였다. C64 선택 구간의 기존 fused gate/up와 down projection은 각각131.24/139.04ms다. 다음 pair의 scheduler 예약 확장보다 이 GPU 실행 영역을 먼저 검증한다. 이전 decode-only pipeline의 작은 이득을 prefill 성능으로 간주하지 않는다.
+
+하나의 구현 batch:
+
+1. 별도 `prefill_ffn_pipeline.cuh`에16-row CTA 입력 공유와 두-stage global→shared asynchronous copy를 넣은 gate/up를 구현한다. 기존 `prefill_fused_gate_v51.cuh`의4-warp 출력 분할, K16 MMA 순서, BF16 gate/up rounding과 SwiGLU 순서를 유지한다. K64 stage 기준 입력2,048B + 두 weight8,192B, 두-stage 합20,480B는 논리 계획이며 ptxas/occupancy로 확인한다. 기존 gate/up fusion은 재구현 목표가 아니다.
+2. 같은16-row 전달 규약을 down projection에 적용한다.2-warp/K64 stage 기준 입력2,048B + weight2,048B, 두-stage8,192B다. 기존 K320 구간별 BF16 rounding 및 마지막K256 누적 순서를 보존한다. CTA 전체가 copy completion과 shared reuse barrier에 참여하고 inactive M row는 안전한 zero-fill을 사용한다.
+3. Native entry/profile·mixed prefill graph identity·retained workspace 수명·Rust opt-in 선택을 함께 연결한다. Pure decode와 기존 successor-overlap 경로는 보존하고 mixed/prefill 경로의 두 FFN kernel만 선택한다. 기존 FFN decode backend와 혼동하지 않는다. Backend 선택/identity와 실제 모델 연결 전 native gate가 필요하다.
+
+검증은 live M1/15/16/17/31/32/64/128/398/512 및 capacity padding1024, row 갱신을 동반한 반복 graph replay, inactive 출력 미변경, BF16 bitwise 대조, native memcheck/racecheck, ptxas register/shared/spill, 전체30-layer 모델 logits/greedy·natural reference/stop/cancel 순서다. Native가 회귀하면 원인을 기록하고 모델 승격을 하지 않는다. 통과한 후보는 현재 single/직전 paired/새 paired/vLLM의 동일 natural serving을 C32 및 client C64/active32 두 순서로 비교한다. 최종 판정에는 TTFT/TPOT/P95/P99와 오류율을 포함한다.
+
+이는 CUDA asynchronous-copy 및 PR05에 이미 조사한 memory-lifetime 실행 방식의 prefill 적용이다. Counter 접근이 없으면 논리 byte 수를 실제 HBM 절감량으로 표기하지 않는다. SM89 실행과 SM90a/SM100a compile을 구분하고 후자의 runtime은 장비 부재를 명시한다. 기존 수치 gate를 낮추지 않으며 실제 실패를 skip으로 바꾸지 않는다. 기본값 승격은 serving 검증 후 별도 판정한다.

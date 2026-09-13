@@ -202,3 +202,8 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 현재 pair보다 더 먼 iteration을 예약하거나 scheduler의 in-flight 수를 늘리는 구현은 아니다. 먼저 이 영역의 실제 준비 overlap과 serving 효과를 검증하며 default single은 유지한다. 새로운 상태 전이, descriptor 오류, exact serving/stop/cancel, 같은 조건의 single/직전/후보/vLLM 역순 비교와 CUDA graph trace를 수행한다.
 
 [최종 측정](../../benchmarks/results/20260913-overlap-successor-preparation/README.md): C32 throughput은 직전 paired 대비+4.27%, vLLM 대비−3.38%다. 준비 구간의 predecessor device overlap 중앙값271.24µs를 확인했다. Client C64/active32에서는 직전 대비+0.71%로 반복별 부호가 달랐고 vLLM 대비−7.93%, TTFT/TPOT도 더 높았다. 기본값 single을 유지하며 높은 부하 전반의 개선이나 PR02 전체 완료로 표시하지 않는다. 다음 pair 준비와 admission/commit 의존성 분리를 별도로 다룬다.
+
+
+### 다음 영역 재평가
+
+[384-request C32/C64 profile](../../benchmarks/results/20260913-load-shape-profile/README.md)에서 두 부하의 paired decode 구성과 gap이 비슷하고 prefill/mixed graph 시간이 약53%를 차지했다. C64의 작은 이득을 prefill 비중 증가 탓으로 확정하지 않는다. 다음 pair 예약/commit 의존성 분리 범위는 남겨 두되, 다음 구현 batch는 PR05 prefill FFN의 입력/weight staging과 down projection pipeline을 우선한다.

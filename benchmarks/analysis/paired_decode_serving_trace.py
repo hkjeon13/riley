@@ -45,7 +45,8 @@ def watch(process,done,receipt):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('root',type=pathlib.Path);ap.add_argument('out',type=pathlib.Path);args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('root',type=pathlib.Path);ap.add_argument('out',type=pathlib.Path);ap.add_argument('--requests',type=int,default=96);ap.add_argument('--concurrency',type=int,default=32);args=ap.parse_args()
+    assert 1<=args.concurrency<=128 and args.concurrency<=args.requests<=1024
     root=args.root;out=args.out;out.mkdir();spec=json.loads((root/'workload.json').read_text())
     for lane in ['single','paired']:
         assert not subprocess.check_output(['nvidia-smi','--query-compute-apps=pid','--format=csv,noheader'],text=True).strip()
@@ -54,7 +55,7 @@ def main():
         if lane=='paired':argv+=['--decode-window','paired-experimental-v1']
         command=['/data/cuda-12.8.1/bin/nsys','profile','--trace=cuda,nvtx','--cuda-graph-trace=node','--sample=none','--cpuctxsw=none','--output',str(out/lane),'--force-overwrite=false']+argv
         env=os.environ.copy();env.update(CUDA_VISIBLE_DEVICES='0',LD_LIBRARY_PATH=str(root/'toolchain130/nvidia/cu13/lib')+':/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/nvidia/cu13/lib')
-        write(out/(lane+'-launch.json'),{'argv':command,'binary_sha256':file_hash(argv[0]),'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'rss_limit_bytes':8*1024**3,'wall_limit_s':360})
+        write(out/(lane+'-launch.json'),{'argv':command,'requests':args.requests,'client_concurrency':args.concurrency,'active_capacity':int(argv[argv.index('--max-active-sequences')+1]),'fixture_sha256':file_hash(root/'workload.json'),'binary_sha256':file_hash(argv[0]),'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'rss_limit_bytes':8*1024**3,'wall_limit_s':360})
         receipt={};done=threading.Event()
         with (out/(lane+'.log')).open('w') as log:
             p=subprocess.Popen(command,env=env,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
@@ -68,10 +69,10 @@ def main():
                             if r.status==200:break
                     except OSError:pass
                     assert time.monotonic()<deadline,'readiness timeout';time.sleep(.5)
-                rows=phase(port,spec['natural'],96,32);write(out/(lane+'-rows.json'),rows)
+                rows=phase(port,spec['natural'],args.requests,args.concurrency);write(out/(lane+'-rows.json'),rows)
                 assert all(r['valid'] and all(r['checks'].values()) for r in rows)
                 p.stdin.write(b'\n');p.stdin.flush();assert p.wait(timeout=60)==0
-                receipt.update(requests=96,reference_exact=True,exit_code=p.returncode)
+                receipt.update(requests=args.requests,reference_exact=True,exit_code=p.returncode)
             finally:
                 try:
                     if p.poll() is None:
