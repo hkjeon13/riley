@@ -1,6 +1,6 @@
 # PR20 — Rolling one-step-ahead decode pipeline
 
-상태: **KV 예약 연장·연속 prefix 정산 기반 구현 / scheduler·GPU·serving 연결 진행 전**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
+상태: **KV 예약 연장·scheduler rolling 전이 구현 / GPU ticket·serving 연결 미완료**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
 
 ## 근거와 목표
 
@@ -39,3 +39,10 @@ Greedy dense path의 rolling execution에 한정한다. Draft 모델 speculation
 연속48회 진행과15/16/17·31 page 경계, 오래된 권한, 부분 할당 후 실패·재시도, poison 후 prefix 보존, cache/off-batch reader 수명을 검사했다. [검증 기록](../../benchmarks/results/20260914-rolling-reservation/README.md)에 실제 실행 결과를 기록한다. 아직 scheduler rolling 정산, result ring, native future-input 소비 수명 및 server streaming 통합은 미완료이며 새로운 serving benchmark는 실행하지 않았다.
 
 다음 scheduler 연결에서는 `publish_committed_item`의 terminal 처리에 주의한다. 현재 helper는 stop/length/cancel이면 sequence를 닫을 수 있어 successor 실행 중 그대로 호출하면 안 된다. 앞 step의 token 발행과 GPU에서 사용하는 suffix의 retirement를 분리해야 한다. Batch 중간 정산 오류에서도 진행 중 페이지를 reclaim하지 않도록 실패 상태를 보유하고 전체 drain 이후 정리한다. 단순한 pair API 반복이나 terminal 경로 우회로 완료 처리하지 않는다.
+
+
+## 구현 진행 — Scheduler rolling 전이
+
+[Scheduler 검증 기록](../../benchmarks/results/20260914-rolling-scheduler/README.md): nonterminal 앞 token만 정산하는 `complete_decode_window_prefix`와 실행 중 successor를 새 first로 삼아 뒤 step 하나를 예약하는 `roll_decode_window`를 구현했다. 첫 결과는 보존하고 마지막 drain에서 중복 발행하지 않는다. 일부 row만 연장된 OOM에서도 모든 예약을 유지하며 quiesced abort로만 회수한다. 앞 결과 발행 이후 NotDispatched rollback은 거부한다. Waiting/출력·context limit에서는 drain 후 일반 scheduler로 복귀한다.
+
+24회 연속 rolling·page 경계·descriptor authority·취소·terminal·부분 할당 실패·출력 중복 방지를 host fixture로 검증했다. GPU ticket 승격과 server의 실제 호출은 아직 연결하지 않았다. 기존 `try_decode_window`의 callback만 바꾸는 것으로 완료할 수 없다. Immutable scheduler authority의 borrow 종료, retained successor cookie/replay 승격, native 두 slot의 재사용 시점, 결과별 publication을 함께 연결하고 model/serving gate를 실행해야 한다.

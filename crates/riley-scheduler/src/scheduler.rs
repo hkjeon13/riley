@@ -484,10 +484,15 @@ struct InflightItem {
 }
 
 #[derive(Debug)]
+struct PrefixSettlement { result: IterationResult, committed_items: usize }
+
+#[derive(Debug)]
 struct InflightPlan {
     mixed_cost_bucket: usize,
     iteration_id: IterationId,
     successor: Option<IterationId>,
+    prefix_settlement: Option<PrefixSettlement>,
+    device_progress: bool,
     prefill_tokens: usize,
     decode_tokens: usize,
     prefill_count: usize,
@@ -1161,6 +1166,9 @@ impl Scheduler {
                 expected,
                 actual: iteration_id,
             });
+        }
+        if abort == ExecutionAbort::NotDispatched && self.inflight.as_ref().is_some_and(|p|p.device_progress) {
+            return Err(SchedulerError::InvalidPlan{field:"prefix settlement",reason:"published device work requires quiesced abort"});
         }
         let completion_capacity = self
             .inflight
@@ -2028,6 +2036,8 @@ impl Scheduler {
             mixed_cost_bucket: if self.mixed_time.is_some(){self.mixed_cost_bucket()}else{0},
             iteration_id,
             successor,
+            prefix_settlement: None,
+            device_progress: false,
             prefill_tokens,
             decode_tokens,
             prefill_count,
@@ -2728,7 +2738,7 @@ impl Scheduler {
             pending_completions: self.completion_outbox.len(),
             completion_capacity: self.completion_outbox_capacity,
             accepting: self.accepting,
-            outstanding_iterations: self.inflight.as_ref().map_or(0,|p|1+usize::from(p.successor.is_some())),
+            outstanding_iterations: self.inflight.as_ref().map_or(0,|p|1+usize::from(p.successor.is_some())-usize::from(p.prefix_settlement.as_ref().is_some_and(|s|s.committed_items==p.items.len()))),
         }
     }
 }

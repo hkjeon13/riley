@@ -54,7 +54,7 @@ impl Scheduler {
         self.validate_inflight_reservations()?;
         let pending=self.inflight.as_ref().ok_or(SchedulerError::NoIterationInFlight)?;
         let bad=||SchedulerError::InvalidPlan{field:"window authority",reason:"plans differ from live shared reservation"};
-        if pending.successor!=Some(window.second.iteration_id()) || pending.iteration_id!=window.first.iteration_id() || !window.first.prefill_items().is_empty() || !window.second.prefill_items().is_empty() || window.first.batch_size()!=pending.items.len() || window.second.batch_size()!=pending.items.len(){return Err(bad());}
+        if pending.prefix_settlement.is_some() || pending.successor!=Some(window.second.iteration_id()) || pending.iteration_id!=window.first.iteration_id() || !window.first.prefill_items().is_empty() || !window.second.prefill_items().is_empty() || window.first.batch_size()!=pending.items.len() || window.second.batch_size()!=pending.items.len(){return Err(bad());}
         let mut first_rows=Vec::new();let mut second_rows=Vec::new();
         try_reserve_exact(&mut first_rows,pending.items.len(),"window first authority")?;
         try_reserve_exact(&mut second_rows,pending.items.len(),"window second authority")?;
@@ -73,6 +73,116 @@ impl Scheduler {
         })
     }
 
+    /// Publish a validated, completed predecessor while its successor may run.
+    /// Caller must establish predecessor completion and suffix-only successor
+    /// writes. Returns None without mutation when stop/cancel needs full drain.
+    /// An error after settlement starts retains every reservation; only a
+    /// quiesced abort may recover it. This method never retires a sequence.
+    pub fn complete_decode_window_prefix(&mut self,first:&IterationResult,now_ns:u64)->SchedulerResult<Option<IterationUpdates>> {
+        let cpu_started=Instant::now();
+        self.ensure_completion_backlog_empty()?;self.validate_now(now_ns)?;
+        self.validate_inflight_reservations()?;
+        let p=self.inflight.as_ref().ok_or(SchedulerError::NoIterationInFlight)?;
+        let bad=||SchedulerError::InvalidPlan{field:"prefix settlement",reason:"requires an unpublished decode pair and complete valid predecessor"};
+        if p.successor.is_none() || p.prefix_settlement.is_some() {return Err(bad());}
+        if first.iteration_id()!=p.iteration_id {return Err(SchedulerError::UnexpectedIteration{expected:p.iteration_id,actual:first.iteration_id()});}
+        if first.outputs().len()!=p.expected_output_slots.len() || first.outputs().iter().any(|o|o.token_id()>=49152 || !p.expected_output_slots.contains(&o.slot())) {return Err(bad());}
+        for item in &p.items {
+            let r=&self.requests[self.record_index(item.request_id).ok_or_else(bad)?];
+            let slot=item.output_slot.ok_or_else(bad)?;
+            if item.kind!=WorkKind::Decode {return Err(bad());}
+            if r.cancellation_deferred || first.outputs().iter().find(|o|o.slot()==slot).ok_or_else(bad)?.stop()
+                || r.generated_token_ids.len()+1>=r.descriptor.max_new_tokens {return Ok(None);}
+        }
+        let mut outputs=Vec::new();try_reserve_exact(&mut outputs,first.outputs().len(),"retained prefix result")?;
+        outputs.extend_from_slice(first.outputs());
+        let retained=IterationResult::new(first.iteration_id(),outputs,first.gpu_execution_ns(),first.gpu_idle_gap_ns())?;
+        let mut updates=IterationUpdates::empty();try_reserve_exact(&mut updates.token_events,p.items.len(),"prefix token events")?;
+        // Preflight all output allocation before changing any reservation.
+        let mut ids=Vec::new();try_reserve_exact(&mut ids,p.items.len(),"prefix request IDs")?;ids.extend(p.items.iter().map(|i|i.request_id));
+        for id in ids {let index=self.record_index(id).ok_or_else(bad)?;try_reserve_exact(&mut self.requests[index].generated_token_ids,1,"prefix generated token")?;}
+        let mut pending=self.inflight.take().expect("validated pair");
+        pending.prefix_settlement=Some(PrefixSettlement{result:retained,committed_items:0});
+        pending.device_progress=true;
+        self.last_now_ns=Some(now_ns);
+        let outcome=(||->SchedulerResult<()> {
+            for item in &mut pending.items {
+                let index=self.record_index(item.request_id).ok_or_else(bad)?;
+                let record=&mut self.requests[index];
+                record.sequence.as_mut().ok_or_else(bad)?.commit_prefix(&mut self.pool,&mut item.reservation,item.target_logical_length-1)?;
+                let output=first.outputs().iter().find(|o|Some(o.slot())==item.output_slot).ok_or_else(bad)?;
+                let generated_index=record.generated_token_ids.len();
+                record.generated_token_ids.push(output.token_id());
+                record.ready_since_ns=now_ns;
+                updates.token_events.push(TokenEvent{request_id:item.request_id,token_id:output.token_id(),generated_index});
+                pending.prefix_settlement.as_mut().expect("settlement started").committed_items+=1;
+            }
+            Ok(())
+        })();
+        if outcome.is_ok() {
+            self.record_dispatched_shape(&pending);
+            let sample=IterationMetricSample{batch_size:pending.items.len(),prefill_tokens:0,decode_tokens:pending.items.len(),
+                scheduler_cpu_ns:pending.scheduler_cpu_ns.saturating_add(elapsed_ns(cpu_started)),gpu_execution_ns:first.gpu_execution_ns(),gpu_idle_gap_ns:first.gpu_idle_gap_ns()};
+            observe_metric(&mut self.metrics_degraded,self.metrics.record_iteration(sample),"completed rolling prefix");
+            updates.iteration_metric=Some(sample);pending.scheduler_cpu_ns=0;
+        }
+        self.inflight=Some(pending);self.refresh_metric_gauges();
+        outcome?;Ok(Some(updates))
+    }
+
+    /// Advance a prefix-published pair by one step while its old successor runs.
+    /// The returned first plan describes that already-submitted successor: do
+    /// not dispatch it again. Submit only the new second step, ordered after it.
+    /// None requires draining the current pair for admission/terminal limits.
+    /// On error after extension begins, retain all pages until quiesced abort.
+    pub fn roll_decode_window(&mut self,now_ns:u64)->SchedulerResult<Option<DecodeWindowPlan>> {
+        let cpu_started=Instant::now();
+        self.ensure_completion_backlog_empty()?;self.validate_now(now_ns)?;self.validate_inflight_reservations()?;
+        let bad=||SchedulerError::InvalidPlan{field:"rolling window",reason:"requires completely published predecessor with live successor"};
+        let p=self.inflight.as_ref().ok_or(SchedulerError::NoIterationInFlight)?;
+        let first_id=p.successor.ok_or_else(bad)?;
+        if !p.prefix_settlement.as_ref().is_some_and(|s|s.committed_items==p.items.len()) {return Err(bad());}
+        if !self.waiting.is_empty() {return Ok(None);}
+        for item in &p.items {
+            let r=&self.requests[self.record_index(item.request_id).ok_or_else(bad)?];
+            if r.cancellation_deferred || r.descriptor.max_new_tokens.saturating_sub(r.generated_token_ids.len())<2
+                || item.target_logical_length>=self.config.max_sequence_tokens {return Ok(None);}
+        }
+        let second_id=self.peek_iteration_id()?;
+        let following=self.next_iteration_id.checked_add(1).ok_or(SchedulerError::IdentifierExhausted{kind:"iteration"})?;
+        let mut first_items=Vec::new();let mut second_items=Vec::new();let mut first_tables=Vec::new();let mut second_tables=Vec::new();
+        try_reserve_exact(&mut first_items,p.items.len(),"rolling first items")?;
+        try_reserve_exact(&mut second_items,p.items.len(),"rolling second items")?;
+        try_reserve_exact(&mut first_tables,p.items.len(),"rolling first tables")?;
+        try_reserve_exact(&mut second_tables,p.items.len(),"rolling second tables")?;
+        let mut pending=self.inflight.take().expect("validated rolling window");
+        // During extension, old pair settlement is invalid even if only some
+        // rows extended successfully. Quiesced abort still owns every row.
+        pending.prefix_settlement.as_mut().expect("published prefix").committed_items=0;
+        let prepared=(||->SchedulerResult<DecodeWindowPlan> {
+            for item in &mut pending.items {
+                let index=self.record_index(item.request_id).ok_or_else(bad)?;
+                let record=&mut self.requests[index];let seq=record.sequence.as_mut().ok_or_else(bad)?;
+                let prefix=item.target_logical_length;
+                seq.extend_reservation(&mut self.pool,&mut item.reservation,prefix+1)?;
+                item.target_logical_length=prefix+1;
+                let (a,b)=OwnedBlockTable::copy_reserved_window(item.request_id,seq,&item.reservation,prefix)?;
+                let table_index=first_tables.len();first_tables.push(a);second_tables.push(b);
+                let token=*record.generated_token_ids.last().ok_or_else(bad)?;
+                first_items.push(WorkItem::new(item.request_id,WorkKind::Decode,copy_tokens(&[token],"rolling input")?,prefix,table_index,item.output_slot)?);
+                second_items.push(WorkItem::new(item.request_id,WorkKind::Decode,copy_tokens(&[0],"rolling future input")?,prefix+1,table_index,item.output_slot)?);
+            }
+            Ok(DecodeWindowPlan{first:IterationPlan::with_shared_prefixes(first_id,Vec::new(),first_items,first_tables)?,
+                second:IterationPlan::with_shared_prefixes(second_id,Vec::new(),second_items,second_tables)?})
+        })();
+        if prepared.is_ok() {
+            pending.iteration_id=first_id;pending.successor=Some(second_id);pending.prefix_settlement=None;
+            pending.scheduler_cpu_ns=elapsed_ns(cpu_started);
+            self.next_iteration_id=following;self.last_now_ns=Some(now_ns);
+        }
+        self.inflight=Some(pending);self.refresh_metric_gauges();prepared.map(Some)
+    }
+
     /// Settle after BOTH executions are quiescent and have passed full runtime
     /// identity/numerical validation. This is not a CUDA completion fence.
     /// A first-step stop/cancel suppresses the successor and releases its append
@@ -88,6 +198,11 @@ impl Scheduler {
                 return Err(SchedulerError::InvalidIterationResult{field:"window outputs",reason:"both complete slot sets and vocabulary-valid tokens are required"});
             }
         }
+        let prefix_published=if let Some(prefix)=&p.prefix_settlement {
+            if prefix.result!=*first || prefix.committed_items!=p.items.len() {
+                return Err(SchedulerError::InvalidPlan{field:"prefix settlement",reason:"partial failure requires quiesced abort; retained result must match"});
+            } true
+        }else{false};
         let count=p.items.len();let mut updates=IterationUpdates::empty();
         try_reserve_exact(&mut updates.token_events,count*2,"window token events")?;
         try_reserve_exact(&mut updates.completions,count,"window completions")?;
@@ -106,12 +221,13 @@ impl Scheduler {
                 let prefix=item.target_logical_length-1;
                 let terminal=self.requests[index].cancellation_deferred || a.stop();
                 let seq=self.requests[index].sequence.as_mut().ok_or(SchedulerError::NoIterationInFlight)?;
-                seq.commit_prefix(&mut self.pool,&mut item.reservation,prefix)?;
+                if !prefix_published {seq.commit_prefix(&mut self.pool,&mut item.reservation,prefix)?;}
                 if terminal {
                     seq.discard_completed_append(&mut self.pool,item.reservation)?;
+                    if prefix_published {return self.finish_live_request(id,RequestFinishReason::Cancelled,now_ns);}
                     return self.publish_committed_item(SettledInflightItem{request_id:id,kind:WorkKind::Decode,target_logical_length:prefix,output:Some(a)},now_ns,&mut updates);
                 }
-                self.publish_committed_item(SettledInflightItem{request_id:id,kind:WorkKind::Decode,target_logical_length:prefix,output:Some(a)},now_ns,&mut updates)?;
+                if !prefix_published {self.publish_committed_item(SettledInflightItem{request_id:id,kind:WorkKind::Decode,target_logical_length:prefix,output:Some(a)},now_ns,&mut updates)?;}
                 let index=self.record_index(id).ok_or(SchedulerError::UnknownRequest{request_id:id})?;
                 self.requests[index].sequence.as_mut().ok_or(SchedulerError::NoIterationInFlight)?.commit(&mut self.pool,item.reservation)?;
                 self.publish_committed_item(SettledInflightItem{request_id:id,kind:WorkKind::Decode,target_logical_length:item.target_logical_length,output:Some(b)},now_ns,&mut updates)
@@ -124,7 +240,8 @@ impl Scheduler {
         self.drain_completion_outbox_into(&mut updates.completions);
         if updates.settlement_failures.is_empty() {
             for (step,result) in [first,second].into_iter().enumerate() {
-                let sample=IterationMetricSample{batch_size:count,prefill_tokens:0,decode_tokens:count,scheduler_cpu_ns:if step==0{planning_cpu_ns.saturating_add(elapsed_ns(cpu_started))}else{0},gpu_execution_ns:result.gpu_execution_ns(),gpu_idle_gap_ns:result.gpu_idle_gap_ns()};
+                if prefix_published && step==0 {continue;}
+                let sample=IterationMetricSample{batch_size:count,prefill_tokens:0,decode_tokens:count,scheduler_cpu_ns:if step==0{planning_cpu_ns.saturating_add(elapsed_ns(cpu_started))}else if prefix_published{elapsed_ns(cpu_started)}else{0},gpu_execution_ns:result.gpu_execution_ns(),gpu_idle_gap_ns:result.gpu_idle_gap_ns()};
                 observe_metric(&mut self.metrics_degraded,self.metrics.record_iteration(sample),"completed decode window step");
                 // The singular result field cannot describe two iterations.
                 // Both samples are recorded in scheduler metrics above.
@@ -148,6 +265,122 @@ mod tests {
     fn result(p:&IterationPlan,base:u32,stop:Option<usize>)->IterationResult{
         IterationResult::new(p.iteration_id(),p.prefill_items().iter().chain(p.decode_items()).enumerate().filter_map(|(i,w)|w.output_slot().map(|slot|IterationOutput::new(slot,base+i as u32,stop==Some(i)))).collect(),100,5).unwrap()
     }
+    #[test] fn rolling_windows_keep_one_live_successor_across_page_boundaries() {
+        let(mut s,ids)=ready(40);let mut w=s.plan_decode_window(3).unwrap().unwrap();
+        for step in 0..24 {
+            let old_second=w.second().iteration_id();let a=result(w.first(),100+step*2,None);
+            let u=s.complete_decode_window_prefix(&a,4+u64::from(step)*2).unwrap().unwrap();
+            assert!(u.iteration_metric().is_some());assert_eq!(u.token_events().len(),2);
+            let next=s.roll_decode_window(5+u64::from(step)*2).unwrap().unwrap();
+            assert_eq!(next.first().iteration_id(),old_second);
+            assert_eq!(next.first().decode_items()[0].input_tokens(),[100+step*2]);
+            let authority=s.authorize_decode_window(&next).unwrap();
+            let owner=crate::authority::VariableOwnerGeometry{generation:7,last_accepted_replay:2+u64::from(step),catalog_digest:[9;32],max_active_rows:2,physical_block_count:16,context_tokens:64,packed_prefill:true,shared_prefixes:false,mixed_execution:true};
+            let prepared=authority.prepare_wire(&owner,3+u64::from(step),&[1000,1001],&[1002,1003]).unwrap();
+            assert_eq!(prepared.first().rows[0].progress.committed_tokens,16+step);
+            drop(authority);
+            assert!(s.abort_iteration(next.first().iteration_id(),ExecutionAbort::NotDispatched,5+u64::from(step)*2).is_err());
+            assert_eq!(s.current_gauges().outstanding_iterations,2);w=next;
+        }
+        let u=s.complete_decode_window_after_drain(&result(w.first(),200,None),&result(w.second(),210,None),60).unwrap();
+        assert_eq!(u.token_events().len(),4);assert!(u.settlement_failures().is_empty());
+        for id in ids {let r=&s.requests[s.record_index(id).unwrap()];assert_eq!(r.generated_token_ids.len(),27);assert_eq!(r.sequence.as_ref().unwrap().logical_length(),41);}
+        s.close(61,None).unwrap();
+    }
+
+    #[test] fn rolling_admission_and_output_limit_require_current_pair_drain() {
+        for waiting in [false,true] {
+            let(mut s,_)=ready(if waiting{8}else{3});let w=s.plan_decode_window(3).unwrap().unwrap();
+            let a=result(w.first(),20,None);let b=result(w.second(),30,None);
+            s.complete_decode_window_prefix(&a,4).unwrap().unwrap();
+            if waiting {s.submit(RequestDescriptor::new(vec![4;7],3),5).unwrap();}
+            let before=s.pool.stats();assert!(s.roll_decode_window(5).unwrap().is_none());assert_eq!(s.pool.stats(),before);
+            assert!(s.complete_decode_window_after_drain(&a,&b,6).unwrap().settlement_failures().is_empty());
+            s.close(7,None).unwrap();
+        }
+    }
+
+    #[test] fn rolling_allocation_failure_retains_partial_extensions_until_quiesced_abort() {
+        let(mut s,_)=ready(40);let mut w=s.plan_decode_window(3).unwrap().unwrap();
+        for step in 0..15 {
+            s.complete_decode_window_prefix(&result(w.first(),100,None),4+step*2).unwrap().unwrap();
+            w=s.roll_decode_window(5+step*2).unwrap().unwrap();
+        }
+        // Pending targets are now32; the next extension needs a new page per row.
+        assert_eq!(w.second().decode_items()[0].target_logical_length(),32);
+        let a=result(w.first(),120,None);let b=result(w.second(),130,None);
+        s.complete_decode_window_prefix(&a,40).unwrap().unwrap();
+        let mut pressure=s.pool.create_sequence(176).unwrap();
+        let hold=pressure.reserve_to(&mut s.pool,176).unwrap();pressure.commit(&mut s.pool,hold).unwrap();
+        assert_eq!(s.pool.stats().free_block_count(),1);
+        assert!(s.roll_decode_window(41).is_err());
+        assert_eq!(s.pool.stats().allocated_block_count(),16);
+        assert!(s.complete_decode_window_after_drain(&a,&b,42).is_err());
+        let u=s.abort_iteration(w.first().iteration_id(),ExecutionAbort::DeviceQuiescedMutationUnknown,42).unwrap();
+        assert!(u.settlement_failures().is_empty());assert_eq!(s.pool.stats().allocated_block_count(),11);
+        pressure.close(&mut s.pool).unwrap();s.close(43,None).unwrap();
+    }
+
+    #[test] fn prefix_publication_retains_suffix_until_cancel_and_final_drain() {
+        let(mut s,ids)=ready(4);let w=s.plan_decode_window(3).unwrap().unwrap();
+        let a=result(w.first(),20,None);let b=result(w.second(),30,None);
+        let before=s.pool.stats();
+        let u=s.complete_decode_window_prefix(&a,4).unwrap().unwrap();
+        assert_eq!(u.token_events().len(),2);assert!(u.completions().is_empty());
+        assert_eq!(s.pool.stats().allocated_block_count(),before.allocated_block_count());
+        assert_eq!(s.current_gauges().outstanding_iterations,1);
+        for &id in &ids {let r=&s.requests[s.record_index(id).unwrap()];assert_eq!(r.sequence.as_ref().unwrap().logical_length(),16);assert_eq!(r.generated_token_ids.len(),2);}
+        assert!(s.complete_decode_window_prefix(&a,5).is_err());
+        assert!(s.authorize_decode_window(&w).is_err());
+        assert!(s.abort_iteration(w.first().iteration_id(),ExecutionAbort::NotDispatched,5).is_err());
+        assert!(s.cancel(ids[0],5).unwrap().deferred_until_iteration_settles());
+        assert_eq!(s.pool.stats().allocated_block_count(),4);
+        let bad=result(w.second(),49152,None);
+        assert!(s.complete_decode_window_after_drain(&a,&bad,6).is_err());
+        assert_eq!(s.pool.stats().allocated_block_count(),4);
+        let u=s.complete_decode_window_after_drain(&a,&b,6).unwrap();
+        assert_eq!(u.token_events().len(),1);assert_eq!(u.token_events()[0].token_id(),31);
+        assert_eq!(u.completions().len(),1);assert_eq!(u.completions()[0].generated_token_ids(),[10,20]);
+        assert_eq!(s.pool.stats().allocated_block_count(),2);
+        assert_eq!(s.requests[s.record_index(ids[1]).unwrap()].generated_token_ids,[11,21,31]);
+        s.close(7,None).unwrap();
+    }
+
+    #[test] fn terminal_prefix_defers_all_publication_until_drain() {
+        for cancel in [false,true] {
+            let(mut s,ids)=ready(4);let w=s.plan_decode_window(3).unwrap().unwrap();
+            if cancel {s.cancel(ids[0],4).unwrap();}
+            let a=result(w.first(),20,if cancel{None}else{Some(1)});let b=result(w.second(),30,None);
+            let before=s.pool.stats();assert!(s.complete_decode_window_prefix(&a,4).unwrap().is_none());
+            assert_eq!(s.pool.stats(),before);
+            for &id in &ids {assert_eq!(s.requests[s.record_index(id).unwrap()].generated_token_ids.len(),1);}
+            let u=s.complete_decode_window_after_drain(&a,&b,5).unwrap();assert!(u.settlement_failures().is_empty());
+            s.close(6,None).unwrap();
+        }
+    }
+
+    #[test] fn published_prefix_requires_matching_result_and_quiesced_failure_cleanup() {
+        let(mut s,ids)=ready(4);let w=s.plan_decode_window(3).unwrap().unwrap();
+        let a=result(w.first(),20,None);let b=result(w.second(),30,None);
+        s.complete_decode_window_prefix(&a,4).unwrap().unwrap();
+        assert!(s.complete_decode_window_after_drain(&result(w.first(),21,None),&b,5).is_err());
+        assert_eq!(s.pool.stats().allocated_block_count(),4);
+        let u=s.abort_iteration(w.first().iteration_id(),ExecutionAbort::DeviceQuiescedMutationUnknown,5).unwrap();
+        assert!(u.settlement_failures().is_empty());assert_eq!(u.completions().len(),2);
+        for (i,id) in ids.iter().enumerate() {let c=u.completions().iter().find(|c|c.request_id()==*id).unwrap();assert_eq!(c.generated_token_ids(),[10+i as u32,20+i as u32]);}
+        assert_eq!(s.pool.stats().allocated_block_count(),0);s.close(6,None).unwrap();
+    }
+
+    #[test] fn early_prefix_and_second_length_completion_publish_each_token_once() {
+        let(mut s,_)=ready(3);let w=s.plan_decode_window(3).unwrap().unwrap();
+        let a=result(w.first(),20,None);let b=result(w.second(),30,None);
+        assert_eq!(s.complete_decode_window_prefix(&a,4).unwrap().unwrap().token_events().len(),2);
+        let u=s.complete_decode_window_after_drain(&a,&b,5).unwrap();
+        assert_eq!(u.token_events().len(),2);assert_eq!(u.completions().len(),2);
+        assert!(u.completions().iter().all(|c|c.generated_token_ids().len()==3 && c.reason()==RequestFinishReason::Length));
+        assert_eq!(s.pool.stats().allocated_block_count(),0);s.close(6,None).unwrap();
+    }
+
     #[test] fn paired_decode_commits_two_tokens_and_preserves_request_progress(){
         let(mut s,ids)=ready(4);let w=s.plan_decode_window(3).unwrap().unwrap();
         assert_eq!(w.first().block_tables()[0].valid_tokens(),[16]);assert_eq!(w.second().block_tables()[0].valid_tokens(),[16,1]);
