@@ -127,3 +127,10 @@ CPU KV 검사 14개와 기존 scheduler 검사 37개가 통과했다. 252개 경
 [기존 serving trace의 graph 사이 시간 재계산](../../benchmarks/results/20260913-overlap-headroom/README.md)에서 natural C16/C32의 간격은 각 trace window의 12.65%/17.47%였다. 모든 간격을 제거한 낙관적 trace 상한은 +14.48%/+21.17%지만 profiler/client pacing을 포함하므로 unprofiled serving 예측에 사용할 수 없다. 별도 round62 C32 natural에서 목표까지 필요한 throughput 변화는 +31.72%다.
 
 PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 attention adapter의 실제 모델 경로를 우선한다. PR 02의 GPU future token·두 plan 예약·순차 commit은 그대로 남은 범위이며, 완료·성능 승격으로 표시하지 않는다. GPU 연산과 CPU 중첩의 결합 효과는 실제 serving 통합 후 비교한다.
+
+
+## GPU future-token native 경계
+
+[GPU 전달 검증](../../benchmarks/results/20260913-future-token-native/README.md): 선행 compact 결과 identity 및 연속 replay/progress 검사, row 재배치, descriptor/token-slab 전달, 전체 batch 검증 후 변경을 native prototype으로 구현했다. Device producer→consumer graph의 288개 검사 및 memcheck/racecheck를 통과했다. SM90a/SM100a compile 통과, runtime은 장비 부재 skip이다. 모델의 status 초기화 뒤·embedding 앞에 연결해야 한다는 기존 enqueue 순서도 확인했다.
+
+이는 scheduler 연결 전의 전달 경계다. Canonical reference를 실제 retained authority에서 생성하는 Rust 표현, 두 pending expectation, tentative KV 예약·순차 commit, EOS/cancel 후 drain과 결과 폐기, 실제 모델·serving 검증이 남아 있다. 현재 prototype을 두 iteration overlap 지원으로 표시하지 않는다. FP16 모델 품질 실패 이후 다음 구현 영역을 PR02로 전환하며 앞선 'PR03 우선'은 당시의 순서 기록으로 남긴다.

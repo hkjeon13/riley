@@ -1,0 +1,30 @@
+{
+  "scope": "native GPU future-token primitive, not scheduler/model/serving evidence",
+  "gpu": "RTX 4090 SM89",
+  "cuda": "13.0.88",
+  "cases": 288,
+  "run_exit": 0,
+  "memcheck_exit": 0,
+  "racecheck_exit": 0,
+  "sm90a_compile_exit": 0,
+  "sm100a_compile_exit": 0,
+  "sm90a_sm100a_runtime": "skipped: hardware unavailable",
+  "source_sha256": {
+    "kernels/optional/future_token.cuh": "56a7961372de1fae20868c177722170eb07adb08a7500874adf7c21e16bb60ad",
+    "benchmarks/analysis/future_token_probe.cu": "9c238ee30ec95e55df6a4571acec0c2d3671d1be7e968c236191ca1fcbfbcc11"
+  },
+  "binary_sha256": {
+    "probe": "a11e77cc0f893252bc9ed021e3a1b0507c2affdca7ed20a8c7d64be96894e80f",
+    "probe-sm_90a": "e657434d524b255286787fbe3d0f5af88992edd6bded5803805e976155668f61",
+    "probe-sm_100a": "cc54b62c5207d7b26643bbb6c65605f4dcfabccfcc501bd74b81d17a21d69f91"
+  },
+  "log_sha256": {
+    "racecheck.log": "598ad790fc155fb2452bc61e538054c49e03641a186c6f9265634eddc1665bbb",
+    "run.log": "e49cd90c407fef7af5383fa35f7f6571867c4811a92fda5ee95e07e34ddcc3a6",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "memcheck.log": "1d4cf04b450a38ac7d37b7694457d8aea4aa4ebd6898c4a15e67563927021b79",
+    "build-sm_100a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-sm_90a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "build_command": "nvcc -std=c++17 -O3 -lineinfo -arch=sm_89 SOURCE/benchmarks/analysis/future_token_probe.cu -o OUTPUT/probe"
+}
