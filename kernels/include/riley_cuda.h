@@ -2642,6 +2642,12 @@ RileyCudaStatus riley_cuda_graph_resources_prepare_buffered_transfers(
 RileyCudaStatus riley_cuda_graph_resources_submit_buffered_transfer(
     RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
     uint64_t* ticket, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// V7 compact decode only. Predecessor must be the latest unconsumed ticket.
+// Copies the 4480-byte canonical sidecar before returning; retains all parents.
+RileyCudaStatus riley_cuda_graph_resources_submit_future_transfer(
+    RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
+    const uint8_t* references, uint64_t reference_bytes, uint64_t predecessor,
+    uint64_t* ticket, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_query_buffered_transfer(
     RileyCudaGraphResources* resources, uint64_t ticket, uint32_t wait,
     uint32_t* ready, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

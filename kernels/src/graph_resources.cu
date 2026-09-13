@@ -4,6 +4,7 @@
 #include <vector>
 #include "ffi_internal.hpp"
 #include "compact_shared_result.cuh"
+#include "../optional/future_token.cuh"
 #include "prefill_shape_packet.hpp"
 #include <cublasLt.h>
 #include <new>
@@ -80,10 +81,16 @@ struct RileyCudaGraphResources {
     cudaGraph_t graph[4]{};
     cudaGraphExec_t exec[4]{};
     cudaEvent_t event = nullptr;
+    cudaGraph_t future_graph = nullptr;
+    cudaGraphExec_t future_exec = nullptr;
     uint64_t ticket = 0, result_bytes = 0;
     bool pending = false, borrows_original_graphs = false;
   };
   BufferedSlot buffered[2]{};
+  void* future_packet = nullptr;
+  void* future_scratch = nullptr;
+  void* future_result = nullptr;
+  unsigned* future_status = nullptr;
   bool buffered_ready = false;
   uint64_t next_buffered_ticket = 1, buffered_output_offset = 0;
   RileyCudaGraphCapture* scoped_capture = nullptr;
@@ -388,7 +395,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 
 static RileyCudaStatus replay_transfer_impl(
     RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
-    RileyCudaErrorInfo* error, bool asynchronous, uint64_t* buffered_ticket = nullptr) noexcept {
+    RileyCudaErrorInfo* error, bool asynchronous, uint64_t* buffered_ticket = nullptr,
+    const uint8_t* references = nullptr, uint64_t reference_bytes = 0, uint64_t predecessor = 0) noexcept {
   clear_error(error);
   auto status = buffered_ticket ? buffered_transfer_ready(r, error) : transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
@@ -461,7 +469,7 @@ static RileyCudaStatus replay_transfer_impl(
     if (position >= r->rope_table_positions)
       return reject(error, "RoPE replay position outside table", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   }
-  if (buffered_ticket) return launch_buffered_transfer(r, source, bytes, selected_exec, buffered_ticket, error);
+  if (buffered_ticket) return launch_buffered_transfer(r, source, bytes, selected_exec, buffered_ticket, error, references, reference_bytes, predecessor);
   CaptureDomainControlLease admission(r->owner->capture_domain);
   if (!admission.active()) return reject(error, "capture domain busy");
   CurrentContext scope(r->owner);
@@ -525,6 +533,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_submit_buffered_transfer(
   if (!ticket) return reject(error, "null buffered ticket output", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   *ticket = 0;
   return replay_transfer_impl(r, source, bytes, error, true, ticket);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_submit_future_transfer(
+    RileyCudaGraphResources* r, const uint8_t* source, uint64_t bytes,
+    const uint8_t* references, uint64_t reference_bytes, uint64_t predecessor,
+    uint64_t* ticket, RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (ticket) *ticket = 0;
+  if (!ticket || !references || reference_bytes != sizeof(riley_future_token::Reference)*32 || !predecessor)
+    return reject(error, "invalid future transfer arguments", RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  return replay_transfer_impl(r, source, bytes, error, true, ticket, references, reference_bytes, predecessor);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
@@ -1453,6 +1472,12 @@ static RileyCudaStatus record_variable_shared(
    }
   }
   if(status==RILEY_CUDA_STATUS_SUCCESS)status=record_shape(1);
+ }
+ if constexpr(Mixed && Compact) {
+  if(status==RILEY_CUDA_STATUS_SUCCESS && !attention_workspace && !FfnPipeline) {
+   r->future_packet=d[16]->device_data;r->future_scratch=d[7]->device_data;
+   r->future_result=d[25]->device_data;r->future_status=static_cast<unsigned*>(d[18]->device_data);
+  }
  }
  if(status==RILEY_CUDA_STATUS_SUCCESS){r->mixed_execution=Mixed;r->packed_prefill=Packed;r->compact_ready=Compact;r->v3_shared=true;r->variable_rows=Rows;r->v3_prefill_capacity=capacity;r->v3_prefill_physical=physical;r->v3_prefill_context=std::min<uint64_t>(4096,d[14]->byte_len/128);}
  return status;

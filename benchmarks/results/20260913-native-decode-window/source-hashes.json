@@ -1,0 +1,49 @@
+{
+  "scope": "local source snapshot used for remote upload; hash readback pending SSH recovery",
+  "sources": [
+    {
+      "path": "crates/riley-cuda/build.rs",
+      "sha256": "51a5fc3eab3717cb2144a94528e7ccfca6be551375907064210caa14940545f1"
+    },
+    {
+      "path": "crates/riley-cuda/src/ffi.rs",
+      "sha256": "c1c3d9360b7f97487b74e0b3e4180cf405f545c1e4f8b2bb31b25eb8503c6ef0"
+    },
+    {
+      "path": "crates/riley-cuda/src/graph_resources.rs",
+      "sha256": "93e5d34b7a7d9dca7d2cd3289897537f178b416a5f30c726db5a9d79db4b9d7a"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/graph_decode_full.rs",
+      "sha256": "07428c5cdcf940d06fdfedbe2bbf46aa45b0a36a13d37a9a937a7499dc6a5e62"
+    },
+    {
+      "path": "crates/riley-runtime/src/llama/variable_session.rs",
+      "sha256": "e1b8c5508560e5d3cb5b767c3f49b0863f533a6486105a850e65df4ec545f9e0"
+    },
+    {
+      "path": "crates/riley-scheduler/src/execution.rs",
+      "sha256": "422f90d583d07b7ac7b2b058774e45eee434928b3fa8155c2d894e673d6a3ddc"
+    },
+    {
+      "path": "kernels/include/riley_cuda.h",
+      "sha256": "bf68dd1676af1666a0a88aafb5db8901d3a195207d3435661484a5052453e9d1"
+    },
+    {
+      "path": "kernels/src/graph_buffered_transfer.inc",
+      "sha256": "1df2fbac1631bc221c2241456cad667572a64c20f4e68df71264e2b281adc972"
+    },
+    {
+      "path": "kernels/src/graph_resources.cu",
+      "sha256": "b776f7724f0e18d3b7ccaeda64400bcd08b29ae81b80832ccae54bd425e8ae66"
+    },
+    {
+      "path": "kernels/optional/future_token.cuh",
+      "sha256": "a7b3a871f0392700fdaf50324bbab1a28c68d69502088adfc1f08e6d61061310"
+    },
+    {
+      "path": "crates/riley-scheduler/tests/decode_window_gpu.rs",
+      "sha256": "32878a2774d505f25a96edf29fc491464f816ac858f1230624f457734d29f4e7"
+    }
+  ]
+}

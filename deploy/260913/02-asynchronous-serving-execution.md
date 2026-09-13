@@ -153,3 +153,9 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 [Scheduler window 검증](../../benchmarks/results/20260913-scheduler-decode-window/README.md): 두 decode plan의 공동 최종 예약·prefix/full table, scoped pair authority→future wire, 두 결과 검증 후 prefix/suffix settlement를 구현했다. 선행 stop·cancel의 후행 출력 폐기, OOM rollback, admission fallback, C32 ragged 진행을 host 검사로 확인했다. 기존 single-plan 실행/완료 API로 window를 우회할 수 없다. 이는 더 이상 wire-only prototype은 아니지만 GPU window 실행 adapter와 serving 선택은 미구현이다.
 
 현재 완료 처리는 두 실행 drain 후 공개 방식이다. 다음은 두 staging slot·future-token resolver·source result/sidecar lifetime·graph identity를 실제 모델 경로에 연결하고, output correctness와 EOS/cancel drain을 GPU에서 검증하는 것이다. 새 serving 비교표는 그 통합 milestone에서 작성한다.
+
+## Native model window 실행 연결
+
+[GPU window 검증](../../benchmarks/results/20260913-native-decode-window/README.md): buffered V7 decode graph에 status reset 뒤/embedding 앞 future-token resolver를 연결했다. 첫 device result·두 pinned output·reference scratch의 dependency와 수명을 고정하고, native predecessor ticket 검사·runtime pair expectation/commit·scheduler pair authority adapter를 함께 구현했다. 32개 ragged 요청의 반복 window 생성은 직렬 V7과 exact이며, 선행 stop/cancel의 출력 폐기 및 context allocation 회수도 GPU에서 확인했다.
+
+다음 구현은 HTTP engine의 명시적 window 선택과 기존 sampling/audit/cancel 계약 연결이다. 양쪽 drain 후 공개하는 현재 방식은 serving TPOT/tail 결과를 보고 판단한다. 그 통합 milestone에서 직전 Riley·새 Riley·vLLM 비교표를 작성한다.

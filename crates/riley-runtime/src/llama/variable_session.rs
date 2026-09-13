@@ -12,9 +12,14 @@ pub struct VariableSessionIdentity {
 /// A result remains outstanding until scheduler commit is explicitly confirmed.
 pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     graph:G, identity:VariableSessionIdentity,
+    issued_successor:Option<Vec<u64>>, window:Option<DecodeWindowState<ROWS>>,
     issued:Option<Vec<u64>>, next_cookie:u64, retained:Option<wire::Expectation<ROWS>>,
     buffered:bool, buffered_ticket:Option<u64>, async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
+struct DecodeWindowState<const ROWS:usize> {
+    successor:wire::Expectation<ROWS>, tickets:[u64;2], output:Vec<u8>, complete:bool,
+}
+
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
 impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// The caller must have recorded the V3 model and bound the digest to its
@@ -22,7 +27,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
-        Ok(Self{graph,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
+        Ok(Self{graph,issued_successor:None,window:None,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
             buffered:false,buffered_ticket:None,async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
@@ -46,7 +51,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     }
     pub fn abandon_issued(&mut self)->Result<()> {
         if self.retained.is_some() || self.poisoned {return Err(bad("cannot abandon admitted work"));}
-        self.issued=None;Ok(())
+        self.issued=None;self.issued_successor=None;Ok(())
     }
     pub fn submission_started(&self)->bool {self.started}
     pub fn execute(&mut self,e:wire::Expectation<ROWS>)->Result<(Option<u32>,&[u8])> {
@@ -60,6 +65,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         self.async_completion=enabled; Ok(())
     }
     fn retain_submission(&mut self,e:wire::Expectation<ROWS>)->Result<()> {
+        if self.issued_successor.is_some() || self.window.is_some() {return Err(bad("window requires paired submission"));}
         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
         let i=self.identity;
         if e.mixed_execution!=i.mixed_execution || e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
@@ -90,18 +96,18 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         Ok(())
     }
     pub fn query_completion(&mut self)->Result<bool> {
-        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        if self.poisoned || self.window.is_some() || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
         let result=if let Some(ticket)=self.buffered_ticket {self.graph.query_buffered_transfer(ticket,false)} else {self.graph.query_transfer()};
         result.map_err(|_|{self.poisoned=true;bad("native completion failed; close required")})
     }
     pub fn wait_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
-        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        if self.poisoned || self.window.is_some() || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
         let result=if let Some(ticket)=self.buffered_ticket {self.graph.query_buffered_transfer(ticket,true).map(|_|())} else {self.graph.wait_transfer()};
         if result.is_err() {self.poisoned=true;return Err(bad("native completion failed; close required"));}
         self.collect_rows()
     }
     fn collect_rows(&mut self)->Result<Vec<wire::RowResult<'_>>> {
-        if self.poisoned || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
+        if self.poisoned || self.window.is_some() || self.retained.is_none() || self.completed {return Err(bad("no pending iteration"));}
         let compact=self.compact && self.retained.as_ref().unwrap().mode==super::multi_descriptor::ResultMode::Greedy;
         let output_bytes=if compact{wire::Layout::<ROWS>::COMPACT_RESULT_BYTES}else{self.output.len()};
         let result=if let Some(ticket)=self.buffered_ticket {self.graph.read_buffered_transfer(ticket,&mut self.output[..output_bytes])} else {self.graph.read_transfer(&mut self.output[..output_bytes])};
@@ -115,7 +121,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     }
     /// Only after successful scheduler settlement of this exact iteration.
     pub fn confirm_scheduler_commit(&mut self,iteration:u64)->Result<()> {
-        if self.poisoned || !self.completed || self.retained.as_ref().map(|e|e.iteration_id)!=Some(iteration) {return Err(bad("commit differs from completed iteration"));}
+        if self.poisoned || self.window.is_some() || !self.completed || self.retained.as_ref().map(|e|e.iteration_id)!=Some(iteration) {return Err(bad("commit differs from completed iteration"));}
         self.identity.last_accepted_replay=self.retained.take().unwrap().replay_id;self.completed=false;Ok(())
     }
     pub(crate) fn into_recorded_parts(self)->(G,VariableSessionIdentity) {(self.graph,self.identity)}
@@ -177,6 +183,7 @@ mod sealed {
 }
 /// Native reservation operations; sealed so a caller cannot fabricate completion.
 pub trait VariableGraph: sealed::Sealed {
+    fn submit_future_transfer(&mut self,input:&[u8],references:&[u8],predecessor:u64)->riley_cuda::CudaResult<u64>;
     fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64>;
     fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool>;
     fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()>;
@@ -187,6 +194,7 @@ pub trait VariableGraph: sealed::Sealed {
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()>;
 }
 impl VariableGraph for BorrowedGraphResourceReservation<'_> {
+    fn submit_future_transfer(&mut self,input:&[u8],references:&[u8],predecessor:u64)->riley_cuda::CudaResult<u64> {BorrowedGraphResourceReservation::submit_future_transfer(self,input,references,predecessor)}
     fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64> {BorrowedGraphResourceReservation::submit_buffered_transfer(self,input)}
     fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool> {BorrowedGraphResourceReservation::query_buffered_transfer(self,ticket,wait)}
     fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_buffered_transfer(self,ticket,output)}
@@ -197,6 +205,7 @@ impl VariableGraph for BorrowedGraphResourceReservation<'_> {
     fn read_transfer(&mut self,output:&mut[u8])->riley_cuda::CudaResult<()> {BorrowedGraphResourceReservation::read_transfer(self,output)}
 }
 impl VariableGraph for riley_cuda::OwnedGraphResourceReservation<VariableModelParents> {
+    fn submit_future_transfer(&mut self,input:&[u8],references:&[u8],predecessor:u64)->riley_cuda::CudaResult<u64> {riley_cuda::OwnedGraphResourceReservation::submit_future_transfer(self,input,references,predecessor)}
     fn submit_buffered_transfer(&mut self,input:&[u8])->riley_cuda::CudaResult<u64> {riley_cuda::OwnedGraphResourceReservation::submit_buffered_transfer(self,input)}
     fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool> {riley_cuda::OwnedGraphResourceReservation::query_buffered_transfer(self,ticket,wait)}
     fn read_buffered_transfer(&mut self,ticket:u64,output:&mut[u8])->riley_cuda::CudaResult<()> {riley_cuda::OwnedGraphResourceReservation::read_buffered_transfer(self,ticket,output)}
@@ -239,7 +248,7 @@ impl super::PreparedLlamaBatchExecutor {
     pub fn into_owned_variable_packed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,false)}
     pub fn into_owned_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session::<32>(context,capacity,true,compact,true,true)}
     /// Opt-in staging double buffering. Scheduler admission still permits only
-    /// one retained expectation; this does not enable GPU future-token decoding.
+    /// single iterations and opt-in paired decode windows.
     pub fn into_owned_buffered_variable_mixed_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>>{self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,true,false,false,false)}
     fn into_variable_session<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         self.into_variable_session_mode::<ROWS>(context,capacity,shared,compact,packed,mixed,false,false,false,false)
@@ -277,5 +286,70 @@ impl super::PreparedLlamaBatchExecutor {
         let mut session=(if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
             .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})?;
         session.set_buffered_completion(buffered);Ok(session)
+    }
+}
+
+// Window state uses the same retained native owner and stream. No Python path.
+impl<G:VariableGraph> VariableSession<G,32> {
+    pub fn issue_decode_window(&mut self,rows:usize)->Result<(VariableSessionIdentity,u64,Vec<u64>,Vec<u64>)> {
+        if !self.buffered || !self.compact || !self.identity.mixed_execution {return Err(bad("window requires buffered V7 compact session"));}
+        self.identity.last_accepted_replay.checked_add(2).ok_or_else(||bad("window replay exhausted"))?;
+        self.next_cookie.checked_add((rows as u64).checked_mul(2).ok_or_else(||bad("window cookies exhausted"))?).ok_or_else(||bad("window cookies exhausted"))?;
+        let(owner,replay,first)=self.issue_rows(rows)?;
+        let start=self.next_cookie;self.next_cookie+=rows as u64;
+        let second:Vec<_>=(start..self.next_cookie).collect();self.issued_successor=Some(second.clone());
+        Ok((owner,replay,first,second))
+    }
+    pub fn submit_decode_window(&mut self,first:wire::Expectation<32>,second:wire::Expectation<32>)->Result<()> {
+        use super::multi_descriptor::future_token::{prepare,TokenSource};
+        if self.poisoned || self.retained.is_some() || self.window.is_some() || !self.buffered || !self.compact {return Err(bad("window session busy or unavailable"));}
+        let cookies:Vec<_>=second.rows.iter().map(|r|r.cookie).collect();
+        if self.issued_successor.as_deref()!=Some(cookies.as_slice()) {return Err(bad("successor cookies differ from issue"));}
+        if first.rows.len()!=second.rows.len() || first.rows.iter().chain(&second.rows).any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Decode) {return Err(bad("window requires two pure decode batches"));}
+        let sources:Vec<_>=(0..second.rows.len()).map(|r|TokenSource::PreviousRow(r as u32)).collect();
+        let future=prepare(&first,&second,&sources)?;
+        let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
+        // retain_submission validates actual owner, geometry and first cookies.
+        let issued=self.issued_successor.take();
+        if let Err(e)=self.retain_submission(first) {self.issued_successor=issued;return Err(e);}
+        self.window=Some(DecodeWindowState{successor:second,tickets:[0;2],output,complete:false});
+        let submit=(|| {
+            let first=self.graph.submit_buffered_transfer(&self.input)?;
+            self.window.as_mut().unwrap().tickets[0]=first;
+            let second=self.graph.submit_future_transfer(future.packet(),future.references(),first)?;
+            self.window.as_mut().unwrap().tickets[1]=second;
+            Ok::<_,riley_cuda::CudaError>(())
+        })();
+        if submit.is_err() {self.poisoned=true;return Err(bad("window submission failed; close required before KV release"));}
+        Ok(())
+    }
+    /// Waits for both launches, then validates both outputs. No replay commit.
+    pub fn wait_decode_window(&mut self)->Result<[Vec<(u32,u32)>;2]> {
+        if self.poisoned || self.window.as_ref().map(|w|w.complete)!=Some(false) {return Err(bad("no pending decode window"));}
+        let result=(|| {
+            let window=self.window.as_mut().unwrap();
+            // Same stream: second completion fences all writes from both steps.
+            self.graph.query_buffered_transfer(window.tickets[1],true).map_err(|_|bad("window completion failed"))?;
+            self.graph.query_buffered_transfer(window.tickets[0],true).map_err(|_|bad("predecessor completion failed"))?;
+            let bytes=wire::Layout::<32>::COMPACT_RESULT_BYTES;
+            self.graph.read_buffered_transfer(window.tickets[0],&mut self.output[..bytes]).map_err(|_|bad("predecessor read failed"))?;
+            self.graph.read_buffered_transfer(window.tickets[1],&mut window.output).map_err(|_|bad("successor read failed"))?;
+            let first=wire::validate_compact_result(&self.output[..bytes],self.retained.as_ref().unwrap())?;
+            let a:Vec<_>=first.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing decode output"))).collect::<Result<_>>()?;
+            // GPU filled the unknown input; validate successor against that exact
+            // predecessor token, with structural replay only in this local clone.
+            let mut second=window.successor.clone();second.last_accepted_replay=self.retained.as_ref().unwrap().replay_id;
+            for (row,previous) in second.rows.iter_mut().zip(first.iter()) {row.input_tokens[0]=previous.token.ok_or_else(||bad("missing future input"))?;}
+            let b=wire::validate_compact_result(&window.output,&second)?.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing successor output"))).collect::<Result<Vec<_>>>()?;
+            window.complete=true;Ok([a,b])
+        })();
+        if result.is_err(){self.poisoned=true;}result
+    }
+    /// Call only after scheduler settlement of both drained iterations succeeds.
+    pub fn confirm_decode_window_commit(&mut self,first:u64,second:u64)->Result<()> {
+        let w=self.window.as_ref().ok_or_else(||bad("no completed window"))?;
+        if self.poisoned || !w.complete || w.successor.iteration_id!=second || self.retained.as_ref().map(|e|e.iteration_id)!=Some(first) {return Err(bad("window commit differs from completed pair"));}
+        self.identity.last_accepted_replay=w.successor.replay_id;
+        self.window=None;self.retained=None;self.completed=false;Ok(())
     }
 }

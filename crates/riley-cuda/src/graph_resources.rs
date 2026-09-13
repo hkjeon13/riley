@@ -58,6 +58,11 @@ impl<P> OwnedGraphResourceReservation<P> {
     /// # Errors
     /// Rejects full slots, invalid input or an unprepared/failed owner.
     pub fn submit_buffered_transfer(&mut self, input: &[u8]) -> CudaResult<u64> { self.native.submit_buffered_transfer(input) }
+    /// Submit V7 compact decode using the latest unconsumed predecessor output.
+    /// # Errors
+    /// Rejects wrong extents, stale tickets and unsupported prepared profiles.
+    pub fn submit_future_transfer(&mut self, input: &[u8], references: &[u8], predecessor: u64) -> CudaResult<u64> { self.native.submit_future_transfer(input, references, predecessor) }
+
     /// Poll or wait for this owner's exact ticket; does not consume output.
     /// # Errors
     /// Rejects stale tickets and propagates CUDA completion errors.
@@ -1434,6 +1439,11 @@ impl BorrowedGraphResourceReservation<'_> {
     /// # Errors
     /// Rejects full slots, invalid input or an unprepared/failed owner.
     pub fn submit_buffered_transfer(&mut self, input: &[u8]) -> CudaResult<u64> { self.native.submit_buffered_transfer(input) }
+    /// Submit V7 compact decode using the latest unconsumed predecessor output.
+    /// # Errors
+    /// Rejects wrong extents, stale tickets and unsupported prepared profiles.
+    pub fn submit_future_transfer(&mut self, input: &[u8], references: &[u8], predecessor: u64) -> CudaResult<u64> { self.native.submit_future_transfer(input, references, predecessor) }
+
     /// Poll or wait for this owner's exact ticket; does not consume output.
     /// # Errors
     /// Rejects stale tickets and propagates CUDA completion errors.

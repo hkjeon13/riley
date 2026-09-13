@@ -9868,6 +9868,7 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_graph_resources_prepare_buffered_transfers(resources: *mut RawGraphResources, first: *mut RawPinnedHostBuffer, second: *mut RawPinnedHostBuffer, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_submit_buffered_transfer(resources: *mut RawGraphResources, source: *const u8, bytes: u64, ticket: *mut u64, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_resources_submit_future_transfer(resources: *mut RawGraphResources, source: *const u8, bytes: u64, references: *const u8, reference_bytes: u64, predecessor: u64, ticket: *mut u64, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_query_buffered_transfer(resources: *mut RawGraphResources, ticket: u64, wait: u32, ready: *mut u32, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_read_buffered_transfer(resources: *mut RawGraphResources, ticket: u64, destination: *mut u8, bytes: u64, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_submit_transfer(
@@ -9931,6 +9932,13 @@ impl GraphResourcesHandle {
         // SAFETY: source is copied before return; writable ticket is call-local.
         let status = unsafe { riley_cuda_graph_resources_submit_buffered_transfer(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), source.as_ptr(), source.len() as u64, &mut ticket, &mut error) };
         status_result(status, "submit buffered transfer", &error)?; Ok(ticket)
+    }
+    pub(super) fn submit_future_transfer(&mut self, source: &[u8], references: &[u8], predecessor: u64) -> CudaResult<u64> {
+        let mut error = ErrorInfo::new(); let mut ticket = 0;
+        // SAFETY: slices remain live through synchronous staging; native checks
+        // exact extents, retained parent ownership and predecessor ticket order.
+        let status = unsafe { riley_cuda_graph_resources_submit_future_transfer(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), source.as_ptr(), source.len() as u64, references.as_ptr(), references.len() as u64, predecessor, &mut ticket, &mut error) };
+        status_result(status, "submit future transfer", &error)?; Ok(ticket)
     }
     pub(super) fn query_buffered_transfer(&mut self, ticket: u64, wait: bool) -> CudaResult<bool> {
         let mut error = ErrorInfo::new(); let mut ready = 0;
