@@ -2348,8 +2348,8 @@ pub fn execute_llama_decode_window<G:riley_runtime::llama::variable_session::Var
     let mut outputs=[prepare(&authority.first)?,prepare(&authority.second)?];
     let(identity,replay,first_cookies,second_cookies)=executor.issue_decode_window(outputs[0].output_count).map_err(desc)?;
     let owner=crate::authority::VariableOwnerGeometry{mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
-    let(first,second,_)=match authority.prepare_wire(&owner,replay,&first_cookies,&second_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
-    executor.submit_decode_window(first,second).map_err(|e|variable_ticket_failure(id,e))?;
+    let prepared=match authority.prepare_wire(&owner,replay,&first_cookies,&second_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
+    executor.submit_prepared_decode_window(prepared).map_err(|e|variable_ticket_failure(id,e))?;
     let rows=executor.wait_decode_window().map_err(|e|variable_ticket_failure(id,e))?;
     for(output,rows)in outputs.iter_mut().zip(rows) {
         if rows.len()!=output.output_count {return Err(variable_ticket_failure(id,crate::descriptor::Error{field:"window output",reason:"publication count differs"}));}

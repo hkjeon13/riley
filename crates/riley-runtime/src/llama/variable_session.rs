@@ -327,17 +327,29 @@ impl<G:VariableGraph> VariableSession<G,32> {
         let second:Vec<_>=(start..self.next_cookie).collect();self.issued_successor=Some(second.clone());
         Ok((owner,replay,first,second))
     }
-    pub fn submit_decode_window(&mut self,first:wire::Expectation<32>,second:wire::Expectation<32>)->Result<()> {
-        use super::multi_descriptor::future_token::{prepare,TokenSource};
-        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
+    fn check_decode_window_submission(&self, first: &wire::Expectation<32>, second: &wire::Expectation<32>) -> Result<()> {
         if self.poisoned || self.retained.is_some() || self.window.is_some() || !self.buffered || !self.compact {return Err(bad("window session busy or unavailable"));}
         let cookies:Vec<_>=second.rows.iter().map(|r|r.cookie).collect();
         if self.issued_successor.as_deref()!=Some(cookies.as_slice()) {return Err(bad("successor cookies differ from issue"));}
         if first.rows.len()!=second.rows.len() || first.rows.iter().chain(&second.rows).any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Decode) {return Err(bad("window requires two pure decode batches"));}
+        Ok(())
+    }
+    /// Compatibility entry point: construct one checked, immutable future window.
+    pub fn submit_decode_window(&mut self,first:wire::Expectation<32>,second:wire::Expectation<32>)->Result<()> {
+        use super::multi_descriptor::future_token::{PreparedFutureWindow, TokenSource};
+        self.check_decode_window_submission(&first, &second)?;
+        let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         let sources:Vec<_>=(0..second.rows.len()).map(|r|TokenSource::PreviousRow(r as u32)).collect();
-        let future=prepare(&first,&second,&sources)?;
-        let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
+        let prepared = PreparedFutureWindow::new(first, second, &sources)?;
         runtime_phase_record(&mut self.host_phase_timing, 5, phase);
+        self.submit_prepared_decode_window(prepared)
+    }
+    /// Consume expectations and their bound bytes without rebuilding the future packet.
+    /// Current owner, issued cookies and eligibility are still checked at admission.
+    pub fn submit_prepared_decode_window(&mut self, prepared: super::multi_descriptor::future_token::PreparedFutureWindow) -> Result<()> {
+        let (first, second, future) = prepared.into_parts();
+        self.check_decode_window_submission(&first, &second)?;
+        let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
         // retain_submission validates actual owner, geometry and first cookies.
         let issued=self.issued_successor.take();
         if let Err(e)=self.retain_submission(first) {self.issued_successor=issued;return Err(e);}

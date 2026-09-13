@@ -16,13 +16,13 @@ def parse(path):
     assert runtime['retain_encode']['calls']==runtime['read_validate']['calls']==total_steps
     assert runtime['sync_transfer']['calls']+runtime['buffered_submit']['calls']==total_steps
     assert runtime['buffered_wait']['calls']==runtime['buffered_submit']['calls']
-    assert runtime['future_prepare']['calls']==engine['paired_decode']['steps']
+    assert runtime['future_prepare']['calls'] in (0,engine['paired_decode']['steps'])
     execute=sum(r['execute_wall_ns'] for r in engine.values())
     native=sum(runtime[k]['wall_ns'] for k in ['sync_transfer','buffered_submit','buffered_wait'])
     explicit=sum(runtime[k]['wall_ns'] for k in ['retain_encode','read_validate','future_prepare'])
     adapter=execute-native-explicit;assert adapter>=0
     outer=sum(r[k] for r in engine.values() for k in ['plan_ns','sample_ns','commit_publish_ns'])+fallback
-    return {'engine':engine,'runtime':runtime,'fallback_ns':fallback,'total_observed_ns':execute+outer,'native_transfer_submit_wait_ns':native,'runtime_prepare_validate_ns':explicit,'adapter_and_other_execute_ns':adapter,'outer_plan_sample_commit_ns':outer,'scheduled_tokens':sum(r['scheduled_tokens'] for r in engine.values()),'decode_mean_rows':{kind:(r['scheduled_tokens']/r['steps']/(2 if kind=='paired_decode' else 1) if r['steps'] else None) for kind,r in engine.items() if kind!='prefill_or_mixed'}}
+    return {'future_preparation_scope':'prepared handoff: construction remains in adapter' if engine['paired_decode']['steps'] and not runtime['future_prepare']['calls'] else 'runtime construction counted separately','engine':engine,'runtime':runtime,'fallback_ns':fallback,'total_observed_ns':execute+outer,'native_transfer_submit_wait_ns':native,'runtime_prepare_validate_ns':explicit,'adapter_and_other_execute_ns':adapter,'outer_plan_sample_commit_ns':outer,'scheduled_tokens':sum(r['scheduled_tokens'] for r in engine.values()),'decode_mean_rows':{kind:(r['scheduled_tokens']/r['steps']/(2 if kind=='paired_decode' else 1) if r['steps'] else None) for kind,r in engine.items() if kind!='prefill_or_mixed'}}
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('directory',type=pathlib.Path);p.add_argument('output',type=pathlib.Path);a=p.parse_args()

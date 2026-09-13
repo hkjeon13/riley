@@ -1,0 +1,24 @@
+{
+  "source": "completed local test command results; CUDA build and HTTP evidence archived separately",
+  "tests": [
+    {
+      "command": "cargo test -p riley-runtime multi_descriptor --lib",
+      "passed": 51,
+      "ignored": 1,
+      "failed": 0,
+      "duration_s": 309.51
+    },
+    {
+      "command": "cargo test -p riley-scheduler --lib",
+      "passed": 44,
+      "ignored": 0,
+      "failed": 0
+    },
+    {
+      "command": "cargo test -p riley-runtime --doc PreparedFutureWindow",
+      "passed": 1,
+      "failed": 0,
+      "scope": "compile-fail E0594 immutable bound expectation"
+    }
+  ]
+}

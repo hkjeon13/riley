@@ -25,6 +25,33 @@ impl PreparedFutureBatch {
     pub fn committed_replay(&self) -> u64 { self.committed_replay }
 }
 
+/// Owns the exact expectations whose future bytes were validated and encoded.
+/// No mutable expectation or packet access escapes after construction.
+/// ```compile_fail,E0594
+/// use riley_runtime::llama::multi_descriptor::future_token::PreparedFutureWindow;
+/// fn cannot_change_checked_owner(window: &mut PreparedFutureWindow) {
+///     window.first().owner_generation += 1;
+/// }
+/// ```
+pub struct PreparedFutureWindow {
+    first: Expectation<32>,
+    second: Expectation<32>,
+    future: PreparedFutureBatch,
+}
+impl PreparedFutureWindow {
+    pub fn new(first: Expectation<32>, second: Expectation<32>, sources: &[TokenSource]) -> Result<Self> {
+        let future = prepare(&first, &second, sources)?;
+        Ok(Self { first, second, future })
+    }
+    pub fn first(&self) -> &Expectation<32> { &self.first }
+    pub fn second(&self) -> &Expectation<32> { &self.second }
+    pub fn future(&self) -> &PreparedFutureBatch { &self.future }
+    #[cfg(feature = "cuda")]
+    pub(crate) fn into_parts(self) -> (Expectation<32>, Expectation<32>, PreparedFutureBatch) {
+        (self.first, self.second, self.future)
+    }
+}
+
 /// Validate the pair and encode a tentative successor without changing either
 /// expectation. Future tokens use an explicit zero placeholder. This object
 /// cannot be submitted through the existing single-inflight session API.
@@ -43,7 +70,7 @@ pub fn prepare(previous: &Expectation<32>, successor: &Expectation<32>, sources:
     // never changes session state and is not returned as an accepted expectation.
     let mut structural=successor.clone();
     structural.last_accepted_replay=previous.replay_id;
-    wire::validate(&structural)?;
+    let checked_structural = wire::checked_expectation(&structural)?;
     let last_cookie=previous.rows.iter().map(|r|r.cookie).max().unwrap();
     check(successor.rows.iter().all(|r|r.cookie>last_cookie), "future_cookie", "successor cookies must be freshly issued")?;
     for owner in &previous.block_ownership {
@@ -83,7 +110,7 @@ pub fn prepare(previous: &Expectation<32>, successor: &Expectation<32>, sources:
         references[base+132..base+140].copy_from_slice(&new.cookie.to_le_bytes());
     }
     let mut packet=vec![0;wire::request_bytes(&structural)];
-    wire::encode_into(&mut packet,&structural)?;
+    wire::encode_checked_into(&mut packet,&checked_structural)?;
     Ok(PreparedFutureBatch {packet,references,predecessor_replay:previous.replay_id,committed_replay:previous.last_accepted_replay})
 }
 
@@ -121,6 +148,21 @@ mod tests {
         assert_eq!(&prepared.packet()[128..132],&[0;4]);
         export(&old,&prepared,"");
     }
+    #[test] fn owned_window_keeps_the_exact_cookie_and_page_binding() {
+        let (mut old, mut new) = pair();
+        let window = PreparedFutureWindow::new(old.clone(), new.clone(), &[TokenSource::PreviousRow(1), TokenSource::PreviousRow(0)]).unwrap();
+        old.rows[1].cookie = 999;
+        new.rows[0].physical_ids[0] = 7;
+        assert_eq!(window.first().rows[1].cookie, 101);
+        assert_eq!(window.second().rows[0].physical_ids, [1, 2]);
+        assert_eq!(u64::from_le_bytes(window.future().references()[52..60].try_into().unwrap()), 101);
+        assert_eq!(u64::from_le_bytes(window.future().references()[132..140].try_into().unwrap()), 200);
+        let mut structural = window.second().clone();
+        structural.last_accepted_replay = window.first().replay_id;
+        let mut expected = vec![0; wire::request_bytes(&structural)];
+        wire::encode_into(&mut expected, &structural).unwrap();
+        assert_eq!(window.future().packet(), expected);
+    }
     #[test] fn host_prefill_admission_keeps_previous_pages_retained(){
         let(old,mut new)=pair();new.stage=InputStage::Prefill;
         let row=&mut new.rows[0];row.sequence_tag=99;row.progress=old.rows[0].progress;
@@ -146,7 +188,8 @@ mod tests {
             4=>n.rows[0].input_tokens[0]=5,5=>n.rows[0].progress.generated_index=2,
             6=>n.block_ownership.retain(|o|o.physical_id!=0),7=>n.rows[0].physical_ids.swap(0,1),
             8=>n.rows[0].sequence_tag=99,_=>n.catalog_digest=[2;32]}
-            assert!(prepare(&old,&n,&sources).is_err(),"fault={fault}");}
+            assert!(prepare(&old,&n,&sources).is_err(),"fault={fault}");
+            assert!(PreparedFutureWindow::new(old.clone(),n,&sources).is_err(),"owned fault={fault}");}
         assert!(prepare(&old,&new,&[TokenSource::PreviousRow(1);2]).is_err());
         assert!(prepare(&old,&new,&[TokenSource::PreviousRow(32);2]).is_err());
         assert!(prepare(&old,&new,&[]).is_err());

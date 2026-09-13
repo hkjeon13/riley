@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(s.pool.stats().allocated_block_count(),4);assert!(s.authorize_execution(w.first()).is_err());assert!(s.authorize_execution(w.second()).is_err());
         let a=result(w.first(),20,None);let b=result(w.second(),30,None);
         {let authority=s.authorize_decode_window(&w).unwrap();let owner=crate::authority::VariableOwnerGeometry{generation:7,last_accepted_replay:1,catalog_digest:[9;32],max_active_rows:2,physical_block_count:16,context_tokens:64,packed_prefill:true,mixed_execution:true};
-        let(first,second,future)=authority.prepare_wire(&owner,2,&[100,101],&[102,103]).unwrap();assert_eq!(first.rows[0].progress.generated_index,1);assert_eq!(second.rows[0].progress.generated_index,2);assert_eq!(future.committed_replay(),1);assert_eq!(future.references().len(),4480);}
+        let prepared=authority.prepare_wire(&owner,2,&[100,101],&[102,103]).unwrap();let(first,second,future)=(prepared.first(),prepared.second(),prepared.future());assert_eq!(first.rows[0].progress.generated_index,1);assert_eq!(second.rows[0].progress.generated_index,2);assert_eq!(future.committed_replay(),1);assert_eq!(future.references().len(),4480);}
 
         assert!(s.complete_iteration(&a,4).is_err());
         let updates=s.complete_decode_window_after_drain(&a,&b,4).unwrap();assert_eq!(updates.token_events().len(),4);assert!(updates.settlement_failures().is_empty());

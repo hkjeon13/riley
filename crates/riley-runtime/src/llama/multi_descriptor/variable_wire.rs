@@ -85,7 +85,20 @@ fn u64_at(p:&mut [u8],at:usize,v:u64){p[at..at+8].copy_from_slice(&v.to_le_bytes
 /// Caller can reuse a retained buffer. Reject before mutating it on invalid authority.
 pub fn encode_into<const ROWS:usize>(packet:&mut [u8],e:&Expectation<ROWS>)->Result<()> {
     check(packet.len()==request_bytes(e),"bytes","exact versioned request extent required")?;
-    validate(e)?;packet.fill(0);
+    let checked = checked_expectation(e)?;
+    encode_checked_into(packet, &checked)
+}
+
+/// The immutable borrow prevents changing the expectation after validation.
+pub(super) struct CheckedExpectation<'a, const ROWS: usize> { expectation: &'a Expectation<ROWS> }
+pub(super) fn checked_expectation<const ROWS: usize>(e: &Expectation<ROWS>) -> Result<CheckedExpectation<'_, ROWS>> {
+    validate(e)?;
+    Ok(CheckedExpectation { expectation: e })
+}
+pub(super) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked: &CheckedExpectation<'_, ROWS>) -> Result<()> {
+    let e = checked.expectation;
+    check(packet.len()==request_bytes(e),"bytes","exact versioned request extent required")?;
+    packet.fill(0);
     for (at,v) in [(0,if e.mixed_execution{0x37444d52}else if e.packed_prefill{0x36444d52}else{Layout::<ROWS>::MAGIC}),(4,if e.mixed_execution{7}else if e.packed_prefill{6}else{Layout::<ROWS>::VERSION}),(8,request_bytes(e) as u32),(12,ROW_BYTES as u32),
         (16,packet_stage(e)),(20,e.rows.len() as u32),(24,e.max_active_rows),(28,e.physical_block_count),(32,e.mode as u32)] {u32_at(packet,at,v);}
     u64_at(packet,40,e.owner_generation);u64_at(packet,48,e.replay_id);u64_at(packet,56,e.iteration_id);packet[64..96].copy_from_slice(&e.catalog_digest);

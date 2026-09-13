@@ -176,3 +176,6 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 
 
 [Host phase profile](../../benchmarks/results/20260913-host-phase-profile/README.md)에서는 paired 회귀 증가분의 약 84–94%가 native transfer/submit/wait 밖에서 관찰됐다. Scheduler가 생성한 future packet/reference를 버리고 runtime에서 다시 만드는 경로와 structural validation 반복을 확인했다. 다음 batch는 immutable prepared window의 소유권 전달과 검증된 borrow 기반 encoding을 묶어 개선하고, 기존 rejection·GPU/HTTP correctness 및 unprofiled single/이전 paired/새 paired/vLLM 비교를 수행한다. 이는 아직 구현·성능 승격 완료가 아니다.
+
+
+[Prepared window batch](../../benchmarks/results/20260913-prepared-window-batch/README.md)는 immutable prepared 객체 전달과 checked-borrow encoding으로 중복 future 준비/검증을 제거했다. CPU descriptor 51개·scheduler 44개·immutable binding Rustdoc, 실제 CUDA/HTTP correctness가 통과했다. C32 교차 serving throughput은 이전 paired 대비 +3.10%지만 single과 사실상 동률, vLLM 대비 -10.79%였다. E2E P99 개선도 확인되지 않아 single 기본값을 유지한다. 다음 분석 영역은 native execution/transfer/wait 및 GPU kernel 비용의 분해다.
