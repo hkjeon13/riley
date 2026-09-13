@@ -25,7 +25,12 @@ int main() {
         make({{17,32}}),make({{1,4096},{128,256},{17,398}}),make({{1024,4096}}),
         make(std::vector<std::pair<unsigned,unsigned>>(32,{32,4096})),
         make(std::vector<std::pair<unsigned,unsigned>>(32,{1,31}))};
-    auto bad=cases[5];bad.packet[32+2*416+32+24]=2048;bad.expected=4;cases.push_back(bad);
+    auto decode=cases[8];decode.packet[4]=1;decode.packet[9]=0;
+    for(unsigned r=0;r<32;++r)decode.packet[32+r*416+16]=0;
+    cases.push_back(decode);
+    auto bad=decode;bad.packet[9]=32;bad.expected=1;cases.push_back(bad);
+    bad=decode;bad.packet[32+31*416+16]=31;bad.expected=2;cases.push_back(bad);
+    bad=cases[5];bad.packet[32+2*416+32+24]=2048;bad.expected=4;cases.push_back(bad);
     bad=cases[5];bad.packet[32+2*416+1]=4096;bad.expected=2;cases.push_back(bad);
     bad=cases[5];bad.packet[32+2*416+16]++;bad.expected=2;cases.push_back(bad);
     bad=cases[5];bad.packet[9]++;bad.expected=16;cases.push_back(bad);
@@ -55,7 +60,7 @@ int main() {
         OK(cudaMemcpyAsync(&got_status,status,4,cudaMemcpyDeviceToHost,stream));OK(cudaStreamSynchronize(stream));
         REQUIRE(got_status==c.expected);
         for(unsigned r=0;r<33;++r) {
-            unsigned expected=c.expected?0:r<c.packet[5]?c.packet[32+r*416+16]:c.packet[9];
+            unsigned expected=c.expected?0:c.packet[4]==1?(r<c.packet[5]?r:c.packet[5]):r<c.packet[5]?c.packet[32+r*416+16]:c.packet[9];
             REQUIRE(got.q_indptr[r]==int(expected));
         }
         for(unsigned r=0;r<32;++r) {

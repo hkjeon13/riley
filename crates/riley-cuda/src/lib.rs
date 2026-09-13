@@ -10,7 +10,7 @@ mod decode;
 mod environment;
 mod error;
 mod fa3;
-pub use fa3::{Fa3Batch, PreparedFa3Attention, FA3_COMPILED};
+pub use fa3::{Fa3Batch, PreparedFa3Attention, FA3_COMPILED, FA3_MODEL_WORKSPACE_BYTES};
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
 mod ffi;

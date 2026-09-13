@@ -2804,6 +2804,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_experimental(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
     RileyCudaDeviceBuffer*, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_record_v7_fa3_experimental(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+    RileyCudaDeviceBuffer*, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 /* Prefill-only experiment, exact retained workspace extent 33996 bytes. */
 RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_prefill_only(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,

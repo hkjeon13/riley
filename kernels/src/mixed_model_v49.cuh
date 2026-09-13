@@ -1,3 +1,6 @@
+#ifdef RILEY_CUDA_ENABLE_FA3
+#include "../optional/fa3_api.h"
+#endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
 #include "../optional/flashinfer_api.h"
 #endif
@@ -20,7 +23,7 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* 
  if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
 }
-template<uint32_t WireRows=8,bool PrefillFfnPipeline=false>
+template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false>
 inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false){
@@ -35,6 +38,16 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
  auto pages=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+256);
  auto tokens=reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(metadata)+(128+WireRows*1664));
  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
+if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+  err=static_cast<cudaError_t>(riley_fa3_model_metadata_prepare(stream,metadata,32*4+32*1664,attention_workspace,attention_bytes,physical,capacity,context,status));
+  if(err!=cudaSuccess)return err;
+  err=static_cast<cudaError_t>(riley_fa3_model_schedule(stream,attention_workspace,attention_bytes,capacity,context));
+  if(err!=cudaSuccess)return err;
+#else
+  return cudaErrorNotSupported;
+#endif
+ } else {
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace){
   err=static_cast<cudaError_t>((prefill_only?riley_flashinfer_prefill_only_prepare(stream,metadata,attention_workspace,attention_bytes,physical,capacity,status):riley_flashinfer_mixed_prepare(stream,metadata,attention_workspace,attention_bytes,physical,context,capacity,status)));
@@ -43,6 +56,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
 #else
  if(attention_workspace||attention_bytes)return cudaErrorNotSupported;
 #endif
+ }
  riley_prefill_pointwise::embedding_rows<<<capacity,256,0,stream>>>(w(0),tokens,b(0),shape,capacity,49152,status,nullptr);
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
   if(layer==0)riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(0),nullptr,w(base),nullptr,b(1),0,shape,capacity);
@@ -55,6 +69,13 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
   auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
   auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
   mixed_rope_kv_v7<<<dim3(2,capacity),256,0,stream>>>(b(2),b(5),b(6),b(3),lk,lv,static_cast<const float*>(cos),static_cast<const float*>(sin),meta,capacity);
+  if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+   err=cudaMemsetAsync(b(4),0,uint64_t(capacity)*1152,stream);if(err!=cudaSuccess)return err;
+   err=static_cast<cudaError_t>(riley_fa3_model_attention(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes,physical,capacity,context,0));
+   if(err!=cudaSuccess)return err;
+#endif
+  } else {
   riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,attention_workspace!=nullptr&&!prefill_only,attention_workspace!=nullptr&&prefill_only);
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
   if(attention_workspace){
@@ -62,6 +83,7 @@ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratc
    if(err!=cudaSuccess)return err;
   }
 #endif
+  }
   if(capacity==1)enqueue_decode_projection<576,576,128>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]));
   else gemm_prefill_shape_vector<576,576,128,2><<<dim3(36,(capacity+15)/16),64,0,stream>>>(b(4),w(base+4),b(2),capacity,shape+2);
   riley_prefill_pointwise::norm_rows<<<capacity,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,shape,capacity);

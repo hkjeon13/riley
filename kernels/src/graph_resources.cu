@@ -1,3 +1,6 @@
+#ifdef RILEY_CUDA_ENABLE_FA3
+#include "../optional/fa3_api.h"
+#endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
 #include "../optional/flashinfer_api.h"
 #endif
@@ -1356,7 +1359,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  return status;
 }
 
-template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false,bool PrefillFlashinfer=false,bool PrefillFfnPipeline=false>
+template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false,bool PrefillFlashinfer=false,bool PrefillFfnPipeline=false,bool Fa3=false>
 static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
@@ -1383,6 +1386,13 @@ static RileyCudaStatus record_variable_shared(
   for(size_t j=0;j<26;++j)if(w[i]==d[j])return reject(error,"V3 weight/mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  }
  if(attention_workspace){
+  if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+   if(!Mixed||!same_context(attention_workspace->owner,r->owner)||!holds_counter(r,&attention_workspace->active_uses)||attention_workspace->byte_len!=riley_fa3_model_workspace_bytes())return reject(error,"FA3 workspace parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+#else
+   return reject(error,"FA3 was not compiled",RILEY_CUDA_STATUS_NOT_SUPPORTED);
+#endif
+  } else {
 #ifndef RILEY_CUDA_ENABLE_FLASHINFER
   return reject(error,"FlashInfer was not compiled",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
 #else
@@ -1390,6 +1400,11 @@ static RileyCudaStatus record_variable_shared(
   for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t i=0;i<weight_count;++i)if(w[i]==attention_workspace)return reject(error,"FlashInfer weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
 #endif
+  }
+  if constexpr(Fa3) {
+   for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FA3 mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+   for(size_t i=0;i<weight_count;++i)if(w[i]==attention_workspace)return reject(error,"FA3 weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  }
  }
  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
  for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],Rows*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1409,6 +1424,16 @@ static RileyCudaStatus record_variable_shared(
  void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
  const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];
  if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
+ if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+  if(!attention_workspace)return reject(error,"FA3 requires retained workspace",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  CurrentContext current(r->owner);status=current.enter(error,RILEY_CUDA_ERROR_STAGE_PREPARE,"FA3 cold preparation");
+  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+  status=runtime_error(static_cast<cudaError_t>(riley_fa3_model_attention(r->stream->stream,scratch[3],d[12]->device_data,d[13]->device_data,scratch[4],attention_workspace->device_data,attention_workspace->byte_len,physical,capacity,std::min<uint64_t>(4096,d[14]->byte_len/128),1)),error,RILEY_CUDA_ERROR_STAGE_PREPARE,"FA3 cold preparation");
+  status=current.leave(status,error,RILEY_CUDA_ERROR_STAGE_PREPARE,"FA3 cold preparation");
+  if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+#endif
+ }
  constexpr uint64_t transfer=Rows*98432;
  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
  auto record_shape=[&](uint32_t row_capacity,bool compact=false) noexcept {
@@ -1417,6 +1442,11 @@ static RileyCudaStatus record_variable_shared(
   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
   auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
   if(row_capacity==1){
+#ifdef RILEY_CUDA_ENABLE_FA3
+   if constexpr(Fa3) {
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 decode model");
+   }else
+#endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
    if(attention_workspace&&!PrefillFlashinfer){
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FlashInfer model");
@@ -1435,6 +1465,11 @@ static RileyCudaStatus record_variable_shared(
    return result;
   }
   if constexpr(Packed){
+#ifdef RILEY_CUDA_ENABLE_FA3
+   if constexpr(Fa3) {
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 mixed model");
+   }else
+#endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
    if(attention_workspace){
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((PrefillFlashinfer?enqueue_compiled_v7_flashinfer_prefill_only_model:enqueue_compiled_v7_flashinfer_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,PrefillFlashinfer?"experimental prefill attention":"experimental consistent decode attention");
@@ -1543,6 +1578,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_shared_greedy(
  return record_variable_shared<32,true,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_fa3_experimental(
+ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+ uint32_t capacity,uint32_t physical,RileyCudaDeviceBuffer* attention_workspace,uint32_t compact,RileyCudaErrorInfo* error) noexcept {
+#ifndef RILEY_CUDA_ENABLE_FA3
+ return reject(error,"FA3 was not compiled",RILEY_CUDA_STATUS_NOT_SUPPORTED);
+#else
+ if(!attention_workspace||compact>1)return reject(error,"FA3 explicit workspace/profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(compact)return record_variable_shared<32,true,true,true,false,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
+ return record_variable_shared<32,false,true,true,false,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
+#endif
+}
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_experimental(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,

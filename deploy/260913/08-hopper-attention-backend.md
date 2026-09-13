@@ -70,3 +70,9 @@ Rust retained owner, optional production build, 동적 serving metadata 연결�
 [GPU metadata 검증](../../benchmarks/results/20260914-fa3-dynamic-metadata/README.md): mixed packet을 검증 후 FA3 page table·query offset·KV 길이로 게시하는 GPU planner와 71,424-byte 외부 workspace 호출을 추가했다. 배치 scheduling은 한 번 준비하고 각 레이어는 semaphore만 초기화하는 경로다. 4090 metadata graph 비교 34건, memcheck/racecheck 및 SM90a native build/link가 통과했다.
 
 실제 model recorder는 아직 새 함수를 호출하지 않는다. Hopper에서 scheduling 재사용·빈/실패 배치 처리·attention 수치·graph·모델 품질을 검증해야 하며, metadata 검사 통과를 FA3 attention 또는 serving 성능 증거로 간주하지 않는다.
+
+### Model recorder 및 serving 선택 연결
+
+[후속 검증 기록](../../benchmarks/results/20260914-fa3-model-recorder/README.md): 위 단계 이후 실제 30-layer mixed/pure-decode recorder, retained workspace, Rust session 및 `fa3-smol-experimental-v1` CLI 선택을 연결했다. Pure-decode wire 차이를 수정하여 metadata graph 40건 및 sanitizer 검사를 통과했다. 실제 모델을 로드한 4090 recorder는 capture 전에 미지원을 반환하고 모든 할당을 회수했다. Native/server 빌드, Hopper fixture 테스트 컴파일, 기존 single/paired serving의 기준 출력·stop·cancel 검사가 통과했다.
+
+FA3는 기본 비활성·loopback 실험 경로다. Hopper attention 실행·수치·graph·serving은 미검증이며 fixture 파일 복구도 필요하다. 현재 구현 연결과 장비 검증 대기를 구별하고, 새로운 vLLM 성능 우위나 backend 승격으로 간주하지 않는다.

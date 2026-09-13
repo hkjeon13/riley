@@ -46,7 +46,7 @@ serve options:
   --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
-  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)
+  --graph-numerics MODE          existing, vllm-smol-p128-v1, shared-smol-p128-v1, variable-smol-v3, variable-smol-v4, variable-smol-v5, variable-smol-v6, variable-smol-v7, flashinfer-smol-experimental-v2, fa3-smol-experimental-v1 (unqualified; loopback only)
   --mixed-time-budget-us N       experimental V7 loopback wall-time target (1000..100000)
   --decode-window MODE           single or paired-experimental-v1 (V7 loopback diagnostic)
   --ffn-backend MODE             existing, pipeline-experimental-v1 or prefill-pipeline-experimental-v1 (V7 loopback diagnostic)
@@ -97,6 +97,7 @@ struct ServeOptions {
     packed_prefill: bool,
     mixed_execution: bool,
     flashinfer_experimental: bool,
+    fa3_experimental: bool,
     ffn_pipeline: bool,
     prefill_ffn_pipeline: bool,
     decode_window: bool,
@@ -401,18 +402,19 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
             "--graph-numerics" => {
                 let value = next_value(&mut arguments, "--graph-numerics")?;
                 let enabled = match value.to_str() {
-                    Some("existing") => (false, false, false, false, false, false, false, false),
-                    Some("vllm-smol-p128-v1") => (true, false, false, false, false, false, false, false),
-                    Some("shared-smol-p128-v1") => (true, true, false, false, false, false, false, false),
-                    Some("variable-smol-v3") => (false, false, true, false, false, false, false, false),
-                    Some("variable-smol-v4") => (false, false, true, true, false, false, false, false),
-                    Some("variable-smol-v5") => (false, false, true, false, true, false, false, false),
-                    Some("variable-smol-v6") => (false, false, true, false, true, true, false, false),
-                    Some("variable-smol-v7") => (false, false, true, false, true, true, true, false),
-                    Some("flashinfer-smol-experimental-v2") => (false, false, true, false, true, true, true, true),
+                    Some("existing") => (false, false, false, false, false, false, false, false, false),
+                    Some("vllm-smol-p128-v1") => (true, false, false, false, false, false, false, false, false),
+                    Some("shared-smol-p128-v1") => (true, true, false, false, false, false, false, false, false),
+                    Some("variable-smol-v3") => (false, false, true, false, false, false, false, false, false),
+                    Some("variable-smol-v4") => (false, false, true, true, false, false, false, false, false),
+                    Some("variable-smol-v5") => (false, false, true, false, true, false, false, false, false),
+                    Some("variable-smol-v6") => (false, false, true, false, true, true, false, false, false),
+                    Some("variable-smol-v7") => (false, false, true, false, true, true, true, false, false),
+                    Some("flashinfer-smol-experimental-v2") => (false, false, true, false, true, true, true, true, false),
+                    Some("fa3-smol-experimental-v1") => (false, false, true, false, true, true, true, false, true),
                     _ => {
                         return Err(
-                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3, variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)".to_owned()
+                            "--graph-numerics requires existing, vllm-smol-p128-v1, shared-smol-p128-v1 variable-smol-v3, variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7, flashinfer-smol-experimental-v2, fa3-smol-experimental-v1 (unqualified; loopback only)".to_owned()
                         );
                     }
                 };
@@ -544,25 +546,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
-    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false));
+    let (vllm_smol_p128_graph, shared_rows_graph, variable_graph, variable_graph16, variable_graph32, packed_prefill, mixed_execution, flashinfer_experimental, fa3_experimental) = graph_numerics.unwrap_or((false, false, false, false, false, false, false, false, false));
     let (ffn_pipeline,prefill_ffn_pipeline) = ffn_pipeline.unwrap_or((false,false));
-    if mixed_time_budget_us.is_some() && (!mixed_execution || flashinfer_experimental || ffn_pipeline || !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"mixed time budget requires loopback IP".to_owned())?.ip().is_loopback()) {return Err("mixed time budget requires independent V7 loopback".to_owned());}
+    if mixed_time_budget_us.is_some() && (!mixed_execution || flashinfer_experimental || fa3_experimental || ffn_pipeline || !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"mixed time budget requires loopback IP".to_owned())?.ip().is_loopback()) {return Err("mixed time budget requires independent V7 loopback".to_owned());}
     let decode_window=decode_window.unwrap_or(false);
     if decode_window && sampling_backend.unwrap_or(SamplingBackendMode::Cpu)!=SamplingBackendMode::GpuGreedy {return Err("decode window requires --sampling-backend gpu-greedy".to_owned());}
-    if decode_window && (!mixed_execution || flashinfer_experimental || ffn_pipeline) {return Err("decode window requires independent variable-smol-v7".to_owned());}
+    if decode_window && (!mixed_execution || flashinfer_experimental || fa3_experimental || ffn_pipeline) {return Err("decode window requires independent variable-smol-v7".to_owned());}
     if decode_window && !bind_address.parse::<std::net::SocketAddr>().map_err(|_|"decode window requires loopback IP socket address".to_owned())?.ip().is_loopback() {return Err("decode window is restricted to loopback diagnostics".to_owned());}
-    if (ffn_pipeline || prefill_ffn_pipeline) && (!mixed_execution || flashinfer_experimental) {
+    if (ffn_pipeline || prefill_ffn_pipeline) && (!mixed_execution || flashinfer_experimental || fa3_experimental) {
         return Err("FFN pipeline requires the independent variable-smol-v7 graph profile".to_owned());
     }
     if (ffn_pipeline || prefill_ffn_pipeline) && !bind_address.parse::<std::net::SocketAddr>()
         .map_err(|_| "FFN pipeline requires loopback IP socket address".to_owned())?.ip().is_loopback() {
         return Err("FFN pipeline is restricted to loopback diagnostics".to_owned());
     }
-    if flashinfer_experimental {
+    if flashinfer_experimental || fa3_experimental {
         let address = bind_address.parse::<std::net::SocketAddr>()
-            .map_err(|_| "experimental FlashInfer requires a loopback IP socket address".to_owned())?;
+            .map_err(|_| "experimental attention requires a loopback IP socket address".to_owned())?;
         if !address.ip().is_loopback() {
-            return Err("experimental FlashInfer is unqualified and restricted to loopback diagnostics".to_owned());
+            return Err("experimental attention is unqualified and restricted to loopback diagnostics".to_owned());
         }
     }
     if (vllm_smol_p128_graph || variable_graph)
@@ -602,6 +604,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         packed_prefill,
         mixed_execution,
         flashinfer_experimental,
+        fa3_experimental,
         ffn_pipeline,
         prefill_ffn_pipeline,
         decode_window,
@@ -992,7 +995,7 @@ fn run_serve(
     if options.variable_graph && (!matches!(options.max_active_sequences,1|2|4|8|16|32) || options.batch_token_budget<options.max_active_sequences || options.prefill_chunk_tokens>1024
         || options.batch_token_budget>1024 || options.batch_shape_policy!=BatchShapePolicyMode::FixedMaximum
         || (options.sampling_backend!=SamplingBackendMode::Cpu && !options.variable_graph16 && !options.variable_graph32)) {
-        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7, flashinfer-smol-experimental-v2 (unqualified; loopback only)".to_owned());
+        return Err("variable graphs require capacity1/2/4/8/16/32, fixed-max shape and a token budget covering all active rows, at most1024; GPU greedy requires variable-smol-v4, variable-smol-v5 variable-smol-v6 or variable-smol-v7, flashinfer-smol-experimental-v2, fa3-smol-experimental-v1 (unqualified; loopback only)".to_owned());
     }
     if options.vllm_smol_p128_graph
         && (!matches!(options.max_active_sequences, 1 | 2 | 4 | 8)
@@ -1132,7 +1135,7 @@ fn run_serve(
             executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
         }
     };
-    let executor = if options.prefill_ffn_pipeline {executor.with_prefill_ffn_pipeline(options.decode_window)} else if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
+    let executor = if options.prefill_ffn_pipeline {executor.with_prefill_ffn_pipeline(options.decode_window)} else if options.decode_window {executor.with_decode_window()} else if options.ffn_pipeline {executor.with_ffn_pipeline()} else if options.fa3_experimental {executor.with_fa3_experimental()} else if options.flashinfer_experimental {executor.with_flashinfer_experimental()} else if options.mixed_execution {executor.with_mixed_execution()} else if options.packed_prefill {executor.with_packed_prefill()} else if options.variable_graph32 {executor.with_variable_graph32()} else if options.variable_graph16 {
         executor.with_variable_graph16()
     } else if options.variable_graph {
         executor.with_variable_graph()
@@ -3082,6 +3085,28 @@ mod tests {
     }
 
     #[test]
+    fn fa3_diagnostic_is_explicit_loopback_and_requires_graph() {
+        for (bind, policy, accepted) in [
+            ("127.0.0.1:8080", "require", true),
+            ("[::1]:8080", "require", true),
+            ("0.0.0.0:8080", "require", false),
+            ("192.0.2.1:8080", "require", false),
+            ("localhost:8080", "require", false),
+            ("127.0.0.1:8080", "disabled", false),
+        ] {
+            let parsed = super::parse_arguments([
+                "serve", "--model", "/tmp/model", "--graph-numerics",
+                "fa3-smol-experimental-v1", "--bind", bind,
+                "--execution-graph-policy", policy,
+            ].map(std::ffi::OsString::from));
+            assert_eq!(parsed.is_ok(), accepted, "{bind} {policy}");
+            if let Ok(super::CliCommand::Serve(options)) = parsed {
+                assert!(options.fa3_experimental && !options.flashinfer_experimental && options.mixed_execution);
+            }
+        }
+    }
+
+    #[test]
     fn mixed_v7_profile_preserves_aggregate_budget(){
         let result=super::parse_arguments(["serve","--model","/tmp/model","--graph-numerics","variable-smol-v7","--execution-graph-policy","require","--max-active-sequences","32","--batch-token-budget","1024","--prefill-chunk-tokens","512"].map(std::ffi::OsString::from)).unwrap();
         let super::CliCommand::Serve(options)=result else{panic!("serve")};assert!(options.variable_graph&&options.variable_graph32&&options.packed_prefill&&options.mixed_execution&&!options.variable_graph16);assert_eq!(options.prefill_chunk_tokens,512);
@@ -4048,6 +4073,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
@@ -4446,6 +4472,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
@@ -4611,6 +4638,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,
@@ -4743,6 +4771,7 @@ mod tests {
                 packed_prefill: false,
                 mixed_execution: false,
                 flashinfer_experimental: false,
+                fa3_experimental: false,
                 ffn_pipeline: false,
                 prefill_ffn_pipeline: false,
                 decode_window: false,

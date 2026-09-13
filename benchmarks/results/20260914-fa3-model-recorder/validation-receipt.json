@@ -1,0 +1,48 @@
+{
+  "smoke": {
+    "single": {
+      "warmup": 96,
+      "warmup_all_reference_match": true,
+      "stop": 96,
+      "cancel": 32,
+      "exit": {
+        "exit_code": 0
+      }
+    },
+    "paired": {
+      "warmup": 96,
+      "warmup_all_reference_match": true,
+      "stop": 96,
+      "cancel": 32,
+      "exit": {
+        "exit_code": 0
+      }
+    }
+  },
+  "artifact_hashes": {
+    "c32-p0-single-launch.json": "f5b3bb9cc3450785ce302b31704c83ad0acc9794abe94bcb082077f98fe6e149",
+    "c32-p0-paired-stop.json": "9745589812f11a06e9d53a5f9d8ab3c8d5243372b797cac87f0b1d653be0121d",
+    "c32-p0-paired-exit.json": "81868a6e94ffc0178bf833deb1c9013d9fab4ee95ddb876a5e8ec4f1d26376d2",
+    "c32-p0-single.log": "e6cb8f3bb1a296f664c9c0185aa1aa69ed3a0668a3db5b8629c7c3567555a558",
+    "completion.json": "284eb4159fda04d66f3f06f06a06bea1436e0adf54e0ed11ea5f2a6d25110438",
+    "c32-p0-single-retained.json": "9546b2061841bc778cdf4cff0091662880631632400da06fb1affa27bca5bb3b",
+    "c32-p0-paired-warmup.json": "e6688dc2cc909a339164c357ba658ad1432cf55f3e5ae5d5540ef7b30399b057",
+    "progress.json": "284eb4159fda04d66f3f06f06a06bea1436e0adf54e0ed11ea5f2a6d25110438",
+    "c32-p0-single-exit.json": "81868a6e94ffc0178bf833deb1c9013d9fab4ee95ddb876a5e8ec4f1d26376d2",
+    "preparation.json": "4df8886f0a88219d228297b1e3e00397f183356d5bb553904e6873ebd51aefa0",
+    "c32-p0-paired-cancel.json": "8554fc58af125d46965c58f69498f7a8a35228eca603ef03c7c1abee2999d5a2",
+    "c32-p0-paired-retained.json": "5ab340fafc0b25281c4ee71dab77df8b2c79e243a548955ae20711e3716a0b1d",
+    "c32-p0-single-cancel.json": "8554fc58af125d46965c58f69498f7a8a35228eca603ef03c7c1abee2999d5a2",
+    "c32-p0-single-summary.json": "ff2e52a8196d1d05567799ce1a457510b13399bc78041301e03384545d079872",
+    "c32-p0-single-stop.json": "7da8864675a299ba79b7827070c59e1cf66a7ee7382945e25888bcac91bf1229",
+    "c32-p0-paired-launch.json": "2ee3720d81f55003e7a14e2e6a0d57b403c0cfc4d2327cfd0bedf70319a7e953",
+    "c32-p0-paired-summary.json": "b442db00067e54d92001e24ff62f2ef42123012932390f367c203f2000ce6762",
+    "c32-p0-single-warmup.json": "560a49a2a1ed0e5dda3cb7a10da0b6b2b16cc28ae3d68ea584890757704a69c5",
+    "c32-p0-paired.log": "85efa970e8068996685d82db9bdf6042bdf7530bbd3c153c2db2397a364166d7"
+  },
+  "binary_sha256": "3abb1af2281811909ca58ed306b163f676bd7fa0f57b9f4bfb32ec7b29ce72ff",
+  "ldd": "\tlinux-vdso.so.1 (0x00007ffecb95f000)\n\tlibcublasLt.so.13 => /data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcublasLt.so.13 (0x00007ea74c200000)\n\tlibcudart.so.13 => /data/riley-serving-260913-recovery/toolchain130/nvidia/cu13/lib/libcudart.so.13 (0x00007ea74be00000)\n\tlibcuda.so.1 => /lib/x86_64-linux-gnu/libcuda.so.1 (0x00007ea746000000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007ea745c00000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007ea7725c1000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007ea771d19000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007ea745800000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007ea7725f7000)\n\tlibrt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x00007ea7725ba000)\n\tlibpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007ea7725b5000)\n\tlibdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007ea7725b0000)\n",
+  "fa3_attention_executed": false,
+  "hopper_numerical_runtime": "not run: no Hopper; fixture binaries also require restoration",
+  "serving_performance_claim": false
+}

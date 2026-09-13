@@ -1,0 +1,42 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/main.rs (target/debug/deps/riley-1e0032c6aab50203)
+
+running 35 tests
+test graph_numerics_cli_tests::numerical_profile_requires_explicit_required_graph ... ok
+test graph_numerics_cli_tests::shared_profile_is_explicit_and_requires_graph ... ok
+test graph_numerics_cli_tests::variable_profile_accepts_supported_shared_capacities ... ok
+test graph_numerics_cli_tests::variable_profile_is_explicit_and_requires_graph_policy ... ok
+test graph_policy_cli_tests::graph_policy_is_explicit_and_closed ... ok
+test tests::c02_generation_audit_marker_binds_only_a_safe_create_only_leaf ... ok
+test tests::c02_generation_audit_v2_schema_is_narrow_and_canonical ... ok
+test tests::c02_linux_process_identity_parser_handles_a_parenthesized_comm ... ok
+test tests::c02_runtime_identity_is_all_or_none_and_fail_closed ... ok
+test tests::c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection ... ok
+test tests::c02_shutdown_artifact_requires_one_safe_nonhidden_audit_child ... ok
+test tests::custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound ... ok
+test tests::fa3_diagnostic_is_explicit_loopback_and_requires_graph ... ok
+test tests::ffn_pipeline_requires_independent_v7_and_loopback ... ok
+test tests::fixed37_profile_rejects_an_advertised_context_above_its_ragged_limit ... ok
+test tests::flashinfer_diagnostic_is_explicit_loopback_and_requires_graph ... ok
+test tests::fused_residual_norm_requires_explicit_per_operation_completion ... ok
+test tests::mixed_time_cli_bounds_and_profile ... ok
+test tests::c02_receipt_bytes_and_startup_artifact_are_canonical_and_create_only ... ok
+test tests::mixed_v7_profile_preserves_aggregate_budget ... ok
+test tests::packed_v6_profile_preserves_aggregate_budget ... ok
+test tests::paired_decode_requires_compatible_graph_sampling_and_loopback ... ok
+test tests::c02_generation_audit_writer_refuses_schema_oversize_without_evidence ... ok
+test tests::prefill_ffn_selection_checks_profile_bind_and_pairing ... ok
+test tests::reduction_profile_values_and_duplicates_fail_closed ... ok
+test signal::tests::synchronously_receives_sigint_and_sigterm ... ok
+test tests::serve_defaults_are_bounded_and_model_is_required ... ok
+test tests::serve_explicit_options_and_duplicate_rejection_are_deterministic ... ok
+test tests::variable_v4_cli_selects_sixteen_row_profile_explicitly ... ok
+test tests::variable_v5_cli_selects_thirtytwo_row_profile_explicitly ... ok
+test tests::version_and_help_are_exact_commands ... ok
+test tests::shutdown_metrics_path_is_absolute_and_create_only ... ok
+test tests::c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker ... ok
+test tests::c02_audit_directory_is_private_held_and_descriptor_relative ... ok
+test tests::c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+

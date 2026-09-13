@@ -8,15 +8,15 @@ fn read32(f:&mut File)->std::io::Result<u32>{let mut b=[0;4];f.read_exact(&mut b
 // Fixture-level greedy/batch invariance regressions and numerical observations.
 // Not a general quality acceptance test or a serving benchmark.
 fn run_mixed_profile(active:usize,request_count:usize,physical:usize,capacity:u32,chunk:usize,compact:bool)->Result<(),Box<dyn std::error::Error>>{
-run_profile(active,request_count,physical,capacity,chunk,compact,false,false)
+run_profile(active,request_count,physical,capacity,chunk,compact,false,false,false)
 }
-fn run_profile(active:usize,request_count:usize,physical:usize,capacity:u32,chunk:usize,compact:bool,separate_stages:bool,exact_backend:bool)->Result<(),Box<dyn std::error::Error>>{
+fn run_profile(active:usize,request_count:usize,physical:usize,capacity:u32,chunk:usize,compact:bool,separate_stages:bool,exact_backend:bool,fa3_backend:bool)->Result<(),Box<dyn std::error::Error>>{
 const ROWS:usize=32;
 let root=PathBuf::from(std::env::var_os("RILEY_V3_MODEL_FIXTURE").ok_or("fixture missing")?);let model=LoadedModel::load(PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?).as_path(),LoadLimits::default().with_weight_byte_limits(1<<30,1<<30)?)?;
 let mut f=File::open(root.join("requests.bin"))?;let count=read32(&mut f)?;let mut requests=vec![];for _ in 0..count{let n=read32(&mut f)?;let mut tokens=vec![];for _ in 0..n{tokens.push(read32(&mut f)?);}requests.push(tokens);}
 let context=CudaRuntime::initialize()?.device(0)?.create_context()?;let mut stream=context.create_stream()?;
 let config=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,64,1,physical as usize)?,PreparedLlamaForwardConfig::default());
-let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=if exact_backend {executor.into_owned_variable_mixed_session(&context,capacity,compact)?}else{executor.into_owned_variable_flashinfer_experimental_session(&context,capacity,compact)?};session.set_async_completion(true)?;assert_eq!(session.supports_compact_greedy(),compact);
+let executor=PreparedLlamaBatchExecutor::prepare(&model,&context,&mut stream,config)?;let mut session=if fa3_backend {executor.into_owned_variable_fa3_session(&context,capacity,compact)?}else if exact_backend {executor.into_owned_variable_mixed_session(&context,capacity,compact)?}else{executor.into_owned_variable_flashinfer_experimental_session(&context,capacity,compact)?};session.set_async_completion(true)?;assert_eq!(session.supports_compact_greedy(),compact);
 let mut scheduler=Scheduler::new_with_execution_shape(SchedulerConfig{max_waiting_requests:64,max_waiting_prompt_tokens:32768,max_active_sequences:active,max_sequence_tokens:1024,iteration_token_budget:capacity as usize,max_prefill_chunk_tokens:chunk,aging_threshold_ns:1,overload_policy:OverloadPolicy::Wait,admission_timeout_ns:None,max_promised_kv_blocks:physical as usize,metrics_window_samples:16},riley_runtime::paged_kv::KvLayout::checked(30,physical,3,64)?,if separate_stages {riley_scheduler::ExecutionShapePolicy::PackedPrefillDecode32}else{riley_scheduler::ExecutionShapePolicy::MixedPrefillDecode32})?;
 let request_set=if ROWS==32 && request_count==32{vec![requests.iter().max_by_key(|p|p.len()).unwrap().clone()]}else{requests.clone()};
 let mut refs=std::collections::BTreeMap::new();for prompt in request_set.iter().cycle().take(request_count).cloned() {let limit=match prompt.len(){16=>32,128=>64,_=>128};let reference=std::fs::read(root.join(format!("decode-logits-{}.bf16",prompt.len())))?;let id=scheduler.submit(RequestDescriptor::new(prompt,limit),0)?.request_id();refs.insert(id,(reference,0usize,limit));}
@@ -66,7 +66,7 @@ let plan=scheduler.plan_iteration(iteration*2+2)?.into_parts().0.unwrap();let au
 let ticket=riley_scheduler::execution::submit_llama_iteration_variable_graph(&authority,&mut session,compact,None).unwrap();
 // Drop drains without publishing or settling. The session remains unavailable.
 drop(ticket);drop(authority);assert!(session.issue_rows(2).is_err());assert!(session.query_completion().is_err());
-session.close()?;assert!(scheduler.abort_iteration(plan.iteration_id(),riley_scheduler::ExecutionAbort::DeviceQuiescedMutationUnknown,iteration*2+3)?.settlement_failures().is_empty());scheduler.close(iteration*2+4,None)?;stream.close()?;assert!(context.allocation_stats()?.is_zero());assert_eq!(argmax_agreements,checked as u64,"fixture greedy equivalence");assert_eq!(cross_request_tokens,0,"fixture token invariance");assert_eq!(cross_request_logits,0,"fixture logit invariance");eprintln!("STAGE_CONTROL exact_backend={} separate_stages={} mixed_iterations={} pure_decode_iterations={} cross_request_token_differences={} token_comparisons={} cross_request_logit_differences={} logit_comparisons={}",exact_backend,separate_stages,mixed_iterations,pure_decode_iterations,cross_request_tokens,compared_tokens,cross_request_logits,compared_logits);eprintln!("FLASHINFER_OBSERVATION values={} exact_values={} max_abs={} rmse={} argmax_agreements={} outputs={} numerical_profile_accepted=false teacher_forced=true",values,exact_values,max_abs,(squared_error/values as f64).sqrt(),argmax_agreements,checked);eprintln!("LOADED_MIXED rows_max={} logits_checked={} iterations={} pending_close_abort=true allocation_zero=true",widest,checked,iteration-1);Ok(())}
+session.close()?;assert!(scheduler.abort_iteration(plan.iteration_id(),riley_scheduler::ExecutionAbort::DeviceQuiescedMutationUnknown,iteration*2+3)?.settlement_failures().is_empty());scheduler.close(iteration*2+4,None)?;stream.close()?;assert!(context.allocation_stats()?.is_zero());assert_eq!(argmax_agreements,checked as u64,"fixture greedy equivalence");assert_eq!(cross_request_tokens,0,"fixture token invariance");assert_eq!(cross_request_logits,0,"fixture logit invariance");eprintln!("STAGE_CONTROL exact_backend={} separate_stages={} mixed_iterations={} pure_decode_iterations={} cross_request_token_differences={} token_comparisons={} cross_request_logit_differences={} logit_comparisons={}",exact_backend,separate_stages,mixed_iterations,pure_decode_iterations,cross_request_tokens,compared_tokens,cross_request_logits,compared_logits);eprintln!("{} values={} exact_values={} max_abs={} rmse={} argmax_agreements={} outputs={} numerical_profile_accepted=false teacher_forced=true",if fa3_backend {"FA3_OBSERVATION"}else{"FLASHINFER_OBSERVATION"},values,exact_values,max_abs,(squared_error/values as f64).sqrt(),argmax_agreements,checked);eprintln!("LOADED_MIXED rows_max={} logits_checked={} iterations={} pending_close_abort=true allocation_zero=true",widest,checked,iteration-1);Ok(())}
 #[test]
 #[ignore="requires optional FlashInfer build, pinned checkpoint and GPU; numerical observations only"]
 fn flashinfer_model_observation_partial()->Result<(),Box<dyn std::error::Error>> {run_mixed_profile(4,3,128,1024,256,false)}
@@ -76,11 +76,18 @@ fn flashinfer_model_observation_compact32()->Result<(),Box<dyn std::error::Error
 
 #[test]
 #[ignore="requires pinned model and optional FlashInfer; stage isolation control"]
-fn flashinfer_separate_stages32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,true,false)}
+fn flashinfer_separate_stages32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,true,false,false)}
 #[test]
 #[ignore="requires pinned model and GPU; exact backend stage isolation control"]
-fn exact_separate_stages32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,true,true)}
+fn exact_separate_stages32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,true,true,false)}
 
 #[test]
 #[ignore="requires pinned model and optional FlashInfer; full logits for every mixed32 output"]
-fn flashinfer_consistent_full32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,false,false)}
+fn flashinfer_consistent_full32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,false,false,false,false)}
+
+#[test]
+#[ignore="requires Hopper, optional FA3 and pinned full-model fixtures; strict numerical gate"]
+fn fa3_model_observation_partial()->Result<(),Box<dyn std::error::Error>> {run_profile(4,3,128,1024,256,false,false,false,true)}
+#[test]
+#[ignore="requires Hopper, optional FA3 and pinned full-model fixtures; strict mixed/decode gate"]
+fn fa3_model_observation_compact32()->Result<(),Box<dyn std::error::Error>> {run_profile(32,32,2048,1024,512,true,false,false,true)}

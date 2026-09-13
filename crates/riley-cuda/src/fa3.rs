@@ -2,6 +2,9 @@ use crate::{CudaDeviceBuffer, CudaError, CudaResult, CudaStream};
 #[cfg(not(all(feature = "cuda", riley_fa3)))]
 use crate::{CudaErrorDomain, CudaErrorKind, CudaErrorStage};
 
+/// External FA3 model workspace extent, checked again by the native recorder.
+pub const FA3_MODEL_WORKSPACE_BYTES: u64 = 71_424;
+
 /// Compile availability only, not numerical or device qualification.
 pub const FA3_COMPILED: bool = cfg!(all(feature = "cuda", riley_fa3));
 

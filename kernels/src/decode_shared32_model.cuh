@@ -1,3 +1,6 @@
+#ifdef RILEY_CUDA_ENABLE_FA3
+#include "../optional/fa3_api.h"
+#endif
 #include "../optional/ffn_pipeline.cuh"
 #pragma once
 #include "prefill_shape_model.cuh"
@@ -56,13 +59,16 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
 }
+template<bool Fa3=false>
 inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,void* attention_workspace=nullptr,uint64_t attention_workspace_bytes=0,bool ffn_pipeline=false){
+if constexpr(!Fa3) {
 #ifndef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace||attention_workspace_bytes)return cudaErrorNotSupported;
 #else
  if((attention_workspace==nullptr)!=(attention_workspace_bytes==0))return cudaErrorInvalidValue;
  if(attention_workspace&&(!grouped_attention||attention_workspace_bytes<riley_flashinfer_decode_workspace_bytes()))return cudaErrorInvalidValue;
 #endif
+ }
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!status||!physical||physical>4096||!context||context>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
  for(int i=0;i<273;++i)if(!weights[i])return cudaErrorInvalidValue;
@@ -70,12 +76,23 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  auto w=[&](int i){return static_cast<const __nv_bfloat16*>(weights[i]);};
  const auto* meta=static_cast<const uint32_t*>(metadata);auto* shape=meta+32;auto* pages=meta+64;auto* active=meta+5;auto* pointwise=meta+3;
  auto err=cudaMemsetAsync(status,0,4,stream);if(err!=cudaSuccess)return err;
+if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+  err=static_cast<cudaError_t>(riley_fa3_model_metadata_prepare(stream,metadata,32*4+32*1664,attention_workspace,attention_workspace_bytes,physical,32,context,status));
+  if(err!=cudaSuccess)return err;
+  err=static_cast<cudaError_t>(riley_fa3_model_schedule(stream,attention_workspace,attention_workspace_bytes,32,context));
+  if(err!=cudaSuccess)return err;
+#else
+  return cudaErrorNotSupported;
+#endif
+ } else {
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace){
   err=static_cast<cudaError_t>(riley_flashinfer_decode_prepare(stream,shape,active,attention_workspace,attention_workspace_bytes,physical,context,status));
   if(err!=cudaSuccess)return err;
  }
 #endif
+ }
  embedding<<<32,256,0,stream>>>(w(0),b(0),shape,active,status);
  if(tiled)for(int i=273;i<363;++i)if(!weights[i])return cudaErrorInvalidValue;
  for(int layer=0;layer<30;++layer){int base=3+9*layer;
@@ -84,6 +101,13 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+if constexpr(Fa3) {
+#ifdef RILEY_CUDA_ENABLE_FA3
+  err=cudaMemsetAsync(b(4),0,32*1152,stream);if(err!=cudaSuccess)return err;
+  err=static_cast<cudaError_t>(riley_fa3_model_attention(stream,b(3),lk,lv,b(4),attention_workspace,attention_workspace_bytes,physical,32,context,0));
+  if(err!=cudaSuccess)return err;
+#endif
+ } else {
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace){
   err=static_cast<cudaError_t>(riley_flashinfer_decode_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_workspace_bytes));
@@ -92,6 +116,7 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
 #endif
  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+ }
  if(grouped_attention){
   shared32_projection_parts<576,576,128,false><<<dim3(72,5),32,0,stream>>>(b(4),w(base+4),static_cast<float*>(scratch[7]),b(2),active);
   riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);

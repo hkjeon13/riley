@@ -14,6 +14,7 @@ struct alignas(256) Workspace {
     alignas(256) int semaphore;
     alignas(256) float lse[1024*9];
 };
+static_assert(sizeof(Workspace)==71424,"Rust model workspace ABI drift");
 // One CTA validates and publishes a complete mixed packet. Only valid physical
 // IDs may enter the table; q offsets/lengths stay zero until every request passes.
 #ifdef RILEY_FA3_METADATA_IMPLEMENTATION
@@ -24,13 +25,14 @@ static __global__ void prepare(const unsigned *packet, Workspace *w,
     if(threadIdx.x<=Requests) w->q_indptr[threadIdx.x]=0;
     if(threadIdx.x<Requests) w->kv_lengths[threadIdx.x]=0;
     if(threadIdx.x==0) {
-        bad=0; inherited=*status; active=packet[5]; total=packet[9];
+        bad=0; inherited=*status; active=packet[5]; total=packet[4]==1?active:packet[9];
         unsigned cursor=0;
-        if(active>Requests || total>capacity || (!active && total) || (active && !total)) bad=1;
+        if(packet[4]>2 || (packet[4]==1 && packet[9]) || active>Requests || total>capacity || (!active && total) || (active && !total)) bad=1;
         if(!bad && !inherited) for(unsigned r=0;r<active;++r) {
             const unsigned *s=packet+32+r*416;
             unsigned n=s[1]+1, q=s[2];
-            if(!q || q>n || n>context || s[16]!=cursor || q>total-cursor ||
+            if(!q || q>n || n>context || s[16]!=(packet[4]==1?0:cursor) || q>total-cursor ||
+               (packet[4]==1 && (q!=1 || s[18]!=1)) ||
                s[18]>1 || (s[18]==1 && q!=1)) {bad=2;break;}
             offsets[r]=cursor; lengths[r]=n; counts[r]=(n+15)/16; cursor+=q;
         }

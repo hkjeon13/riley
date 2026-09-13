@@ -137,6 +137,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     packed_prefill: bool,
     mixed_execution: bool,
     flashinfer_experimental: bool,
+    fa3_experimental: bool,
     ffn_pipeline: bool,
     prefill_ffn_pipeline: bool,
     decode_window: bool,
@@ -166,6 +167,7 @@ impl PreparedLlamaBatchExecutorConfig {
             packed_prefill: false,
             mixed_execution: false,
             flashinfer_experimental: false,
+            fa3_experimental: false,
             ffn_pipeline: false,
             prefill_ffn_pipeline: false,
             decode_window: false,
@@ -179,14 +181,14 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;
+        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;self.fa3_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;
         self.vllm_smol_p128_graph = true;
         self.shared_rows_graph = false;
         self
     }
     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
     #[must_use]
-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.flashinfer_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.flashinfer_experimental=false;self.fa3_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
     pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
     pub const fn with_packed_prefill(self)->Self {let mut s=self.with_variable_graph32();s.packed_prefill=true;s}
@@ -197,6 +199,9 @@ impl PreparedLlamaBatchExecutorConfig {
         s.flashinfer_experimental = true;
         s
     }
+    /// Unqualified Hopper attention profile, independently selected from FlashInfer.
+    pub const fn with_fa3_experimental(self) -> Self {let mut s=self.with_mixed_execution();s.fa3_experimental=true;s}
+    pub const fn fa3_experimental(self) -> bool {self.fa3_experimental}
     pub const fn with_ffn_pipeline(self) -> Self {
         let mut s = self.with_mixed_execution();
         s.ffn_pipeline = true;
@@ -222,7 +227,7 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_shared_rows_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;
+        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;self.fa3_experimental=false;self.ffn_pipeline=false;self.prefill_ffn_pipeline=false;self.decode_window=false;self.mixed_time_budget_ns=None;
         self.vllm_smol_p128_graph = true;self.shared_rows_graph = true;self
     }
     #[must_use]
@@ -497,6 +502,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         packed_prefill: config.packed_prefill,
         mixed_execution: config.mixed_execution,
         flashinfer_experimental: config.flashinfer_experimental,
+        fa3_experimental: config.fa3_experimental,
         ffn_pipeline: config.ffn_pipeline,
         prefill_ffn_pipeline: config.prefill_ffn_pipeline,
         decode_window: config.decode_window,
@@ -509,6 +515,15 @@ pub(in crate::llama) const fn normalize_prepared_config(
 #[cfg(test)]
 mod graph_numerical_profile_tests {
     use super::*;
+    #[test]
+    fn fa3_profile_does_not_alias_or_survive_an_exact_profile_reset() {
+        let c=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,16,1,16).unwrap(),PreparedLlamaForwardConfig::default());
+        let p=normalize_prepared_config(c.with_flashinfer_experimental().with_fa3_experimental());
+        assert!(p.fa3_experimental() && p.mixed_execution() && p.packed_prefill());
+        assert_eq!(p.variable_graph_rows(),32);
+        assert!(!p.flashinfer_experimental() && !p.ffn_pipeline() && !p.decode_window());
+        for reset in [p.with_mixed_execution(),p.with_variable_graph(),p.with_shared_rows_graph(),p.with_flashinfer_experimental(),p.with_ffn_pipeline(),p.with_decode_window()] {assert!(!reset.fa3_experimental());}
+    }
     #[test]
     fn mixed_time_budget_survives_normalization_and_resets() {
         let c=PreparedLlamaBatchExecutorConfig::new(LlamaBatchMetadataConfig::new(1,1,16,1,16).unwrap(),PreparedLlamaForwardConfig::default());
