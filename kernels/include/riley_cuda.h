@@ -2037,6 +2037,24 @@ RileyCudaStatus riley_cuda_pinned_host_buffer_defer_to_active_capture(
 // after cudaMemcpyAsync is attempted are stored in that token and surfaced by
 // query/synchronize, preserving all buffer lifetimes until completion. A
 // zero-byte copy is a successful no-op and returns *out_copy == NULL.
+// One same-pool page copy across separate K/V allocations. Strides are bytes;
+// valid_bytes covers only the initialized token prefix of each head.
+typedef struct RileyCudaPageCopySpec {
+  uint64_t layers;
+  uint64_t heads;
+  uint64_t layer_stride;
+  uint64_t block_stride;
+  uint64_t head_stride;
+  uint64_t valid_bytes;
+  uint32_t source_page;
+  uint32_t destination_page;
+} RileyCudaPageCopySpec;
+
+RileyCudaStatus riley_cuda_copy_kv_page_async(
+    RileyCudaDeviceBuffer* keys, RileyCudaDeviceBuffer* values,
+    const RileyCudaPageCopySpec* spec, RileyCudaStream* stream,
+    RileyCudaCopy** out_copy, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 RileyCudaStatus riley_cuda_copy_h2d_async(
     RileyCudaDeviceBuffer* destination,
     uint64_t destination_offset,

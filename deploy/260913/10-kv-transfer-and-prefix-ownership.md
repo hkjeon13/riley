@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **구현 진행 중 — host identity·공유 import·COW ticket 구현, CUDA/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — host identity·공유 import·COW 및 local CUDA event/D2D 검증 완료, captured model/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -74,4 +74,14 @@ Host 검증: `cargo test -p riley-runtime --lib` 334 passed / 1 ignored / 0 fail
 
 검증: 최종 `cargo test -p riley-runtime --lib paged_kv --quiet` 31 passed; `cargo test -p riley-scheduler --lib --quiet` 48 passed; `cargo test -p riley-runtime --lib llama::batch:: --quiet` 8 passed. 초기 offset API 인자 수 컴파일 오류는 수정 후 재실행했다. 이 단계에서 GPU 실행·full-model 재검증·serving 성능 측정은 하지 않았다.
 
-다음 연결 범위: `llama/batch.rs`와 `llama/multi_descriptor/variable_wire.rs`는 현재 cross-sequence page alias를 일괄 거부한다. 이 검증을 단순히 제거하지 말고, authoritative shared-owner ledger와 committed read-only range를 기반으로 읽기 공유를 허용하고 쓰기 충돌을 거부하도록 native 검사까지 함께 변경해야 한다. 이어서 Rust→C ABI→CUDA D2D local adapter와 실제 event에 ticket 완료를 묶고, scheduler cache lookup/publication/eviction 및 model identity를 연결한다. 이 작업이 완료되기 전까지 PR10은 host 기반 구현이며 serving 승격 대상이 아니다.
+Batch 연결 범위: `llama/batch.rs`와 `llama/multi_descriptor/variable_wire.rs`는 현재 cross-sequence page alias를 일괄 거부한다. 이 검증을 단순히 제거하지 말고, authoritative shared-owner ledger와 committed read-only range를 기반으로 읽기 공유를 허용하고 쓰기 충돌을 거부하도록 native 검사까지 함께 변경해야 한다. Local CUDA adapter 결과는 아래에 기록한다. Scheduler cache lookup/publication/eviction 및 model identity 연결도 남아 있으며, 아직 serving 승격 대상이 아니다.
+
+## Local CUDA 전송 검증
+
+이후 `CudaPendingCow` → `CudaPendingKvCopy` → C ABI의 실제 D2D/event 경로를 연결했다. Enqueue 이후 실패도 native token이 양쪽 device buffer·stream·context 수명을 보유하며, 실제 event 완료와 context restoration 확인 전에는 page를 publish/reclaim하지 않는다. 실패는 재시도해도 유지하고, 취소는 완료 이후 discard한다. 상세 결과는 [local CUDA COW gate](../../benchmarks/results/20260914-kv-prefix-cuda/README.md)에 보존했다.
+
+4090에서 4 GPU tests, 기존 H2D/D2H 7 regressions, Memcheck 0 errors/0 leaks(정상·취소·부분 실패 8 cases)를 확인했다. 완료 불명확 fault는 별도 child에서 source/staging 2 pages와 native holds를 보존하는 것으로 검증했다. Trace는 D2D 85 operations/6,736 bytes 및 event 생성·record·파괴 각 8회를 확인한다. 이 수치는 serving benchmark가 아니다.
+
+Nsight 원본은 환경 정보를 담을 수 있으므로 저장소에 넣지 않는다. Runner는 최소 환경으로 profile하고 원본을 원격 private directory에 보관하며, 공개 evidence에는 numeric CUDA activity와 public API 이름만 새 DB로 추출한 SQLite를 넣는다. 이 경로를 포함한 최종 v4 gate가 통과했다.
+
+현재 local adapter는 idle K/V buffer용이다. Captured graph는 `RileyCudaGraphResources`가 parent의 active-use를 장기 보유하므로 그 ledger의 권한·in-flight 상태와 결합한 전송 seam이 추가로 필요하다. 공유 prefix를 일반 serving에 켜기 전에 위 batch/native alias 검사, 모델 identity/정확도, scheduler cache 정책과 함께 연결해야 한다. 아직 실제 model/serving 개선이나 PR10 승격을 주장하지 않는다.

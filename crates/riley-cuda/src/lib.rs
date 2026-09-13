@@ -127,6 +127,7 @@ pub use graph::{
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
+    CudaPageCopySpec, CudaPendingKvCopy,
 };
 #[cfg(feature = "cuda-test-fault-injection")]
 pub use memory::{CudaMemoryFault, CudaMemoryFaultStats};

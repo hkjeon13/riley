@@ -1,0 +1,24 @@
+
+running 4 tests
+test kv_page_ambiguous_completion_retains_all_holds ... 
+running 1 test
+kv-copy ambiguous_completion=true retained_host_pages=2 copy_use_releases=0 cleanup=process_exit
+test kv_page_ambiguous_completion_retains_all_holds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.09s
+
+ok
+test kv_page_cancel_reset_and_orphan_drain ... kv-copy mode=cancel tokens=17 bytes_verified=24576 host_pages=0 cuda_allocations=0
+kv-copy mode=orphan tokens=17 bytes_verified=24576 host_pages=0 cuda_allocations=0
+ok
+test kv_page_event_copy_and_all_tail_guards ... kv-copy mode=publish tokens=1 bytes_verified=24576 host_pages=0 cuda_allocations=0
+kv-copy mode=publish tokens=15 bytes_verified=24576 host_pages=0 cuda_allocations=0
+kv-copy mode=publish tokens=17 bytes_verified=24576 host_pages=0 cuda_allocations=0
+kv-copy mode=publish tokens=31 bytes_verified=24576 host_pages=0 cuda_allocations=0
+kv-copy mode=publish tokens=33 bytes_verified=24576 host_pages=0 cuda_allocations=0
+ok
+test kv_page_partial_submission_never_publishes ... kv-copy mode=partial tokens=17 bytes_verified=24576 host_pages=0 cuda_allocations=0
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+

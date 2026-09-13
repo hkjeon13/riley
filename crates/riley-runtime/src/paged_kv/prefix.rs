@@ -6,6 +6,11 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::{CowTransferError, CudaPendingCow};
+
 #[cfg(test)]
 mod tests;
 

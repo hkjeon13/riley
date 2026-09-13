@@ -1,0 +1,67 @@
+{
+  "scope": "local COW transfer correctness and lifetime; not model or serving qualification",
+  "gpu_tests_passed": 4,
+  "normal_cancel_orphan_partial_cases": 8,
+  "whole_buffer_bytes_verified": 196608,
+  "ambiguous_completion": "isolated process retained both host pages and all native copy uses until exit",
+  "memcheck_errors": 0,
+  "memcheck_leaked_bytes": 0,
+  "memcheck_scope": "8 cases; deliberate ambiguity retention tested separately",
+  "existing_memory_regression_tests_passed": 7,
+  "trace_copies": {
+    "Device-to-Device": {
+      "operations": 85,
+      "bytes": 6736
+    },
+    "Device-to-Host": {
+      "operations": 16,
+      "bytes": 196608
+    },
+    "Host-to-Device": {
+      "operations": 16,
+      "bytes": 196608
+    }
+  },
+  "trace_event_calls": {
+    "cudaEventCreateWithFlags": 8,
+    "cudaEventDestroy": 8,
+    "cudaEventQuery": 5,
+    "cudaEventRecord": 8,
+    "cudaEventSynchronize": 3
+  },
+  "source_hashes": {
+    "kernels/src/memory.cu": "09738a02edf17af615c7780d564875e122e741ae6daf35fc765e82637507432c",
+    "kernels/src/ffi_internal.hpp": "3bcead3a1a402d41ad03601db91cc26a61b786bed0c4c69852fb2102a228b89a",
+    "kernels/include/riley_cuda.h": "cbaabd38da70ea2facef93584586e1cf2cdc6ce6a32638a2a550386afd73729c",
+    "crates/riley-cuda/src/ffi.rs": "6df79ff6274a8afbfd6cacc23f6c3d6340368ea13f893c9c2ec14da7f9b470aa",
+    "crates/riley-cuda/src/lib.rs": "afd60108a49380c88edb0bd85ef132c1f3f0d4208d46c57069d168454c3fa026",
+    "crates/riley-cuda/src/memory.rs": "218f730f91ef1cd49ad086319c6c150cfeb03b96b8e8df1478e81644c1eefdb3",
+    "crates/riley-cuda/src/memory/kv_copy.rs": "0a37dd72dcec355f260efd6d3d707fd4015cad1c32e7c60bf3208b806df5309d",
+    "crates/riley-runtime/Cargo.toml": "3c28512993a00b220259181e6c4e932ef7a65329e65316b3d0b63d3b20ca08a0",
+    "crates/riley-runtime/src/paged_kv.rs": "df4d110d5ee72661c8c477bdc55be94a71c21c8b89eacd9dccbd10fcbe382595",
+    "crates/riley-runtime/src/paged_kv/prefix.rs": "3fd5ddc890bf5e0edab9dabc70d26a2c819b178e5b128954aaa1b26b634facfa",
+    "crates/riley-runtime/src/paged_kv/prefix/cuda.rs": "10f5f20eb7b443bf99cabce942afa6ac13d4d74328745daa83f91c9df437a437",
+    "crates/riley-runtime/tests/kv_prefix_copy_gpu.rs": "41b669edb380b7eec0d7060375449c84dbcab9e8d2a8058e3ba0040893c4e3eb",
+    "benchmarks/analysis/kv_prefix_gpu_gate.sh": "59ea3b9a8e777b59eb86342599c3f7c9519108aa7cc206289f2e6197c4e85f71",
+    "benchmarks/analysis/sanitize_kv_trace.py": "9da7adea4ce11d97701951eed1bcb4978404e6a6b986c495eb898a817b4f9c8d"
+  },
+  "evidence_files_sha256": {
+    "build.jsonl": "6c239d6571cd6ad9da5d8fd0851052dcfa555662b148ee91c7e821c65cb3a672",
+    "build.log": "383ec2700ee4b712ee022efc030fbd042c2692c70aa65be7848ce7b4b60a9f69",
+    "completion.txt": "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1",
+    "compute-after.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copy.sqlite": "fd8cc0956a7f356f5a2db110d4c7b712888cbffb8a74e1c669000670d65de998",
+    "export.log": "1df051e5aad140211d70d077775846262aaeb3697e140daa24f2495e0a75ab34",
+    "gpu-after.txt": "a44a46fd65cfc6aa92612f0aa35405c379d03b2a9f621c3102df66ccf2f215d0",
+    "gpu-before.txt": "e662fe8a5cdf43837e702371deeedb43384eb76d298a9dbe24be6aed767563fc",
+    "gpu.log": "ad971f7b08087bf26ae8b2c02ea24ed482ba204ad2b3fd235e1fefef5ddf1750",
+    "initial-gate.log": "1296a9430079701c077966d1ed85f86ade5d15769f054efd23d7f443d2727535",
+    "memcheck.log": "eda4fed4e2e4d4f48016de7f3f3d7e56aad5c14ade52f9845df08da76e83a09c",
+    "memory-regression.log": "126b77a9123a222d3e00c8fa6fd2437dc414e253cd1abd723f28b7bbf3d7dd6f",
+    "sanitization.log": "b939bdc80b29f874ae2a301f497d9eeb2b4936b74dd556408a474bdcb4647e12",
+    "source.sha256": "bb83c6e3cd3dd4186f017952d23c83f7a4ef048bbf83ad9ca6c5e3f5c9419a41",
+    "test-binary.sha256": "bf467f224f3b819b98561e895eeb289382bb865760ae749b06b5642234c591fb",
+    "test-binary.txt": "72924ce4e4500e96c7690a3bad222379fbc71af73f61a167bcb5ce230c282e9a",
+    "trace.log": "9942e4beeb6bfc7b2082ca83cc6ee35e9cc24c1fadc902f5d1d85851cd9f5ac8"
+  }
+}

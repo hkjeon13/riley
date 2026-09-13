@@ -1031,6 +1031,10 @@ struct RileyCudaCopy {
         stream(copy_stream),
         device(device_buffer),
         host(host_buffer),
+        second_device(nullptr),
+        completion_event(nullptr),
+        event_recorded(false),
+        event_cleanup_failed(false),
         deferred_status(RILEY_CUDA_STATUS_SUCCESS),
         deferred_error{},
         completed(false),
@@ -1042,6 +1046,10 @@ struct RileyCudaCopy {
   RileyCudaStream* stream;
   RileyCudaDeviceBuffer* device;
   RileyCudaPinnedHostBuffer* host;
+  RileyCudaDeviceBuffer* second_device;
+  cudaEvent_t completion_event;
+  bool event_recorded;
+  bool event_cleanup_failed;
   RileyCudaStatus deferred_status;
   RileyCudaErrorInfo deferred_error;
   bool completed;

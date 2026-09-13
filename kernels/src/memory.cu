@@ -227,7 +227,9 @@ bool release_copy_uses(RileyCudaCopy* copy) noexcept {
   }
   if (copy->stream->active_uses.load(std::memory_order_acquire) != 1 ||
       copy->device->active_uses.load(std::memory_order_acquire) != 1 ||
-      copy->host->active_uses.load(std::memory_order_acquire) != 1) {
+      (copy->host != nullptr
+           ? copy->host->active_uses.load(std::memory_order_acquire)
+           : copy->second_device->active_uses.load(std::memory_order_acquire)) != 1) {
     return false;
   }
 #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
@@ -240,7 +242,8 @@ bool release_copy_uses(RileyCudaCopy* copy) noexcept {
   // rule this precheck makes the three-resource state transition all-or-none.
   copy->stream->active_uses.store(0, std::memory_order_release);
   copy->device->active_uses.store(0, std::memory_order_release);
-  copy->host->active_uses.store(0, std::memory_order_release);
+  if (copy->host != nullptr) copy->host->active_uses.store(0, std::memory_order_release);
+  else copy->second_device->active_uses.store(0, std::memory_order_release);
   copy->completed = true;
   return true;
 }
@@ -993,6 +996,106 @@ riley_cuda_pinned_host_buffer_defer_to_active_capture(
                         "the active capture rejected the deferred pinned-buffer node");
 }
 
+extern "C" RileyCudaStatus riley_cuda_copy_kv_page_async(
+    RileyCudaDeviceBuffer* keys, RileyCudaDeviceBuffer* values,
+    const RileyCudaPageCopySpec* spec, RileyCudaStream* stream,
+    RileyCudaCopy** out_copy, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* operation = "copy KV page asynchronously";
+  static_assert(sizeof(RileyCudaPageCopySpec) == 56, "page copy spec ABI drift");
+  clear_error(error);
+  if (out_copy == nullptr) return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+      RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "out_copy is null");
+  *out_copy = nullptr;
+  if (keys == nullptr || values == nullptr || keys == values || spec == nullptr || stream == nullptr)
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "missing or aliased copy resources");
+  if (!same_context(keys->owner, values->owner) || !same_context(keys->owner, stream->owner)
+      || keys->owner->restoration_failed.load(std::memory_order_acquire))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "foreign or poisoned context");
+  // Division-based checks avoid integer multiplication overflow. Together these
+  // invariants prove all slices are in bounds and source/destination disjoint.
+  if (spec->layers == 0 || spec->heads == 0 || spec->head_stride == 0
+      || spec->block_stride == 0 || spec->layer_stride == 0 || spec->valid_bytes == 0
+      || spec->valid_bytes > spec->head_stride
+      || spec->block_stride % spec->head_stride != 0
+      || spec->block_stride / spec->head_stride != spec->heads
+      || spec->layer_stride % spec->block_stride != 0
+      || spec->source_page == spec->destination_page
+      || spec->source_page >= spec->layer_stride / spec->block_stride
+      || spec->destination_page >= spec->layer_stride / spec->block_stride
+      || spec->layers > keys->byte_len / spec->layer_stride
+      || spec->layers > values->byte_len / spec->layer_stride)
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "invalid or overlapping page copy layout");
+  if (!try_begin_capture_domain_pending_copy(keys->owner->capture_domain))
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "capture lifecycle blocks pending copy");
+  void* storage = std::calloc(1, sizeof(RileyCudaCopy));
+  if (storage == nullptr) {
+    (void)release_capture_domain_pending_copy(keys->owner->capture_domain);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE, operation,
+        "copy token allocation failed");
+  }
+  const bool keys_held = try_acquire_copy(keys->active_uses);
+  const bool values_held = keys_held && try_acquire_copy(values->active_uses);
+  const bool stream_held = values_held && try_acquire_copy(stream->active_uses);
+  if (!stream_held || !retain_child(keys->owner)) {
+    if (stream_held) (void)release_copy(stream->active_uses);
+    if (values_held) (void)release_copy(values->active_uses);
+    if (keys_held) (void)release_copy(keys->active_uses);
+    (void)release_capture_domain_pending_copy(keys->owner->capture_domain);
+    std::free(storage);
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, operation, "resource busy or child counter exhausted");
+  }
+  auto* copy = new (storage) RileyCudaCopy(keys->owner, stream, keys, nullptr);
+  copy->second_device = values;
+  RileyCudaErrorInfo deferred{};
+  deferred.struct_size = sizeof(deferred);
+  CurrentContext scope(keys->owner);
+  RileyCudaStatus status = scope.enter(&deferred, RILEY_CUDA_ERROR_STAGE_COPY, operation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = runtime_error(cudaEventCreateWithFlags(&copy->completion_event, cudaEventDisableTiming),
+        &deferred, RILEY_CUDA_ERROR_STAGE_CREATE, "create KV copy event");
+  }
+  for (uint64_t layer = 0; layer < spec->layers && status == RILEY_CUDA_STATUS_SUCCESS; ++layer) {
+    for (uint64_t head = 0; head < spec->heads && status == RILEY_CUDA_STATUS_SUCCESS; ++head) {
+      const uint64_t base = layer * spec->layer_stride + head * spec->head_stride;
+      for (unsigned kind = 0; kind < 2 && status == RILEY_CUDA_STATUS_SUCCESS; ++kind) {
+        auto* bytes = static_cast<uint8_t*>((kind == 0 ? keys : values)->device_data);
+        status = runtime_error(cudaMemcpyAsync(
+            bytes + base + spec->destination_page * spec->block_stride,
+            bytes + base + spec->source_page * spec->block_stride,
+            static_cast<size_t>(spec->valid_bytes), cudaMemcpyDeviceToDevice, stream->stream),
+            &deferred, RILEY_CUDA_ERROR_STAGE_COPY, operation);
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+        if (status == RILEY_CUDA_STATUS_SUCCESS && consume_fault(keys->owner,
+            RILEY_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR))
+          status = injected_runtime_error(&deferred, RILEY_CUDA_ERROR_STAGE_COPY, operation);
+#endif
+      }
+    }
+  }
+  // Even partial submission is fenced. If event recording fails, the existing
+  // copy token falls back to stream completion, with all resources still held.
+  if (copy->completion_event != nullptr) {
+    const cudaError_t recorded = cudaEventRecord(copy->completion_event, stream->stream);
+    copy->event_recorded = recorded == cudaSuccess;
+    if (status == RILEY_CUDA_STATUS_SUCCESS)
+      status = runtime_error(recorded, &deferred, RILEY_CUDA_ERROR_STAGE_COPY, "record KV copy event");
+  }
+  status = scope.leave(status, &deferred, RILEY_CUDA_ERROR_STAGE_COPY, operation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    copy->deferred_status = status;
+    copy->deferred_error = deferred;
+  }
+  *out_copy = copy;
+  clear_error(error);
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RileyCudaStatus riley_cuda_copy_h2d_async(
     RileyCudaDeviceBuffer* destination, uint64_t destination_offset,
     RileyCudaPinnedHostBuffer* source, uint64_t source_offset,
@@ -1117,7 +1220,8 @@ extern "C" RileyCudaStatus riley_cuda_copy_query(
       error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA copy");
   bool completion_observed = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    const cudaError_t result = cudaStreamQuery(copy->stream->stream);
+    const cudaError_t result = copy->event_recorded
+        ? cudaEventQuery(copy->completion_event) : cudaStreamQuery(copy->stream->stream);
     completion_observed = result == cudaSuccess;
     status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                            "query CUDA copy stream");
@@ -1158,7 +1262,8 @@ extern "C" RileyCudaStatus riley_cuda_copy_synchronize(
       "synchronize CUDA copy");
   bool completion_observed = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    const cudaError_t result = cudaStreamSynchronize(copy->stream->stream);
+    const cudaError_t result = copy->event_recorded
+        ? cudaEventSynchronize(copy->completion_event) : cudaStreamSynchronize(copy->stream->stream);
     completion_observed = result == cudaSuccess;
     status = runtime_error(result, error,
                            RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
@@ -1215,6 +1320,27 @@ extern "C" RileyCudaStatus riley_cuda_copy_close(
   }
   if (complete != 0) {
     RileyCudaContext* owner = (*copy)->owner;
+    if ((*copy)->event_cleanup_failed) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA copy",
+                            "prior event cleanup was ambiguous; token remains retained");
+    }
+    if ((*copy)->completion_event != nullptr) {
+      CurrentContext scope(owner);
+      RileyCudaStatus cleanup = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                            "close copy completion event");
+      if (cleanup == RILEY_CUDA_STATUS_SUCCESS) {
+        const cudaEvent_t event = (*copy)->completion_event;
+        (*copy)->completion_event = nullptr; // Never retry an ambiguous destroy.
+        cleanup = runtime_error(cudaEventDestroy(event), error,
+                                RILEY_CUDA_ERROR_STAGE_CLOSE, "close copy completion event");
+      }
+      cleanup = scope.leave(cleanup, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            "close copy completion event");
+      if (cleanup != RILEY_CUDA_STATUS_SUCCESS) {
+        (*copy)->event_cleanup_failed = true;
+        return cleanup;
+      }
+    }
     const bool held_capture_admission = (*copy)->capture_admission_held;
     (*copy)->~RileyCudaCopy();
     std::free(*copy);

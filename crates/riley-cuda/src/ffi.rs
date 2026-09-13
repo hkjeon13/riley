@@ -1936,6 +1936,14 @@ unsafe extern "C" {
         buffer: *mut *mut RawPinnedHostBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_copy_kv_page_async(
+        keys: *mut RawDeviceBuffer,
+        values: *mut RawDeviceBuffer,
+        spec: *const crate::memory::CudaPageCopySpec,
+        stream: *mut RawStream,
+        out_copy: *mut *mut RawCopy,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_copy_h2d_async(
         destination: *mut RawDeviceBuffer,
         destination_offset: u64,
@@ -6470,6 +6478,23 @@ pub(super) struct CopyHandle {
 unsafe impl Send for CopyHandle {}
 
 impl CopyHandle {
+    pub(super) fn kv_page(
+        keys: &DeviceBufferHandle,
+        values: &DeviceBufferHandle,
+        spec: &crate::memory::CudaPageCopySpec,
+        stream: &StreamHandle,
+    ) -> CudaResult<Self> {
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: repr(C) spec is readable for this call. The safe pending
+        // wrapper exclusively borrows both buffers and stream until completion.
+        let status = unsafe { riley_cuda_copy_kv_page_async(keys.as_ptr(), values.as_ptr(),
+            spec, stream.as_ptr(), &mut pointer, &mut error) };
+        status_result(status, "enqueue KV page copy", &error)?;
+        Self::from_submit_output(pointer, 1, "enqueue KV page copy")?
+            .ok_or_else(|| missing_output("enqueue KV page copy", "missing nonzero copy token"))
+    }
+
     pub(super) fn h2d(
         destination: &DeviceBufferHandle,
         destination_offset: u64,

@@ -14,6 +14,8 @@ use std::time::Instant;
 
 mod prefix;
 pub use prefix::{CopyOnWrite, CopyOutcome, KvCopyRegion, KvIdentity, KvPageLayout, PrefixDescriptor, PrefixExport};
+#[cfg(feature = "cuda")]
+pub use prefix::{CowTransferError, CudaPendingCow};
 
 /// Fixed token capacity of every PR10 physical block.
 pub const KV_BLOCK_SIZE: usize = 16;

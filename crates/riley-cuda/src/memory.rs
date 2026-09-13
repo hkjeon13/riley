@@ -3,6 +3,9 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod kv_copy;
+pub use kv_copy::{CudaPageCopySpec, CudaPendingKvCopy};
+
 use crate::error::{CudaError, CudaResult};
 use crate::runtime::{
     ContextInner, CudaCommandStream, CudaContext, CudaStream, ensure_same_context,
