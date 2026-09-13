@@ -1,6 +1,6 @@
 # PR 19 — Persistent layer 실행의 전 layer·serving 통합
 
-상태: **FFN phase DAG 진단 구현·serving screen 완료 / 전체 layer DAG 미완료**. [공통 계약](README.md)을 따른다.
+상태: **Post-attention phase DAG 진단 구현·serving screen 완료 / 전체 layer DAG 미완료**. [공통 계약](README.md)을 따른다.
 
 ## 문제와 가설
 
@@ -50,3 +50,9 @@ GPU 내부 request scheduler 전체 이식, 무한 persistent loop, 모든 모�
 [구현 및 비교 보고](../../benchmarks/results/20260913-persistent-ffn-native/README.md): V7의 gate/down/residual-norm body를 재사용하고 finite cooperative grid의 두 barrier로 연결했다. Occupancy·device 검증, graph replay, inactive row·invalid plan 검증을 포함한다. Native memcheck/racecheck0, SM89 runtime 및 SM90a/SM100a compile 통과(후자 runtime 장비 부재 skip). 별도 모델 source에서30-layer pure-decode FFN을 연결했고 mixed/prefill은 기존 경로다. 생성1,024토큰과 full-logit12,582,912개 값이 bitwise 같고 whole-model memcheck0이다.
 
 C32 natural 두 역순에서 V7/후보/vLLM throughput은10,440.7/10,715.1/11,793.7 tokens/s, median TPOT는2.920/2.850/2.381ms다. V7 대비2.63% 개선, vLLM 대비9.15% 부족이다. 기본값 승격은 보류한다. 아직 attention+MLP 전체 layer DAG, persistent prefill, async ticket 통합, 높은 concurrency·장시간 안정성 검증이 남아 있다. FFN 내부 global intermediate는 유지되므로 on-chip 전체 재사용을 구현했다고 주장하지 않는다. 다음 batch는 attention/projection 경계와 scratch 수명을 함께 다루는 구조 확장 타당성 검토다.
+
+## Projection부터 FFN까지 확장 결과
+
+[Post-attention batch 보고](../../benchmarks/results/20260913-persistent-post-attention/README.md): attention 출력 projection·residual/norm·FFN을 하나의 finite cooperative grid로 연결하고 partial scratch 재사용 전 barrier를 추가했다. Native24 replay와 full-model1,024토큰/12,582,912 logits가 bitwise 일치하며 memcheck/racecheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다.
+
+같은 C32 natural 두 역순에서 V7/FFN-only/확장 후보/vLLM은10,482.0/10,610.7/10,711.1/12,029.1 tokens/s다. 후보는 직전 구조보다0.95%, V7보다2.19% 빠르지만 vLLM보다10.96% 느리다. 작은 추가 이득의 통계적 유의성은 입증하지 않았다. 기본값 승격을 보류한다. 다음 영역은 기존 attention의 score/value 연산을 유지하면서 ragged context 작업 분배와 score scratch·grid barrier를 함께 연결하는 구조 확장이다. Attention 자체와 mixed/prefill·async ticket 통합은 여전히 미완료다.
