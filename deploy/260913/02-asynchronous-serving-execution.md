@@ -120,3 +120,10 @@ prefix commit마다 detached reservation과 내부 pending reservation의 nonce�
 CPU KV 검사 14개와 기존 scheduler 검사 37개가 통과했다. 252개 경계 조합에서 prefix commit 뒤 suffix commit/rollback, block ID·valid-token 합계·pool accounting을 대조했다. 같은 page의 stale nonce, foreign 예약, 역순/중복 prefix, nonce 소진의 무변경 거절, sidecar 무효화, 후행 실패·예약 유실 후 prefix 유지도 검사했다. CUDA feature build에서도 동일 host KV 검사를 실행하며, 이를 GPU 동시 실행 검증으로 계산하지 않는다.
 
 [부분 commit 검증 manifest](../../benchmarks/results/20260913-prefix-kv/manifest.json), [CPU KV](../../benchmarks/results/20260913-prefix-kv/kv-cpu.log), [scheduler](../../benchmarks/results/20260913-prefix-kv/scheduler-cpu.log), [CUDA feature의 host 검사](../../benchmarks/results/20260913-prefix-kv/cuda-feature-host-tests.log). 최종 소스 SHA256을 원격과 대조했고, CUDA feature에서도 14개 host 검사가 통과했다.
+
+
+## 시간 예산에 따른 다음 구현 순서
+
+[기존 serving trace의 graph 사이 시간 재계산](../../benchmarks/results/20260913-overlap-headroom/README.md)에서 natural C16/C32의 간격은 각 trace window의 12.65%/17.47%였다. 모든 간격을 제거한 낙관적 trace 상한은 +14.48%/+21.17%지만 profiler/client pacing을 포함하므로 unprofiled serving 예측에 사용할 수 없다. 별도 round62 C32 natural에서 목표까지 필요한 throughput 변화는 +31.72%다.
+
+PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 attention adapter의 실제 모델 경로를 우선한다. PR 02의 GPU future token·두 plan 예약·순차 commit은 그대로 남은 범위이며, 완료·성능 승격으로 표시하지 않는다. GPU 연산과 CPU 중첩의 결합 효과는 실제 serving 통합 후 비교한다.

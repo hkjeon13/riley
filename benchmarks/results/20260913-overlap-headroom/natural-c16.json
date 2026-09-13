@@ -1,0 +1,52 @@
+{
+  "source": "/tmp/riley-opt-260912/native-trace-v56/c16.sqlite",
+  "source_sha256": "bdcd93f6fbd395888dfc5e47d348ec89629334d0b3b31a98822595bcd8dd2572",
+  "cpu_graph_launches": 525,
+  "matched_device_launches": 525,
+  "groups": [
+    {
+      "launches": 525,
+      "window_ms": 1072.387002,
+      "graph_span_ms": 936.73347,
+      "inter_graph_gap": {
+        "count": 524,
+        "median_us": 163.3785,
+        "p95_us": 1164.911,
+        "max_us": 4011.669,
+        "sum_ms": 135.653532
+      },
+      "post_gpu_until_next_cpu_launch": {
+        "count": 524,
+        "median_us": 157.822,
+        "p95_us": 1157.753,
+        "max_us": 3998.15,
+        "sum_ms": 132.166735
+      },
+      "remaining_gap_after_cpu_launch_starts": {
+        "count": 524,
+        "median_us": 5.539,
+        "p95_us": 13.005,
+        "max_us": 21.906,
+        "sum_ms": 3.486797
+      },
+      "removable_fraction_if_all_inter_graph_gaps_vanish": 0.126496807353135,
+      "optimistic_trace_speedup_if_all_gaps_vanish": 1.144815506592286,
+      "inside_graph_unoccupied_ms": 83.433371,
+      "process_context_stream": [
+        306899924811776,
+        1,
+        14
+      ],
+      "kernel_count_distribution": {
+        "276": 458,
+        "306": 67
+      }
+    }
+  ],
+  "limits": [
+    "All inter-graph gaps are optimistically removable, including client pacing and launch overhead.",
+    "Profiler overhead is not removed; this is not a bound on unprofiled serving.",
+    "Inside-graph unoccupied time is kept and must not be called scheduler host bubble.",
+    "No throughput, latency, fairness or correctness gain is established."
+  ]
+}

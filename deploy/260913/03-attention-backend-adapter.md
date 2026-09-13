@@ -46,3 +46,8 @@ backend flag로 기존 attention 복귀. 새 workspace는 해당 stream 완료 �
 ## 연구 근거
 
 [FlashInfer](https://arxiv.org/abs/2501.01005), [FlashAttention](https://arxiv.org/abs/2205.14135). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+
+## 착수 우선순위 보강
+
+[비동기 시간 예산 분석](../../benchmarks/results/20260913-overlap-headroom/README.md)에 따라 다음 구현은 이 PR의 실제 모델 adapter를 우선한다. PR 02 전체 완료를 기다리는 의존성은 추가하지 않는다. 기존 FlashInfer primitive 호환 검사는 actual-model correctness나 serving 이득의 증거가 아니다. HND/page16 무복사 경로, explicit numerical profile, graph-compatible plan 수명, 기존 exact fallback을 함께 연결한 뒤 검증하며 품질·성능 결과 없이 기본값으로 승격하지 않는다.
