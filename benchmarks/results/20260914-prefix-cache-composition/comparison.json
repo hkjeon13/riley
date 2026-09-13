@@ -1,0 +1,265 @@
+{
+  "scope": "closed-loop C32 screen; two reversed-order runs; not overall qualification",
+  "aggregation": "median of two lane throughput / percentile estimates, not pooled percentiles",
+  "retained_requests": 4096,
+  "retained_tokens": 131072,
+  "archive_sha256": "e8d7ba6e856eca728b61c7e6c96f6e71b43d2e102db127f7a86969bb68c56147",
+  "preparation": {
+    "hashes": {
+      "current": "f1ccef367d9329a13e8c19b499ec22bf5817a5f82692fbaf38c1c3b6021688ea",
+      "prior": "d85368b3bc3af73593f28cac2ea7bcb01f09c45f2888e6a5f4fb6be5c9101bab"
+    },
+    "controller_sha256": "091d2ddf39027506288611556428f801488b76b4d83de9654cc3127c24ea8a62",
+    "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "concurrency": 32,
+    "warmup": 64,
+    "retained": 256,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "qualification": false,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "prompt_token_ranges": {
+    "shared": [
+      498,
+      518
+    ],
+    "unique": [
+      552,
+      603
+    ]
+  },
+  "comparison": [
+    {
+      "workload": "shared",
+      "lane": "cache",
+      "throughput_tokens_s": 7404.381250289752,
+      "ttft_0.5_ms": 19.47229875,
+      "tpot_0.5_ms": 3.8172605403225806,
+      "e2e_0.95_ms": 154.67485,
+      "e2e_0.99_ms": 175.2292224
+    },
+    {
+      "workload": "shared",
+      "lane": "optimized",
+      "throughput_tokens_s": 3977.2352934282044,
+      "ttft_0.5_ms": 72.93412275,
+      "tpot_0.5_ms": 5.674363217741935,
+      "e2e_0.95_ms": 327.49863675,
+      "e2e_0.99_ms": 353.337775675
+    },
+    {
+      "workload": "shared",
+      "lane": "composed",
+      "throughput_tokens_s": 7839.5550952707745,
+      "ttft_0.5_ms": 19.465242500000002,
+      "tpot_0.5_ms": 3.5173760241935486,
+      "e2e_0.95_ms": 144.596722875,
+      "e2e_0.99_ms": 163.0354094
+    },
+    {
+      "workload": "shared",
+      "lane": "vllm",
+      "throughput_tokens_s": 11871.68608643227,
+      "ttft_0.5_ms": 28.69819575,
+      "tpot_0.5_ms": 1.743839266129032,
+      "e2e_0.95_ms": 98.447887375,
+      "e2e_0.99_ms": 101.29841615
+    },
+    {
+      "workload": "unique",
+      "lane": "cache",
+      "throughput_tokens_s": 3299.010261414238,
+      "ttft_0.5_ms": 133.16881375,
+      "tpot_0.5_ms": 6.001936387096775,
+      "e2e_0.95_ms": 369.93909087500003,
+      "e2e_0.99_ms": 404.25844144999996
+    },
+    {
+      "workload": "unique",
+      "lane": "optimized",
+      "throughput_tokens_s": 3522.434028298815,
+      "ttft_0.5_ms": 124.13928899999999,
+      "tpot_0.5_ms": 5.5893940483870965,
+      "e2e_0.95_ms": 344.039644875,
+      "e2e_0.99_ms": 377.9395133249999
+    },
+    {
+      "workload": "unique",
+      "lane": "composed",
+      "throughput_tokens_s": 3373.899736735215,
+      "ttft_0.5_ms": 127.34391725,
+      "tpot_0.5_ms": 5.975788330645161,
+      "e2e_0.95_ms": 361.4314285,
+      "e2e_0.99_ms": 393.47158887499995
+    },
+    {
+      "workload": "unique",
+      "lane": "vllm",
+      "throughput_tokens_s": 4764.208241724014,
+      "ttft_0.5_ms": 43.14746975,
+      "tpot_0.5_ms": 5.299236903225807,
+      "e2e_0.95_ms": 279.44615699999997,
+      "e2e_0.99_ms": 338.5133751999999
+    }
+  ],
+  "reference_agreement": {
+    "shared-p0-cache": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-optimized": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-composed": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p0-vllm": {
+      "prompt": 256,
+      "tokens": 217,
+      "text": 217,
+      "finish": 256
+    },
+    "shared-p1-vllm": {
+      "prompt": 256,
+      "tokens": 217,
+      "text": 217,
+      "finish": 256
+    },
+    "shared-p1-composed": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p1-optimized": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "shared-p1-cache": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-cache": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-optimized": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-composed": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p0-vllm": {
+      "prompt": 256,
+      "tokens": 80,
+      "text": 80,
+      "finish": 256
+    },
+    "unique-p1-vllm": {
+      "prompt": 256,
+      "tokens": 80,
+      "text": 80,
+      "finish": 256
+    },
+    "unique-p1-composed": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p1-optimized": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    },
+    "unique-p1-cache": {
+      "prompt": 256,
+      "tokens": 256,
+      "text": 256,
+      "finish": 256
+    }
+  },
+  "cache_telemetry_including_warmup": {
+    "shared-p0-cache": {
+      "entries": 16,
+      "pages": 512,
+      "hits": 288,
+      "reused_tokens": 117200,
+      "host_capacity_bytes": 62464
+    },
+    "shared-p0-composed": {
+      "entries": 16,
+      "pages": 512,
+      "hits": 306,
+      "reused_tokens": 125040,
+      "host_capacity_bytes": 62464
+    },
+    "shared-p1-composed": {
+      "entries": 16,
+      "pages": 512,
+      "hits": 306,
+      "reused_tokens": 125040,
+      "host_capacity_bytes": 62464
+    },
+    "shared-p1-cache": {
+      "entries": 16,
+      "pages": 512,
+      "hits": 306,
+      "reused_tokens": 125136,
+      "host_capacity_bytes": 62464
+    },
+    "unique-p0-cache": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 59736
+    },
+    "unique-p0-composed": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 59736
+    },
+    "unique-p1-composed": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 59736
+    },
+    "unique-p1-cache": {
+      "entries": 13,
+      "pages": 481,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 59736
+    }
+  }
+}

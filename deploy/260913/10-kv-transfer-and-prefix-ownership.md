@@ -125,3 +125,7 @@ Serving 비교는 이전 binary·현재 cache-off·현재 cache-on·vLLM cache-o
 Riley는 이전 baseline의 token/text/finish와 모든 retained 응답이 일치했다. vLLM exact token/text agreement는 shared 436/512, unique 160/512이므로 cross-engine quality 완료 주장은 하지 않는다. 양쪽 input/output token 수, hardware, KV memory와 workload는 맞췄다. 단일 C32·2 reversed runs screen이며 soak/open-loop/tail 안정성 qualification은 아니다.
 
 이번 screen은 cache 변경을 분리하기 위해 standard V7를 사용했다. 다음에는 기존 prefill-FFN/paired-decode 구성과 cache 조합을 먼저 qualification하고, 긴 context workload의 GPU 실행 및 host/prefill-decode overlap을 profile한다. 낮아진 TTFT에도 남은 TPOT 차이만으로 특정 attention kernel을 원인으로 단정하지 않는다. Cache-miss admission/index 비용과 partial-tail COW도 별도 남은 범위로 유지한다.
+
+### Cache와 기존 실행 최적화 결합 검증
+
+[결합 serving 결과](../../benchmarks/results/20260914-prefix-cache-composition/README.md): 동일 release binary에서 prefill-FFN·paired-decode·adaptive projection + cache를 실행했다. C32 공유-prefix throughput은 표준 cache-on 대비 +5.9%이나 vLLM 대비 −34.0%다. 고유 prompt는 최적화 cache-off 대비 −4.2%로 cache 기본값 승격은 보류한다. Riley retained 3,072건은 기준 출력과 일치하고 최적화 lane마다 paired 실행 완료를 확인했다. 두 반복의 screen이며 전체 품질·장시간 안정성 검증은 아니다. 다음은 결합 lane의 bounded GPU/host trace로 PR04 overlap 또는 PR06 attention 분할의 적용 근거를 확보한다. Partial-tail COW의 captured-model 연결은 여전히 미완료다.
