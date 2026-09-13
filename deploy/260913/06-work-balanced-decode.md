@@ -46,3 +46,11 @@ unsplit backend로 복귀한다.
 ## 연구 근거
 
 [Stream-K](https://arxiv.org/abs/2301.03598), [LeanAttention](https://arxiv.org/abs/2405.10480). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+## 후속 범위 선택 — 2026-09-14
+
+[C8/C16 serving 및 C8 profile](../../benchmarks/results/20260914-decode-capacity-serving/README.md)에서 낮은 concurrency의 decode 비중과 고정 32행 projection의 불필요한 MMA tile 계산을 확인했다. 기존 계획의 small-M GEMM 후속 후보로 QKV·attention 출력 projection·FFN down을 하나의 적응형 16/32행 batch로 묶는다. 이는 Stream-K 또는 LeanAttention의 split reduction을 구현했다고 주장하는 범위가 아니며 기존 attention split 계획을 대체 완료하지 않는다.
+
+[Native gate](../../benchmarks/results/20260914-decode-adaptive-native/README.md): device active count로 1/2 tile을 선택하는 격리 후보, active0..33 graph102건 bitwise partial 일치, memcheck/racecheck, SM89 실행 및 SM90a/SM100a compile 통과. 30개 weight 집합의 세 연산 시간은 active8 약−21%, active16 약−14%였다. 모델·serving에는 아직 연결되지 않았다.
+
+다음 묶음은 ordinary/paired future decode 연결, source/profile identity, full-model 자유 생성·logits parity, C8/C16 및 C32/C64 serving 비교다. K reduction·BF16 partial rounding·scratch stride를 유지한다. Native 시간 비율을 serving 개선율로 환산하거나 기본값을 승격하지 않는다.

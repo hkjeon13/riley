@@ -1,0 +1,22 @@
+{
+  "compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "gpu": "NVIDIA GeForce RTX 4090, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, 580.178.04",
+  "source_base": "cf6df5e8b3c6145c1d7da0f2d65d8c27fc383221 plus accompanying isolated candidate",
+  "sm89_command": "nvcc -std=c++17 -O3 -arch=sm_89 -Xptxas=-v benchmarks/analysis/decode_adaptive_rows_probe.cu -o decode-adaptive-rows-probe",
+  "compile_only_arches": [
+    "sm_90a",
+    "sm_100a"
+  ],
+  "compile_only_flags": "-std=c++17 -O3 -c",
+  "build_and_native_and_sanitizer_exit_code": 0,
+  "hopper_blackwell_runtime": "not run: no hardware",
+  "production_model_integration": false,
+  "files": {
+    "source/kernels/optional/decode_adaptive_rows.cuh": "a5e0498300fe6491bdf6ef0a8eaf63f1cb706b69e25dd68dd366e8c49adf7094",
+    "source/kernels/src/decode_shared32.cuh": "bbf2be89c3560c28c8ee7d08fd92043b6fa6cc95a7c74fcc8555768ef116f96d",
+    "source/benchmarks/analysis/decode_adaptive_rows_probe.cu": "11f64fb7b6a9818ba542ede2b60d8ff4420e2ccc2a131d7d5e5312f8aac31b1d",
+    "decode-adaptive-rows-probe": "a987384d2e7ce225f6212774575f3b3dc8441f11ef67d759c6f4a3684e2a5be9",
+    "decode-adaptive-sm90a.o": "caef9f60a550c1df93d0667150f215eec6ab8e5df2d0ce10fd505885b5256977",
+    "decode-adaptive-sm100a.o": "bf168fec70bee78f94fc44e729cb3dc16461d331eba1030e7068b36a1d3d3cdc"
+  }
+}
