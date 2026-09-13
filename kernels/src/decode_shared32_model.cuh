@@ -3,6 +3,8 @@
 #include "decode_shared32.cuh"
 #include "decode_shared32_attention.cuh"
 #include "decode_gqa_attention_v50.cuh"
+#include "decode_gate_v56.cuh"
+#include "decode_merge_norm_v56.cuh"
 // Internal model sequence: caller validates all row identities, context/page
 // ownership and buffer extents before enqueue. Final hidden rows stay in b(1).
 namespace riley_shared32_model {
@@ -68,13 +70,25 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+ if(grouped_attention){
+  shared32_projection_parts<576,576,128,false><<<dim3(72,5),32,0,stream>>>(b(4),w(base+4),static_cast<float*>(scratch[7]),b(2),active);
+  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
+ }else{
  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(2),b(0),w(base+5),scratch[10],b(1),1,pointwise,32);
- if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+ }
+ if(grouped_attention&&tiled)riley_gate_v56::split_rows<4><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
+ else if(tiled)shared32_gate_up_swiglu<true><<<192,64,0,stream>>>(b(1),w(273+layer*3),w(274+layer*3),b(11),active);
  else shared32_gate_up_swiglu<false><<<192,64,0,stream>>>(b(1),w(base+6),w(base+7),b(11),active);
+ if(grouped_attention){
+  if(tiled)shared32_projection_parts<576,1536,320,true><<<dim3(72,5),32,0,stream>>>(b(11),w(273+layer*3+2),static_cast<float*>(scratch[7]),b(4),active);
+  else shared32_projection_parts<576,1536,320,false><<<dim3(72,5),32,0,stream>>>(b(11),w(base+8),static_cast<float*>(scratch[7]),b(4),active);
+  riley_merge_norm_v56::merge_norm<<<32,256,0,stream>>>(static_cast<const float*>(scratch[7]),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
+ }else{
  if(tiled)enqueue_shared32_projection<576,1536,320,true>(stream,b(11),w(273+layer*3+2),b(4),static_cast<float*>(scratch[7]),active);
  else enqueue_shared32_projection<576,1536,320,false>(stream,b(11),w(base+8),b(4),static_cast<float*>(scratch[7]),active);
  riley_prefill_pointwise::norm_rows<<<32,256,0,stream>>>(b(4),scratch[10],w(layer+1<30?base+9:1),b(0),b(1),2,pointwise,32);
+ }
  }
  clear_inactive_hidden<<<32,256,0,stream>>>(b(1),active);
  return cudaGetLastError();

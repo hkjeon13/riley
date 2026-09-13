@@ -2092,6 +2092,8 @@ include_bytes!("../../../../kernels/src/decode_shared16.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared32.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared32_attention.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_gqa_attention_v50.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_merge_norm_v56.cuh").as_slice(),
+include_bytes!("../../../../kernels/src/decode_gate_v56.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared32_model.cuh").as_slice(),
 include_bytes!("../../../../kernels/src/decode_shared32_result.cuh").as_slice(),
 
