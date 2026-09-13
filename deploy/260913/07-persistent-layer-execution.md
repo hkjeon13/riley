@@ -58,3 +58,7 @@ C32 natural 두 역순에서 V7/후보/vLLM throughput은10,440.7/10,715.1/11,79
 [Post-attention batch 보고](../../benchmarks/results/20260913-persistent-post-attention/README.md): attention 출력 projection·residual/norm·FFN을 하나의 finite cooperative grid로 연결하고 partial scratch 재사용 전 barrier를 추가했다. Native24 replay와 full-model1,024토큰/12,582,912 logits가 bitwise 일치하며 memcheck/racecheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다.
 
 같은 C32 natural 두 역순에서 V7/FFN-only/확장 후보/vLLM은10,482.0/10,610.7/10,711.1/12,029.1 tokens/s다. 후보는 직전 구조보다0.95%, V7보다2.19% 빠르지만 vLLM보다10.96% 느리다. 작은 추가 이득의 통계적 유의성은 입증하지 않았다. 기본값 승격을 보류한다. 다음 영역은 기존 attention의 score/value 연산을 유지하면서 ragged context 작업 분배와 score scratch·grid barrier를 함께 연결하는 구조 확장이다. Attention 자체와 mixed/prefill·async ticket 통합은 여전히 미완료다.
+
+## Attention task body native gate — batch 진행 중
+
+[Native gate](../../benchmarks/results/20260913-persistent-attention-native/README.md): score/value 연산을 explicit task body로 분리하고 ragged request-prefix score 작업 계획·row-interleaved value 배치·cooperative barrier를 구현했다. 원본 V7과15개 graph replay의 score/output 전체가 bitwise 같으며 native memcheck/racecheck0이다. SM90a/SM100a compile 통과, runtime 장비 부재 skip이다. 아직 모델·serving 통합 전이므로 성능 개선이나 batch 완료를 주장하지 않는다. 다음 단계는 attention score scratch를 projection/down partial로 재사용하기 전 전체 value 소비 완료 barrier, retained owner·graph identity, full-model gate 및 기존/직전/신규/vLLM 비교다.
