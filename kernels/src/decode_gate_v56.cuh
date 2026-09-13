@@ -2,8 +2,8 @@
 #include "decode_shared32.cuh"
 namespace riley_gate_v56 {
 template<int Steps,int Tiles>
-__device__ __forceinline__ void compute(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,uint32_t rows){
- const int lane=threadIdx.x%32,g=lane/4,t=lane%4,column=blockIdx.x;
+__device__ __forceinline__ void compute(const __nv_bfloat16* x,const __nv_bfloat16* gate,const __nv_bfloat16* up,__nv_bfloat16* out,uint32_t rows,int column=blockIdx.x){
+ const int lane=threadIdx.x%32,g=lane/4,t=lane%4;
  float dg[Tiles][4]={},du[Tiles][4]={};
  #pragma unroll 1
  for(int depth=0;depth<576;depth+=Steps*16){

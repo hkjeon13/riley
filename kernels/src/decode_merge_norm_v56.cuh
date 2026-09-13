@@ -4,13 +4,13 @@
 #include <stdint.h>
 // Internal V3 pointwise operators; the retained owner validates parent extents.
 namespace riley_merge_norm_v56 {
-__global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity){
- const uint32_t row=blockIdx.x,live=shape[2];if(capacity!=32||!live||live>capacity||row>=live)return;
+__device__ __forceinline__ void merge_norm_row(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity,uint32_t row,float* sums){
+ const uint32_t live=shape[2];if(capacity!=32||!live||live>capacity||row>=live)return;
  parts+=row*576;out+=row*576;
  if(mode==1){b=static_cast<const __nv_bfloat16*>(b)+row*576;residual=static_cast<float*>(residual)+row*576;}
  if(mode==2){b=static_cast<const float*>(b)+row*576;residual=static_cast<__nv_bfloat16*>(residual)+row*576;}
 
- __shared__ float sums[8];int tid=threadIdx.x,lane=tid%32;float x[4]={};
+ int tid=threadIdx.x,lane=tid%32;float x[4]={};
  for(int j=0;j<4;++j){int i=tid*4+j;if(i<576){float value=0.F;
   #pragma unroll
   for(int chunk=0;chunk<5;++chunk)value+=parts[chunk*32*576+i];
@@ -25,4 +25,9 @@ __global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16*
  asm("rsqrt.approx.ftz.f32 %0, %1;":"=f"(inv):"f"(mean));
  for(int j=0;j<4;++j){int i=tid*4+j;if(i<576)out[i]=__float2bfloat16_rn((x[j]*inv)*__bfloat162float(w[i]));}
 }
+__global__ void merge_norm(const float* parts,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode,const uint32_t* shape,uint32_t capacity){
+ __shared__ float sums[8];
+ merge_norm_row(parts,b,w,residual,out,mode,shape,capacity,blockIdx.x,sums);
+}
+
 }

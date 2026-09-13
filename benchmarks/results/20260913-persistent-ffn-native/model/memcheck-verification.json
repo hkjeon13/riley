@@ -1,0 +1,19 @@
+{
+  "command": [
+    "/data/cuda-12.8.1/bin/compute-sanitizer",
+    "--tool",
+    "memcheck",
+    "--error-exitcode",
+    "99",
+    "/tmp/riley-opt-260912/persistent-ffn-cargo-target-v1/release/deps/ffn_pipeline_natural_logits_gpu-48cb61334be2ee79",
+    "--ignored",
+    "--nocapture"
+  ],
+  "exit_code": 0,
+  "binary_sha256": "e76d65040297bb7389c34f6a54538e1812dd26d44ce16b13fe509d4fe7a2b8e0",
+  "logit_hashes": {
+    "baseline": "492a46578581d131ab67c8c1cdb2d70f36a6539c868530e36269f1484f19f939",
+    "candidate": "492a46578581d131ab67c8c1cdb2d70f36a6539c868530e36269f1484f19f939"
+  },
+  "outputs_equal_ordinary": true
+}
