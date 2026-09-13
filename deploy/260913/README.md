@@ -87,3 +87,7 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 ## 비교표 보고 주기 — 사용자 확정 지시
 
 작은 수정마다 반복하지 않고 Scheduler·attention·KV 등 의미 있는 구현/도입 묶음이 serving에서 실행·검증 가능한 수준에 도달할 때, 직전 Riley baseline·새 Riley·vLLM을 동일 조건에서 비교하고 결과를 표로 남긴다. Throughput, TTFT/TPOT, P95/P99 latency, 오류율, correctness, revision·모델·하드웨어·workload·수치 profile·반복 횟수 및 raw 증거를 포함한다. 새 측정이 없으면 미측정으로 표시하며 primitive/모델 검사 시간을 serving 수치로 대체하지 않는다. 보고 형식은 [비교표 양식](BENCHMARK_REPORT_TEMPLATE.md)을 따른다.
+
+## 추가 통합 PR
+
+[PR20 — Rolling decode pipeline](20-rolling-decode-pipeline.md): 최신 cache-residency serving trace를 근거로 고정 pair 정산 경계를 한 단계 선행 실행으로 확장한다. 현재 구현 미착수이며 PR02의 reservation·ticket·streaming 후속 통합이다.
