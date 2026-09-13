@@ -1,0 +1,58 @@
+benchmarks/analysis/../../kernels/optional/gqa_staged_mixed_attention.cuh(118): warning #177-D: variable "base" was declared but never referenced
+     const int base=blocks?((blocks[token/16]*3+kvh)*16)*64:(token*3+kvh)*64;
+               ^
+          detected during instantiation of "void riley_gqa_staging::mapped<Staged,Audit>(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, uint32_t, const uint32_t *, unsigned int *) [with Staged=true, Audit=true]" at line 28 of benchmarks/analysis/gqa_staged_mixed_probe.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN17riley_gqa_staging6mappedILb1ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN17riley_gqa_staging6mappedILb1ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 152 registers, used 1 barriers, 45056 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 127.052 ms
+ptxas info    : Compiling entry function '_ZN17riley_gqa_staging6mappedILb1ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN17riley_gqa_staging6mappedILb1ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 146 registers, used 1 barriers, 45056 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 127.427 ms
+ptxas info    : Compiling entry function '_ZN17riley_gqa_staging6mappedILb0ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN17riley_gqa_staging6mappedILb0ELb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 0 barriers, 12288 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 81.801 ms
+ptxas info    : Compiling entry function '_ZN17riley_gqa_staging6mappedILb0ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN17riley_gqa_staging6mappedILb0ELb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 0 barriers, 12288 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 90.596 ms
+ptxas info    : Compiling entry function '_ZN19riley_compact_mixed16mapped_attentionILb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN19riley_compact_mixed16mapped_attentionILb0EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 126 registers, used 0 barriers, 4096 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 82.024 ms
+ptxas info    : Compiling entry function '_ZN19riley_compact_mixed16mapped_attentionILb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj' for 'sm_89'
+ptxas info    : Function properties for _ZN19riley_compact_mixed16mapped_attentionILb1EEEvPK13__nv_bfloat16S3_S3_PS1_jPKjPj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 128 registers, used 0 barriers, 4096 bytes smem, 408 bytes cmem[0]
+ptxas info    : Compile time = 100.995 ms
+ptxas info    : Compiling entry function '_ZN19riley_compact_mixed7prepareEPKjjPN15riley_pod_mixed4PlanEb' for 'sm_89'
+ptxas info    : Function properties for _ZN19riley_compact_mixed7prepareEPKjjPN15riley_pod_mixed4PlanEb
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 1 barriers, 377 bytes cmem[0]
+ptxas info    : Compile time = 2.342 ms
+ptxas info    : Compiling entry function '_ZN15riley_pod_mixed7prepareEPKjjPNS_4PlanEb' for 'sm_89'
+ptxas info    : Function properties for _ZN15riley_pod_mixed7prepareEPKjjPNS_4PlanEb
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 1 barriers, 377 bytes cmem[0]
+ptxas info    : Compile time = 2.349 ms
+ptxas info    : Compiling entry function '_ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKjbb' for 'sm_89'
+ptxas info    : Function properties for _ZN21riley_mixed_attention16mapped_attentionEPK13__nv_bfloat16S2_S2_PS0_jPKjbb
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 127 registers, used 0 barriers, 6144 bytes smem, 402 bytes cmem[0]
+ptxas info    : Compile time = 85.070 ms
+ptxas info    : Compiling entry function '_ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_' for 'sm_89'
+ptxas info    : Function properties for _ZN19riley_prefill_shape15attention_shapeEPK13__nv_bfloat16S2_S2_PS0_iiPKiPKjS7_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 80 registers, used 0 barriers, 3840 bytes smem, 416 bytes cmem[0]
+ptxas info    : Compile time = 24.990 ms
