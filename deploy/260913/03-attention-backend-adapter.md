@@ -99,3 +99,7 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 ## Prefill optional archive 연결
 
 [빌드 연결 검증](../../benchmarks/results/20260913-flashinfer-prefill-build/README.md): 원본 dependency lock과 GPU 검증된 patched header digest를 모두 유지하는 생성 overlay를 CMake에 연결했다. Prefill만 overlay를 사용하며 decode는 원본을 유지한다. 전체 archive, header/receipt 변경 거부, 동일 디렉터리 enabled→disabled→enabled 빌드를 검증했다. Archive-linked GPU probe의868,032개 값은 이전 patched library와 bitwise 일치하고 memcheck/racecheck 모두0이다. Cargo native 입력 및 내부 ABI를 등록했지만 model recorder/serving 선택에는 아직 연결하지 않았다. 다음 구현은 retained workspace와 mixed prefill-only routing이며 모델 수치·serving gate가 여전히 필요하다.
+
+## Mixed prefill-only metadata 준비
+
+[Routing 검증](../../benchmarks/results/20260913-flashinfer-prefill-routing/README.md): 별도 native planner가 V7 요청별 stage를 기준으로 prefill tile만 등록한다. Packed offset은 유지하며 decode 출력은 건드리지 않는다. 1-token prefill과 decode를 구분하고, all-decode·invalid stage·잘못된 decode 길이·오류 후 graph 재사용을 포함한10 replay를 검증했다. 기존 prefill849,600개 값 bitwise 일치, matched decode18,432개 값 미변경, memcheck/racecheck0이다. 모델 owner/recorder 연결 전 단계이며 기존 decode 품질 gate 실패와 serving 기본값은 그대로다.

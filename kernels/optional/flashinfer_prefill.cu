@@ -16,6 +16,7 @@ struct Metadata {
 };
 // Single bounded planner; no host readback or Q/K/V repacking. Commit valid bits
 // only after validating the complete packet, so an invalid suffix cannot publish.
+template<bool PrefillOnly>
 __global__ void prepare(const unsigned* packet, Metadata* m, unsigned physical,
     unsigned capacity, unsigned* status) {
   if(threadIdx.x || blockIdx.x)return;
@@ -27,6 +28,7 @@ __global__ void prepare(const unsigned* packet, Metadata* m, unsigned physical,
     const unsigned* shape=packet+32+r*416;
     unsigned n=shape[1]+1,q=shape[2],offset=shape[16];
     if(!q || q>n || n>4096 || offset!=cursor || q>total-cursor){atomicOr(status,2u);return;}
+    if(PrefillOnly && (shape[18]>1 || (shape[18]==1 && q!=1))){atomicOr(status,2u);return;}
     unsigned count=(n+15)/16;
     m->q_indptr[r]=cursor;m->kv_indptr[r]=page_cursor;m->last[r]=(n-1)%16+1;
     for(unsigned p=0;p<count;++p){unsigned page=shape[32+p];
@@ -34,7 +36,7 @@ __global__ void prepare(const unsigned* packet, Metadata* m, unsigned physical,
       m->pages[page_cursor++]=page;
     }
     // GQA packs three query heads per KV head into the CTA Q axis.
-    unsigned tiles=(q*3+127)/128;
+    unsigned tiles=(PrefillOnly && shape[18]==1)?0:(q*3+127)/128;
     if(tile_cursor+tiles>Tiles){atomicOr(status,8u);return;}
     for(unsigned t=0;t<tiles;++t){m->requests[tile_cursor]=r;m->q_tiles[tile_cursor]=t;m->kv_tiles[tile_cursor]=0;++tile_cursor;}
     cursor+=q;
@@ -51,7 +53,18 @@ extern "C" int riley_flashinfer_prefill_prepare(void* stream,const void* packet,
     void* workspace,uint64_t bytes,unsigned physical,unsigned capacity,void* status) noexcept {
   if(!packet||!workspace||!status||bytes!=sizeof(riley_flashinfer_prefill::Metadata)||
       !physical||physical>4096||!capacity||capacity>1024)return cudaErrorInvalidValue;
-  riley_flashinfer_prefill::prepare<<<1,1,0,static_cast<cudaStream_t>(stream)>>>(
+  riley_flashinfer_prefill::prepare<false><<<1,1,0,static_cast<cudaStream_t>(stream)>>>(
+      static_cast<const unsigned*>(packet),static_cast<riley_flashinfer_prefill::Metadata*>(workspace),
+      physical,capacity,static_cast<unsigned*>(status));
+  return cudaGetLastError();
+}
+// Preserve original packed offsets, including holes occupied by decode rows.
+// Decode packets are validated too, but never publish prefill work tiles.
+extern "C" int riley_flashinfer_prefill_only_prepare(void* stream,const void* packet,
+    void* workspace,uint64_t bytes,unsigned physical,unsigned capacity,void* status) noexcept {
+  if(!packet||!workspace||!status||bytes!=sizeof(riley_flashinfer_prefill::Metadata)||
+      !physical||physical>4096||!capacity||capacity>1024)return cudaErrorInvalidValue;
+  riley_flashinfer_prefill::prepare<true><<<1,1,0,static_cast<cudaStream_t>(stream)>>>(
       static_cast<const unsigned*>(packet),static_cast<riley_flashinfer_prefill::Metadata*>(workspace),
       physical,capacity,static_cast<unsigned*>(status));
   return cudaGetLastError();
