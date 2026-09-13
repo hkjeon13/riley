@@ -81,3 +81,7 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 ## 독립 free-running 입력 gate
 
 [독립 생성 검증](../../benchmarks/results/20260913-flashinfer-free-generation/README.md): 새로운 synthetic prompt 8개를 4회 반복한 32-request 실행에서 strict greedy equivalence는 실패했다(12/32 sequence, 152/1024 token positions 불일치). 각 backend 내부의 반복 prompt 결과는 같았다. 최초 분기 3곳의 독립 HF FP32 reference는 FlashInfer 선택 2곳, 기존 선택 1곳과 일치했으며, 이것만으로 일반 품질 우열을 판정하지 않는다. Default 승격은 보류하며 별도 자연어 입력에서 baseline/candidate를 같은 reference로 평가한다. Rust↔Python serving 호출은 추가하지 않았다.
+
+## 고정 자연어 screen 결과
+
+[자연어 수치 screen](../../benchmarks/results/20260913-flashinfer-natural-screen/README.md): 사전 고정한 8개 문장, 256개 target에서 NLL은 2.95928943→2.95213500으로 개선됐지만 KL(FP32 || engine)은 0.0007591519→0.0007855655로 증가했다. 사전 기준의 두 지표 모두 baseline 이하 조건은 실패했다. 기준을 완화하지 않고 기본값 승격을 보류한다. 이 작은 표본은 일반 품질 우열의 증거가 아니며, 다른 precision/backend 대안을 동일 계약에서 검토한다. Serving/vLLM 성능 비교는 아직 미측정이다.
