@@ -136,6 +136,7 @@ pub struct PreparedLlamaBatchExecutorConfig {
     variable_graph_rows: usize,
     packed_prefill: bool,
     mixed_execution: bool,
+    flashinfer_experimental: bool,
     shape_policy: LlamaBatchShapePolicy,
     shape_buckets: LlamaBatchShapeBuckets,
 }
@@ -160,6 +161,7 @@ impl PreparedLlamaBatchExecutorConfig {
             variable_graph_rows: 8,
             packed_prefill: false,
             mixed_execution: false,
+            flashinfer_experimental: false,
             shape_policy: LlamaBatchShapePolicy::FixedMaximum,
             shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
         }
@@ -169,18 +171,25 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_vllm_smol_p128_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;self.mixed_execution=false;
+        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;
         self.vllm_smol_p128_graph = true;
         self.shared_rows_graph = false;
         self
     }
     /// Opt-in variable-prefill SmolLM2 graph with a retained single-request session.
     #[must_use]
-    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
+    pub const fn with_variable_graph(mut self)->Self {self.variable_graph=true;self.variable_graph_rows=8;self.packed_prefill=false;self.mixed_execution=false;self.flashinfer_experimental=false;self.vllm_smol_p128_graph=false;self.shared_rows_graph=false;self}
     pub const fn with_variable_graph16(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=16;s}
     pub const fn with_variable_graph32(self)->Self {let mut s=self.with_variable_graph();s.variable_graph_rows=32;s}
     pub const fn with_packed_prefill(self)->Self {let mut s=self.with_variable_graph32();s.packed_prefill=true;s}
     pub const fn with_mixed_execution(self)->Self {let mut s=self.with_packed_prefill();s.mixed_execution=true;s}
+    /// Unqualified numerical profile for explicit serving diagnostics only.
+    pub const fn with_flashinfer_experimental(self) -> Self {
+        let mut s = self.with_mixed_execution();
+        s.flashinfer_experimental = true;
+        s
+    }
+    pub const fn flashinfer_experimental(self) -> bool { self.flashinfer_experimental }
     pub const fn mixed_execution(self)->bool {self.mixed_execution}
     pub const fn packed_prefill(self)->bool {self.packed_prefill}
     pub const fn variable_graph_rows(self)->usize {self.variable_graph_rows}
@@ -189,7 +198,7 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn with_shared_rows_graph(mut self) -> Self {
         self.variable_graph = false;
-        self.packed_prefill = false;self.mixed_execution=false;
+        self.packed_prefill = false;self.mixed_execution=false;self.flashinfer_experimental=false;
         self.vllm_smol_p128_graph = true;self.shared_rows_graph = true;self
     }
     #[must_use]
@@ -463,6 +472,7 @@ pub(in crate::llama) const fn normalize_prepared_config(
         variable_graph_rows: config.variable_graph_rows,
         packed_prefill: config.packed_prefill,
         mixed_execution: config.mixed_execution,
+        flashinfer_experimental: config.flashinfer_experimental,
         shape_policy: config.shape_policy,
         shape_buckets: config.shape_buckets,
     }
@@ -471,6 +481,22 @@ pub(in crate::llama) const fn normalize_prepared_config(
 #[cfg(test)]
 mod graph_numerical_profile_tests {
     use super::*;
+    #[test]
+    fn experimental_attention_survives_normalization_and_resets_on_profile_change() {
+        let c = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        );
+        assert!(!c.flashinfer_experimental());
+        let experimental = normalize_prepared_config(c.with_flashinfer_experimental());
+        assert!(experimental.flashinfer_experimental() && experimental.mixed_execution());
+        assert_eq!(experimental.variable_graph_rows(), 32);
+        for regular in [experimental.with_mixed_execution(), experimental.with_variable_graph(),
+            experimental.with_shared_rows_graph(), experimental.with_vllm_smol_p128_graph()] {
+            assert!(!regular.flashinfer_experimental());
+        }
+    }
+
     #[test]
     fn explicit_profile_survives_normalization_without_changing_default() {
         let c = PreparedLlamaBatchExecutorConfig::new(

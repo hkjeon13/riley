@@ -1,6 +1,6 @@
 # PR 03 — FlashInfer paged attention 실행층 통합
 
-상태: **구현 중 — Rust/native 연결 및 관측 반례 수정, 일반 품질·serving 미검증**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — Rust/native 연결 및 관측 반례 수정, 일반 품질 미통과·실험적 serving 측정 완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -85,3 +85,7 @@ Workspace 78,256 bytes, Q/KV 무복사와 decode 출력 scatter 1회/layer가 �
 ## 고정 자연어 screen 결과
 
 [자연어 수치 screen](../../benchmarks/results/20260913-flashinfer-natural-screen/README.md): 사전 고정한 8개 문장, 256개 target에서 NLL은 2.95928943→2.95213500으로 개선됐지만 KL(FP32 || engine)은 0.0007591519→0.0007855655로 증가했다. 사전 기준의 두 지표 모두 baseline 이하 조건은 실패했다. 기준을 완화하지 않고 기본값 승격을 보류한다. 이 작은 표본은 일반 품질 우열의 증거가 아니며, 다른 precision/backend 대안을 동일 계약에서 검토한다. Serving/vLLM 성능 비교는 아직 미측정이다.
+
+## 실험적 serving 비교 결과
+
+[동일 바이너리 V7 / FlashInfer / vLLM 비교](../../benchmarks/results/20260913-flashinfer-serving-screen/README.md)를 완료했다. C32 natural 확장 교차 screen에서 FlashInfer throughput은 V7 대비 +7.24%, vLLM 대비 −5.36%이며 median TPOT는 vLLM보다 17.82% 길다. TTFT P99는 V7보다 나빠졌다. 품질 gate 실패는 유지하며, loopback 전용 `flashinfer-smol-experimental-v2`는 명시적 진단 선택지다. 지원·승격 backend 등록이나 기본값 변경이 아니다. 실제 serving 이득은 있지만 PR03 및 전체 목표의 완료 조건은 충족하지 못했다.
