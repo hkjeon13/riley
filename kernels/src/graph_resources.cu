@@ -1,3 +1,6 @@
+#ifdef RILEY_CUDA_ENABLE_FLASHINFER
+#include "../optional/flashinfer_api.h"
+#endif
 #include <vector>
 #include "ffi_internal.hpp"
 #include "compact_shared_result.cuh"
@@ -1338,7 +1341,7 @@ template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false>
 static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
- uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
+ uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error,RileyCudaDeviceBuffer* attention_workspace=nullptr) noexcept {
  static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
  static_assert(!Compact||Rows==16||Rows==32,"compact capture currently requires sixteen rows");
  static_assert(!Packed||Rows==32,"V6 requires32 rows");
@@ -1355,6 +1358,15 @@ static RileyCudaStatus record_variable_shared(
  }
  for(size_t i=0;i<weight_count;++i){if(!w[i]||!same_context(w[i]->owner,r->owner)||!holds_counter(r,&w[i]->active_uses))return reject(error,"V3 weight parent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t j=0;j<26;++j)if(w[i]==d[j])return reject(error,"V3 weight/mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ }
+ if(attention_workspace){
+#ifndef RILEY_CUDA_ENABLE_FLASHINFER
+  return reject(error,"FlashInfer was not compiled",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+#else
+  if(!Mixed||!same_context(attention_workspace->owner,r->owner)||!holds_counter(r,&attention_workspace->active_uses)||attention_workspace->byte_len!=riley_flashinfer_decode_workspace_bytes())return reject(error,"FlashInfer workspace parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  for(size_t i=0;i<26;++i)if(d[i]==attention_workspace)return reject(error,"FlashInfer mutable alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  for(size_t i=0;i<weight_count;++i)if(w[i]==attention_workspace)return reject(error,"FlashInfer weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+#endif
  }
  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
  for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],Rows*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1382,6 +1394,11 @@ static RileyCudaStatus record_variable_shared(
   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
   auto result=copy(d[16]->device_data,host,request_bytes,cudaMemcpyHostToDevice);
   if(row_capacity==1){
+#ifdef RILEY_CUDA_ENABLE_FLASHINFER
+   if(attention_workspace){
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FlashInfer model");
+   }else
+#endif
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:(Mixed?enqueue_compiled_v7_gqa_shared_model:enqueue_compiled_v5_shared_model)))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
@@ -1490,4 +1507,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_shared_greedy(
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error) noexcept {
  return record_variable_shared<32,true,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_flashinfer_experimental(
+ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+ uint32_t capacity,uint32_t physical,RileyCudaDeviceBuffer* attention_workspace,uint32_t compact,RileyCudaErrorInfo* error) noexcept {
+ if(!attention_workspace||compact>1)return reject(error,"FlashInfer explicit workspace/profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(compact)return record_variable_shared<32,true,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
+ return record_variable_shared<32,false,true,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,attention_workspace);
 }

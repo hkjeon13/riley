@@ -1,0 +1,31 @@
+{
+  "numerical_profile_accepted": false,
+  "serving_tested": false,
+  "existing_exact_default_changed": false,
+  "cases": {
+    "partial": {
+      "outputs": 224,
+      "argmax_agreements": 224,
+      "logit_values": 11010048,
+      "bitwise_equal_values": 1898066,
+      "max_abs": 0.78125,
+      "rmse": 0.11260756275714064
+    },
+    "compact32": {
+      "outputs": 4096,
+      "argmax_agreements": 4080,
+      "logit_values": 67043328,
+      "bitwise_equal_values": 11319617,
+      "max_abs": 0.703125,
+      "rmse": 0.1084530249720961
+    }
+  },
+  "memcheck_errors": 0,
+  "gates": {
+    "reference_greedy_equivalence": "FAIL: 16 mismatches in 4096 outputs",
+    "batch_invariance": "FAIL: identical prompt/teacher-forced tokens produce different argmax across request histories",
+    "lifecycle_and_finite_output": "PASS on observed fixtures",
+    "serving_performance": "NOT_RUN"
+  },
+  "next_action": "investigate pure-decode versus mixed-stage arithmetic consistency before promotion"
+}

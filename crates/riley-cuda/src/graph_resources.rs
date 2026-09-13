@@ -1304,6 +1304,22 @@ pub fn record_v6_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,we
         }
         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical);Err(crate::CudaError::unavailable("record V6 packed"))}
     }
+/// Records experimental FlashInfer decode arithmetic, retaining its workspace.
+/// This is not numerically interchangeable with the existing exact profile.
+pub fn record_v7_flashinfer_experimental(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,attention_workspace:usize,compact:bool)->CudaResult<()> {
+        #[cfg(feature="cuda")]{
+            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
+            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
+            let attention_workspace=self.parents.devices.get(attention_workspace).ok_or_else(bad)?.native_handle();
+            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
+            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
+            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
+            self.native.record_v7_flashinfer_experimental(&devices,workspace,&weights,head,shared_head,staging,capacity,physical,attention_workspace,compact)
+        }
+        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,attention_workspace,compact);Err(crate::CudaError::unavailable("record V7 mixed"))}
+    }
 pub fn record_v7_shared(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32)->CudaResult<()> {
         #[cfg(feature="cuda")]{
             let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");

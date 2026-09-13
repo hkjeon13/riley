@@ -1,0 +1,10 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+FLASHINFER_OBSERVATION values=11010048 exact_values=1898066 max_abs=0.78125 rmse=0.11260756275714064 argmax_agreements=224 outputs=224 numerical_profile_accepted=false teacher_forced=true
+LOADED_MIXED rows_max=3 logits_checked=224 iterations=129 pending_close_abort=true allocation_zero=true
+test flashinfer_model_observation_partial ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 22.25s
+
+========= ERROR SUMMARY: 0 errors

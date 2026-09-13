@@ -1,6 +1,6 @@
 # PR 03 — FlashInfer paged attention 실행층 통합
 
-상태: **구현 중 — standalone native adapter 검증, 모델·serving 통합 미완료**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — Rust/native 모델 연결 및 관측 완료, 수치 gate 실패·serving 미검증**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -63,3 +63,9 @@ Native-only memcheck는 0 errors. Python FlashInfer 포함 memcheck는 cuGetProc
 ## Native 모델·빌드 연결 진행
 
 [후속 빌드 증거](../../benchmarks/results/20260913-flashinfer-model-build/README.md): 헤더 digest로 고정한 optional CMake/Cargo build와 별도 workspace를 받는 30-layer native 모델 진입점을 구현했다. Enabled 전체 archive 빌드 및 같은 build directory에서 disabled로 복귀하는 빌드가 통과했다. 기존 exact entry는 새 backend를 선택하지 않는다. Rust recorder/명시적 profile 연결, 새 full-model GPU 실행 및 serving 비교는 여전히 미완료다.
+
+## 실제 모델 수치 gate 결과
+
+[모델 관측 증거](../../benchmarks/results/20260913-flashinfer-model-observation/README.md): 별도 retained workspace를 검증하는 Rust/native recorder와 explicit experimental factory를 연결했다. Partial 224개 argmax는 reference와 같았지만 32-request 관측은 4,096개 중 16개 불일치했다. 동일 prompt·teacher-forced history의 요청끼리도 서로 다른 argmax를 내어 batch invariance 반례가 확인됐다. Native 모델 partial memcheck는 0 errors다.
+
+**수치 gate는 실패이며 기본값 승격 및 serving 성능 주장은 하지 않는다.** Pure-decode FlashInfer와 mixed 기존 backend 사이 연산 일관성을 다음에 조사한다. 이것은 아직 원인 확정이 아니다. 관측 harness 종료 성공을 수치 계약 통과로 해석하거나 tolerance를 사후 완화하지 않는다.

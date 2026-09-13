@@ -1,0 +1,135 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling typenum v1.20.1
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.228
+   Compiling riley-cuda v0.1.0 (/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda)
+   Compiling hybrid-array v0.4.14
+   Compiling block-buffer v0.12.1
+   Compiling syn v2.0.119
+   Compiling crypto-common v0.2.2
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.145
+   Compiling tinyvec_macros v0.1.1
+   Compiling riley-core v0.1.0 (/tmp/riley-opt-260912/hardware-validation-source/crates/riley-core)
+   Compiling tinyvec v1.12.0
+   Compiling digest v0.11.3
+   Compiling itoa v1.0.18
+   Compiling cpufeatures v0.3.0
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling cfg-if v1.0.4
+   Compiling sha2 v0.11.0
+   Compiling serde_derive v1.0.228
+   Compiling unicode-normalization v0.1.25
+warning: riley-cuda@0.1.0: riley-cuda: CUDA toolkit=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13 nvcc=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc
+warning: riley-cuda@0.1.0: riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+error: failed to run custom build command for `riley-cuda v0.1.0 (/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/riley-opt-260912/flashinfer-cargo-target/debug/build/riley-cuda-767f7717b66443d5/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=RILEY_CUDA_ARCHITECTURES
+  cargo:rustc-env=RILEY_CUDA_COMPILED_ARCHITECTURES=89
+  cargo:rerun-if-env-changed=CUDAToolkit_ROOT
+  cargo:rerun-if-env-changed=CUDA_HOME
+  cargo:rerun-if-env-changed=CUDA_PATH
+  cargo:rerun-if-env-changed=NVCC
+  cargo:rerun-if-env-changed=CUDACXX
+  cargo:rerun-if-env-changed=CMAKE
+  cargo:rerun-if-env-changed=RILEY_FLASHINFER_DATA
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/CMakeLists.txt
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/include/riley_cuda.h
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/optional/flashinfer.cmake
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/optional/verify_flashinfer.py
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/optional/flashinfer_api.h
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/optional/flashinfer_decode.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/ffi_internal.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/attention_online.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/attention_online.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/attention_cublaslt.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/attention_reference.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/batch_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/fixed37_gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/fixed37_attention.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/fixed37_primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/fixed37_reduction.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/gemm.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_resources.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_numerics.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_numerics_precise.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_tiled.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared16.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared32.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared32_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_gqa_attention_v50.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_merge_norm_v56.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_gate_v56.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared32_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared32_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared16_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared16_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shared16_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/decode_shape.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_model.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/packed_prefill_attention_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/packed_prefill_rope_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/packed_prefill_model_v48.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/mixed_attention_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/mixed_rope_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/mixed_model_v49.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_fused_gate_v51.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_projection.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_query_tile_attention.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/compact_shared_result.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_rope_kv.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_pointwise.cuh
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/prefill_shape_packet.hpp
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_multisequence_precise.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_multisequence_io.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_multisequence_packet.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_buffered_transfer.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_multisequence_record.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/graph_multisequence_catalog.inc
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/host_runtime.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/memory.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/primitives.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/smoke_fill.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/src/version.cu
+  cargo:rerun-if-changed=/tmp/riley-opt-260912/hardware-validation-source/crates/riley-cuda/../../kernels/tests/abi_layout.c
+  cargo:warning=riley-cuda: CUDA toolkit=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13 nvcc=/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc
+  cargo:warning=riley-cuda: CUDA AOT architectures=89 (compile targets only; no runtime device detection)
+  cargo:rerun-if-changed=/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data
+  -- The C compiler identification is GNU 11.4.0
+  -- The CUDA compiler identification is NVIDIA 13.0.88 with host compiler GNU 11.4.0
+  -- Detecting C compiler ABI info
+  -- Detecting C compiler ABI info - done
+  -- Check for working C compiler: /usr/bin/cc - skipped
+  -- Detecting C compile features
+  -- Detecting C compile features - done
+  -- Detecting CUDA compiler ABI info
+  -- Detecting CUDA compiler ABI info - done
+  -- Check for working CUDA compiler: /tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc - skipped
+  -- Detecting CUDA compile features
+  -- Detecting CUDA compile features - done
+  -- Found CUDAToolkit: /tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/include;/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/include/cccl (found version "13.0.88")
+  -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+  -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+  -- Found Threads: TRUE
+  -- riley CUDA AOT architectures: 89 (compile targets only)
+  -- Found Python3: /usr/bin/python3.10 (found version "3.10.12") found components: Interpreter
+  -- FlashInfer compile support enabled; dependency SHA256=2a7d8ab8f81f6cb7fd259270b63bd71e152bff77a105b3c0ba875108b5567e0c; serving selection unchanged
+  -- Configuring done (1.3s)
+  -- Generating done (0.0s)
+  -- Build files have been written to: /tmp/riley-opt-260912/flashinfer-cargo-target/debug/build/riley-cuda-30e312a147ad7349/out/cuda-native-build
+
+  --- stderr
+  error: riley-cuda native build failed: CMake selected cuBLASLt /data/riley-g04-cuda13/lib/libcublasLt.so.13 outside the nvcc toolkit root /tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13; clear the CMake cache and select one CUDA toolkit
+warning: build failed, waiting for other jobs to finish...
