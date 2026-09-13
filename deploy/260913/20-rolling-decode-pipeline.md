@@ -1,6 +1,6 @@
 # PR20 — Rolling one-step-ahead decode pipeline
 
-상태: **KV 예약 연장·scheduler rolling 전이 구현 / GPU ticket·serving 연결 미완료**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
+상태: **KV·scheduler·runtime ticket 전이 및 4090 모델 검사 완료 / server·serving 비교 미완료**. PR02의 후속 실행 통합이다. [공통 계약](README.md)과 Rust → C ABI → CUDA 경계를 따른다.
 
 ## 근거와 목표
 
@@ -46,3 +46,12 @@ Greedy dense path의 rolling execution에 한정한다. Draft 모델 speculation
 [Scheduler 검증 기록](../../benchmarks/results/20260914-rolling-scheduler/README.md): nonterminal 앞 token만 정산하는 `complete_decode_window_prefix`와 실행 중 successor를 새 first로 삼아 뒤 step 하나를 예약하는 `roll_decode_window`를 구현했다. 첫 결과는 보존하고 마지막 drain에서 중복 발행하지 않는다. 일부 row만 연장된 OOM에서도 모든 예약을 유지하며 quiesced abort로만 회수한다. 앞 결과 발행 이후 NotDispatched rollback은 거부한다. Waiting/출력·context limit에서는 drain 후 일반 scheduler로 복귀한다.
 
 24회 연속 rolling·page 경계·descriptor authority·취소·terminal·부분 할당 실패·출력 중복 방지를 host fixture로 검증했다. GPU ticket 승격과 server의 실제 호출은 아직 연결하지 않았다. 기존 `try_decode_window`의 callback만 바꾸는 것으로 완료할 수 없다. Immutable scheduler authority의 borrow 종료, retained successor cookie/replay 승격, native 두 slot의 재사용 시점, 결과별 publication을 함께 연결하고 model/serving gate를 실행해야 한다.
+
+
+## 구현 진행 — Runtime ticket 승격·실제 모델
+
+[Runtime/GPU gate](../../benchmarks/results/20260914-rolling-runtime/README.md): 완료된 앞 replay만 승인하고 live successor ticket·cookie를 유지하는 승격 API를 구현했다. 새 successor만 fresh cookie/replay로 준비하며 준비 실패는 owner를 poison하고 close/drain 전 KV 회수를 막는다. 기존 native2-slot ring을 그대로 사용한다.
+
+4090 실제 모델4개 요청에서 rolling21회, 총96개 생성 token이 직렬 실행과 같았다. 취소 mode는[5,24,24,24] token이 각각 직렬 prefix와 일치하며, 잘못된 cookie를 주입한 별도 mode도 GPU drain 후4개 요청 정리·allocation0을 확인했다. 이는 greedy 모델·수명 검사이며 full-logit·HTTP serving·C32·장시간 qualification은 아니다. 첫 private-type build 오류는 수정했고 GPU 실패를 skip으로 바꾸지 않았다.
+
+다음 server 연결은 worker tick 사이에 rolling state를 유지해야 한다. 각 앞 token 정산 후 새 successor를 제출하고 해당 token event를 반환한다. 모든 rolling step을 한 호출에서 반복한 뒤 출력을 한꺼번에 반환하면 streaming 지연과 TPOT 측정이 왜곡되므로 금지한다. Prefix를 먼저 발행한 drain fallback은 첫 결과를 보존한 채 다음 tick에서 suffix를 정산한다. 기존 pair 경로는 유지하고 opt-in serving 비교 후 승격을 판단한다.

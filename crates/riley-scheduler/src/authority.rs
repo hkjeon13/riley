@@ -146,9 +146,10 @@ impl AuthorizedExecution<'_> {
 
 /// Geometry/identity supplied only by the retained V3 execution adapter.
 /// This is not a catalog authorization or a GPU completion receipt.
-#[allow(dead_code)]
+/// Model geometry used for descriptor preparation, not a dispatch capability.
+/// Runtime submission must bind it to its retained native model identity.
 #[derive(Clone)]
-pub(crate) struct VariableOwnerGeometry {
+pub struct VariableOwnerGeometry {
     pub generation: u64,
     pub last_accepted_replay: u64,
     pub catalog_digest: [u8;32],
@@ -496,8 +497,10 @@ impl AuthorizedDecodeWindow<'_> {
         second.last_accepted_replay=owner.last_accepted_replay;
         Ok(second)
     }
-    #[allow(dead_code)]
-    pub(crate) fn prepare_wire(&self,owner:&VariableOwnerGeometry,replay:u64,first_cookies:&[u64],second_cookies:&[u64])->crate::descriptor::Result<crate::descriptor::future_token::PreparedFutureWindow> {
+    /// Prepare immutable dependent descriptors from the live reservations.
+    /// This is not dispatch or completion evidence; retain scheduler ownership
+    /// until every execution using these descriptors is quiescent.
+    pub fn prepare_wire(&self,owner:&VariableOwnerGeometry,replay:u64,first_cookies:&[u64],second_cookies:&[u64])->crate::descriptor::Result<crate::descriptor::future_token::PreparedFutureWindow> {
         let first=self.prepare_wire_first(owner,replay,first_cookies)?;
         let second=self.prepare_wire_second(owner,replay,second_cookies)?;
         let sources=(0..second.rows.len()).map(|i|crate::descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();

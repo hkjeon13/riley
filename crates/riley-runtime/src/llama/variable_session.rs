@@ -495,6 +495,36 @@ impl<G:VariableGraph> VariableSession<G,32> {
         })();
         if result.is_err(){self.poisoned=true;}result
     }
+    /// Promote the still-live successor after scheduler prefix settlement and
+    /// reservation extension. The old predecessor was already read and its native
+    /// slot consumed; the successor ticket must remain live for future-token input.
+    /// Returns identity/replay/cookies for only the NEW successor. Never resubmit
+    /// the promoted predecessor. Failure after eligibility checking poisons the
+    /// retained owner; close/drain is required before scheduler page reclamation.
+    pub fn promote_decode_window_successor(&mut self,first:u64,successor:u64)->Result<(VariableSessionIdentity,u64,Vec<u64>)> {
+        let w=self.window.as_ref().ok_or_else(||bad("no rolling window"))?;
+        if self.poisoned || w.complete || !w.predecessor_validated || w.successor.iteration_id!=successor
+            || self.retained.as_ref().map(|e|e.iteration_id)!=Some(first)
+            || self.window_predecessor_ticket.is_some() || self.issued_successor.is_some() {
+            return Err(bad("rolling promotion requires validated predecessor and live successor"));
+        }
+        let prepared=(|| {
+            let next_replay=w.successor.replay_id.checked_add(1).ok_or_else(||bad("rolling replay exhausted"))?;
+            let end=self.next_cookie.checked_add(w.successor.rows.len() as u64).ok_or_else(||bad("rolling cookies exhausted"))?;
+            if w.successor.rows.iter().any(|r|r.cookie>=self.next_cookie) {return Err(bad("rolling cookies not fresh"));}
+            let retained=wire::OwnedCheckedExpectation::new(w.successor.clone())?;
+            let cookies:Vec<_>=(self.next_cookie..end).collect();
+            Ok((retained,next_replay,end,cookies))
+        })();
+        let(retained,next_replay,end,cookies)=match prepared {Ok(v)=>v,Err(e)=>{self.poisoned=true;return Err(e)}};
+        let committed=self.retained.as_ref().unwrap().replay_id;
+        let w=self.window.take().unwrap();
+        self.window_predecessor_ticket=Some(w.tickets[1]);
+        self.retained=Some(retained);self.identity.last_accepted_replay=committed;
+        self.next_cookie=end;self.issued_successor=Some(cookies.clone());self.completed=false;
+        Ok((self.identity,next_replay,cookies))
+    }
+
     /// Fence and validate the successor after the predecessor was validated.
     /// Both reservations remain retained until the scheduler commits the pair.
     pub fn wait_decode_window_second(&mut self)->Result<Vec<(u32,u32)>> {
@@ -526,12 +556,12 @@ impl<G:VariableGraph> VariableSession<G,32> {
 mod staged_window_tests {
     use super::*;
     use super::super::multi_descriptor::shape_progress::InputStage;
-    struct FakeGraph { outputs:[Vec<u8>;2], calls:Vec<(&'static str,u64)> }
+    struct FakeGraph { outputs:Vec<Vec<u8>>, calls:Vec<(&'static str,u64)> }
     impl sealed::Sealed for FakeGraph {}
     impl VariableGraph for FakeGraph {
         fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool>{assert!(wait);self.calls.push(("wait",ticket));Ok(true)}
         fn read_buffered_transfer(&mut self,ticket:u64,out:&mut[u8])->riley_cuda::CudaResult<()>{self.calls.push(("read",ticket));out.copy_from_slice(&self.outputs[ticket as usize-1]);Ok(())}
-        fn submit_future_transfer(&mut self,_:&[u8],_:&[u8],predecessor:u64)->riley_cuda::CudaResult<u64>{assert_eq!(predecessor,1);self.calls.push(("submit_future",2));Ok(2)}
+        fn submit_future_transfer(&mut self,_:&[u8],_:&[u8],predecessor:u64)->riley_cuda::CudaResult<u64>{self.calls.push(("submit_future",predecessor+1));Ok(predecessor+1)}
         fn submit_buffered_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<u64>{self.calls.push(("submit",1));Ok(1)}
         fn replay_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<()>{unreachable!()}
         fn submit_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<()>{unreachable!()}
@@ -545,7 +575,7 @@ mod staged_window_tests {
         let mut second=first.clone();second.iteration_id+=1;second.replay_id+=1;
         second.last_accepted_replay=first.replay_id;
         let row=&mut second.rows[0];row.cookie+=1;row.progress.committed_tokens+=1;row.progress.generated_index+=1;*row.valid_tokens.last_mut().unwrap()+=1;row.input_tokens[0]=7;
-        let graph=FakeGraph{outputs:[wire::tests::compact_fixture(&first),wire::tests::compact_fixture(&second)],calls:vec![]};
+        let graph=FakeGraph{outputs:vec![wire::tests::compact_fixture(&first),wire::tests::compact_fixture(&second)],calls:vec![]};
         second.last_accepted_replay=first.last_accepted_replay;second.rows[0].input_tokens[0]=0;
         let mut s=VariableSession::new_shared_mixed(graph,first.catalog_digest,first.physical_block_count,first.rows[0].progress.context_tokens,true,false).unwrap();
         s.identity.last_accepted_replay=first.last_accepted_replay;s.retained=Some(wire::OwnedCheckedExpectation::new(first).unwrap());s.buffered=true;
@@ -560,6 +590,50 @@ mod staged_window_tests {
         s.graph.outputs[1]=wire::tests::compact_fixture(&actual);
         (s,first,second)
     }
+    #[test]
+    fn rolling_promotes_live_tickets_without_resubmit_or_successor_wait() {
+        let(mut s,first,second)=issued();s.next_cookie=second.rows[0].cookie+1;
+        s.submit_decode_window(first,second).unwrap();
+        for ticket in 1..=6 {
+            assert_eq!(s.wait_decode_window_first().unwrap(),[(0,7)]);
+            let first_id=s.retained.as_ref().unwrap().iteration_id;
+            let next_id=s.window.as_ref().unwrap().successor.iteration_id;
+            let before=s.graph.calls.clone();
+            let(owner,replay,cookies)=s.promote_decode_window_successor(first_id,next_id).unwrap();
+            assert_eq!(s.graph.calls,before); // no wait/read/resubmit of the live successor
+            assert_eq!(s.window_predecessor_ticket,Some(ticket+1));
+            assert_eq!(s.retained.as_ref().unwrap().iteration_id,next_id);
+            assert!(s.issue_rows(1).is_err());
+            let mut next=s.retained.as_ref().unwrap().checked().expectation().clone();
+            next.iteration_id+=1;next.replay_id=replay;next.last_accepted_replay=owner.last_accepted_replay;
+            let row=&mut next.rows[0];row.cookie=cookies[0];row.progress.committed_tokens+=1;row.progress.generated_index+=1;
+            *row.valid_tokens.last_mut().unwrap()+=1;row.input_tokens[0]=0;
+            let mut actual=next.clone();actual.last_accepted_replay=s.retained.as_ref().unwrap().replay_id;actual.rows[0].input_tokens[0]=7;
+            s.graph.outputs.push(wire::tests::compact_fixture(&actual));
+            s.submit_decode_window_successor(||Ok(next)).unwrap();
+            assert_eq!(s.graph.calls.last(),Some(&("submit_future",ticket+2)));
+        }
+        let first=s.retained.as_ref().unwrap().iteration_id;let second=s.window.as_ref().unwrap().successor.iteration_id;
+        s.wait_decode_window().unwrap();s.confirm_decode_window_commit(first,second).unwrap();
+        assert_eq!(s.graph.calls.iter().filter(|c|c.0=="submit").count(),1);
+        assert!(s.issue_rows(1).is_ok());
+    }
+
+    #[test]
+    fn rolling_rejects_wrong_phase_and_keeps_live_ticket_on_late_failure() {
+        let(mut s,first,second)=issued();s.next_cookie=second.rows[0].cookie+1;
+        let ids=(first.iteration_id,second.iteration_id);s.submit_decode_window(first,second).unwrap();
+        assert!(s.promote_decode_window_successor(ids.0,ids.1).is_err());
+        assert_eq!(s.graph.calls,[("submit",1),("submit_future",2)]);
+        s.wait_decode_window_first().unwrap();
+        assert!(s.promote_decode_window_successor(ids.0+1,ids.1).is_err());
+        s.promote_decode_window_successor(ids.0,ids.1).unwrap();
+        assert!(s.submit_decode_window_successor(||Err(bad("injected rolling preparation failure"))).is_err());
+        assert!(s.poisoned);assert_eq!(s.window_predecessor_ticket,Some(2));assert!(s.retained.is_some());
+        assert!(s.issue_rows(1).is_err());assert!(s.abandon_issued().is_err());
+        assert!(!s.graph.calls.iter().any(|c|*c==("wait",2)));
+    }
+
     #[test]
     fn shared_prefix_capability_cannot_be_changed_by_submission() {
         for enabled in [false,true] {
