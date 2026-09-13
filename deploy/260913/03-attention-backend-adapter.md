@@ -113,3 +113,9 @@ Strict free generation은32요청 중8요청·1,024토큰 중56토큰 불일치�
 ## 동일 입력 정밀도 대조
 
 [정밀도 screen](../../benchmarks/results/20260913-prefill-precision/README.md): 기존 attention body, FlashInfer BF16, 동일 BF16 입력값을 FP16으로 계산 후 BF16 출력으로 되돌리는 별도 native 실험을 비교했다. 입력값은 float32 dump hash로 동일함을 확인했다. 3개 Q/K scale에서 FP16 실험의 FP64-reference RMSE는 FI BF16보다0.90~24.41% 낮았다. 새 FP16 primitive memcheck/racecheck는0이다. 이는 합성 attention 오차 감소이며 serving speedup이나 모델 품질 통과가 아니다. 이전 full-model KL 실패는 유지한다. 다음 batch는 BF16 KV 저장을 유지하는 명시적 변환, FP16 범위/정밀도 계약, 독립 graph identity 및 full-model gate를 함께 평가하고 변환 비용까지 serving에서 측정한다.
+
+## BF16 잔차 보정과 실제 serving 판정
+
+[보정 batch 결과](../../benchmarks/results/20260913-prefill-residual/README.md): FlashInfer의 rounded-probability denominator를 FP32로 유지하고, BF16 probability의 반올림 잔차를 추가 P×V MMA로 누적하는 후보를 별도 빌드에서 평가했다. BF16 Q/K/V 저장을 유지한다. 고정 자연어 NLL·KL 사전 screen은 모두 통과했지만 독립 greedy는148/1,024토큰 차이로 실패하며 general quality는 미승인이다. Whole-model native memcheck0 errors다.
+
+C32 natural·두 역순·engine별1,536 retained 비교에서 V7/후보/vLLM throughput은10,420.8/9,637.2/11,802.2 tokens/s, median TPOT는2.928/3.170/2.385ms다. 후보는 V7보다7.52% 느리고 tails도 악화되어 도입을 보류한다. 기본값은 유지한다. 선택된 primitive는239 registers/thread와32KiB shared memory를 사용하지만 local memory는0이므로, 다른 미사용 변형의 spill을 이번 회귀 원인으로 단정하지 않는다. 다음 attention batch는 query tile/work 분배와 residual fragment 수명을 함께 조정하고 동일 모델 gate·serving 비교를 반복한다. 합성오차 개선만으로 성공을 선언하지 않는다.

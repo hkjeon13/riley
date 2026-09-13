@@ -1,0 +1,87 @@
+{
+  "qualification": false,
+  "percentile_method": "nearest rank over pooled retained requests",
+  "lanes": {
+    "baseline": {
+      "requests": 1536,
+      "failures": 0,
+      "reference_matches": 1536,
+      "output_tokens": 114688,
+      "tokens_per_second": 10420.810244808168,
+      "requests_per_second": 139.56442292153795,
+      "run_tokens_per_second": [
+        10379.250399466206,
+        10462.704250035418
+      ],
+      "ttft_ms": {
+        "p50": 10.400723,
+        "p95": 17.180198,
+        "p99": 65.943035
+      },
+      "tpot_ms": {
+        "p50": 2.9276860781051557,
+        "p95": 3.0397808582677164,
+        "p99": 3.097990874015748
+      },
+      "e2e_ms": {
+        "p50": 194.5219385,
+        "p95": 393.353766,
+        "p99": 399.601386
+      }
+    },
+    "flashinfer": {
+      "requests": 1536,
+      "failures": 0,
+      "reference_matches": 1532,
+      "output_tokens": 114688,
+      "tokens_per_second": 9637.212785769158,
+      "requests_per_second": 129.06981409512264,
+      "run_tokens_per_second": [
+        9644.193230843664,
+        9630.242438246529
+      ],
+      "ttft_ms": {
+        "p50": 11.852058,
+        "p95": 19.893196,
+        "p99": 74.482378
+      },
+      "tpot_ms": {
+        "p50": 3.170356119380239,
+        "p95": 3.287089307086614,
+        "p99": 3.355342
+      },
+      "e2e_ms": {
+        "p50": 210.5973275,
+        "p95": 425.28351,
+        "p99": 432.350466
+      }
+    },
+    "vllm": {
+      "requests": 1536,
+      "failures": 0,
+      "reference_matches": 1118,
+      "output_tokens": 114688,
+      "tokens_per_second": 11802.17082670523,
+      "requests_per_second": 158.06478785765935,
+      "run_tokens_per_second": [
+        11736.41397433854,
+        11868.668676530417
+      ],
+      "ttft_ms": {
+        "p50": 18.1094455,
+        "p95": 37.379128,
+        "p99": 64.360748
+      },
+      "tpot_ms": {
+        "p50": 2.3847993343573988,
+        "p95": 2.7767143492063493,
+        "p99": 3.311690603174603
+      },
+      "e2e_ms": {
+        "p50": 169.290508,
+        "p95": 350.901405,
+        "p99": 375.172884
+      }
+    }
+  }
+}

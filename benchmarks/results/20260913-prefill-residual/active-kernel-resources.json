@@ -1,0 +1,22 @@
+[
+  {
+    "kernel": "void flashinfer::BatchPrefillWithPagedKVCacheKernel<flashinfer::KernelTraits<(flashinfer::MaskMode)1, (unsigned int)128, (unsigned int)2, (unsigned int)4, (unsigned int)4, (unsigned int)4, (unsigned int)4, (unsigned int)1, (flashinfer::PosEncodingMode)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, int, flashinfer::DefaultAttention<(bool)0, (bool)0, (bool)0, (bool)0>>, flashinfer::BatchPrefillPagedParams<__nv_bfloat16, __nv_bfloat16, __nv_bfloat16, int>>(T2)",
+    "registersPerThread": 239,
+    "blockX": 32,
+    "blockY": 4,
+    "blockZ": 1,
+    "dynamicSharedMemory": 32768,
+    "localMemoryPerThread": 0,
+    "launches": 6
+  },
+  {
+    "kernel": "void riley_flashinfer_prefill::prepare<(bool)0>(const unsigned int *, riley_flashinfer_prefill::Metadata *, unsigned int, unsigned int, unsigned int *)",
+    "registersPerThread": 30,
+    "blockX": 1,
+    "blockY": 1,
+    "blockZ": 1,
+    "dynamicSharedMemory": 0,
+    "localMemoryPerThread": 0,
+    "launches": 6
+  }
+]
