@@ -1465,11 +1465,15 @@ pub fn record_v7_shared_greedy(&mut self,devices:&[usize;25],workspace:Option<us
 
 #[cfg(feature = "cuda")]
 impl BorrowedGraphResourceReservation<'_> {
-    /// Cold preparation using two pinned parents already in the ledger.
-    /// Slot zero may reuse an existing combined model input/output staging parent.
-    /// Each slot must cover the recorded input/output staging extent.
+    /// Enables immutable prefix sharing on the recorded V7 model owner.
+    /// Call once before buffered preparation or the first replay. Submission
+    /// still requires authoritative host ownership and write-range validation.
     /// # Errors
-    /// Rejects invalid parent indices, extents or graph state; CUDA errors propagate.
+    /// Rejects non-V7, sealed, already-enabled, pending or failed owners.
+    pub fn enable_shared_prefixes(&mut self) -> CudaResult<()> { self.native.enable_shared_prefixes() }
+    /// Cold preparation of two retained staging slots.
+    /// # Errors
+    /// Rejects invalid parents or sealed owners.
     pub fn prepare_buffered_transfers(&mut self, first: usize, second: usize) -> CudaResult<()> {
         let bad = || crate::CudaError::invalid_argument("prepare buffered transfers", "staging index outside retained parents");
         let first = self.parents.pinned.get(first).ok_or_else(bad)?.native_handle();

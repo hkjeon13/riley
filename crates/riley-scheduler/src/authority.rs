@@ -156,7 +156,7 @@ pub(crate) struct VariableOwnerGeometry {
     pub physical_block_count: u32,
     pub context_tokens: u32,
     pub packed_prefill: bool,
-    pub mixed_execution: bool,
+    pub mixed_execution: bool, pub shared_prefixes: bool,
 }
 impl AuthorizedExecution<'_> {
     #[allow(dead_code)]
@@ -193,7 +193,7 @@ impl AuthorizedExecution<'_> {
                 input_tokens:work.input_tokens().to_vec(), physical_ids:row.table.physical_block_ids().to_vec(),
                 valid_tokens:row.table.valid_tokens().to_vec() });
         }
-        let e = Expectation { mixed_execution:owner.mixed_execution, packed_prefill:owner.packed_prefill, owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
+        let e = Expectation { shared_prefixes:owner.shared_prefixes,mixed_execution:owner.mixed_execution, packed_prefill:owner.packed_prefill, owner_generation:owner.generation, last_accepted_replay:owner.last_accepted_replay,
             replay_id:replay, iteration_id:self.plan.iteration_id().get(), catalog_digest:owner.catalog_digest,
             physical_block_count:owner.physical_block_count, max_active_rows:owner.max_active_rows,
             stage, mode, rows, block_ownership:self.block_owners.iter().map(|(id,tag)| BlockOwnership {
@@ -218,7 +218,7 @@ mod tests {
             max_promised_kv_blocks:256,metrics_window_samples:16,
         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::VariablePrefillDecodeN).unwrap();
         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
-        let mut owner=super::VariableOwnerGeometry{mixed_execution:false,packed_prefill:false,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+        let mut owner=super::VariableOwnerGeometry{shared_prefixes:false,mixed_execution:false,packed_prefill:false,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
         let mut last=None;
         loop {
@@ -268,7 +268,7 @@ mod tests {
             max_promised_kv_blocks:256,metrics_window_samples:16,
         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::PackedPrefillDecode32).unwrap();
         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
-        let mut owner=super::VariableOwnerGeometry{mixed_execution:false,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+        let mut owner=super::VariableOwnerGeometry{shared_prefixes:false,mixed_execution:false,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
         let mut last=None;let mut prefill_width=0;
         loop {
@@ -318,7 +318,7 @@ mod tests {
             max_promised_kv_blocks:256,metrics_window_samples:16,
         },riley_runtime::paged_kv::KvLayout::checked(30,256,3,64).unwrap(),ExecutionShapePolicy::MixedPrefillDecode32).unwrap();
         let ids:Vec<_>=[16,128,398,73].into_iter().map(|n|scheduler.submit(RequestDescriptor::new(vec![17;n],32),0).unwrap().request_id()).collect();
-        let mut owner=super::VariableOwnerGeometry{mixed_execution:true,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
+        let mut owner=super::VariableOwnerGeometry{shared_prefixes:false,mixed_execution:true,packed_prefill:true,generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:4,physical_block_count:256,context_tokens:1024};
         let (mut replay,mut now,mut widest,mut retried,mut partial)=(0u64,0u64,0usize,false,false);
         let mut last=None;let mut prefill_width=0;let mut saw_mixed=false;
         loop {
@@ -368,7 +368,7 @@ mod tests {
                 max_promised_kv_blocks:64, metrics_window_samples:16,
             }, riley_runtime::paged_kv::KvLayout::checked(30,64,3,64).unwrap()).unwrap();
             let id=scheduler.submit(RequestDescriptor::new(vec![17;prompt],limit),0).unwrap().request_id();
-            let mut owner=super::VariableOwnerGeometry { mixed_execution:false, packed_prefill:false, generation:1,last_accepted_replay:0,catalog_digest:[7;32],
+            let mut owner=super::VariableOwnerGeometry { shared_prefixes:false,mixed_execution:false, packed_prefill:false, generation:1,last_accepted_replay:0,catalog_digest:[7;32],
                 max_active_rows:1,physical_block_count:64,context_tokens:1024 };
             let (mut committed,mut generated,mut replay)=(0,0,0u64);
             while generated<limit {

@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(w.first().block_tables()[0].valid_tokens(),[16]);assert_eq!(w.second().block_tables()[0].valid_tokens(),[16,1]);
         assert_eq!(s.pool.stats().allocated_block_count(),4);assert!(s.authorize_execution(w.first()).is_err());assert!(s.authorize_execution(w.second()).is_err());
         let a=result(w.first(),20,None);let b=result(w.second(),30,None);
-        {let authority=s.authorize_decode_window(&w).unwrap();let owner=crate::authority::VariableOwnerGeometry{generation:7,last_accepted_replay:1,catalog_digest:[9;32],max_active_rows:2,physical_block_count:16,context_tokens:64,packed_prefill:true,mixed_execution:true};
+        {let authority=s.authorize_decode_window(&w).unwrap();let owner=crate::authority::VariableOwnerGeometry{generation:7,last_accepted_replay:1,catalog_digest:[9;32],max_active_rows:2,physical_block_count:16,context_tokens:64,packed_prefill:true,shared_prefixes:false,mixed_execution:true};
         let prepared=authority.prepare_wire(&owner,2,&[100,101],&[102,103]).unwrap();let(first,second,future)=(prepared.first(),prepared.second(),prepared.future());assert_eq!(first.rows[0].progress.generated_index,1);assert_eq!(second.rows[0].progress.generated_index,2);assert_eq!(future.committed_replay(),1);assert_eq!(future.references().len(),4480);}
 
         assert!(s.complete_iteration(&a,4).is_err());

@@ -2995,7 +2995,7 @@ mod tests {
         scheduler.config.iteration_token_budget = 2;
         let owner = crate::authority::VariableOwnerGeometry { generation:1,last_accepted_replay:0,
             catalog_digest:[9;32],max_active_rows:32,physical_block_count:12,context_tokens:64,
-            packed_prefill:true,mixed_execution:true };
+            packed_prefill:true,shared_prefixes:true,mixed_execution:true };
         for (now,abort) in [(3,true),(5,false)] {
             let plan = scheduler.plan_iteration(now).unwrap().into_parts().0.unwrap();
             assert_eq!(plan.batch_size(),2);

@@ -2654,6 +2654,11 @@ RileyCudaStatus riley_cuda_graph_resources_record_transfer(
 // combined model input/output staging parent and its original DAG). Model
 // device buffers remain shared and all launches execute serially on one stream.
 // Read consumes a completed ticket. Until consumed its slot cannot be reused.
+// One-way cold V7 capability; call after recording and before buffered setup
+// or first replay. Packet bytes cannot enable sharing. Host authority must bind
+// complete page ownership and read-only ranges before each submission.
+RileyCudaStatus riley_cuda_graph_resources_enable_shared_prefixes(
+    RileyCudaGraphResources* resources, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_prepare_buffered_transfers(
     RileyCudaGraphResources* resources, RileyCudaPinnedHostBuffer* first,
     RileyCudaPinnedHostBuffer* second, RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

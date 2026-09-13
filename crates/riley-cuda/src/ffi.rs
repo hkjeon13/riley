@@ -9895,6 +9895,7 @@ unsafe extern "C" {
         output: *mut RawPinnedHostBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_enable_shared_prefixes(resources: *mut RawGraphResources, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_prepare_buffered_transfers(resources: *mut RawGraphResources, first: *mut RawPinnedHostBuffer, second: *mut RawPinnedHostBuffer, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_submit_buffered_transfer(resources: *mut RawGraphResources, source: *const u8, bytes: u64, ticket: *mut u64, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_graph_resources_submit_future_transfer(resources: *mut RawGraphResources, source: *const u8, bytes: u64, references: *const u8, reference_bytes: u64, predecessor: u64, ticket: *mut u64, error: *mut ErrorInfo) -> i32;
@@ -9949,6 +9950,12 @@ impl GraphResourcesHandle {
             )
         };
         status_result(status, "record aggregate transfer", &error)
+    }
+    pub(super) fn enable_shared_prefixes(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: native verifies the live retained owner and cold lifecycle.
+        let status = unsafe { riley_cuda_graph_resources_enable_shared_prefixes(self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr), &mut error) };
+        status_result(status, "enable shared prefixes", &error)
     }
     pub(super) fn prepare_buffered_transfers(&mut self, first: &PinnedHostBufferHandle, second: &PinnedHostBufferHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();

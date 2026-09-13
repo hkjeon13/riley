@@ -37,7 +37,7 @@ pub struct Expectation<const ROWS:usize=8> {
     pub block_ownership:Vec<BlockOwnership>,
     /// Explicit V6 capability, bound to the retained native graph by the session.
     pub packed_prefill:bool,
-    pub mixed_execution:bool,
+    pub mixed_execution:bool, pub shared_prefixes:bool,
 }
 fn result_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {if e.mixed_execution{0x37524d52}else if e.packed_prefill{0x36524d52}else{Layout::<ROWS>::RESULT_MAGIC}}
 fn compact_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {result_magic(e)^0x8000_0000}
@@ -52,6 +52,7 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
     check(!e.mixed_execution || (e.packed_prefill&&ROWS==32),"capacity","mixed execution requires packed32 capability")?;
     check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
+    check(!e.shared_prefixes || (ROWS==32 && e.mixed_execution),"capability","shared prefixes require V7")?;
     let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
     check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;
     check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
@@ -90,7 +91,7 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
             check(*owner==row.sequence_tag || shared_owners.contains(&(id,row.sequence_tag)),
                 "ownership","page not reserved by this request")?;
             let shared=!shared_owners.is_empty() && shared_owners.range((id,0)..=(id,u64::MAX)).next().is_some();
-            check(!shared || (ROWS==32 && e.mixed_execution),
+            check(!shared || (e.shared_prefixes && ROWS==32 && e.mixed_execution),
                 "ownership","shared prefixes require the V7 owner capability")?;
             let writes=i>=row.progress.committed_tokens as usize/16;
             // The ledger includes off-batch consumers. A writer cannot ignore
@@ -278,7 +279,7 @@ pub(crate) mod tests {
     #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
     pub(crate) fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
-        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false,mixed_execution:false};
+        let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false,shared_prefixes:false,mixed_execution:false};
         for i in 0..active {
             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};
             let v=progress.validate().unwrap();let ids:Vec<_>=(0..v.live_pages).map(|p|i*(if ROWS==32{128}else{256})+p).collect();
@@ -334,7 +335,7 @@ pub(crate) mod tests {
     }
     fn shared_prefix_fixture()->Expectation<32> {
         let mut e=fixture_rows::<32>(InputStage::Decode,2);
-        e.mixed_execution=true;e.packed_prefill=true;e.physical_block_count=8;
+        e.shared_prefixes=true;e.mixed_execution=true;e.packed_prefill=true;e.physical_block_count=8;
         for (index,row) in e.rows.iter_mut().enumerate() {
             row.progress=Progress{prompt_tokens:32,output_limit:8,context_tokens:64,
                 committed_tokens:32,input_tokens:1,generated_index:1,stage:InputStage::Decode};
@@ -350,6 +351,8 @@ pub(crate) mod tests {
     #[test]
     fn shared_prefix_wire_binds_all_owners_and_exports_native_fixture() {
         let e=shared_prefix_fixture();validate(&e).unwrap();
+        let mut exclusive=e.clone();exclusive.shared_prefixes=false;
+        assert!(validate(&exclusive).is_err(),"ownership entries cannot enable the owner capability");
         let mut legacy=e.clone();legacy.mixed_execution=false;legacy.packed_prefill=false;
         assert!(validate(&legacy).is_err(),"legacy variable wire remains exclusive");
         let mut packet=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut packet,&e).unwrap();

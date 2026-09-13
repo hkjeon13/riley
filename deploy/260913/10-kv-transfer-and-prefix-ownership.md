@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **구현 진행 중 — host identity·공유 import·COW, local CUDA event/D2D 및 공유 batch/wire/native 구조 검증 완료, captured model/serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — 공유 prefix의 retained native capability와 실제 model read parity 완료. 자동 serving cache·captured-model COW는 미연결**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -100,4 +100,12 @@ Nsight 원본은 환경 정보를 담을 수 있으므로 저장소에 넣지 �
 
 실제 export/import 후 두 consumer 실행과 off-batch consumer, NotDispatched 재시도, paired future-token authority, 취소 후 전체 회수를 검증했다. [검증 기록](../../benchmarks/results/20260914-shared-prefix-scheduler/README.md): scheduler 전체 150 passed, runtime library 348 passed / 1 기존 timing diagnostic ignored. 이 테스트의 출력 token은 host fixture이며 model 정확도 증거가 아니다.
 
-현재 ledger는 request-owned sequence를 포함한다. Scheduler cache-only owner가 도입될 때 해당 owner도 추가해야 한다. 자동 cache 정책과 native model capability는 아직 연결하지 않았으므로 serving에서 prefix reuse가 켜진 상태는 아니다. 다음 단계는 위 retained-model/COW/cache 통합과 실제 GPU·serving 검증으로 유지한다.
+이 단계의 ledger는 request-owned sequence를 포함한다. Scheduler cache-only owner가 도입될 때 해당 owner도 추가해야 한다. 이 시점에는 자동 cache 정책과 native model capability가 미연결이었다. 이후 native model 연결 결과는 아래에 기록하며, serving cache 통합과 성능 검증은 계속 남아 있다.
+
+## Retained native capability와 실제 모델 공유 읽기
+
+Native model capability를 기본값 false에서 명시적 opt-in으로 연결했다. V7 graph 기록 후, buffered 준비 또는 첫 replay 전에 한 번만 켤 수 있다. Capability를 loaded-model catalog digest와 session identity에 포함하고 scheduler expectation 및 paired successor가 같은 값을 갖도록 검증한다. Packet bytes로 설정을 바꾸지 못하며 기존 constructor는 계속 exclusive다.
+
+4090에서 실제 SmolLM2의 독립 page와 공유 prefix page decode logits를 동기·buffered 각각 196,608 bytes씩 비교해 완전 일치를 확인했다. 각 mode 종료 후 host page와 CUDA allocation은 0이다. CUDA-enabled session 7 tests와 CUDA/server feature check도 통과했다. [모델 검증 기록](../../benchmarks/results/20260914-shared-prefix-model/README.md).
+
+이것은 full-page prefix 읽기 검증이다. 자동 cache descriptor의 실제 model/token binding, cache-only owner 및 lookup/publication/eviction, captured-model COW/drain, 다양한 prompt/model·partial tail 검증과 실제 vLLM serving 비교가 남아 있다. CLI serving cache는 아직 켜지 않았고 성능 승격도 하지 않았다.

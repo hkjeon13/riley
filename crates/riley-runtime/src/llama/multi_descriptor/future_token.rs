@@ -57,7 +57,7 @@ impl PreparedFutureWindow {
 /// cannot be submitted through the existing single-inflight session API.
 pub fn prepare(previous: &Expectation<32>, successor: &Expectation<32>, sources: &[TokenSource]) -> Result<PreparedFutureBatch> {
     wire::validate(previous)?;
-    check(previous.mixed_execution && successor.mixed_execution && previous.mode==ResultMode::Greedy && successor.mode==ResultMode::Greedy,
+    check(previous.shared_prefixes==successor.shared_prefixes && previous.mixed_execution && successor.mixed_execution && previous.mode==ResultMode::Greedy && successor.mode==ResultMode::Greedy,
           "future_profile", "requires V7 mixed32 greedy expectations")?;
     check(previous.owner_generation==successor.owner_generation && previous.catalog_digest==successor.catalog_digest && previous.physical_block_count==successor.physical_block_count,
           "future_owner", "retained owner differs")?;
@@ -120,7 +120,7 @@ mod tests {
     use super::super::{BlockOwnership,shape_progress::Progress};
     use wire::Row;
     fn pair()->(Expectation<32>,Expectation<32>) {
-        let old=Expectation {owner_generation:7,last_accepted_replay:9,replay_id:10,iteration_id:20,catalog_digest:[1;32],physical_block_count:8,max_active_rows:32,stage:InputStage::Prefill,mode:ResultMode::Greedy,packed_prefill:true,mixed_execution:true,
+        let old=Expectation {owner_generation:7,last_accepted_replay:9,replay_id:10,iteration_id:20,catalog_digest:[1;32],physical_block_count:8,max_active_rows:32,stage:InputStage::Prefill,mode:ResultMode::Greedy,packed_prefill:true,shared_prefixes:false,mixed_execution:true,
             rows:(0..2).map(|i|Row {sequence_tag:10+i as u64,cookie:100+i as u64,output_slot:i,progress:Progress {prompt_tokens:16,output_limit:4,context_tokens:64,committed_tokens:0,input_tokens:16,generated_index:0,stage:InputStage::Prefill},input_tokens:vec![3;16],physical_ids:vec![i],valid_tokens:vec![16]}).collect(),
             block_ownership:(0..2).map(|i|BlockOwnership{physical_id:i,sequence_tag:10+i as u64}).collect()};
         let mut new=old.clone();new.replay_id=11;new.iteration_id=21;new.stage=InputStage::Decode;new.rows.reverse();

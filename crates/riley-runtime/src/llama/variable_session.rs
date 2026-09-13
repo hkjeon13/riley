@@ -15,7 +15,7 @@ static GENERATION: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy)]
 pub struct VariableSessionIdentity {
     pub generation:u64, pub last_accepted_replay:u64, pub catalog_digest:[u8;32],
-    pub physical_block_count:u32, pub context_tokens:u32, pub packed_prefill:bool, pub mixed_execution:bool,
+    pub physical_block_count:u32, pub context_tokens:u32, pub packed_prefill:bool, pub mixed_execution:bool, pub shared_prefixes:bool,
 }
 /// Owns the prepared reservation; no mutable native handle escapes while active.
 /// A result remains outstanding until scheduler commit is explicitly confirmed.
@@ -37,7 +37,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     pub fn new(graph:G,catalog_digest:[u8;32],physical_block_count:u32,context_tokens:u32)->Result<Self> {
         if !matches!(ROWS,8|16|32) || catalog_digest==[0;32] || !(1..=4096).contains(&physical_block_count) || !(1..=4096).contains(&context_tokens) {return Err(bad("invalid prepared geometry"));}
         let generation=GENERATION.fetch_update(Ordering::Relaxed,Ordering::Relaxed,|n|n.checked_add(1)).map_err(|_|bad("generation exhausted"))?;
-        Ok(Self{graph,host_phase_timing:(std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref()==Some("1")).then(HostRuntimeTiming::default),window_predecessor_ticket:None,issued_successor:None,window:None,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,mixed_execution:false},
+        Ok(Self{graph,host_phase_timing:(std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref()==Some("1")).then(HostRuntimeTiming::default),window_predecessor_ticket:None,issued_successor:None,window:None,identity:VariableSessionIdentity{generation,last_accepted_replay:0,catalog_digest,physical_block_count,context_tokens,packed_prefill:false,shared_prefixes:false,mixed_execution:false},
             buffered:false,buffered_ticket:None,async_completion:false,compact:false,shared:false,issued:None,next_cookie:1,retained:None,started:false,poisoned:false,completed:false,input:vec![0;wire::Layout::<ROWS>::REQUEST_BYTES],output:vec![0;wire::RESULT_BYTES]})
     }
     pub fn new_shared(graph:G,digest:[u8;32],physical:u32,context:u32)->Result<Self>{let mut s=Self::new(graph,digest,physical,context)?;s.shared=true;s.output=vec![0;wire::Layout::<ROWS>::BATCH_RESULT_BYTES];Ok(s)}
@@ -46,7 +46,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if ROWS!=32{return Err(bad("packed requires32 rows"));}
         let mut s=if compact{Self::new_shared_compact(graph,digest,physical,context)?}else{Self::new_shared(graph,digest,physical,context)?};s.identity.packed_prefill=true;Ok(s)
     }
-    pub(crate) fn new_shared_mixed(graph:G,digest:[u8;32],physical:u32,context:u32,compact:bool)->Result<Self>{let mut s=Self::new_shared_packed(graph,digest,physical,context,compact)?;s.identity.mixed_execution=true;s.input.resize(wire::MIXED_REQUEST_BYTES,0);Ok(s)}
+    pub(crate) fn new_shared_mixed(graph:G,digest:[u8;32],physical:u32,context:u32,compact:bool,shared_prefixes:bool)->Result<Self>{let mut s=Self::new_shared_packed(graph,digest,physical,context,compact)?;s.identity.mixed_execution=true;s.identity.shared_prefixes=shared_prefixes;s.input.resize(wire::MIXED_REQUEST_BYTES,0);Ok(s)}
     pub(crate) fn set_buffered_completion(&mut self,enabled:bool) {self.buffered=enabled;}
     /// Opt-in diagnostic wall time; native execution includes GPU waits.
     pub fn report_host_phase_timing(&self) {
@@ -87,7 +87,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         if self.issued_successor.is_some() || (self.window.is_some() || self.window_predecessor_ticket.is_some()) {return Err(bad("window requires paired submission"));}
         if self.poisoned || self.retained.is_some() {return Err(bad("session busy or poisoned"));}
         let i=self.identity;
-        if e.mixed_execution!=i.mixed_execution || e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
+        if e.shared_prefixes!=i.shared_prefixes || e.mixed_execution!=i.mixed_execution || e.packed_prefill!=i.packed_prefill || e.rows.is_empty() || e.rows.len()>if self.shared{ROWS}else{1} || e.max_active_rows!=ROWS as u32 || e.owner_generation!=i.generation
             || e.last_accepted_replay!=i.last_accepted_replay || e.catalog_digest!=i.catalog_digest
             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
@@ -174,7 +174,7 @@ pub struct VariableGraphBuffers {
     pub(crate) wire_rows:usize,
     pub(crate) compact:bool,
     pub(crate) packed_prefill:bool,
-    pub(crate) mixed_execution:bool,
+    pub(crate) mixed_execution:bool, pub(crate) shared_prefixes:bool,
 }
 impl VariableGraphBuffers {
     pub fn prepare(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self> {Self::prepare_base(context,capacity,true)}
@@ -190,7 +190,7 @@ impl VariableGraphBuffers {
         for bytes in [17536,1152,128,4,98304,8] {devices.push(context.allocate_device_buffer(bytes)?);}
         let tiled=(0..if packed{90}else{0}).map(|_|context.allocate_device_buffer(1769472)).collect::<riley_cuda::CudaResult<Vec<_>>>()?;
         Ok(Self{fa3_attention:false,flashinfer_prefill_only:false,ffn_pipeline:false,prefill_ffn_pipeline:false,adaptive_decode:false,attention_workspace:None,devices,tiled,shared_devices:vec![],shared_head:None,staging:context.allocate_pinned_host_buffer(196864)?,
-            buffered_staging:Vec::new(),head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,mixed_execution:false})
+            buffered_staging:Vec::new(),head:context.prepare_gemm(riley_cuda::CudaGemmConfig::new(1,49152,576,0)?)?,capacity,wire_rows:8,compact:false,packed_prefill:false,shared_prefixes:false,mixed_execution:false})
     }
     pub fn prepare_shared(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<8>(context,capacity)}
     pub fn prepare_shared16(context:&riley_cuda::CudaContext,capacity:u32)->riley_cuda::CudaResult<Self>{Self::prepare_shared_rows::<16>(context,capacity)}
@@ -302,18 +302,23 @@ impl super::PreparedLlamaBatchExecutor {
         self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true)
     }
     fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
-        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false)
+        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false,false)
     }
     /// Experimental Hopper FA3 model graph. Not an exact numerical profile.
     pub fn into_owned_variable_fa3_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         if !riley_cuda::FA3_COMPILED {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"FA3 backend",reason:"FA3 was not compiled"});}
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false,false)
     }
     /// Exact-order adaptive row tiles for pure decode, including paired graphs.
     pub fn into_owned_variable_adaptive_decode_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true,false)
     }
-    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+    /// Opt-in immutable shared prefixes with the existing V7 numerical profile.
+    /// Automatic cache policy and captured-buffer COW are separate integrations.
+    pub fn into_owned_variable_prefix_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool,adaptive:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,adaptive,true)
+    }
+    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
@@ -322,7 +327,7 @@ impl super::PreparedLlamaBatchExecutor {
         parents.scratch.prefill_ffn_pipeline=prefill_ffn_pipeline;
         parents.scratch.flashinfer_prefill_only=prefill_only;
         parents.scratch.fa3_attention=fa3;
-        parents.scratch.adaptive_decode=adaptive;
+        parents.scratch.adaptive_decode=adaptive;parents.scratch.shared_prefixes=shared_prefixes;
         if fa3 {parents.scratch.attention_workspace=Some(context.allocate_device_buffer(riley_cuda::FA3_MODEL_WORKSPACE_BYTES).map_err(cuda)?);}
         if flashinfer || prefill_only {parents.scratch.attention_workspace=Some(context.allocate_device_buffer(if prefill_only{33996}else{78256}).map_err(cuda)?);}
         if mixed {parents.scratch.devices[12]=context.allocate_device_buffer(wire::MIXED_REQUEST_BYTES as u64).map_err(cuda)?;}
@@ -333,7 +338,7 @@ impl super::PreparedLlamaBatchExecutor {
             let (graph,i)=session.into_recorded_parts();identity=Some(i);Ok::<_,super::LlamaBatchExecutorError>(graph)
         })?;
         let i=identity.expect("successful recording provides identity");
-        let mut session=(if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
+        let mut session=(if mixed {OwnedVariableSession::new_shared_mixed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact,i.shared_prefixes)}else if packed {OwnedVariableSession::new_shared_packed(graph,i.catalog_digest,i.physical_block_count,i.context_tokens,compact)}else if compact {OwnedVariableSession::new_shared_compact(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else if shared {OwnedVariableSession::new_shared(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)}else{OwnedVariableSession::new(graph,i.catalog_digest,i.physical_block_count,i.context_tokens)})
             .map_err(|_|super::LlamaBatchExecutorError::InvalidConfiguration{field:"V3 owned session",reason:"identity creation failed"})?;
         session.set_buffered_completion(buffered);Ok(session)
     }
@@ -524,7 +529,7 @@ mod staged_window_tests {
         let row=&mut second.rows[0];row.cookie+=1;row.progress.committed_tokens+=1;row.progress.generated_index+=1;*row.valid_tokens.last_mut().unwrap()+=1;row.input_tokens[0]=7;
         let graph=FakeGraph{outputs:[wire::tests::compact_fixture(&first),wire::tests::compact_fixture(&second)],calls:vec![]};
         second.last_accepted_replay=first.last_accepted_replay;second.rows[0].input_tokens[0]=0;
-        let mut s=VariableSession::new_shared_mixed(graph,first.catalog_digest,first.physical_block_count,first.rows[0].progress.context_tokens,true).unwrap();
+        let mut s=VariableSession::new_shared_mixed(graph,first.catalog_digest,first.physical_block_count,first.rows[0].progress.context_tokens,true,false).unwrap();
         s.identity.last_accepted_replay=first.last_accepted_replay;s.retained=Some(first);s.buffered=true;
         s.window=Some(DecodeWindowState{successor:second,tickets:[1,2],output:vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES],predecessor_validated:false,complete:false});s
     }
@@ -536,6 +541,25 @@ mod staged_window_tests {
         let mut actual=second.clone();actual.last_accepted_replay=first.replay_id;actual.rows[0].input_tokens[0]=7;
         s.graph.outputs[1]=wire::tests::compact_fixture(&actual);
         (s,first,second)
+    }
+    #[test]
+    fn shared_prefix_capability_cannot_be_changed_by_submission() {
+        for enabled in [false,true] {
+            let (mut session,mut first,_) = issued();
+            session.issued_successor=None;
+            session.identity.shared_prefixes=enabled;
+            first.shared_prefixes=!enabled;
+            assert!(session.retain_submission(first.clone()).is_err());
+            assert!(session.retained.is_none());
+            assert!(session.graph.calls.is_empty());
+            first.shared_prefixes=enabled;
+            session.retain_submission(first).unwrap();
+        }
+        let (mut session,first,mut second)=issued();
+        session.submit_decode_window_predecessor(first).unwrap();
+        second.shared_prefixes=true;
+        assert!(session.submit_decode_window_successor(||Ok(second)).is_err());
+        assert_eq!(session.graph.calls,vec![("submit",1)]);
     }
     #[test]
     fn successor_preparation_follows_first_submit_and_keeps_pair_exclusive(){

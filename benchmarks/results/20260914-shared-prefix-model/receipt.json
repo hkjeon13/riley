@@ -1,0 +1,28 @@
+{
+  "scope": "real model full-page shared-prefix read parity; no serving performance claim",
+  "base_commit": "8c6400c6",
+  "gpu": "RTX 4090",
+  "cuda": "13.0.88",
+  "modes": [
+    "synchronous",
+    "buffered"
+  ],
+  "exact_logits_bytes_per_mode": 196608,
+  "native_session_tests_passed": 7,
+  "model_tests_passed": 1,
+  "test_binary_sha256": "f5959dc0d98884c08da6087383e0c4bf5fc66ac66eb9a6448e5ce60b77d49e62",
+  "remote_verified_source_sha256": {
+    "crates/riley-runtime/tests/shared_prefix_model_gpu.rs": "2fc2169ce4300df054a039f81ece7ef586a92f86e73c78b7d6dfbfee692afa29",
+    "kernels/src/graph_resources.cu": "97a5e2eef56b1b8370ff56af496c7cf640efc82d8ebf1e92d03dce80d134035d",
+    "kernels/src/prefill_shape_packet.hpp": "af2b57c837fd75dc20ed4c0e260080a5df8cc54504becf5e5af6a3bc26220638"
+  },
+  "evidence_sha256": {
+    "build.log": "344edcb11849fa4cd326e49a568ffee1a67f2e5180a8ded6b7708db4b3fff137",
+    "compute-after.csv": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-tests.log": "8473ca60780707346be8ada178a69744739b39b7ab6f84ec75cf70c7fd0c9b2f",
+    "server-feature-check.log": "ce6a4ae6dd5ae5d0966908f3f3798ebc265f2f2c916f56ebda020927b9976618",
+    "session-tests.log": "ca15b6158eb56deafa084d382a8a3ed25767abd02f778b7d997c3f49d1cd7567",
+    "source-sha256.txt": "60875def5871d72dae5ecdc01d01482aa85fb02c021323de27beece07638ae76"
+  },
+  "serving_executed": false
+}

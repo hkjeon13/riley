@@ -2177,7 +2177,7 @@ fn execute_variable_graph_impl<G:riley_runtime::llama::variable_session::Variabl
     if prepared.output_count>ROWS || ROWS>32{return Err(fail(crate::descriptor::Error{field:"V3 output",reason:"too many output slots"},Some(ExecutionAbort::NotDispatched)));}
     let mut argmax=[0u32;32];
     let (identity,replay,cookies)=executor.issue_rows(authority.plan().batch_size()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
-    let owner=crate::authority::VariableOwnerGeometry {mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
+    let owner=crate::authority::VariableOwnerGeometry {shared_prefixes:identity.shared_prefixes,mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,
         catalog_digest:identity.catalog_digest,max_active_rows:ROWS as u32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
     let expectation=match authority.variable_descriptor_expectation_rows::<ROWS>(&owner,replay,&cookies,if compact_greedy{crate::descriptor::ResultMode::Greedy}else{crate::descriptor::ResultMode::FullLogits}) {
         Ok(e)=>e, Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}
@@ -2295,7 +2295,7 @@ pub fn submit_llama_iteration_variable_graph<'execution, 'scheduler, G: riley_ru
     let logits = zeroed_vec(if compact_greedy { 0 } else { prepared.output_count * 98304 }, "V3 logits").map_err(before_dispatch)?;
     let (identity, replay, cookies) = executor.issue_rows(authority.plan().batch_size()).map_err(descriptor_error)?;
     let owner = crate::authority::VariableOwnerGeometry {
-        mixed_execution: identity.mixed_execution, packed_prefill: identity.packed_prefill,
+        shared_prefixes: identity.shared_prefixes,mixed_execution: identity.mixed_execution, packed_prefill: identity.packed_prefill,
         generation: identity.generation, last_accepted_replay: identity.last_accepted_replay,
         catalog_digest: identity.catalog_digest, max_active_rows: ROWS as u32,
         physical_block_count: identity.physical_block_count, context_tokens: identity.context_tokens,
@@ -2360,7 +2360,7 @@ pub fn execute_llama_decode_window_with_first<G:riley_runtime::llama::variable_s
     };
     let outputs=[prepare(&authority.first)?,prepare(&authority.second)?];
     let(identity,replay,first_cookies,second_cookies)=executor.issue_decode_window(outputs[0].output_count).map_err(desc)?;
-    let owner=crate::authority::VariableOwnerGeometry{mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
+    let owner=crate::authority::VariableOwnerGeometry{shared_prefixes:identity.shared_prefixes,mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
     let first=match authority.prepare_wire_first(&owner,replay,&first_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
     executor.submit_decode_window_predecessor(first).map_err(|e|variable_ticket_failure(id,e))?;
     // The second descriptor and future packet are prepared while the first
