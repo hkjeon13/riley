@@ -1,0 +1,20 @@
+   Compiling riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.88s
+     Running unittests src/lib.rs (target/debug/deps/riley_scheduler-79707b6f5c34a155)
+
+running 12 tests
+test execution::tests::greedy_workspace_restore_failure_preserves_both_allocations ... ok
+test execution::tests::downloaded_greedy_tokens_map_dense_slots_without_logits ... ok
+test execution::tests::downloaded_greedy_allocation_returns_to_empty_execution_placeholder ... ok
+test execution::tests::downloaded_rows_map_dense_slots_to_commit_results_without_reallocation ... ok
+test execution::tests::post_validation_test_fault_retains_unpublished_download_and_is_one_shot ... ok
+test execution::tests::physical_blocks_must_be_exclusive_across_rows ... ok
+test execution::tests::plan_is_adapted_in_prefill_then_decode_order_without_copying_payloads ... ok
+test execution::tests::commit_failure_retains_download_and_safe_abort_data ... ok
+test execution::tests::plan_boundary_rejects_nondense_slots_and_decode_without_output ... ok
+test execution::tests::executor_bounds_are_rechecked_without_device_work ... ok
+test execution::tests::reusable_greedy_workspace_is_bounded_and_never_reallocated ... ok
+test execution::validated_argmax_routing_tests::validated_logits_keep_distinct_dense_argmax_and_full_rows ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.00s
+

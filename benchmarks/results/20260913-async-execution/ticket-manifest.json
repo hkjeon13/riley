@@ -1,0 +1,60 @@
+{
+  "recorded_at_utc": "2026-09-13T03:18:31.433181+00:00",
+  "baseline": "030c207565eda3ec45533a166e6d9a201c8d1831",
+  "parent_commit": "9933778b4cf73ac6b225ae6019c78d54a8bc7c4d",
+  "source_overlay_sha256": {
+    "crates/riley-cuda/examples/hardware_validation.rs": "3168eee9a978f8317082456b3e9bceba3f6af7c3cff013e88cf5fc29995548e8",
+    "crates/riley-cuda/src/ffi.rs": "76610cd6465acdb7ed66b852e3aa04180a1b5a8ecfd8799b635c5fd25dec5145",
+    "crates/riley-cuda/src/graph_resources.rs": "7f58aeded81bac4bed2e34235806935f07095efd0dfc657c88192e3037d1719f",
+    "crates/riley-cuda/src/hardware_validation.rs": "ecd5e03efbe018839bb41429a6675bda8d179f7649adf692eff8b9770e90efa9",
+    "crates/riley-cuda/src/lib.rs": "05aafb02dbf30340f3587442d0b437f6880a8e2c88c1c0255203cf610a026431",
+    "crates/riley-cuda/src/runtime.rs": "b336fc6265143a6e4b7476993fb858103c510e22e28997b975355985244ae6c2",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "61860be5a9394b8b3bb023ed0f0e17e03ada101ea19a4cd6e4251a85062d981a",
+    "crates/riley-runtime/src/llama/mod.rs": "3ef42ba39a78584ca2583ce15250cc33d222629c8c26d4cbdd4ddf7c7b9c0b96",
+    "crates/riley-runtime/src/llama/variable_plan.rs": "69af9530f1bcf5f441952f22751660ca43dd68f4bc3a711b6e9b383b0a0dd8be",
+    "crates/riley-runtime/src/llama/variable_session.rs": "5dd2a32da6d667d25202975b7bac3f63431a7ccf6c4c320f63c1e743fc5ee0b6",
+    "crates/riley-scheduler/src/execution.rs": "8213acde864bc065123e50bb7f7da8efb97d55905d294e5262ea94c04f714243",
+    "crates/riley-scheduler/tests/v3_shared_owned_gpu.rs": "20ce2f0181861ea999a9b14a3f41f28b8f756d2f59eb46991325f37b4a04f459",
+    "kernels/include/riley_cuda.h": "a2e12d6737ba283c8d625903d881653d0e9a555c66c8505521b3b83ba946d856",
+    "kernels/src/graph_resources.cu": "d407518b5c48fb866da6ff938d6b3866f7789242aa355a73326964fa22c76558",
+    "kernels/src/host_runtime.cu": "ebcb308ef295dfcfd523c0d719b911bd6025e4db3d3c9942bab8498c9aaf256c"
+  },
+  "remote_source_matches_local_overlay": true,
+  "test_binary": "/tmp/riley-opt-260912/hardware-validation-target/debug/deps/v3_shared_owned_gpu-6db3b0fd131047ce",
+  "test_binary_sha256": "184aaa96ef2e4fac25bd57ed5833b2667533db2fb0bfc7764f57a244570eabf7",
+  "hardware": "single RTX 4090 SM89",
+  "model": "SmolLM2-135M BF16 /data/riley-benchmark/20260827T051948Z-d7ad713a/model",
+  "fixture": "/tmp/riley-opt-260912/loaded-rope-fixture-v11",
+  "commands": {
+    "gpu": "cargo test -p riley-scheduler --features cuda --test v3_shared_owned_gpu loaded_v7 -- --ignored --test-threads=1 --nocapture",
+    "docs": "cargo test -p riley-scheduler --features cuda --doc",
+    "cpu": "cargo test -p riley-scheduler --lib execution:: -- --nocapture",
+    "sanitizer": "/data/cuda-12.8.1/bin/compute-sanitizer --tool memcheck --error-exitcode 86 /tmp/riley-opt-260912/hardware-validation-target/debug/deps/v3_shared_owned_gpu-6db3b0fd131047ce loaded_v7_partial --ignored --test-threads=1 --nocapture"
+  },
+  "results": {
+    "gpu": {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    "docs": {
+      "passed": 2,
+      "failed": 0
+    },
+    "cpu": {
+      "passed": 12,
+      "failed": 0
+    },
+    "memcheck": {
+      "passed": 1,
+      "errors": 0
+    }
+  },
+  "limitations": [
+    "Single in-flight iteration only. Serving default unchanged. No throughput or latency claim.",
+    "Hopper, Blackwell and multi-GPU tests not run; hardware unavailable.",
+    "Local macOS cargo check --features cuda failed because nvcc is absent; remote CUDA build and executed tests passed.",
+    "Source overlay fingerprints cover every changed crates/kernels file relative to frozen V56.",
+    "No new native async event failure injection coverage."
+  ]
+}

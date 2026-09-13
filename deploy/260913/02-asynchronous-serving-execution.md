@@ -1,6 +1,6 @@
 # PR 02 — 비동기 iteration 실행과 응답 처리 중첩
 
-상태: **구현 진행 중**. native submit/query/wait와 variable session을 연결했다. GPU token 전달·이중 buffer·ahead scheduling은 남아 있다. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중**. native submit/query/wait, variable session, scheduler authority를 보유하는 제출 ticket을 연결했다. GPU token 전달·이중 buffer·ahead scheduling은 남아 있다. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -62,3 +62,26 @@ submit_rows/query_completion/wait_rows를 추가하고 기존 execute_rows를 ev
 SmolLM2 실제 모델의 loaded_v7_compact32/full32/partial 3개 GPU 테스트가 통과했다. 각각 4096/4096/224 출력 위치의 기존 reference 검사와 scheduler settlement, pending close/abort, allocation_zero 검증이 포함되어 있다. compact 경로는 greedy token, full 경로는 BF16 logits를 대조한다. partial 경로에 대한 Compute Sanitizer memcheck는 0 errors다. [모델 GPU 결과](../../benchmarks/results/20260913-async-execution/model-gpu.log), [모델 memcheck](../../benchmarks/results/20260913-async-execution/model-memcheck.log).
 
 이는 비동기 제출 경계의 correctness 증거다. 테스트의 compatibility 경로는 제출 후 대기하므로 CPU/GPU overlap이나 serving 성능 향상을 입증하지 않는다. 다음 batch는 GPU token 전달, completion/metadata 이중화, 두 iteration ticket과 scheduler 반영 순서를 함께 구현하고 실제 serving으로 비교한다.
+
+
+## Scheduler 제출 ticket 경계
+
+`submit_llama_iteration_variable_graph`는 제출 후 즉시 ticket을 반환한다. ticket이 `AuthorizedExecution`과 mutable session을 빌리므로 wait 이전에 scheduler 예약이나 session을 다시 사용할 수 없다. `query_completion`은 결과를 공개하지 않으며 `wait`만 wire 검증 후 기존 `DownloadedLlamaIteration`을 만든다. Greedy workspace와 full-logit 저장소는 제출 전에 확보하고, 기존 workspace 반환 계약을 유지한다. 제출 전 workspace 부족은 GPU mutation 없이 거절한다.
+
+정상 pending ticket의 Drop은 완료 대기·검증을 수행하되 scheduler commit을 수행하지 않는다. 오류로 완료를 확정하지 못하면 session의 poison/retained owner를 유지하며, KV를 반환하기 전에 owner close가 필요하다. 검증을 마친 ticket도 scheduler settlement와 `confirm_scheduler_commit`이 따로 필요하다. 이 단계는 한 iteration의 host work 분리를 제공하며 두 iteration 실행은 아직 지원하지 않는다.
+
+다음 구현에서 연결해야 하는 실제 의존성:
+
+- `scheduler.rs`의 단일 `inflight: Option<InflightPlan>`과 authority의 immutable scheduler borrow를 유지한 채 단순히 두 번째 launch를 허용할 수 없다. 선행 결과에 의존하는 다음 plan의 tentative reservation과 순서대로 반영하는 상태 전이가 필요하다.
+- shared32 embedding은 descriptor의 `shape[row*416]` CPU token을 사용한다. GPU future token은 선행 replay·request/cookie·generation·output slot·status에 묶고 다음 descriptor 검증 및 embedding 전에 전달해야 한다. 숫자 token만 복사해 row 재배치에 사용하는 방식은 금지한다.
+- metadata·host staging·completion·event를 두 slot으로 분리한다. model activation·KV 실행은 동일 stream에서 직렬화해 전체 activation 이중 할당을 피한다. input staging 재사용과 output read는 각각 해당 slot의 완료 증거를 요구한다.
+- 선행 EOS/cancel로 불필요해진 다음 token은 공개하지 않는다. 추가 KV append 및 page-boundary 예약은 후행 GPU 접근 완료 후에만 정리하고, 실패 시 두 ticket의 소유 관계를 유지한다.
+
+이는 PR 02의 남은 optimization batch이며 별도 성능 개선 완료로 계산하지 않는다. 실제 serving 연결·overlap trace·V56 및 vLLM 비교 전에는 기본값으로 승격하지 않는다.
+
+
+### Ticket 검증 결과
+
+4090 actual-model compact32/full32/partial 3개 검사가 통과했다(출력 위치 4096/4096/224). compact/full 결과 대조, 부족한 workspace의 제출 전 거절 후 정상 재제출, workspace allocation 반환, pending ticket Drop 후 재사용 거절 및 close/abort의 allocation_zero를 확인했다. partial model Compute Sanitizer는 0 errors였다. CPU 실행 adapter 12개와 Rustdoc 2개(진행 중 ticket의 scheduler 변경을 막는 compile-fail 포함)가 통과했다.
+
+[검증 manifest](../../benchmarks/results/20260913-async-execution/ticket-manifest.json), [모델 GPU](../../benchmarks/results/20260913-async-execution/ticket-model-gpu.log), [memcheck](../../benchmarks/results/20260913-async-execution/ticket-model-memcheck.log), [Rustdoc](../../benchmarks/results/20260913-async-execution/ticket-doc.log), [CPU](../../benchmarks/results/20260913-async-execution/ticket-cpu.log). 원격 테스트 소스는 V56 대비 변경된 crates/kernels 파일의 SHA256을 로컬과 대조했다. 로컬 macOS CUDA check는 nvcc 부재로 실패했고 원격 CUDA build·실행으로 검증했다. Hopper/Blackwell/multi-GPU 실행 증거와 serving overlap 성능 증거는 이번 결과에 포함하지 않는다.

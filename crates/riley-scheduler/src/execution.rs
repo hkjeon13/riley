@@ -2190,6 +2190,134 @@ fn execute_variable_graph_impl<G:riley_runtime::llama::variable_session::Variabl
         output:if compact_greedy{DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens))}else{DownloadedLlamaOutput::ValidatedLogits{logits,argmax}},commit_outputs:prepared.commit_outputs})
 }
 
+/// One submitted iteration retaining both live KV authority and the runtime owner.
+/// Waiting validates GPU output but does not commit the scheduler. Dropping a
+/// pending ticket drains the device; the caller must still settle or abort the
+/// iteration before reusing its reservations. No second iteration is admitted.
+///
+/// A live ticket prevents scheduler mutation even if the host has other work:
+/// ```compile_fail,E0502
+/// use riley_scheduler::{Scheduler, IterationPlan};
+/// use riley_runtime::llama::variable_session::{VariableGraph, VariableSession};
+/// fn cannot_mutate<G: VariableGraph>(scheduler: &mut Scheduler,
+///     plan: &IterationPlan, session: &mut VariableSession<G, 32>) {
+///     let authority = scheduler.authorize_execution(plan).unwrap();
+///     let ticket = riley_scheduler::execution::submit_llama_iteration_variable_graph(
+///         &authority, session, false, None).unwrap();
+///     let _ = scheduler.plan_iteration(1);
+///     let _ = ticket.wait();
+/// }
+/// ```
+#[cfg(feature = "cuda")]
+#[must_use = "wait for the submitted iteration, then settle the scheduler"]
+pub struct SubmittedVariableIteration<'execution, 'scheduler, G: riley_runtime::llama::variable_session::VariableGraph, const ROWS: usize> {
+    _authority: &'execution crate::AuthorizedExecution<'scheduler>,
+    executor: &'execution mut riley_runtime::llama::variable_session::VariableSession<G, ROWS>,
+    downloaded: Option<DownloadedLlamaIteration>,
+    pending: bool,
+}
+
+#[cfg(feature = "cuda")]
+impl<G: riley_runtime::llama::variable_session::VariableGraph, const ROWS: usize> SubmittedVariableIteration<'_, '_, G, ROWS> {
+    /// Poll without spinning or exposing unvalidated output.
+    pub fn query_completion(&mut self) -> Result<bool, IterationExecutionFailure> {
+        let id = self.downloaded.as_ref().expect("unconsumed ticket").iteration_id;
+        self.executor.query_completion().map_err(|e| variable_ticket_failure(id, e))
+    }
+
+    pub fn wait(mut self) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+        self.pending = false;
+        let mut downloaded = self.downloaded.take().expect("unconsumed ticket");
+        let id = downloaded.iteration_id;
+        let rows = self.executor.wait_rows().map_err(|e| variable_ticket_failure(id, e))?;
+        if rows.iter().filter(|row| row.token.is_some()).count() != downloaded.output_count {
+            return Err(variable_ticket_failure(id, crate::descriptor::Error {
+                field: "V3 output", reason: "publication differs from plan",
+            }));
+        }
+        for row in rows {
+            if let Some(token) = row.token {
+                let slot = row.output_slot as usize;
+                match &mut downloaded.output {
+                    DownloadedLlamaOutput::GreedyTokens(tokens) => tokens[slot] = token,
+                    DownloadedLlamaOutput::ValidatedLogits { logits, argmax } => {
+                        argmax[slot] = token;
+                        logits[slot * 98304..(slot + 1) * 98304].copy_from_slice(row.logits);
+                    }
+                    _ => unreachable!("ticket output mode is fixed before submission"),
+                }
+            }
+        }
+        Ok(downloaded)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<G: riley_runtime::llama::variable_session::VariableGraph, const ROWS: usize> Drop for SubmittedVariableIteration<'_, '_, G, ROWS> {
+    fn drop(&mut self) {
+        if self.pending {
+            // A failure poisons the retained session. It is never a successful
+            // scheduler commit, and its owner must close before KV release.
+            let _ = self.executor.wait_rows();
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn variable_ticket_failure(id: IterationId, error: crate::descriptor::Error) -> IterationExecutionFailure {
+    IterationExecutionFailure::new(id, None, IterationAdapterError::InvalidRuntimeOutput {
+        field: error.field, reason: error.reason,
+    })
+}
+
+/// Submit without immediately waiting, allowing independent CPU work while the
+/// GPU executes. All publication storage is allocated before device mutation.
+/// The ticket borrows authority so settlement/cancellation cannot free live KV.
+#[cfg(feature = "cuda")]
+pub fn submit_llama_iteration_variable_graph<'execution, 'scheduler, G: riley_runtime::llama::variable_session::VariableGraph, const ROWS: usize>(
+    authority: &'execution crate::AuthorizedExecution<'scheduler>,
+    executor: &'execution mut riley_runtime::llama::variable_session::VariableSession<G, ROWS>,
+    compact_greedy: bool,
+    workspace: Option<&mut Vec<u32>>,
+) -> Result<SubmittedVariableIteration<'execution, 'scheduler, G, ROWS>, IterationExecutionFailure> {
+    let id = authority.plan().iteration_id();
+    let before_dispatch = |e| IterationExecutionFailure::new(id, Some(ExecutionAbort::NotDispatched), e);
+    let descriptor_error = |e: crate::descriptor::Error| before_dispatch(IterationAdapterError::InvalidRuntimeOutput { field: e.field, reason: e.reason });
+    let prepared = PreparedLlamaIteration::prepare(authority.plan()).map_err(before_dispatch)?;
+    if prepared.output_count > ROWS || ROWS > 32 || (compact_greedy && !executor.supports_compact_greedy()) {
+        return Err(descriptor_error(crate::descriptor::Error { field: "V3 output", reason: "unsupported output geometry or mode" }));
+    }
+    let mut local_tokens = if compact_greedy && workspace.is_none() {
+        reserve_vec(prepared.output_count, "V4 compact tokens").map_err(before_dispatch)?
+    } else { Vec::new() };
+    let tokens = workspace.unwrap_or(&mut local_tokens);
+    if compact_greedy { prepare_greedy_token_workspace(tokens, prepared.output_count).map_err(before_dispatch)?; }
+    let logits = zeroed_vec(if compact_greedy { 0 } else { prepared.output_count * 98304 }, "V3 logits").map_err(before_dispatch)?;
+    let (identity, replay, cookies) = executor.issue_rows(authority.plan().batch_size()).map_err(descriptor_error)?;
+    let owner = crate::authority::VariableOwnerGeometry {
+        mixed_execution: identity.mixed_execution, packed_prefill: identity.packed_prefill,
+        generation: identity.generation, last_accepted_replay: identity.last_accepted_replay,
+        catalog_digest: identity.catalog_digest, max_active_rows: ROWS as u32,
+        physical_block_count: identity.physical_block_count, context_tokens: identity.context_tokens,
+    };
+    let mode = if compact_greedy { crate::descriptor::ResultMode::Greedy } else { crate::descriptor::ResultMode::FullLogits };
+    let expectation = match authority.variable_descriptor_expectation_rows::<ROWS>(&owner, replay, &cookies, mode) {
+        Ok(expectation) => expectation,
+        Err(error) => {
+            executor.abandon_issued().map_err(descriptor_error)?;
+            return Err(descriptor_error(error));
+        }
+    };
+    executor.submit_rows(expectation).map_err(|e| variable_ticket_failure(id, e))?;
+    let downloaded = DownloadedLlamaIteration {
+        iteration_id: id, vocabulary_size: 49152, output_count: prepared.output_count,
+        output: if compact_greedy { DownloadedLlamaOutput::GreedyTokens(std::mem::take(tokens)) }
+            else { DownloadedLlamaOutput::ValidatedLogits { logits, argmax: [0; 32] } },
+        commit_outputs: prepared.commit_outputs,
+    };
+    Ok(SubmittedVariableIteration { _authority: authority, executor, downloaded: Some(downloaded), pending: true })
+}
+
 #[cfg(test)]
 mod validated_argmax_routing_tests {
  use super::*;
