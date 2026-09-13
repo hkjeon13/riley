@@ -59,7 +59,7 @@ multi-GPU에서는 GPU 총수·SKU·memory·peer access·NVLink/PCIe/network top
 - PR 결과는 구현 여부, hardware validation, correctness, performance promotion을 별도 기록한다. 검증 대기는 pass가 아니다. 성능 향상이 없으면 원인을 분석하고 not-promoted/rejected로 남긴다. 원본 raw와 revision·binary hash·argv를 보존한다.
 - 최종 판정은 16의 serving 평가다. microbenchmark·모의 실행·compile 성공·논문 배수로 목표를 완료 처리하지 않는다.
 
-Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. 각 카드의 완료 기준과 실제 결과를 대조하기 전에는 구현·성능 승격을 주장하지 않는다.
+Blender는 최신 사용자 지시에 따라 GPU 검증·측정에 필요할 때만 잠시 종료하고, 검증 완료 후 GPU가 불필요한 연구·소스 작업 동안에는 복구한다. 기존 세 작업의 파일·시작 스크립트·포트(9876/9911/9887)를 보존하고 복구 후 프로세스와 포트 응답을 확인한다. 과거 benchmark의 Blender-down 기록은 당시 측정 조건으로 유지한다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. 각 카드의 완료 기준과 실제 결과를 대조하기 전에는 구현·성능 승격을 주장하지 않는다.
 
 ## 연구와 PR 연결
 
