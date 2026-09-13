@@ -91,3 +91,9 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 ## 추가 통합 PR
 
 [PR20 — Rolling decode pipeline](20-rolling-decode-pipeline.md): 최신 cache-residency serving trace를 근거로 고정 pair 정산 경계를 한 단계 선행 실행으로 확장한다. 현재 구현 미착수이며 PR02의 reservation·ticket·streaming 후속 통합이다.
+
+## Blender 복구 — 2026-09-14
+
+사용자 로그인 없이 별도 Xvfb 가상 디스플레이에서 기존 세 `.blend` 파일과 시작 스크립트로 복구했다. 기존 MCP 애드온은 `blender -b`를 거부하므로 가상 화면에서 기존 이벤트 루프를 유지한다. 포트9876/9911/9887 모두 `get_scene_info` 성공 응답을 확인했다. 시스템 패키지를 변경하지 않고 Ubuntu 패키지를 별도 폴더에 추출했다.
+
+원격 `/data/riley-serving-260913-recovery/blender-restoration-260914`의 `launch.json`, `xvfb-launch.json`, `verified.json`에 실행 및 검증 기록이 있다. 인증 cookie는 이 원격 폴더의 private 파일로만 보관하며 저장소에 복사하지 않는다. 다음 측정은 해당 receipt의 프로세스 identity와 현재 상태를 재확인한 뒤 기존 세 작업만 종료하고, GPU 작업 종료 시 복구한다. 가상 디스플레이를 사용하는 현재 세션은 이전 실제 화면의 GUI 세션이나 미저장 상태 복구를 의미하지 않는다.
