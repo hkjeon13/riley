@@ -1,4 +1,5 @@
 #pragma once
+#include "packed_value_v54.cuh"
 #include "decode_shape.cuh"
 namespace riley_gqa50_attention {
 
@@ -53,10 +54,10 @@ __global__ void independent_values(const float* scores,const __nv_bfloat16* v,__
     int at=token+part*16,pi=at-begin;bool live=at<end;
     pa[part]=live?riley_prefill_shape::pair(probs[pi+2*t],probs[pi+2*t+1]):0;
     paa[part]=live?riley_prefill_shape::pair(probs[pi+2*t+8],probs[pi+2*t+9]):0;
-    int dim=block*8+g;int value_base=live?((pages[at/16]*3+head/3)*16)*64+dim:0;
-    auto val=[&](int pos){return pos<end&&live?v[value_base+(pos-at)*64]:zero;};
-    vb[part]=riley_prefill_shape::pair(val(at+2*t),val(at+2*t+1));
-    vbb[part]=riley_prefill_shape::pair(val(at+2*t+8),val(at+2*t+9));
+    // Each lane reads an aligned adjacent-token pair from the packed V tile.
+    int vi=live?(pages[at/16]*3+head/3)*1024+block*128:0;
+    vb[part]=live?riley_packed_value_v54::masked_pair(v+vi+lane*2,at+2*t,end):0;
+    vbb[part]=live?riley_packed_value_v54::masked_pair(v+vi+64+lane*2,at+2*t+8,end):0;
    }
    #pragma unroll
    for(int part=0;part<4;++part)if(token+part*16<end)riley_prefill_shape::mma(accum,pa[part],pa[part],paa[part],paa[part],vb[part],vbb[part]);

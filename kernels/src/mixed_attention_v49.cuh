@@ -1,4 +1,5 @@
 #pragma once
+#include "packed_value_v54.cuh"
 #include "prefill_shape_attention.cuh"
 // Experimental only: exact ordered arithmetic against the independent row oracle.
 namespace riley_mixed_attention {
@@ -6,7 +7,10 @@ using riley_prefill_shape::pair;
 using riley_prefill_shape::mma;
 using riley_prefill_shape::cache_index;
 using riley_prefill_shape::exponential;
+using riley_packed_value_v54::packed_index;
+using riley_packed_value_v54::masked_pair;
 // Exceptional nonfinite V reuses the original per-query arithmetic and causal mask.
+template<bool Vector>
 __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const uint32_t* blocks,int row,int qh,float (*scores)[128],__nv_bfloat16 (*probs)[128],float (*exponentials)[128]){
  int lane=threadIdx.x%32,warp=0,group=lane/4,t=lane%4;
  int kvh=qh/3,count=n-rows+row+1;
@@ -56,9 +60,11 @@ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const
    #pragma unroll
    for(int block=0;block<8;++block){
     int dim=block*8+group;
-    auto val=[&](int pos){return pos<end?v[page_base+(pos-token)*(blocks?64:192)+dim]:zero;};
-    uint32_t b=pair(val(token+2*t),val(token+2*t+1));
-    uint32_t bb=pair(val(token+2*t+8),val(token+2*t+9));
+    auto val=[&](int pos){return pos<end?v[packed_index(pos,kvh,dim,blocks)]:zero;};
+    uint32_t b,bb;
+    if constexpr(Vector){int vi=((blocks?blocks[token/16]:token/16)*3+kvh)*1024+block*128;
+     b=masked_pair(v+vi+lane*2,token+2*t,end);bb=masked_pair(v+vi+64+lane*2,token+2*t+8,end);
+    }else{b=pair(val(token+2*t),val(token+2*t+1));bb=pair(val(token+2*t+8),val(token+2*t+9));}
     mma(accum[block],a,a,aa,aa,b,bb);
    }
   }
@@ -71,7 +77,7 @@ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const
   out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
 }
 
-template<int TileRows>
+template<int TileRows,bool Vector>
 __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,const uint32_t* live_rows,uint32_t query_block){
  static_assert(TileRows==8||TileRows==16,"query tile");
  if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
@@ -81,7 +87,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
  __shared__ __nv_bfloat16 probs[TileRows][128];
  // A small prefill has insufficient queries to amortize the larger tile state.
  if(rows<32){
-  if(query_block<static_cast<uint32_t>(rows))single_query(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
+  if(query_block<static_cast<uint32_t>(rows))single_query<Vector>(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
   return;
  }
  const int first=query_block*TileRows;
@@ -161,8 +167,11 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
    #pragma unroll
    for(int b=0;b<8;++b){
     const int dim=b*8+group;
-    auto val=[&](int pos){return pos<end?v[base+(pos-token)*(blocks?64:192)+dim]:__float2bfloat16_rn(0.F);};
-    uint32_t vb=pair(val(token+2*t),val(token+2*t+1)),vhi=pair(val(token+2*t+8),val(token+2*t+9));
+    auto val=[&](int pos){return pos<end?v[packed_index(pos,kvh,dim,blocks)]:__float2bfloat16_rn(0.F);};
+    uint32_t vb,vhi;
+    if constexpr(Vector){int vi=((blocks?blocks[token/16]:token/16)*3+kvh)*1024+b*128;
+     vb=masked_pair(v+vi+lane*2,token+2*t,end);vhi=masked_pair(v+vi+64+lane*2,token+2*t+8,end);
+    }else{vb=pair(val(token+2*t),val(token+2*t+1));vhi=pair(val(token+2*t+8),val(token+2*t+9));}
     nonfinite_value=nonfinite_value||((vb&0x7f80U)==0x7f80U)||((vb&0x7f800000U)==0x7f800000U)||((vhi&0x7f80U)==0x7f80U)||((vhi&0x7f800000U)==0x7f800000U);
     float next[4];
     #pragma unroll
@@ -174,7 +183,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
    if(__any_sync(0xffffffff,nonfinite_value)){
     __syncwarp();
     for(int row=first;row<min(first+TileRows,rows);++row){
-     single_query(q,k,v,out,rows,n,blocks,row,qh,scores,probs,exps);
+     single_query<Vector>(q,k,v,out,rows,n,blocks,row,qh,scores,probs,exps);
      __syncwarp();
     }
     return;
@@ -190,13 +199,14 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
   if(valid[h])for(int b=0;b<8;++b)for(int z=0;z<2;++z)out[(qr[h]*9+qh)*64+b*8+2*t+z]=__float2bfloat16_rn(accum[b][h*2+z]*inverse);
  }
 }
+template<bool Vector>
 __global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta){
  const uint32_t active=meta[5],total=meta[9],tiles=meta[24],tile=blockIdx.x;
  if(!active||active>32||!total||total>capacity||!tiles||tiles>total||tile>=tiles)return;
  const uint32_t entry=meta[32+32*416+1024+tile],owner=entry>>16,local=entry&0xffffU;
  if(owner>=active)return;const uint32_t* shape=meta+32+owner*416;const uint32_t count=shape[2],offset=shape[16],nt=count<32?count:(count+7)/8;
  if(!count||offset>total||count>total-offset||local>=nt)return;
- attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
+ attention_body<8,Vector>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
 }
 
 }

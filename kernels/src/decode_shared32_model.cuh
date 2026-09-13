@@ -34,6 +34,7 @@ __global__ void shared_rope_kv(const __nv_bfloat16* q,const __nv_bfloat16* k,con
 __device__ __forceinline__ __nv_bfloat16 qkv_rounded(const float* p,int n,int row,int col){
  float value=0.;for(int chunk=0;chunk<3;++chunk)value+=p[chunk*32*n+row*n+col];return __float2bfloat16_rn(value);
 }
+template<bool PackedValue=false>
 __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat16* keys,__nv_bfloat16* values,const float* cos,const float* sin,const uint32_t* pages,const uint32_t* shape,const uint32_t* active){
  uint32_t rows=*active,row=blockIdx.y;if(rows<1||rows>32||row>=rows)return;
  int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=384)return;
@@ -43,7 +44,7 @@ __global__ void qkv_merge_rope(const float* parts,__nv_bfloat16* qo,__nv_bfloat1
  float c=__bfloat162float(__float2bfloat16_rn(cos[pos*32+dim])),sn=__bfloat162float(__float2bfloat16_rn(sin[pos*32+dim]));
  auto first=__float2bfloat16_rn(a*c-b*sn),second=__float2bfloat16_rn(b*c+a*sn);
  if(head<9){qo[row*576+base+dim]=first;qo[row*576+base+dim+32]=second;}
- else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);values[dst]=qkv_rounded(v,192,row,base+dim);values[dst+32]=qkv_rounded(v,192,row,base+dim+32);}
+ else {uint32_t dst=((pages[pos/16]*3+head-9)*16+pos%16)*64+dim;keys[dst]=first;keys[dst+32]=second;const float* v=parts+3*32*(576+192);uint32_t vd=PackedValue?riley_packed_value_v54::packed_index(pos,head-9,dim,pages):dst;values[vd]=qkv_rounded(v,192,row,base+dim);values[vd+(PackedValue?512:32)]=qkv_rounded(v,192,row,base+dim+32);}
 }
 // Fixed-capacity GEMM also reads inactive rows; initialize those inputs.
 __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* active){
@@ -65,7 +66,8 @@ inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*co
  shared32_qkv_parts<<<dim3(120,3),32,0,stream>>>(b(1),w(base+1),w(base+2),w(base+3),static_cast<float*>(scratch[7]),active);
  auto* lk=static_cast<__nv_bfloat16*>(keys)+uint64_t(layer)*physical*16*192;
  auto* lv=static_cast<__nv_bfloat16*>(values)+uint64_t(layer)*physical*16*192;
- qkv_merge_rope<<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+ if(grouped_attention)qkv_merge_rope<true><<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
+ else qkv_merge_rope<false><<<dim3(2,32),256,0,stream>>>(static_cast<float*>(scratch[7]),b(3),lk,lv,cos,sin,pages,shape,active);
  if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  enqueue_shared32_projection<576,576,128,false>(stream,b(4),w(base+4),b(2),static_cast<float*>(scratch[7]),active);
