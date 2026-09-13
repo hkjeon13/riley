@@ -184,3 +184,12 @@ PR 02를 단독 해법으로 간주하지 않는다. 다음 구현은 PR 03 atte
 ## Paired serving trace 재시도 완료
 
 [현재 binary의 trace 분석](../../benchmarks/results/20260913-paired-trace-v3/README.md)을 완료했다. 두 lane 각 96 HTTP 요청이 frozen reference와 일치하고 Nsight export/종료가 정상이다. Pair 내부 gap 중앙값은 6.16µs지만 pair 이후는 716.53µs이며, 선택 구간의 전체 gap 합은 single/paired 114.12/114.25ms다. Profiler/client pacing이 포함되므로 unprofiled 개선율로 해석하지 않는다. Pair 수 확대보다 결과 검증·commit/publication과 다음 descriptor 준비를 GPU 실행 중에 겹치는 남은 구조를 우선 검토한다. 다음 batch의 3개 변경 및 검증 경계는 보고서에 기록했다. 이번 작업은 분석기 보정이며 runtime overlap 구현 완료나 기본값 승격이 아니다.
+
+
+## Staged pair drain batch — 구현·측정 완료, 승격 보류
+
+직전 trace의 pair 이후 host gap을 줄이기 위해 세 변경을 함께 적용한다. (1) Runtime이 predecessor event만 먼저 기다려 검증하고 successor expectation을 해당 token에 묶는다. (2) Scheduler adapter가 authority/session borrow를 유지한 채 첫 결과를 host-only callback에 전달한 후 successor를 drain한다. (3) Server는 callback 안에서 첫 token/stop 처리를 수행하고 두 번째 결과가 검증된 뒤 기존 pair settlement/publication을 실행한다. Pair 길이·수치·KV 예약 정책은 유지한다.
+
+첫 read 이후에도 issue/commit을 거부하며, callback 오류도 successor drain 뒤 전파한다. Native/validation 오류 시 기존 retained owner의 close·격리 경로를 따른다. 첫 결과 처리 중 scheduler와 graph owner는 로컬 scope에서 보유하고 오류 반환 전에 server 필드로 복구한다. 첫 stop에 따른 successor suppression, 전체 drain 후 atomic pair settlement와 외부 공개를 유지한다.
+
+새 상태 전이 테스트 3개, CUDA release build, 실제 HTTP reference/stop/cancel smoke를 통과했다. [최종 결과](../../benchmarks/results/20260913-staged-pair-drain/README.md): 실제83개 pair 모두 host/device overlap을 확인했으나 serving 변화는 직전 paired 대비+0.58%(두 순서+1.65%/−0.49%)로 안정적인 이득을 입증하지 못했다. vLLM 대비−7.39%, default single 유지다. 다음 영역은 다음 descriptor/scheduler 준비와 commit 의존성을 나눈 예약 구조이며 token 처리의 추가 미세 튜닝은 우선하지 않는다.

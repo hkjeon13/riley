@@ -2337,6 +2337,19 @@ pub fn execute_llama_decode_window<G:riley_runtime::llama::variable_session::Var
     authority:&crate::AuthorizedDecodeWindow<'_>,
     executor:&mut riley_runtime::llama::variable_session::VariableSession<G,32>,
 )->Result<[DownloadedLlamaIteration;2],IterationExecutionFailure> {
+    let (first,second)=execute_llama_decode_window_with_first(authority,executor,|first|first)?;
+    Ok([first,second])
+}
+
+/// Run host-only predecessor work while the successor graph may still execute.
+/// Authority and executor stay borrowed through both drains. Callback errors can
+/// be returned as T; the successor is still drained before T is returned.
+#[cfg(feature="cuda")]
+pub fn execute_llama_decode_window_with_first<G:riley_runtime::llama::variable_session::VariableGraph,T>(
+    authority:&crate::AuthorizedDecodeWindow<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,32>,
+    on_first:impl FnOnce(DownloadedLlamaIteration)->T,
+)->Result<(T,DownloadedLlamaIteration),IterationExecutionFailure> {
     let id=authority.first.plan().iteration_id();
     let before=|e|IterationExecutionFailure::new(id,Some(ExecutionAbort::NotDispatched),e);
     let desc=|e:crate::descriptor::Error|before(IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
@@ -2345,19 +2358,23 @@ pub fn execute_llama_decode_window<G:riley_runtime::llama::variable_session::Var
         let mut tokens=reserve_vec(p.output_count,"decode window output").map_err(before)?;tokens.resize(p.output_count,0);
         Ok::<_,IterationExecutionFailure>(DownloadedLlamaIteration{iteration_id:a.plan().iteration_id(),vocabulary_size:49152,output_count:p.output_count,output:DownloadedLlamaOutput::GreedyTokens(tokens),commit_outputs:p.commit_outputs})
     };
-    let mut outputs=[prepare(&authority.first)?,prepare(&authority.second)?];
+    let outputs=[prepare(&authority.first)?,prepare(&authority.second)?];
     let(identity,replay,first_cookies,second_cookies)=executor.issue_decode_window(outputs[0].output_count).map_err(desc)?;
     let owner=crate::authority::VariableOwnerGeometry{mixed_execution:identity.mixed_execution,packed_prefill:identity.packed_prefill,generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens};
     let prepared=match authority.prepare_wire(&owner,replay,&first_cookies,&second_cookies){Ok(p)=>p,Err(e)=>{executor.abandon_issued().map_err(desc)?;return Err(desc(e));}};
     executor.submit_prepared_decode_window(prepared).map_err(|e|variable_ticket_failure(id,e))?;
-    let rows=executor.wait_decode_window().map_err(|e|variable_ticket_failure(id,e))?;
-    for(output,rows)in outputs.iter_mut().zip(rows) {
+    let fill=|mut output:DownloadedLlamaIteration,rows:Vec<(u32,u32)>| {
         if rows.len()!=output.output_count {return Err(variable_ticket_failure(id,crate::descriptor::Error{field:"window output",reason:"publication count differs"}));}
         let DownloadedLlamaOutput::GreedyTokens(tokens)=&mut output.output else{unreachable!()};
         for(slot,token)in rows {
             let target=tokens.get_mut(slot as usize).ok_or_else(||variable_ticket_failure(id,crate::descriptor::Error{field:"window output",reason:"slot outside plan"}))?;
             *target=token;
         }
-    }
-    Ok(outputs)
+        Ok(output)
+    };
+    let [first,second]=outputs;
+    let rows=executor.wait_decode_window_first().map_err(|e|variable_ticket_failure(id,e))?;
+    let first=on_first(fill(first,rows)?);
+    let rows=executor.wait_decode_window_second().map_err(|e|variable_ticket_failure(id,e))?;
+    Ok((first,fill(second,rows)?))
 }

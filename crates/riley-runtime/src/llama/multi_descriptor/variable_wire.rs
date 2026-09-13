@@ -223,9 +223,9 @@ pub fn validate_compact_result<'a,const ROWS:usize>(bytes:&'a[u8],e:&Expectation
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    fn compact_fixture<const ROWS:usize>(e:&Expectation<ROWS>)->Vec<u8>{
+    pub(crate) fn compact_fixture<const ROWS:usize>(e:&Expectation<ROWS>)->Vec<u8>{
         let mut bytes=vec![0;Layout::<ROWS>::COMPACT_RESULT_BYTES];
         for i in 0..e.rows.len(){let mut h=[0;128];let token=if e.rows[i].progress.validate().unwrap().logits_input_row.is_some(){i as u32+7}else{0};
             result_row_identity_into(&mut h,e,i,token).unwrap();u32_at(&mut h,124,compact_magic(e));bytes[i*128..(i+1)*128].copy_from_slice(&h);}
@@ -251,7 +251,7 @@ mod tests {
     #[test] fn compact_sixteen_identity_status_and_publication(){compact_contract::<16>();}
     #[test] fn compact_thirtytwo_identity_status_and_publication(){compact_contract::<32>();}
     fn fixture(stage:InputStage,active:u32)->Expectation {fixture_rows::<8>(stage,active)}
-    fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
+    pub(crate) fn fixture_rows<const ROWS:usize>(stage:InputStage,active:u32)->Expectation<ROWS> {
         let mut e=Expectation{owner_generation:1,last_accepted_replay:4,replay_id:5,iteration_id:7,catalog_digest:[19;32],physical_block_count:4096,max_active_rows:ROWS as u32,stage,mode:ResultMode::Greedy,rows:vec![],block_ownership:vec![],packed_prefill:false,mixed_execution:false};
         for i in 0..active {
             let progress=if stage==InputStage::Prefill {Progress{prompt_tokens:398,output_limit:128,context_tokens:1024,committed_tokens:128,input_tokens:73,generated_index:0,stage}} else {Progress{prompt_tokens:129+i*17,output_limit:128,context_tokens:1024,committed_tokens:129+i*17+63,input_tokens:1,generated_index:64,stage}};

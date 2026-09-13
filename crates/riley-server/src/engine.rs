@@ -2970,19 +2970,36 @@ mod cuda_backend {
             }
             self.snapshot_cancel_deltas(window.first())?;
             phase_ns[0] = host_phase_checkpoint(&mut phase_mark);
-            let authority=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.authorize_decode_window(&window).map_err(|e|internal(format!("window authority failed: {e}")))?;
-            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("window graph unavailable"))};
-            let [first,second]=riley_scheduler::execution::execute_llama_decode_window(&authority,graph).map_err(|e|internal(format!("window execution failed: {}",e.error())))?;
-            drop(authority);
-            phase_ns[1] = host_phase_checkpoint(&mut phase_mark);
-            self.sample_iteration(window.first(),&first,first_selection)?;
-            let suppressed:Vec<_>=window.first().decode_items().iter().filter_map(|item|item.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|item.request_id())).collect();
-            let first_result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window first result failed: {e}")))?;
-            self.window_pending_tokens.clear();std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+            // Move the two owners into this scope so host request-state work can
+            // borrow self while authority still protects scheduler reservations.
+            // Restore both owners before propagating any execution/callback error.
+            let scheduler=self.scheduler.take().ok_or_else(||internal("scheduler closed"))?;
+            let mut graph_owner=self.variable_graph.take();
+            let execution=(|| {
+                let authority=scheduler.authorize_decode_window(&window).map_err(|e|internal(format!("window authority failed: {e}")))?;
+                let Some(VariableServingSession::ThirtyTwo(graph))=graph_owner.as_mut() else{return Err(internal("window graph unavailable"))};
+                riley_scheduler::execution::execute_llama_decode_window_with_first(&authority,graph,|first| {
+                    phase_ns[1]+=host_phase_checkpoint(&mut phase_mark);
+                    let result=(|| {
+                        self.sample_iteration(window.first(),&first,first_selection)?;
+                        let suppressed:Vec<_>=window.first().decode_items().iter().filter_map(|item|item.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|item.request_id())).collect();
+                        let first_result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window first result failed: {e}")))?;
+                        self.window_pending_tokens.clear();std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
+                        Ok::<_,BackendError>((first_result,suppressed))
+                    })();
+                    phase_ns[2]+=host_phase_checkpoint(&mut phase_mark);
+                    result
+                }).map_err(|e|internal(format!("window execution failed: {}",e.error())))
+            })();
+            self.scheduler=Some(scheduler);
+            self.variable_graph=graph_owner;
+            let (first_processed,second)=execution?;
+            let (first_result,suppressed)=first_processed?;
+            phase_ns[1]+=host_phase_checkpoint(&mut phase_mark);
             self.sample_iteration_with_suppression(window.second(),&second,second_selection,&suppressed)?;
             let second_result=second.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("window second result failed: {e}")))?;
             self.window_pending_tokens.append(&mut self.pending_tokens);std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);
-            phase_ns[2] = host_phase_checkpoint(&mut phase_mark);
+            phase_ns[2] += host_phase_checkpoint(&mut phase_mark);
             let now=self.now_ns();let updates=self.scheduler_mut()?.complete_decode_window_after_drain(&first_result,&second_result,now).map_err(|e|internal(format!("window settlement failed: {e}")))?;
             if !updates.settlement_failures().is_empty(){return Err(internal("window settlement contained failures"));}
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{unreachable!()};

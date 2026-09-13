@@ -27,7 +27,7 @@ pub struct VariableSession<G: VariableGraph,const ROWS:usize=8> {
     buffered:bool, buffered_ticket:Option<u64>, async_completion:bool,compact:bool,shared:bool,started:bool, poisoned:bool, completed:bool, input:Vec<u8>, output:Vec<u8>,
 }
 struct DecodeWindowState<const ROWS:usize> {
-    successor:wire::Expectation<ROWS>, tickets:[u64;2], output:Vec<u8>, complete:bool,
+    successor:wire::Expectation<ROWS>, tickets:[u64;2], output:Vec<u8>, predecessor_validated:bool, complete:bool,
 }
 
 fn bad(reason:&'static str)->Error {Error{field:"V3 retained session",reason}}
@@ -353,7 +353,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
         // retain_submission validates actual owner, geometry and first cookies.
         let issued=self.issued_successor.take();
         if let Err(e)=self.retain_submission(first) {self.issued_successor=issued;return Err(e);}
-        self.window=Some(DecodeWindowState{successor:second,tickets:[0;2],output,complete:false});
+        self.window=Some(DecodeWindowState{successor:second,tickets:[0;2],output,predecessor_validated:false,complete:false});
         let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
         let submit=(|| {
             let first=self.graph.submit_buffered_transfer(&self.input)?;
@@ -366,28 +366,53 @@ impl<G:VariableGraph> VariableSession<G,32> {
         runtime_phase_record(&mut self.host_phase_timing, 2, phase);
         Ok(())
     }
-    /// Waits for both launches, then validates both outputs. No replay commit.
+    /// Compatibility drain. Validation of the first result overlaps the second graph.
     pub fn wait_decode_window(&mut self)->Result<[Vec<(u32,u32)>;2]> {
-        if self.poisoned || self.window.as_ref().map(|w|w.complete)!=Some(false) {return Err(bad("no pending decode window"));}
+        let first=self.wait_decode_window_first()?;
+        let second=self.wait_decode_window_second()?;
+        Ok([first,second])
+    }
+    /// Read only the predecessor event. The successor remains retained and pending;
+    /// this neither commits replay nor allows another issue or slot reuse.
+    pub fn wait_decode_window_first(&mut self)->Result<Vec<(u32,u32)>> {
+        if self.poisoned || !self.window.as_ref().is_some_and(|w|!w.complete && !w.predecessor_validated) {return Err(bad("no unread window predecessor"));}
         let result=(|| {
             let window=self.window.as_mut().unwrap();
-            let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
-            // Same stream: second completion fences all writes from both steps.
-            self.graph.query_buffered_transfer(window.tickets[1],true).map_err(|_|bad("window completion failed"))?;
-            self.graph.query_buffered_transfer(window.tickets[0],true).map_err(|_|bad("predecessor completion failed"))?;
-            runtime_phase_record(&mut self.host_phase_timing, 3, phase);
-            let phase = self.host_phase_timing.as_ref().map(|_| Instant::now());
+            let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
+            if !self.graph.query_buffered_transfer(window.tickets[0],true).map_err(|_|bad("predecessor completion failed"))? {return Err(bad("predecessor completion not established"));}
+            runtime_phase_record(&mut self.host_phase_timing,3,phase);
+            let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
             let bytes=wire::Layout::<32>::COMPACT_RESULT_BYTES;
             self.graph.read_buffered_transfer(window.tickets[0],&mut self.output[..bytes]).map_err(|_|bad("predecessor read failed"))?;
-            self.graph.read_buffered_transfer(window.tickets[1],&mut window.output).map_err(|_|bad("successor read failed"))?;
             let first=wire::validate_compact_result(&self.output[..bytes],self.retained.as_ref().unwrap())?;
-            let a:Vec<_>=first.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing decode output"))).collect::<Result<_>>()?;
-            // GPU filled the unknown input; validate successor against that exact
-            // predecessor token, with structural replay only in this local clone.
-            let mut second=window.successor.clone();second.last_accepted_replay=self.retained.as_ref().unwrap().replay_id;
-            for (row,previous) in second.rows.iter_mut().zip(first.iter()) {row.input_tokens[0]=previous.token.ok_or_else(||bad("missing future input"))?;}
-            let b=wire::validate_compact_result(&window.output,&second)?.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing successor output"))).collect::<Result<Vec<_>>>()?;
-            window.complete=true;runtime_phase_record(&mut self.host_phase_timing, 4, phase);Ok([a,b])
+            let rows=first.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing decode output"))).collect::<Result<Vec<_>>>()?;
+            // Bind the successor to validated GPU predecessor tokens while its
+            // device execution continues. This expectation is host-owned only.
+            window.successor.last_accepted_replay=self.retained.as_ref().unwrap().replay_id;
+            for (row,previous) in window.successor.rows.iter_mut().zip(first.iter()) {
+                row.input_tokens[0]=previous.token.ok_or_else(||bad("missing future input"))?;
+            }
+            window.predecessor_validated=true;
+            runtime_phase_record(&mut self.host_phase_timing,4,phase);
+            Ok(rows)
+        })();
+        if result.is_err(){self.poisoned=true;}result
+    }
+    /// Fence and validate the successor after the predecessor was validated.
+    /// Both reservations remain retained until the scheduler commits the pair.
+    pub fn wait_decode_window_second(&mut self)->Result<Vec<(u32,u32)>> {
+        if self.poisoned || !self.window.as_ref().is_some_and(|w|!w.complete && w.predecessor_validated) {return Err(bad("no pending validated window successor"));}
+        let result=(|| {
+            let window=self.window.as_mut().unwrap();
+            let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
+            if !self.graph.query_buffered_transfer(window.tickets[1],true).map_err(|_|bad("window completion failed"))? {return Err(bad("successor completion not established"));}
+            runtime_phase_record(&mut self.host_phase_timing,3,phase);
+            let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
+            self.graph.read_buffered_transfer(window.tickets[1],&mut window.output).map_err(|_|bad("successor read failed"))?;
+            let rows=wire::validate_compact_result(&window.output,&window.successor)?.iter().map(|r|r.token.map(|t|(r.output_slot,t)).ok_or_else(||bad("missing successor output"))).collect::<Result<Vec<_>>>()?;
+            window.complete=true;
+            runtime_phase_record(&mut self.host_phase_timing,4,phase);
+            Ok(rows)
         })();
         if result.is_err(){self.poisoned=true;}result
     }
@@ -397,5 +422,59 @@ impl<G:VariableGraph> VariableSession<G,32> {
         if self.poisoned || !w.complete || w.successor.iteration_id!=second || self.retained.as_ref().map(|e|e.iteration_id)!=Some(first) {return Err(bad("window commit differs from completed pair"));}
         self.identity.last_accepted_replay=w.successor.replay_id;
         self.window=None;self.retained=None;self.completed=false;Ok(())
+    }
+}
+
+#[cfg(test)]
+mod staged_window_tests {
+    use super::*;
+    use super::super::multi_descriptor::shape_progress::InputStage;
+    struct FakeGraph { outputs:[Vec<u8>;2], calls:Vec<(&'static str,u64)> }
+    impl sealed::Sealed for FakeGraph {}
+    impl VariableGraph for FakeGraph {
+        fn query_buffered_transfer(&mut self,ticket:u64,wait:bool)->riley_cuda::CudaResult<bool>{assert!(wait);self.calls.push(("wait",ticket));Ok(true)}
+        fn read_buffered_transfer(&mut self,ticket:u64,out:&mut[u8])->riley_cuda::CudaResult<()>{self.calls.push(("read",ticket));out.copy_from_slice(&self.outputs[ticket as usize-1]);Ok(())}
+        fn submit_future_transfer(&mut self,_:&[u8],_:&[u8],_:u64)->riley_cuda::CudaResult<u64>{unreachable!()}
+        fn submit_buffered_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<u64>{unreachable!()}
+        fn replay_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<()>{unreachable!()}
+        fn submit_transfer(&mut self,_:&[u8])->riley_cuda::CudaResult<()>{unreachable!()}
+        fn query_transfer(&mut self)->riley_cuda::CudaResult<bool>{unreachable!()}
+        fn wait_transfer(&mut self)->riley_cuda::CudaResult<()>{unreachable!()}
+        fn read_transfer(&mut self,_:&mut[u8])->riley_cuda::CudaResult<()>{unreachable!()}
+    }
+    fn pending()->VariableSession<FakeGraph,32>{
+        let first=wire::tests::fixture_rows::<32>(InputStage::Decode,1);
+        let mut second=first.clone();second.iteration_id+=1;second.replay_id+=1;
+        second.last_accepted_replay=first.replay_id;
+        let row=&mut second.rows[0];row.cookie+=1;row.progress.committed_tokens+=1;row.progress.generated_index+=1;*row.valid_tokens.last_mut().unwrap()+=1;row.input_tokens[0]=7;
+        let graph=FakeGraph{outputs:[wire::tests::compact_fixture(&first),wire::tests::compact_fixture(&second)],calls:vec![]};
+        second.last_accepted_replay=first.last_accepted_replay;second.rows[0].input_tokens[0]=0;
+        let mut s=VariableSession::new_shared_mixed(graph,first.catalog_digest,first.physical_block_count,first.rows[0].progress.context_tokens,true).unwrap();
+        s.identity.last_accepted_replay=first.last_accepted_replay;s.retained=Some(first);s.buffered=true;
+        s.window=Some(DecodeWindowState{successor:second,tickets:[1,2],output:vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES],predecessor_validated:false,complete:false});s
+    }
+    #[test]
+    fn predecessor_processing_does_not_wait_successor_or_release_reservations(){
+        let mut s=pending();let first=s.retained.as_ref().unwrap().iteration_id;let second=s.window.as_ref().unwrap().successor.iteration_id;
+        assert!(s.wait_decode_window_second().is_err());assert!(s.graph.calls.is_empty());
+        assert_eq!(s.wait_decode_window_first().unwrap(),vec![(0,7)]);
+        assert_eq!(s.graph.calls,vec![("wait",1),("read",1)]);
+        assert!(s.issue_rows(1).is_err());assert!(s.confirm_decode_window_commit(first,second).is_err());assert!(s.wait_decode_window_first().is_err());
+        assert_eq!(s.wait_decode_window_second().unwrap(),vec![(0,7)]);
+        assert_eq!(s.graph.calls,vec![("wait",1),("read",1),("wait",2),("read",2)]);
+        assert!(s.issue_rows(1).is_err());assert!(s.wait_decode_window_second().is_err());
+        s.confirm_decode_window_commit(first,second).unwrap();assert!(s.issue_rows(1).is_ok());
+    }
+    #[test]
+    fn corrupt_successor_keeps_pair_retained_and_poisoned(){
+        let mut s=pending();s.graph.outputs[1][24]^=1;
+        s.wait_decode_window_first().unwrap();assert!(s.wait_decode_window_second().is_err());
+        assert!(s.poisoned);assert!(s.retained.is_some());assert!(s.window.is_some());assert!(s.issue_rows(1).is_err());
+    }
+    #[test]
+    fn corrupt_predecessor_never_reads_successor(){
+        let mut s=pending();s.graph.outputs[0][24]^=1;
+        assert!(s.wait_decode_window_first().is_err());assert!(s.wait_decode_window_second().is_err());
+        assert_eq!(s.graph.calls,vec![("wait",1),("read",1)]);assert!(s.poisoned);assert!(s.retained.is_some());
     }
 }
