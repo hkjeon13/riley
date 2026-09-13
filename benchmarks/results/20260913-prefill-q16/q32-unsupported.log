@@ -1,0 +1,2 @@
+upstream exception: Error in function 'BatchPrefillWithPagedKVCacheDispatched' at /tmp/riley-opt-260912/prefill-tile-v1/residual_q32/include/flashinfer/attention/prefill.cuh:4403: FlashInfer Internal Error: Invalid configuration : NUM_MMA_Q=2 NUM_MMA_D_QK=4 NUM_MMA_D_VO=4 NUM_MMA_KV=2 NUM_WARPS_Q=1 NUM_WARPS_KV=4 please create an issue (https://github.com/flashinfer-ai/flashinfer/issues) and report the issue to the developers.
+line40 riley_flashinfer_prefill_run(stream,q,k,v,o,ws,bytes) code999

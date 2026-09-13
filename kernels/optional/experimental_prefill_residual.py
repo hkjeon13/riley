@@ -8,7 +8,7 @@ cast = 'vec_cast<typename KTraits::DTypeQ, float>::cast<8>(s_frag_f16[mma_q][mma
 mma = 'mma::mma_sync_m16n16k16_row_col_f16f16f32<typename KTraits::DTypeQ>(\n                o_frag[mma_q][mma_d_local], (uint32_t*)s_frag_f16[mma_q][mma_kv], b_frag);'
 extra = '\n        float residual[8];\n        #pragma unroll\n        for(unsigned i=0;i<8;++i)residual[i]=s_frag[mma_q][mma_kv][i]-float(s_frag_f16[mma_q][mma_kv][i]);\n        vec_cast<typename KTraits::DTypeQ, float>::cast<8>(s_residual[mma_q][mma_kv],residual);'
 
-def transform(text, residual=True):
+def transform(text, residual=True, synchronize_kv_warps=False):
     if hashlib.sha256(text.encode()).hexdigest() != '996253b7c64caaa3ed86540fb5d5ca44482298c9e8c9e3665b91ba5310b0e975':
         raise ValueError('expected the pinned warp-synchronized prefill header')
     if text.count(den_anchor) != 1:
@@ -24,4 +24,17 @@ def transform(text, residual=True):
                 '62026012e8afc44eb30691f07b60df928e1390a8632f53142d604810a402e68e')
     if hashlib.sha256(text.encode()).hexdigest() != expected:
         raise ValueError('compensated prefill header differs from the tested transformation')
+    if synchronize_kv_warps:
+        if not residual:
+            raise ValueError('KV-warp synchronization experiment requires residual arithmetic')
+        anchor = 'const uint_fastdiv group_size, const dim3 tid = threadIdx) {\n  using DTypeO = typename KTraits::DTypeO;'
+        replacement = ('const uint_fastdiv group_size, const dim3 tid = threadIdx) {\n'
+                       '  // Finish KV-warp reduction reads before reusing shared storage for output.\n'
+                       '  if constexpr (KTraits::NUM_WARPS_KV > 1) __syncthreads();\n'
+                       '  using DTypeO = typename KTraits::DTypeO;')
+        if text.count(anchor) != 1:
+            raise ValueError('output shared-storage boundary mismatch')
+        text = text.replace(anchor, replacement)
+        if hashlib.sha256(text.encode()).hexdigest() != 'd01f73f64e51a95748a2034bf8d15890ccffe366301192458af48db074bfcb6a':
+            raise ValueError('KV-warp synchronization overlay differs from tested header')
     return text

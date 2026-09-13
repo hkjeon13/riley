@@ -1,0 +1,15 @@
+{
+  "command": [
+    "/data/cuda-12.8.1/bin/compute-sanitizer",
+    "--tool",
+    "memcheck",
+    "--error-exitcode",
+    "99",
+    "/tmp/riley-opt-260912/prefill-q16-cargo-target-v1/release/deps/flashinfer_prefill_natural_logits_gpu-fa4418cd5cc70da8",
+    "--ignored",
+    "--nocapture"
+  ],
+  "exit_code": 0,
+  "binary_sha256": "176b60f4aa480c20caa250ae16e2ffbb47f28662ab12470f3fb22e5f1810fea8",
+  "outputs_bitwise_equal": true
+}

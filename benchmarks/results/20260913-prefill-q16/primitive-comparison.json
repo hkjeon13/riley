@@ -1,0 +1,413 @@
+{
+  "scope": "synthetic equal BF16 input values; not serving or model-quality evidence",
+  "overlay": {
+    "upstream_header_tree_sha256": "2a7d8ab8f81f6cb7fd259270b63bd71e152bff77a105b3c0ba875108b5567e0c",
+    "original_prefill_sha256": "2e5927bdc0d36ddb393cb4fab68c2e958d65d5b4b0085c969f7cfa777ecdfb5b",
+    "patched_prefill_sha256": "996253b7c64caaa3ed86540fb5d5ca44482298c9e8c9e3665b91ba5310b0e975",
+    "change": "one warp barrier before write_o_reg_gmem cross-lane shared reads",
+    "installed_dependency_modified": false,
+    "patched_header_tree_sha256": "d34d25c9005e6f7fdf3278720851bc279a5fd378404c683e11a9cdb15c00fdb7"
+  },
+  "variants": {
+    "residual_q128": {
+      "scales": {
+        "0.125": {
+          "input_float32_sha256": "044d7635033fb2acf3d62b55eeeb746ed1605f73e0326d96fb4cba6165c3a453",
+          "output_sha256": "e0a85514b194d792a2b3b15db210af03c2987c830f7e50e77cad8d43f46f4071",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000230443164,
+              "rmse": 1.73090338e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000121182128,
+              "rmse": 1.87539204e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.0004874674,
+              "rmse": 2.704564e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000438762394,
+              "rmse": 1.65551388e-05
+            }
+          ],
+          "weighted_rmse": 1.9848385966026826e-05
+        },
+        "1": {
+          "input_float32_sha256": "5f2d7dd0661a8b50b887be72b1436d38336db11476368bc4395c1c4e24943506",
+          "output_sha256": "5b7d09bda36b3dc2aa262aaed1b86856d1986a4199c7ae0da0e078d6beef112c",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000240920602,
+              "rmse": 1.84751111e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000122030247,
+              "rmse": 1.94378586e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000487848764,
+              "rmse": 2.85089032e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000472611579,
+              "rmse": 1.75168054e-05
+            }
+          ],
+          "weighted_rmse": 2.0956636292981812e-05
+        },
+        "4": {
+          "input_float32_sha256": "d72ac442e9116e3083ff490bcd336fbdabb3bdbd8be3fa9d460734747b1d9756",
+          "output_sha256": "e799453792c689d1d9b36fa25177b8bc832591aaa10f084430ae00cf9b86d519",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000488265103,
+              "rmse": 0.000161122512
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000489459242,
+              "rmse": 0.000157996841
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000488556106,
+              "rmse": 0.000165371356
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000488864713,
+              "rmse": 0.000158303003
+            }
+          ],
+          "weighted_rmse": 0.00016021923406492312
+        }
+      },
+      "output_storage": "bf16",
+      "prefill_header_sha256": "e467d96c13eb05688488e68d5b408d5c37f6ed9251af15484080d2cb86c47e1e",
+      "command": [
+        "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc",
+        "-std=c++17",
+        "-O3",
+        "-lineinfo",
+        "-Xptxas=-v",
+        "-arch=sm_89",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/residual_q128/include",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/headers/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/libcudacxx/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/cub",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/thrust",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/optional",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/src",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q128/probe.cu",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q128/adapter.cu",
+        "-o",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q128/probe"
+      ],
+      "source_sha256": "8cb54cef2ccc56f1292e50f38a05a07870b6949b2dfc55e19626f9569eb9c9b8",
+      "adapter_sha256": "4394421e1c93864550eafa646d9a41af54596ddeb3f5c0694a3eade44248ed87",
+      "binary_sha256": "f45dab495bb6e4580d0ebabd3a26b6db20cfdb45a135a6568ebf9a5ef7e4a5aa"
+    },
+    "residual_q64": {
+      "scales": {
+        "0.125": {
+          "input_float32_sha256": "044d7635033fb2acf3d62b55eeeb746ed1605f73e0326d96fb4cba6165c3a453",
+          "output_sha256": "0e14bab075eb248689bd2f3dc94d1a1a7d9095ccdf7a2180fdfdf42c174e1b2e",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000230443164,
+              "rmse": 1.7309032e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000121182128,
+              "rmse": 1.87539151e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.0004874674,
+              "rmse": 2.70456405e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000438762394,
+              "rmse": 1.65551387e-05
+            }
+          ],
+          "weighted_rmse": 1.9848385870329603e-05
+        },
+        "1": {
+          "input_float32_sha256": "5f2d7dd0661a8b50b887be72b1436d38336db11476368bc4395c1c4e24943506",
+          "output_sha256": "376fb7ea198b296db09620178fb768447a7a02aec17e68891b4bb95f91ace90f",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000240920602,
+              "rmse": 1.84751044e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000122030247,
+              "rmse": 1.94378545e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000487848764,
+              "rmse": 2.85089047e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000472611579,
+              "rmse": 1.75168052e-05
+            }
+          ],
+          "weighted_rmse": 2.095663637832797e-05
+        },
+        "4": {
+          "input_float32_sha256": "d72ac442e9116e3083ff490bcd336fbdabb3bdbd8be3fa9d460734747b1d9756",
+          "output_sha256": "ff95d88ad8e7035367d7cc941cb7f96e6a19d51bed91f9ef676bf56204cf49cf",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000488265103,
+              "rmse": 0.000161122503
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000489459242,
+              "rmse": 0.000157996658
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000488556106,
+              "rmse": 0.000165371358
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000488864713,
+              "rmse": 0.000158303004
+            }
+          ],
+          "weighted_rmse": 0.00016021922920806105
+        }
+      },
+      "output_storage": "bf16",
+      "prefill_header_sha256": "e467d96c13eb05688488e68d5b408d5c37f6ed9251af15484080d2cb86c47e1e",
+      "command": [
+        "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc",
+        "-std=c++17",
+        "-O3",
+        "-lineinfo",
+        "-Xptxas=-v",
+        "-arch=sm_89",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/residual_q64/include",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/headers/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/libcudacxx/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/cub",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/thrust",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/optional",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/src",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q64/probe.cu",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q64/adapter.cu",
+        "-o",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q64/probe"
+      ],
+      "source_sha256": "8cb54cef2ccc56f1292e50f38a05a07870b6949b2dfc55e19626f9569eb9c9b8",
+      "adapter_sha256": "1cd996ce706f92789f13ecefb6f782af3103273ebafec5b43239c881274b8711",
+      "binary_sha256": "c5ae9a8a85fbf8c20e244fe4fb260c3674997f71b843db09a2233e2c0e869d35"
+    },
+    "residual_q16": {
+      "scales": {
+        "0.125": {
+          "input_float32_sha256": "044d7635033fb2acf3d62b55eeeb746ed1605f73e0326d96fb4cba6165c3a453",
+          "output_sha256": "d750488bd92fb66bef263a286896afd7c1ca5ced8cd243a24def842265fd1309",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000230443164,
+              "rmse": 1.73090323e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000121182128,
+              "rmse": 1.87539042e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.0004874674,
+              "rmse": 2.70456389e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000438762394,
+              "rmse": 1.65551381e-05
+            }
+          ],
+          "weighted_rmse": 1.9848384655562197e-05
+        },
+        "1": {
+          "input_float32_sha256": "5f2d7dd0661a8b50b887be72b1436d38336db11476368bc4395c1c4e24943506",
+          "output_sha256": "020dbf7c274bd9be9bc2b5043c3e05d9ea28c63b4aa5832cd0d5a70aa0e2b389",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000240920602,
+              "rmse": 1.84751103e-05
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000122030247,
+              "rmse": 1.94378451e-05
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000487848764,
+              "rmse": 2.85089049e-05
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000472611579,
+              "rmse": 1.75168023e-05
+            }
+          ],
+          "weighted_rmse": 2.095663469888389e-05
+        },
+        "4": {
+          "input_float32_sha256": "d72ac442e9116e3083ff490bcd336fbdabb3bdbd8be3fa9d460734747b1d9756",
+          "output_sha256": "0f468e81e84cd50967fcf9d8a57c38f14dcd2cd0df2cc8c4eab93a71c433bf2c",
+          "cases": [
+            {
+              "case": 0.0,
+              "query_rows": 51.0,
+              "values": 29376.0,
+              "max_abs": 0.000488265103,
+              "rmse": 0.000161122499
+            },
+            {
+              "case": 1.0,
+              "query_rows": 48.0,
+              "values": 27648.0,
+              "max_abs": 0.000488582563,
+              "rmse": 0.000157996219
+            },
+            {
+              "case": 2.0,
+              "query_rows": 384.0,
+              "values": 221184.0,
+              "max_abs": 0.000488311102,
+              "rmse": 0.000165371331
+            },
+            {
+              "case": 4.0,
+              "query_rows": 1024.0,
+              "values": 589824.0,
+              "max_abs": 0.000488413046,
+              "rmse": 0.00015830294
+            }
+          ],
+          "weighted_rmse": 0.00016021916521442888
+        }
+      },
+      "output_storage": "bf16",
+      "prefill_header_sha256": "d01f73f64e51a95748a2034bf8d15890ccffe366301192458af48db074bfcb6a",
+      "command": [
+        "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc",
+        "-std=c++17",
+        "-O3",
+        "-lineinfo",
+        "-Xptxas=-v",
+        "-arch=sm_89",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/residual_q16/include",
+        "-I/tmp/riley-opt-260912/prefill-tile-v3/headers/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/libcudacxx/include",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/cub",
+        "-I/data/riley-vllm-interim.CfrT9T/venv/lib/python3.13/site-packages/flashinfer/data/cccl/thrust",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/optional",
+        "-I/tmp/riley-opt-260912/hardware-validation-source/kernels/src",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q16/probe.cu",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q16/adapter.cu",
+        "-o",
+        "/tmp/riley-opt-260912/prefill-tile-v3/residual_q16/probe"
+      ],
+      "source_sha256": "8cb54cef2ccc56f1292e50f38a05a07870b6949b2dfc55e19626f9569eb9c9b8",
+      "adapter_sha256": "0237d57f6c5473fe239316902a944130f35463af0b9272d847a4ca977abcbddb",
+      "binary_sha256": "e82d8f5fb0fa175dd1712409319df6b5fc303f646a443ff50571b9433b45e7dd"
+    }
+  },
+  "all_input_values_bitwise_equal": true
+}
