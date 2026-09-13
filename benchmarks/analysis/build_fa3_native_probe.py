@@ -24,8 +24,7 @@ def export(repo, revision, destination, paths):
         contents.extractall(destination, filter="data")
 
 
-def build(source, nvcc, output):
-    source, nvcc, output = source.resolve(), nvcc.resolve(), output.absolute()
+def prepare(source, output):
     # Never replace an earlier result, nor edit either dependency checkout.
     output.mkdir(parents=True, exist_ok=False)
     export(source, FA3, output / "fa3", ["hopper", "LICENSE", "AUTHORS"])
@@ -44,6 +43,14 @@ struct RileyFa3CutlassError { cutlass::Status status; };
 """
     patched = patched.replace("#define CHECK_CUDA(call)", declarations + "\n#define CHECK_CUDA(call)", 1)
     header.write_text(patched)
+    return {"fa3_commit": FA3, "cutlass_commit": CUTLASS,
+            "original_error_header_sha256": hashlib.sha256(original.encode()).hexdigest(),
+            "patched_error_header_sha256": hashlib.sha256(patched.encode()).hexdigest()}
+
+
+def build(source, nvcc, output):
+    source, nvcc, output = source.resolve(), nvcc.resolve(), output.absolute()
+    receipt = prepare(source, output)
     probe = Path(__file__).with_name("fa3_native_compile_probe.cu")
     command = [str(nvcc), "-std=c++17", "-O3", "-arch=sm_90a",
                "--expt-relaxed-constexpr", "--expt-extended-lambda", "-Xptxas=-v",
@@ -52,12 +59,10 @@ struct RileyFa3CutlassError { cutlass::Status status; };
                "-I" + str(output / "cutlass/tools/util/include"),
                str(probe), str(output / "fa3/hopper/flash_prepare_scheduler.cu"),
                "-lcuda", "-o", str(output / "fa3-native-probe")]
-    receipt = {"fa3_commit": FA3, "cutlass_commit": CUTLASS, "command": command,
+    receipt.update({"command": command,
                "nvcc": subprocess.check_output([str(nvcc), "--version"], text=True),
-               "original_error_header_sha256": hashlib.sha256(original.encode()).hexdigest(),
-               "patched_error_header_sha256": hashlib.sha256(patched.encode()).hexdigest(),
                "probe_sha256": hashlib.sha256(probe.read_bytes()).hexdigest(),
-               "scope": "BF16 head64 dense causal and paged ragged prefill/decode native compile/link; host error contract"}
+               "scope": "BF16 head64 dense causal and paged ragged prefill/decode native compile/link; host error contract"})
     with (output / "build.log").open("w") as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
     receipt["build_exit"] = result.returncode

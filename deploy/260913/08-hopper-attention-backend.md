@@ -1,6 +1,6 @@
 # PR 08 — Hopper 비동기 attention backend
 
-상태: **구현 중 — pinned FA3 native build/link 및 호스트 오류 검사 통과; production adapter와 Hopper 실행 미완료**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 중 — FA3 native plan C ABI와 호스트·4090 거부 계약 검사 통과; Rust serving 연결과 Hopper 실행 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -52,3 +52,9 @@ Hopper의 data movement·Tensor Core overlap을 활용하는 실행 경로를 �
 [검증 기록](../../benchmarks/results/20260914-fa3-native-build/README.md): FA3/CUTLASS commit 고정, 라이선스 보존 export, upstream process exit의 예외 전환, BF16/head64 dense 및 paged ragged prefill/decode 실제 SM90a 커널과 scheduler의 native build/link를 검증했다. Python은 offline 빌드 도구이며 실행 파일에 Python/Torch runtime 의존성은 없다.
 
 호스트 오류 주입 2종은 통과했다. Paged 변형은 KV non-TMA 경로이며 register spill과 WGMMA 직렬화 가능성 경고가 있다. 이를 숨기거나 성능 개선으로 해석하지 않는다. C ABI/Rust owner, HND/page16 extent 및 shape 검사, cold plan·workspace·stream·graph 계약, fallback 연결은 다음 구현 범위다. Hopper runtime numerical/sanitizer/serving은 장비 부재로 미실행이며 production backend 완료 또는 승격으로 간주하지 않는다.
+
+### Native plan 후속 구현
+
+[plan 검증 기록](../../benchmarks/results/20260914-fa3-native-plan/README.md): BF16 Q9/KV3/head64/HND/page16 입력 검증, immutable metadata 및 scheduler/LSE workspace 소유, cold 커널 준비와 반복 enqueue 분리, context/stream/capture 검사 및 동기화 후 해제 C ABI를 구현했다. 실제 SM90a build/link와 호스트 경계·최대 shape·4090 지원 거부·capture 중 생성 거부 검사가 통과했다. Enqueue 성공과 완료를 구분하며 buffer 및 graph 수명은 raw caller 계약이다.
+
+Rust retained owner, optional production build, 동적 serving metadata 연결과 실제 Hopper 수치·lifetime·graph·serving 검증은 미완료다. 현재 plan은 shape/page table/길이를 고정하므로 serving의 dynamic batch cache를 완성한 것으로 보지 않는다. 새 성능 수치나 기본 backend 승격은 없다.
