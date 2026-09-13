@@ -15,6 +15,7 @@ mod ffi;
 mod gemm;
 mod graph;
 mod graph_resources;
+pub mod hardware_validation;
 #[cfg(feature = "cuda")]
 pub use graph_resources::OwnedGraphResourceReservation;
 pub use graph_resources::{

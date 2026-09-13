@@ -1,0 +1,3 @@
+RILEY_GPU_VALIDATION_PEERS=[]
+RILEY_GPU_VALIDATION_PREFLIGHT=HardwareValidationReport { requirement: HardwareRequirement { architectures: [(8, 9)], minimum_devices: 1, minimum_memory_bytes: 0 }, observed: [ValidationDevice { ordinal: 0, architecture: (8, 9), memory_bytes: 25250627584 }], mismatches: [DeviceCount { required: 2, observed: 1 }], disposition: Skip }
+RILEY_GPU_VALIDATION_COMMAND=["/not-a-test-command"]

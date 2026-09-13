@@ -1274,6 +1274,12 @@ unsafe extern "C" {
     fn riley_cuda_abi_version() -> u32;
     fn riley_cuda_build_info() -> *const c_char;
     fn riley_cuda_device_count(out_count: *mut u32, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_device_can_access_peer(
+        source: i32,
+        destination: i32,
+        accessible: *mut u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_device_properties(
         ordinal: i32,
         out_properties: *mut RawDeviceProperties,
@@ -2508,6 +2514,17 @@ pub(super) fn diagnose_null_device_count() -> CudaResult<()> {
     // validation path; no memory is dereferenced by contract.
     let status = unsafe { riley_cuda_device_count(ptr::null_mut(), &mut error) };
     status_result(status, "diagnose null device-count output", &error)
+}
+
+pub(super) fn device_can_access_peer(source: i32, destination: i32) -> CudaResult<bool> {
+    let mut accessible = 0;
+    let mut error = ErrorInfo::new();
+    // SAFETY: both outputs are valid caller-owned buffers; native validates ordinals.
+    let status = unsafe {
+        riley_cuda_device_can_access_peer(source, destination, &mut accessible, &mut error)
+    };
+    status_result(status, "query CUDA peer access", &error)?;
+    Ok(accessible != 0)
 }
 
 pub(super) fn device_properties(ordinal: i32) -> CudaResult<NativeDeviceProperties> {

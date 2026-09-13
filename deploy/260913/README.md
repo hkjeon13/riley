@@ -1,6 +1,6 @@
 # 260913 — 연구 기반 serving 최적화 PR 계획
 
-상태: **계획만 작성**. 이 요청으로 application 구현·commit·배포·새 serving 측정을 수행하지 않는다. 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
+상태: **계획 커밋·푸시 완료, PR01 구현 시작**. 사용자 후속 지시에 따라 구현을 진행한다. 계획 커밋은 `894f0713`, 구현 브랜치는 `codex/260913-execution-contract`다. 새 serving 성능은 아직 측정하지 않았다. 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
 
 ## 목표와 현재 증거
 
@@ -16,7 +16,7 @@
 
 01로 공통 계약을 정한 뒤 **02 비동기 실행**과 **03 attention adapter**를 첫 구조 batch로 진행한다. 04·05·06은 자원 중첩과 memory/work 분할을 다룬다. 07은 큰 실행 구조의 feasibility PR이며 긍정 결과 후 전 layer serving 확장을 새 PR로 구체화한다. 08~12는 장비 확장 경로다. 13~15는 모델·정밀도별 조건부 경로다. 16의 측정 계약은 첫 batch부터 적용하며 마지막에 조합 전체를 다시 판정한다.
 
-숫자는 의존성이 없는 PR까지 직렬로 강제하는 순서가 아니다. 각 파일은 2~5개 연관 변경을 묶은 리뷰 단위다. 개별 파일 안의 변경을 다시 몇 줄짜리 최적화 PR로 쪼개지 않는다. 반대로 전체 serving engine·compiler·cluster control plane을 하나의 PR로 만들지 않는다. 현재는 모든 PR이 미구현이다.
+숫자는 의존성이 없는 PR까지 직렬로 강제하는 순서가 아니다. 각 파일은 2~5개 연관 변경을 묶은 리뷰 단위다. 개별 파일 안의 변경을 다시 몇 줄짜리 최적화 PR로 쪼개지 않는다. 반대로 전체 serving engine·compiler·cluster control plane을 하나의 PR로 만들지 않는다. PR01은 구현 중이며 나머지 PR은 미구현이다.
 
 | PR | 범위 | 선행 |
 |---|---|---|
@@ -59,7 +59,7 @@ multi-GPU에서는 GPU 총수·SKU·memory·peer access·NVLink/PCIe/network top
 - PR 결과는 구현 여부, hardware validation, correctness, performance promotion을 별도 기록한다. 검증 대기는 pass가 아니다. 성능 향상이 없으면 원인을 분석하고 not-promoted/rejected로 남긴다. 원본 raw와 revision·binary hash·argv를 보존한다.
 - 최종 판정은 16의 serving 평가다. microbenchmark·모의 실행·compile 성공·논문 배수로 목표를 완료 처리하지 않는다.
 
-Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. 이번 산출물은 계획이며 구현 승격 증거가 아니다.
+Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. 각 카드의 완료 기준과 실제 결과를 대조하기 전에는 구현·성능 승격을 주장하지 않는다.
 
 ## 연구와 PR 연결
 

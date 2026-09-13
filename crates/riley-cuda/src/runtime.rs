@@ -19,6 +19,41 @@ pub struct CudaRuntime {
 }
 
 impl CudaRuntime {
+    /// Query directed peer access without enabling it or creating contexts.
+    /// This is not a bandwidth, `NVLink`, or collective-support measurement.
+    ///
+    /// # Errors
+    /// Rejects invalid or identical ordinals and propagates CUDA query failures.
+    pub fn can_access_peer(&self, source: u32, destination: u32) -> CudaResult<bool> {
+        if source == destination || source >= self.device_count || destination >= self.device_count
+        {
+            return Err(CudaError::invalid_device(
+                "CudaRuntime::can_access_peer",
+                "distinct visible device ordinals required",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let source = i32::try_from(source).map_err(|_| {
+                CudaError::invalid_device(
+                    "CudaRuntime::can_access_peer",
+                    "source ordinal exceeds native ABI",
+                )
+            })?;
+            let destination = i32::try_from(destination).map_err(|_| {
+                CudaError::invalid_device(
+                    "CudaRuntime::can_access_peer",
+                    "destination ordinal exceeds native ABI",
+                )
+            })?;
+            ffi::device_can_access_peer(source, destination)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("CudaRuntime::can_access_peer"))
+        }
+    }
+
     /// Initializes the compiled CUDA boundary and snapshots the device count.
     ///
     /// # Errors

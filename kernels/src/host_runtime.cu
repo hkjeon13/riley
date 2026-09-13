@@ -669,6 +669,36 @@ extern "C" RileyCudaStatus riley_cuda_device_count(
   return RILEY_CUDA_STATUS_SUCCESS;
 }
 
+extern "C" RileyCudaStatus riley_cuda_device_can_access_peer(
+    int32_t source, int32_t destination, uint32_t* out_accessible,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (out_accessible == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query peer access", "output is null");
+  }
+  *out_accessible = 0;
+  if (source < 0 || destination < 0 || source == destination) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_DEVICE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query peer access", "distinct valid ordinals required");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query peer access", "active graph capture");
+  }
+  CUresult result = cuInit(0);
+  CUdevice from = 0, to = 0;
+  if (result == CUDA_SUCCESS) result = cuDeviceGet(&from, source);
+  if (result == CUDA_SUCCESS) result = cuDeviceGet(&to, destination);
+  int accessible = 0;
+  if (result == CUDA_SUCCESS) result = cuDeviceCanAccessPeer(&accessible, from, to);
+  if (result != CUDA_SUCCESS) {
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE, "query peer access");
+  }
+  *out_accessible = accessible != 0 ? 1u : 0u;
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RileyCudaStatus riley_cuda_device_properties(
     int32_t ordinal, RileyCudaDeviceProperties* out_properties,
     RileyCudaErrorInfo* error) noexcept {
