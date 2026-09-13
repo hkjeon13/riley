@@ -2471,6 +2471,8 @@ mod cuda_backend {
         nanos: [[u128; 4]; 3],
         fallback_count: u64,
         fallback_nanos: u128,
+        shapes: std::collections::BTreeMap<(usize,usize,usize,usize), (u64,u128,u128,u128)>,
+        shape_overflow: u64,
     }
 
     fn host_phase_checkpoint(mark: &mut Option<Instant>) -> u128 {
@@ -2494,12 +2496,26 @@ mod cuda_backend {
             }
         }
 
+        // Bounded diagnostics only. Host execution wall time includes transfers and waits.
+        fn record_shape(&mut self, key: (usize,usize,usize,usize), wall_ns: u128) {
+            if self.shapes.len()>=4096 && !self.shapes.contains_key(&key) {
+                self.shape_overflow=self.shape_overflow.saturating_add(1);return;
+            }
+            let row=self.shapes.entry(key).or_insert((0,0,u128::MAX,0));
+            row.0=row.0.saturating_add(1);row.1=row.1.saturating_add(wall_ns);
+            row.2=row.2.min(wall_ns);row.3=row.3.max(wall_ns);
+        }
+
         fn report(&self) {
             for (kind, name) in ["decode", "prefill_or_mixed", "paired_decode"].iter().enumerate() {
                 let n = self.nanos[kind];
                 eprintln!("RILEY_HOST_PHASE kind={} steps={} scheduled_tokens={} plan_ns={} execute_wall_ns={} sample_ns={} commit_publish_ns={}", name, self.steps[kind], self.scheduled_tokens[kind], n[0], n[1], n[2], n[3]);
             }
             eprintln!("RILEY_HOST_PHASE_FALLBACK count={} wall_ns={}", self.fallback_count, self.fallback_nanos);
+            for ((rows,decode,prefill,context),(count,sum,min,max)) in &self.shapes {
+                eprintln!("RILEY_MIXED_COST rows_upper={} decode_rows={} prefill_requests={} context_upper={} count={} execute_wall_ns={} min_ns={} max_ns={}",rows,decode,prefill,context,count,sum,min,max);
+            }
+            eprintln!("RILEY_MIXED_COST_OVERFLOW count={}",self.shape_overflow);
         }
     }
 
@@ -3568,6 +3584,10 @@ mod cuda_backend {
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
             let phase_kind = if plan.prefill_items().is_empty() { 0 } else { 1 };
+            let cost_shape=self.host_phase_timing.as_ref().map(|_| {
+                let context=plan.prefill_items().iter().chain(plan.decode_items()).map(|w|w.target_logical_length()).max().unwrap_or(0);
+                (expected_active_rows.div_ceil(16)*16,plan.decode_items().len(),plan.prefill_items().len(),context.div_ceil(128)*128)
+            });
             phase_ns[0] = host_phase_checkpoint(&mut phase_mark);
             let (mut downloaded, timing, staged_shape) =
                 if let Some(graph)=self.variable_graph.as_mut() {
@@ -3752,7 +3772,7 @@ mod cuda_backend {
             );
             self.publish_committed_updates(&updates,&mut events)?;
             phase_ns[3] = host_phase_checkpoint(&mut phase_mark);
-            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(phase_kind, expected_active_rows, phase_ns); }
+            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(phase_kind, expected_active_rows, phase_ns);if let Some(key)=cost_shape {timing.record_shape(key,phase_ns[1]);} }
             Ok(events)
         }
 

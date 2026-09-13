@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/paired_decode_serving_screen.py", line 141, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/paired_decode_serving_screen.py", line 94, in main
+    if lane.startswith('chunk'):option('--max-prefill-chunk-tokens',int(lane[5:]))
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/paired_decode_serving_screen.py", line 88, in option
+    def option(key,value):argv[argv.index(key)+1]=str(value)
+ValueError: '--max-prefill-chunk-tokens' is not in list

@@ -1,6 +1,6 @@
 # PR 04 — POD 실행과 시간 예산 기반 mixed batching
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **정책/POD 미구현, chunk sensitivity 및 비용 calibration 완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -46,3 +46,10 @@ prefill의 compute 자원과 decode의 memory 자원을 함께 활용하면서 d
 ## 연구 근거
 
 [POD](https://arxiv.org/abs/2410.18038), [Sarathi-Serve](https://arxiv.org/abs/2403.02310), [NanoFlow](https://arxiv.org/abs/2408.12757). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+
+## 2026-09-14 calibration과 착수 경계
+
+[측정 및 비용 자료](../../benchmarks/results/20260914-mixed-chunk-calibration/README.md): 현재 V7은 decode 우선·최대4개 prefill·고정 budget512의 mixed scheduler다. 새 prefill FFN paired를 유지한 C32 두 순서에서 chunk512→128은 throughput−9.91%,256은−1.68%였다. 전체 reference가 일치했지만 고정 chunk 축소는 채택하지 않는다.
+
+진단 모드의 bounded shape histogram을 추가해 row/decode/prefill/context 구간별 성공한 ordinary 실행 wall-time과 overflow를 보존했다. 작은 chunk의 mixed iteration 수 및 누적 실행 시간이 증가했다. 이를 순수 GPU predictor로 사용하지 않는다. 다음 구현 batch는 비용 추정과 미관측 fallback, decode 진행·prefill 최소 진행량/aging을 지키는 선택, graph/KV/admission 계약, 긴 prompt와 open-loop SLO 평가를 함께 다룬다. POD native backend와 시간 정책 완료는 여전히 별도 검증이 필요하다.

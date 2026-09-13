@@ -1,0 +1,125 @@
+RILEY_GRAPH prepared=true policy=Require fallback=false gpu_iteration_timing=false numerics=variable-smol-v7;ffn=prefill-pipeline-experimental-v1;decode-window=paired-experimental-v1
+riley listening on http://127.0.0.1:49345 (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown=false)
+riley graceful shutdown requested by SIGTERM
+RILEY_HOST_PHASE kind=decode steps=60 scheduled_tokens=1343 plan_ns=1440930 execute_wall_ns=94079871 sample_ns=464715 commit_publish_ns=569580
+RILEY_HOST_PHASE kind=prefill_or_mixed steps=148 scheduled_tokens=44215 plan_ns=3703199 execute_wall_ns=664274377 sample_ns=1670760 commit_publish_ns=1532875
+RILEY_HOST_PHASE kind=paired_decode steps=231 scheduled_tokens=11142 plan_ns=9677402 execute_wall_ns=681775186 sample_ns=3746815 commit_publish_ns=2864033
+RILEY_HOST_PHASE_FALLBACK count=208 wall_ns=269328
+RILEY_MIXED_COST rows_upper=16 decode_rows=2 prefill_requests=0 context_upper=640 count=2 execute_wall_ns=2492714 min_ns=1224411 max_ns=1268303
+RILEY_MIXED_COST rows_upper=16 decode_rows=3 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1279422 min_ns=1279422 max_ns=1279422
+RILEY_MIXED_COST rows_upper=16 decode_rows=4 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1254673 min_ns=1254673 max_ns=1254673
+RILEY_MIXED_COST rows_upper=16 decode_rows=5 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1263088 min_ns=1263088 max_ns=1263088
+RILEY_MIXED_COST rows_upper=16 decode_rows=6 prefill_requests=0 context_upper=640 count=2 execute_wall_ns=2632250 min_ns=1283268 max_ns=1348982
+RILEY_MIXED_COST rows_upper=16 decode_rows=8 prefill_requests=0 context_upper=640 count=2 execute_wall_ns=2671315 min_ns=1300958 max_ns=1370357
+RILEY_MIXED_COST rows_upper=16 decode_rows=9 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1326171 min_ns=1326171 max_ns=1326171
+RILEY_MIXED_COST rows_upper=16 decode_rows=11 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1400220 min_ns=1400220 max_ns=1400220
+RILEY_MIXED_COST rows_upper=16 decode_rows=12 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1395646 min_ns=1395646 max_ns=1395646
+RILEY_MIXED_COST rows_upper=16 decode_rows=12 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1385833 min_ns=1385833 max_ns=1385833
+RILEY_MIXED_COST rows_upper=16 decode_rows=13 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1399115 min_ns=1399115 max_ns=1399115
+RILEY_MIXED_COST rows_upper=16 decode_rows=13 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1401058 min_ns=1401058 max_ns=1401058
+RILEY_MIXED_COST rows_upper=16 decode_rows=14 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1412520 min_ns=1412520 max_ns=1412520
+RILEY_MIXED_COST rows_upper=16 decode_rows=15 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1410308 min_ns=1410308 max_ns=1410308
+RILEY_MIXED_COST rows_upper=16 decode_rows=16 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1439427 min_ns=1439427 max_ns=1439427
+RILEY_MIXED_COST rows_upper=16 decode_rows=16 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1479847 min_ns=1479847 max_ns=1479847
+RILEY_MIXED_COST rows_upper=32 decode_rows=17 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1450808 min_ns=1450808 max_ns=1450808
+RILEY_MIXED_COST rows_upper=32 decode_rows=18 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1495931 min_ns=1495931 max_ns=1495931
+RILEY_MIXED_COST rows_upper=32 decode_rows=18 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1540578 min_ns=1540578 max_ns=1540578
+RILEY_MIXED_COST rows_upper=32 decode_rows=19 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1552316 min_ns=1552316 max_ns=1552316
+RILEY_MIXED_COST rows_upper=32 decode_rows=22 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1511281 min_ns=1511281 max_ns=1511281
+RILEY_MIXED_COST rows_upper=32 decode_rows=23 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1610686 min_ns=1610686 max_ns=1610686
+RILEY_MIXED_COST rows_upper=32 decode_rows=24 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1521785 min_ns=1521785 max_ns=1521785
+RILEY_MIXED_COST rows_upper=32 decode_rows=25 prefill_requests=0 context_upper=512 count=1 execute_wall_ns=1529963 min_ns=1529963 max_ns=1529963
+RILEY_MIXED_COST rows_upper=32 decode_rows=25 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1604646 min_ns=1604646 max_ns=1604646
+RILEY_MIXED_COST rows_upper=32 decode_rows=27 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1662333 min_ns=1662333 max_ns=1662333
+RILEY_MIXED_COST rows_upper=32 decode_rows=28 prefill_requests=0 context_upper=640 count=1 execute_wall_ns=1678805 min_ns=1678805 max_ns=1678805
+RILEY_MIXED_COST rows_upper=32 decode_rows=29 prefill_requests=0 context_upper=512 count=2 execute_wall_ns=3262392 min_ns=1593077 max_ns=1669315
+RILEY_MIXED_COST rows_upper=32 decode_rows=29 prefill_requests=0 context_upper=640 count=2 execute_wall_ns=3395780 min_ns=1693352 max_ns=1702428
+RILEY_MIXED_COST rows_upper=32 decode_rows=30 prefill_requests=0 context_upper=512 count=2 execute_wall_ns=3260450 min_ns=1576367 max_ns=1684083
+RILEY_MIXED_COST rows_upper=32 decode_rows=30 prefill_requests=0 context_upper=640 count=5 execute_wall_ns=8667234 min_ns=1688850 max_ns=1769051
+RILEY_MIXED_COST rows_upper=32 decode_rows=31 prefill_requests=0 context_upper=512 count=6 execute_wall_ns=10032862 min_ns=1539182 max_ns=1864751
+RILEY_MIXED_COST rows_upper=32 decode_rows=31 prefill_requests=0 context_upper=640 count=6 execute_wall_ns=10492855 min_ns=1704367 max_ns=1839430
+RILEY_MIXED_COST rows_upper=32 decode_rows=32 prefill_requests=0 context_upper=512 count=4 execute_wall_ns=6789201 min_ns=1516977 max_ns=1901944
+RILEY_MIXED_COST rows_upper=32 decode_rows=32 prefill_requests=0 context_upper=640 count=3 execute_wall_ns=5376358 min_ns=1728973 max_ns=1916881
+RILEY_MIXED_COST rows_upper=48 decode_rows=29 prefill_requests=1 context_upper=640 count=2 execute_wall_ns=7570495 min_ns=3777998 max_ns=3792497
+RILEY_MIXED_COST rows_upper=48 decode_rows=30 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=3908803 min_ns=3908803 max_ns=3908803
+RILEY_MIXED_COST rows_upper=96 decode_rows=28 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=3828263 min_ns=3828263 max_ns=3828263
+RILEY_MIXED_COST rows_upper=112 decode_rows=28 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=3824484 min_ns=3824484 max_ns=3824484
+RILEY_MIXED_COST rows_upper=112 decode_rows=29 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=3772741 min_ns=3772741 max_ns=3772741
+RILEY_MIXED_COST rows_upper=144 decode_rows=0 prefill_requests=2 context_upper=128 count=2 execute_wall_ns=4861775 min_ns=2308528 max_ns=2553247
+RILEY_MIXED_COST rows_upper=144 decode_rows=30 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=3920138 min_ns=3920138 max_ns=3920138
+RILEY_MIXED_COST rows_upper=144 decode_rows=31 prefill_requests=1 context_upper=512 count=1 execute_wall_ns=3853860 min_ns=3853860 max_ns=3853860
+RILEY_MIXED_COST rows_upper=160 decode_rows=27 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=3935203 min_ns=3935203 max_ns=3935203
+RILEY_MIXED_COST rows_upper=160 decode_rows=29 prefill_requests=1 context_upper=512 count=2 execute_wall_ns=7576287 min_ns=3720307 max_ns=3855980
+RILEY_MIXED_COST rows_upper=160 decode_rows=29 prefill_requests=1 context_upper=640 count=2 execute_wall_ns=7863565 min_ns=3931572 max_ns=3931993
+RILEY_MIXED_COST rows_upper=160 decode_rows=30 prefill_requests=1 context_upper=512 count=2 execute_wall_ns=7778786 min_ns=3887812 max_ns=3890974
+RILEY_MIXED_COST rows_upper=160 decode_rows=30 prefill_requests=1 context_upper=640 count=6 execute_wall_ns=23839598 min_ns=3911181 max_ns=4092896
+RILEY_MIXED_COST rows_upper=160 decode_rows=31 prefill_requests=1 context_upper=512 count=2 execute_wall_ns=7679486 min_ns=3786443 max_ns=3893043
+RILEY_MIXED_COST rows_upper=160 decode_rows=31 prefill_requests=1 context_upper=640 count=2 execute_wall_ns=7995032 min_ns=3948541 max_ns=4046491
+RILEY_MIXED_COST rows_upper=176 decode_rows=27 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=4116974 min_ns=4116974 max_ns=4116974
+RILEY_MIXED_COST rows_upper=176 decode_rows=28 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=4179758 min_ns=4179758 max_ns=4179758
+RILEY_MIXED_COST rows_upper=176 decode_rows=29 prefill_requests=1 context_upper=512 count=3 execute_wall_ns=11607157 min_ns=3759213 max_ns=3931483
+RILEY_MIXED_COST rows_upper=176 decode_rows=29 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=4103863 min_ns=4103863 max_ns=4103863
+RILEY_MIXED_COST rows_upper=176 decode_rows=30 prefill_requests=1 context_upper=512 count=2 execute_wall_ns=8316499 min_ns=4108749 max_ns=4207750
+RILEY_MIXED_COST rows_upper=176 decode_rows=30 prefill_requests=1 context_upper=640 count=10 execute_wall_ns=41928671 min_ns=4153393 max_ns=4289673
+RILEY_MIXED_COST rows_upper=176 decode_rows=31 prefill_requests=1 context_upper=512 count=13 execute_wall_ns=53190420 min_ns=3852120 max_ns=4291142
+RILEY_MIXED_COST rows_upper=176 decode_rows=31 prefill_requests=1 context_upper=640 count=4 execute_wall_ns=16942634 min_ns=4184444 max_ns=4336562
+RILEY_MIXED_COST rows_upper=192 decode_rows=30 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=4216561 min_ns=4216561 max_ns=4216561
+RILEY_MIXED_COST rows_upper=224 decode_rows=29 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=4279688 min_ns=4279688 max_ns=4279688
+RILEY_MIXED_COST rows_upper=224 decode_rows=30 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=3990765 min_ns=3990765 max_ns=3990765
+RILEY_MIXED_COST rows_upper=240 decode_rows=29 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=4190667 min_ns=4190667 max_ns=4190667
+RILEY_MIXED_COST rows_upper=256 decode_rows=29 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=4446063 min_ns=4446063 max_ns=4446063
+RILEY_MIXED_COST rows_upper=272 decode_rows=30 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=4174282 min_ns=4174282 max_ns=4174282
+RILEY_MIXED_COST rows_upper=288 decode_rows=28 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=4512289 min_ns=4512289 max_ns=4512289
+RILEY_MIXED_COST rows_upper=288 decode_rows=29 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=4598638 min_ns=4598638 max_ns=4598638
+RILEY_MIXED_COST rows_upper=288 decode_rows=30 prefill_requests=1 context_upper=640 count=1 execute_wall_ns=4470879 min_ns=4470879 max_ns=4470879
+RILEY_MIXED_COST rows_upper=288 decode_rows=31 prefill_requests=1 context_upper=512 count=5 execute_wall_ns=22326366 min_ns=4449519 max_ns=4489982
+RILEY_MIXED_COST rows_upper=304 decode_rows=27 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=4556005 min_ns=4556005 max_ns=4556005
+RILEY_MIXED_COST rows_upper=304 decode_rows=28 prefill_requests=2 context_upper=512 count=1 execute_wall_ns=4357096 min_ns=4357096 max_ns=4357096
+RILEY_MIXED_COST rows_upper=304 decode_rows=29 prefill_requests=2 context_upper=640 count=2 execute_wall_ns=9015107 min_ns=4501400 max_ns=4513707
+RILEY_MIXED_COST rows_upper=304 decode_rows=30 prefill_requests=2 context_upper=512 count=5 execute_wall_ns=21798860 min_ns=4183660 max_ns=4486069
+RILEY_MIXED_COST rows_upper=304 decode_rows=30 prefill_requests=2 context_upper=640 count=7 execute_wall_ns=31932474 min_ns=4524599 max_ns=4670594
+RILEY_MIXED_COST rows_upper=320 decode_rows=27 prefill_requests=3 context_upper=640 count=1 execute_wall_ns=4693678 min_ns=4693678 max_ns=4693678
+RILEY_MIXED_COST rows_upper=336 decode_rows=28 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=4357809 min_ns=4357809 max_ns=4357809
+RILEY_MIXED_COST rows_upper=432 decode_rows=4 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=3955664 min_ns=3955664 max_ns=3955664
+RILEY_MIXED_COST rows_upper=432 decode_rows=6 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4115258 min_ns=4115258 max_ns=4115258
+RILEY_MIXED_COST rows_upper=432 decode_rows=7 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=3986015 min_ns=3986015 max_ns=3986015
+RILEY_MIXED_COST rows_upper=432 decode_rows=12 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=4668249 min_ns=4668249 max_ns=4668249
+RILEY_MIXED_COST rows_upper=432 decode_rows=14 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4073012 min_ns=4073012 max_ns=4073012
+RILEY_MIXED_COST rows_upper=432 decode_rows=29 prefill_requests=2 context_upper=640 count=2 execute_wall_ns=10469595 min_ns=5232565 max_ns=5237030
+RILEY_MIXED_COST rows_upper=432 decode_rows=29 prefill_requests=3 context_upper=512 count=8 execute_wall_ns=40826022 min_ns=4904396 max_ns=5192013
+RILEY_MIXED_COST rows_upper=432 decode_rows=29 prefill_requests=3 context_upper=640 count=7 execute_wall_ns=36629157 min_ns=5216548 max_ns=5251518
+RILEY_MIXED_COST rows_upper=432 decode_rows=30 prefill_requests=2 context_upper=640 count=1 execute_wall_ns=5288365 min_ns=5288365 max_ns=5288365
+RILEY_MIXED_COST rows_upper=448 decode_rows=17 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=4767926 min_ns=4767926 max_ns=4767926
+RILEY_MIXED_COST rows_upper=448 decode_rows=18 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4157834 min_ns=4157834 max_ns=4157834
+RILEY_MIXED_COST rows_upper=448 decode_rows=28 prefill_requests=4 context_upper=640 count=1 execute_wall_ns=5295307 min_ns=5295307 max_ns=5295307
+RILEY_MIXED_COST rows_upper=480 decode_rows=29 prefill_requests=3 context_upper=512 count=1 execute_wall_ns=5364662 min_ns=5364662 max_ns=5364662
+RILEY_MIXED_COST rows_upper=496 decode_rows=24 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5280766 min_ns=5280766 max_ns=5280766
+RILEY_MIXED_COST rows_upper=496 decode_rows=25 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5515574 min_ns=5515574 max_ns=5515574
+RILEY_MIXED_COST rows_upper=512 decode_rows=2 prefill_requests=3 context_upper=256 count=1 execute_wall_ns=4768881 min_ns=4768881 max_ns=4768881
+RILEY_MIXED_COST rows_upper=512 decode_rows=2 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4400651 min_ns=4400651 max_ns=4400651
+RILEY_MIXED_COST rows_upper=512 decode_rows=3 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4519005 min_ns=4519005 max_ns=4519005
+RILEY_MIXED_COST rows_upper=512 decode_rows=9 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5856341 min_ns=5856341 max_ns=5856341
+RILEY_MIXED_COST rows_upper=512 decode_rows=10 prefill_requests=3 context_upper=256 count=1 execute_wall_ns=4407005 min_ns=4407005 max_ns=4407005
+RILEY_MIXED_COST rows_upper=512 decode_rows=11 prefill_requests=4 context_upper=256 count=1 execute_wall_ns=4385795 min_ns=4385795 max_ns=4385795
+RILEY_MIXED_COST rows_upper=512 decode_rows=15 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5170107 min_ns=5170107 max_ns=5170107
+RILEY_MIXED_COST rows_upper=512 decode_rows=17 prefill_requests=3 context_upper=256 count=1 execute_wall_ns=4509726 min_ns=4509726 max_ns=4509726
+RILEY_MIXED_COST rows_upper=512 decode_rows=20 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5176367 min_ns=5176367 max_ns=5176367
+RILEY_MIXED_COST rows_upper=512 decode_rows=21 prefill_requests=3 context_upper=512 count=1 execute_wall_ns=5191581 min_ns=5191581 max_ns=5191581
+RILEY_MIXED_COST rows_upper=512 decode_rows=22 prefill_requests=3 context_upper=512 count=1 execute_wall_ns=5301237 min_ns=5301237 max_ns=5301237
+RILEY_MIXED_COST rows_upper=512 decode_rows=22 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5479995 min_ns=5479995 max_ns=5479995
+RILEY_MIXED_COST rows_upper=512 decode_rows=24 prefill_requests=4 context_upper=512 count=1 execute_wall_ns=5497838 min_ns=5497838 max_ns=5497838
+RILEY_MIXED_COST rows_upper=512 decode_rows=26 prefill_requests=4 context_upper=640 count=1 execute_wall_ns=5607679 min_ns=5607679 max_ns=5607679
+RILEY_MIXED_COST rows_upper=512 decode_rows=27 prefill_requests=4 context_upper=512 count=2 execute_wall_ns=11048162 min_ns=5521592 max_ns=5526570
+RILEY_MIXED_COST rows_upper=512 decode_rows=27 prefill_requests=4 context_upper=640 count=1 execute_wall_ns=5670003 min_ns=5670003 max_ns=5670003
+RILEY_MIXED_COST rows_upper=512 decode_rows=28 prefill_requests=3 context_upper=512 count=1 execute_wall_ns=5487213 min_ns=5487213 max_ns=5487213
+RILEY_MIXED_COST rows_upper=512 decode_rows=28 prefill_requests=4 context_upper=512 count=2 execute_wall_ns=10831531 min_ns=5271830 max_ns=5559701
+RILEY_MIXED_COST rows_upper=512 decode_rows=28 prefill_requests=4 context_upper=640 count=4 execute_wall_ns=22530005 min_ns=5622291 max_ns=5644542
+RILEY_MIXED_COST rows_upper=512 decode_rows=29 prefill_requests=3 context_upper=512 count=1 execute_wall_ns=5530130 min_ns=5530130 max_ns=5530130
+RILEY_MIXED_COST_OVERFLOW count=0
+RILEY_RUNTIME_PHASE kind=retain_encode calls=439 wall_ns=25538957
+RILEY_RUNTIME_PHASE kind=sync_transfer calls=0 wall_ns=0
+RILEY_RUNTIME_PHASE kind=buffered_submit calls=670 wall_ns=14965593
+RILEY_RUNTIME_PHASE kind=buffered_wait calls=670 wall_ns=1270045959
+RILEY_RUNTIME_PHASE kind=read_validate calls=670 wall_ns=37043943
+RILEY_RUNTIME_PHASE kind=future_prepare calls=231 wall_ns=49969489
+RILEY_DECODE_WINDOW completed=231 widest=32
