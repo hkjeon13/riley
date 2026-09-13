@@ -1,0 +1,38 @@
+-- The C compiler identification is GNU 11.4.0
+-- The CUDA compiler identification is NVIDIA 13.0.88 with host compiler GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Found CUDAToolkit: /tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/include;/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/include/cccl (found version "13.0.88")
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- riley CUDA AOT architectures: 89 (compile targets only)
+-- Found Python3: /usr/bin/python3.10 (found version "3.10.12") found components: Interpreter
+-- FlashInfer compile support enabled; dependency SHA256=2a7d8ab8f81f6cb7fd259270b63bd71e152bff77a105b3c0ba875108b5567e0c; serving selection unchanged
+-- Configuring done (1.6s)
+CMake Error in CMakeLists.txt:
+  Imported target "CUDA::cublasLt" includes non-existent path
+
+    "/tmp/riley-opt-260912/flashinfer-compatibility/toolchain130/nvidia/cu13/include/cccl"
+
+  in its INTERFACE_INCLUDE_DIRECTORIES.  Possible reasons include:
+
+  * The path was deleted, renamed, or moved to another location.
+
+  * An install or uninstall procedure did not complete successfully.
+
+  * The installation package was faulty and references files it does not
+  provide.
+
+
+
+-- Generating done (0.0s)
+CMake Generate step failed.  Build files cannot be regenerated correctly.

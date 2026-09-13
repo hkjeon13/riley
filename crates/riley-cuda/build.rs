@@ -35,6 +35,7 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         "NVCC",
         "CUDACXX",
         "CMAKE",
+        "RILEY_FLASHINFER_DATA",
     ] {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -78,6 +79,16 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         .arg(format!("-DCMAKE_CUDA_ARCHITECTURES={architectures}"))
         .arg(format!("-DCUDAToolkit_ROOT={}", toolkit.root.display()))
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
+    let flashinfer_data = env::var_os("RILEY_FLASHINFER_DATA").unwrap_or_default();
+    if !flashinfer_data.is_empty() {
+        let path = PathBuf::from(&flashinfer_data);
+        if !path.is_absolute() || !path.is_dir() {
+            return Err("RILEY_FLASHINFER_DATA must be an absolute installed data directory".into());
+        }
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    // Always set the cache entry, including OFF, so a reused build cannot retain it.
+    configure.arg(format!("-DRILEY_FLASHINFER_DATA={}", PathBuf::from(flashinfer_data).display()));
     configure_fault_injection(&mut configure);
     configure_nvml_probe(&mut configure);
     run(&mut configure, "configure the native CUDA library")?;
@@ -184,6 +195,10 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
     for source in [
         cmake_lists,
         kernels_dir.join("include/riley_cuda.h"),
+        kernels_dir.join("optional/flashinfer.cmake"),
+        kernels_dir.join("optional/verify_flashinfer.py"),
+        kernels_dir.join("optional/flashinfer_api.h"),
+        kernels_dir.join("optional/flashinfer_decode.cu"),
         kernels_dir.join("src/ffi_internal.hpp"),
         kernels_dir.join("src/attention_online.cu"),
         kernels_dir.join("src/attention_online.hpp"),

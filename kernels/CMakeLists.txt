@@ -143,3 +143,5 @@ install(FILES include/riley_cuda.h
 
 set_source_files_properties(src/graph_numerics.cu PROPERTIES COMPILE_OPTIONS "--use_fast_math")
 
+
+include(optional/flashinfer.cmake)

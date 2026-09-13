@@ -1,6 +1,7 @@
 // Optional FlashInfer CUDA-core backend. The caller retains all device parents
 // and establishes stream/context ownership. This file is built separately until
 // the model recorder has an explicit non-exact numerical-profile selection.
+#include "flashinfer_api.h"
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <flashinfer/attention/decode.cuh>

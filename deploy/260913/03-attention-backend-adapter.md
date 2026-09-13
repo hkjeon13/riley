@@ -59,3 +59,7 @@ backend flag로 기존 attention 복귀. 새 workspace는 해당 stream 완료 �
 Native-only memcheck는 0 errors. Python FlashInfer 포함 memcheck는 cuGetProcAddress_v2 34건으로 실패했고, adapter를 로드하지 않은 import-only 대조군에서도 동일하게 재현됐다. 실패를 통과로 바꾸지 않는다.
 
 현재 CMake·Rust owner·model recorder·server에는 등록하지 않았다. 다음 batch는 (1) pinned optional dependency/build와 명시적 numerical profile, (2) context/stream/extent/lease를 검증하는 owner/recorder 연결, (3) 전체 모델 logits·greedy·batch invariant 및 기존 exact fallback, (4) 동일 workload serving 비교다. 기존 scratch는 layer마다 덮어쓰므로 metadata는 별도 retained buffer로 수명을 보장한다. 이 검증만으로 성능 개선이나 수치 계약 통과를 주장하지 않는다.
+
+## Native 모델·빌드 연결 진행
+
+[후속 빌드 증거](../../benchmarks/results/20260913-flashinfer-model-build/README.md): 헤더 digest로 고정한 optional CMake/Cargo build와 별도 workspace를 받는 30-layer native 모델 진입점을 구현했다. Enabled 전체 archive 빌드 및 같은 build directory에서 disabled로 복귀하는 빌드가 통과했다. 기존 exact entry는 새 backend를 선택하지 않는다. Rust recorder/명시적 profile 연결, 새 full-model GPU 실행 및 serving 비교는 여전히 미완료다.
