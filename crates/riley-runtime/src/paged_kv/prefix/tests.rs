@@ -1,5 +1,25 @@
 use super::*;
 
+#[test]
+fn range_import_binds_source_tokens_and_survives_source_and_cache_release() {
+    let mut pool=pool(4);let mut source=pool.create_sequence(64).unwrap();
+    let reservation=source.reserve_to(&mut pool,32).unwrap();source.commit(&mut pool,reservation).unwrap();
+    let expected=descriptor(&pool,32);let mut export=pool.export_prefix(&source,expected).unwrap();
+    source.close(&mut pool).unwrap();
+    let tokens:Vec<_>=(0..32).collect();let mut wrong=tokens.clone();wrong[31]=0;
+    let mut target=pool.create_sequence(16).unwrap();
+    assert!(target.import_prefix_range(&mut pool,&export,&wrong,16).is_err());
+    assert!(target.import_prefix_range(&mut pool,&export,&tokens,0).is_err());
+    assert!(target.import_prefix_range(&mut pool,&export,&tokens,33).is_err());
+    assert_eq!(target.logical_length(),0);
+    target.import_prefix_range(&mut pool,&export,&tokens,16).unwrap();
+    assert_eq!(target.logical_length(),16);
+    pool.release_prefix(&mut export).unwrap();
+    assert_eq!(pool.stats().allocated_block_count(),1);
+    assert_eq!(target.execution_block_table(&pool,None).unwrap().physical_block_ids().len(),1);
+    target.close(&mut pool).unwrap();assert_eq!(pool.stats().allocated_block_count(),0);
+}
+
 fn pool(blocks: usize) -> KvBlockPool {
     KvBlockPool::new(KvLayout::checked(2, blocks, 2, 8).unwrap()).unwrap()
 }

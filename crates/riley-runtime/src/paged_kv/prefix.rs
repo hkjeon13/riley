@@ -200,13 +200,31 @@ impl SequenceState {
         export: &PrefixExport,
         expected: &PrefixDescriptor,
     ) -> PagedKvResult<()> {
+        if expected != &export.descriptor {return Err(invalid("prefix_identity", "descriptor does not match export"));}
+        self.import_prefix_descriptor(pool,export,expected)
+    }
+
+    /// Imports a leading range from a larger immutable export. The complete
+    /// supplied source tokens must match its digest before deriving the prefix.
+    /// The execution adapter still binds the export to the loaded model.
+    /// # Errors
+    /// Rejects mismatched tokens, empty/out-of-range prefixes and invalid owners.
+    pub fn import_prefix_range(&mut self,pool:&mut KvBlockPool,export:&PrefixExport,source_tokens:&[u32],prefix_tokens:usize)->PagedKvResult<()> {
+        let original=PrefixDescriptor::new(export.descriptor.identity.clone(),export.descriptor.start_position,source_tokens)?;
+        if original!=export.descriptor || prefix_tokens==0 || prefix_tokens>source_tokens.len() {
+            return Err(invalid("prefix_range", "source tokens or prefix range differ"));
+        }
+        let expected=PrefixDescriptor::new(original.identity,original.start_position,&source_tokens[..prefix_tokens])?;
+        self.import_prefix_descriptor(pool,export,&expected)
+    }
+
+    fn import_prefix_descriptor(&mut self,pool:&mut KvBlockPool,export:&PrefixExport,expected:&PrefixDescriptor)->PagedKvResult<()> {
         self.ensure_mutable(pool)?;
         self.ensure_readable()?;
         if self.logical_length != 0 || self.allocated_block_count != 0 {
             return Err(invalid("prefix_target", "must be empty"));
         }
-        if expected != &export.descriptor
-            || expected.identity.layout != KvPageLayout::from(pool.layout)
+        if expected.identity.layout != KvPageLayout::from(pool.layout)
         {
             return Err(invalid(
                 "prefix_identity",
@@ -220,7 +238,8 @@ impl SequenceState {
             });
         }
         pool.validate_lease(&export.lease)?;
-        for block in export.blocks() {
+        let blocks=&export.blocks()[..blocks_for_length(expected.tokens as usize)];
+        for block in blocks {
             let slot = &mut pool.slots[block.physical_index as usize];
             if slot.owner.is_some() {
                 let previous_capacity = slot.shared_owners.capacity();
@@ -237,7 +256,7 @@ impl SequenceState {
                     .saturating_add(delta as u64);
             }
         }
-        for (index, &block) in export.blocks().iter().enumerate() {
+        for (index, &block) in blocks.iter().enumerate() {
             let slot = &mut pool.slots[block.physical_index as usize];
             if slot.owner.is_none() {
                 slot.owner = Some(self.sequence_id);
@@ -247,7 +266,7 @@ impl SequenceState {
             self.block_ids[index] = Some(block);
             self.physical_block_ids[index] = block.physical_index;
         }
-        self.allocated_block_count = export.blocks().len();
+        self.allocated_block_count = blocks.len();
         self.fill_valid_tokens(expected.tokens as usize, self.allocated_block_count);
         self.logical_length = expected.tokens;
         Ok(())

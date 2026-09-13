@@ -1,0 +1,31 @@
+{
+  "base_commit": "9e97e3e3",
+  "scope": "automatic full-page cache correctness; serving measurements separate",
+  "gpu": "RTX 4090",
+  "cuda": "13.0.88",
+  "model_logit_bytes_equal": 1474560,
+  "prefill_tokens": {
+    "off": 157,
+    "on": 77
+  },
+  "hits": 3,
+  "reused_tokens": 80,
+  "test_binary_sha256": "aa32423d3ae0fec46bdc1aa7804941401a09c790bf6754faecf482ff1f31249f",
+  "release_sha256": "f1ccef367d9329a13e8c19b499ec22bf5817a5f82692fbaf38c1c3b6021688ea",
+  "remote_verified_source_sha256": {
+    "crates/riley-scheduler/tests/prefix_cache_model_gpu.rs": "b917d1bc66f08c2a1b47dc2311b0c1d3aaa3bb8e7f47699fb859de06ed3fb6cd",
+    "crates/riley-scheduler/src/scheduler/prefix_cache.rs": "bfd5d09a4505f44a24187dba5fb6d5d3be578ae913edb7ec66f10138685f68c8",
+    "crates/riley-runtime/src/paged_kv/prefix.rs": "a4a6c5004a322df234aed5233f77784af09fff1905a7bf9ef3283ddedb8e2e90",
+    "crates/riley-runtime/src/llama/variable_session.rs": "9426e55808783a951141d31c9d1346ffcc7dd1b9b3ad48447cb458b416b7fcb3",
+    "crates/riley-server/src/engine.rs": "019a0b58d1e1d071e55f23e94529e8a6752b2ed6b95116d5f0eb702b00f9aa3d"
+  },
+  "evidence_sha256": {
+    "compute-after.csv": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model-tests.log": "d0eee5413c4b593e16fb6839e2942190a2fe5e5d2d9f9c34e3e72ae255291c79",
+    "release-build.log": "7a3c2fdb1e73c0cb4371b778a8157286d9a34797b016c04d75affbbd31deda9d",
+    "release-sha256.txt": "0ee3e6ba7b1f97e4ff57ece32b8516d2664a03f0fdc27974349d81a916bc848c",
+    "server-feature-check.log": "9f0b16d19a53195208569968e7a46e1ada28bb91fbfb28f0fec3cdbeac91bd5e",
+    "session-tests.log": "344b6fb54bbb799e43c66a55b0e1eceea28af2d64ea302f36331dcad431c2cd9",
+    "source-sha256.txt": "cd527c54dbf7555d0f43fc3c015fbf83415619252c63ecfc4732ec077f92027d"
+  }
+}

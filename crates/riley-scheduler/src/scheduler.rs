@@ -6,6 +6,7 @@
 
 mod decode_window;
 mod mixed_time;
+mod prefix_cache;
 
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -508,6 +509,7 @@ struct SettledInflightItem {
 #[must_use = "settle every in-flight plan and close the scheduler before discarding it"]
 pub struct Scheduler {
     mixed_time: Option<mixed_time::MixedTimePolicy>,
+    prefix_cache: Option<prefix_cache::PrefixCache>,
     config: SchedulerConfig,
     execution_shape_policy: ExecutionShapePolicy,
     last_dispatched_shape: Option<WorkKind>,
@@ -667,6 +669,7 @@ impl Scheduler {
         let metrics = SchedulerMetrics::new(config.metrics_window_samples)?;
         let mut scheduler = Self {
             mixed_time: None,
+            prefix_cache: None,
             config,
             execution_shape_policy: policy,
             last_dispatched_shape: None,
@@ -838,6 +841,7 @@ impl Scheduler {
             });
         }
 
+        if self.waiting.is_empty() && self.can_admit(promised_kv_blocks) {self.reserve_cache_room(promised_kv_blocks)?;}
         let can_admit = self.waiting.is_empty() && self.can_admit(promised_kv_blocks);
         if !can_admit && self.config.overload_policy == OverloadPolicy::RejectImmediately {
             observe_metric(
@@ -1177,6 +1181,9 @@ impl Scheduler {
             "aborted iteration settlement failures",
         )?;
         self.ensure_completion_capacity(completion_capacity)?;
+        if abort == ExecutionAbort::DeviceQuiescedMutationUnknown {
+            if let Some(cache)=self.prefix_cache.as_mut(){cache.clear(&mut self.pool)?;}
+        }
         self.last_now_ns = Some(now_ns);
         let Some(inflight) = self.inflight.take() else {
             return Err(SchedulerError::NoIterationInFlight);
@@ -1354,6 +1361,7 @@ impl Scheduler {
                 "request cancellation",
             );
         }
+        if let Some(cache)=self.prefix_cache.as_mut(){cache.clear(&mut self.pool)?;}
         self.drain_completion_outbox_into(&mut completions);
         self.refresh_metric_gauges();
         Ok(completions)
@@ -1548,7 +1556,13 @@ impl Scheduler {
                 self.execution_shape_policy,
                 &self.requests[index].descriptor,
             )?;
-            let sequence = self.pool.create_sequence(maximum)?;
+            self.reserve_cache_room(promised)?;
+            let mut sequence = self.pool.create_sequence(maximum)?;
+            let reused = if let Some(cache)=self.prefix_cache.as_mut() {
+                match cache.import(&mut self.pool,&mut sequence,&self.requests[index].descriptor.prompt_token_ids) {
+                    Ok(n)=>n,Err(e)=>{sequence.close(&mut self.pool)?;return Err(e)}
+                }
+            } else {0};
             let prompt_tokens = self.requests[index].descriptor.prompt_token_ids.len();
             let waited_ns = now_ns.saturating_sub(self.requests[index].submitted_at_ns);
             let popped = self.waiting.pop_front();
@@ -1573,6 +1587,7 @@ impl Scheduler {
             let record = &mut self.requests[index];
             transition(record, RequestState::Admitted)?;
             record.sequence = Some(sequence);
+            record.prefill_cursor = reused;
             record.ready_since_ns = now_ns;
             observe_metric(
                 &mut self.metrics_degraded,
@@ -2352,6 +2367,13 @@ impl Scheduler {
         }
         if item.kind == WorkKind::Prefill {
             self.requests[index].prefill_cursor = item.target_logical_length;
+            if item.target_logical_length == self.requests[index].descriptor.prompt_token_ids.len() {
+                if let Some(cache)=self.prefix_cache.as_mut() {
+                    let record=&self.requests[index];
+                    cache.publish(&mut self.pool,record.sequence.as_ref().expect("committed sequence"),
+                        &record.descriptor.prompt_token_ids,self.promised_kv_blocks,&mut self.next_request_id)?;
+                }
+            }
         }
         let Some(output) = item.output else {
             let record = &mut self.requests[index];
@@ -2494,9 +2516,15 @@ impl Scheduler {
         maximum_logical_length: usize,
         now_ns: u64,
     ) -> SchedulerResult<()> {
-        let sequence = self.pool.create_sequence(maximum_logical_length)?;
+        let mut sequence = self.pool.create_sequence(maximum_logical_length)?;
+        let reused = if let Some(cache)=self.prefix_cache.as_mut() {
+            match cache.import(&mut self.pool,&mut sequence,&record.descriptor.prompt_token_ids) {
+                Ok(n)=>n,Err(e)=>{sequence.close(&mut self.pool)?;return Err(e)}
+            }
+        } else {0};
         transition(record, RequestState::Admitted)?;
         record.sequence = Some(sequence);
+        record.prefill_cursor = reused;
         record.ready_since_ns = now_ns;
         self.active_sequences =
             self.active_sequences
@@ -3416,8 +3444,9 @@ impl Scheduler {
         let mut block_owners = Vec::new();
         // Shared prefixes create more owner/page pairs than physical pages.
         // Reserve once for all live sequence tables, including off-batch rows.
+        let cached = self.prefix_cache.as_ref().map_or(0, |c| c.owner_entries());
         let owner_entries = self.requests.iter().filter_map(|r| r.sequence.as_ref())
-            .try_fold(0usize, |n, s| n.checked_add(s.allocated_block_count())
+            .try_fold(cached, |n, s| n.checked_add(s.allocated_block_count())
                 .ok_or(SchedulerError::ArithmeticOverflow { field: "execution block ownership" }))?;
         try_reserve_exact(
             &mut block_owners,
@@ -3445,6 +3474,7 @@ impl Scheduler {
                 block_owners.push((physical, record.request_id));
             }
         }
+        if let Some(cache)=self.prefix_cache.as_ref(){cache.append_owners(&mut block_owners);}
         Ok(block_owners)
     }
 

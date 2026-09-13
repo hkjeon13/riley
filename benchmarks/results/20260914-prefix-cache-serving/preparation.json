@@ -1,0 +1,18 @@
+{
+  "hashes": {
+    "current": "f1ccef367d9329a13e8c19b499ec22bf5817a5f82692fbaf38c1c3b6021688ea",
+    "prior": "d85368b3bc3af73593f28cac2ea7bcb01f09c45f2888e6a5f4fb6be5c9101bab"
+  },
+  "controller_sha256": "9a5631481c0405e6f38ee5d495d989384b541d9c686fc81df97551ceaccb6e66",
+  "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+  "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+  "concurrency": 32,
+  "warmup": 64,
+  "retained": 256,
+  "kv_payload_bytes_per_engine": 754974720,
+  "riley_cache_page_limit": 512,
+  "vllm_prefix_caching": true,
+  "qualification": false,
+  "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+  "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+}

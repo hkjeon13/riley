@@ -2553,7 +2553,7 @@ mod cuda_backend {
     }
 
     impl CudaBackend {
-        fn new(resources: CudaEngineResources) -> Result<Self, BackendError> {
+        fn new(mut resources: CudaEngineResources) -> Result<Self, BackendError> {
             let vocabulary_size = resources.executor.vocabulary_size();
             let addressable_tokens = resources.model.tokenizer().addressable_token_count();
             if addressable_tokens == 0 || addressable_tokens > vocabulary_size {
@@ -2626,6 +2626,17 @@ mod cuda_backend {
             let use_ffn_pipeline = resources.executor.config().ffn_pipeline();
             let use_flashinfer_experimental = resources.executor.config().flashinfer_experimental();
             let use_fa3_experimental = resources.executor.config().fa3_experimental();
+            let prefix_pages=match std::env::var("RILEY_PREFIX_CACHE_PAGES") {
+                Ok(value)=>value.parse::<usize>().map_err(|_|internal("RILEY_PREFIX_CACHE_PAGES must be an unsigned page count"))?,
+                Err(std::env::VarError::NotPresent)=>0,
+                Err(_)=>return Err(internal("invalid prefix cache environment value")),
+            };
+            if prefix_pages>0 && (!use_variable || !resources.executor.config().mixed_execution()
+                || use_ffn_pipeline || use_flashinfer_experimental || use_fa3_experimental
+                || prefix_pages>resources.scheduler.pool_stats().physical_block_count()) {
+                return Err(internal("prefix cache requires bounded V7 standard/adaptive decode with optional prefill FFN"));
+            }
+
             if use_variable && (resources.execution_graph_policy!=ExecutionGraphPolicy::Require
                 || !matches!(resources.scheduler.config().max_active_sequences,1|2|4|8|16|32) || (resources.gpu_greedy && !matches!(resources.executor.config().variable_graph_rows(),16|32))) {
                 return Err(internal("V3 requires graph policy require, capacity1/2/4/8/16/32; GPU greedy requires sixteen-row graphs"));
@@ -2642,8 +2653,14 @@ mod cuda_backend {
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
-                let graph=if use_adaptive_decode {resources.executor.into_owned_variable_adaptive_decode_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline).map(VariableServingSession::ThirtyTwo)}else if use_prefill_ffn_pipeline {resources.executor.into_owned_variable_prefill_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window).map(VariableServingSession::ThirtyTwo)}else if decode_window {resources.executor.into_owned_buffered_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,true).map(VariableServingSession::ThirtyTwo)}else if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_fa3_experimental {resources.executor.into_owned_variable_fa3_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                let graph=if prefix_pages>0 {resources.executor.into_owned_variable_prefix_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline,use_adaptive_decode).map(VariableServingSession::ThirtyTwo)}else if use_adaptive_decode {resources.executor.into_owned_variable_adaptive_decode_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline).map(VariableServingSession::ThirtyTwo)}else if use_prefill_ffn_pipeline {resources.executor.into_owned_variable_prefill_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window).map(VariableServingSession::ThirtyTwo)}else if decode_window {resources.executor.into_owned_buffered_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,true).map(VariableServingSession::ThirtyTwo)}else if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_fa3_experimental {resources.executor.into_owned_variable_fa3_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
+                if prefix_pages>0 {
+                    let VariableServingSession::ThirtyTwo(session)=&graph else {return Err(internal("prefix cache requires retained V7 owner"));};
+                    resources.scheduler.enable_prefix_cache(session.prefix_cache_identity().map_err(|e|internal(e.to_string()))?,prefix_pages.min(64),prefix_pages)
+                        .map_err(|e|internal(e.to_string()))?;
+                    eprintln!("RILEY_PREFIX_CACHE enabled=true max_entries={} max_pages={}",prefix_pages.min(64),prefix_pages);
+                }
                 (None,None,None,Some(graph))
             } else if use_multi {
                 let graph = resources
@@ -3280,6 +3297,12 @@ mod cuda_backend {
         }
 
         fn close_resources(&mut self) -> Result<(), BackendError> {
+            if let Some(scheduler)=self.scheduler.as_ref() {
+                let (entries,pages,hits,reused)=scheduler.prefix_cache_stats();
+                if scheduler.prefix_cache_host_bytes()!=0 {
+                    eprintln!("RILEY_PREFIX_CACHE entries={entries} pages={pages} hits={hits} reused_tokens={reused} host_capacity_bytes={}",scheduler.prefix_cache_host_bytes());
+                }
+            }
             let mut first_error = None;
             let mut final_scheduler = None;
             let mut final_allocation = None;

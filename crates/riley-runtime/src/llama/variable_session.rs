@@ -57,6 +57,18 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
         }
     }
     pub fn supports_mixed_execution(&self)->bool{self.identity.mixed_execution}
+    /// Conservative cache identity derived from this actual loaded-model catalog.
+    /// Catalog hashing includes weights, numerical/position profile and geometry;
+    /// different retained configurations therefore cannot share cache entries.
+    pub fn prefix_cache_identity(&self)->Result<crate::paged_kv::KvIdentity> {
+        use sha2::{Digest,Sha256};
+        if !self.identity.shared_prefixes || !self.identity.mixed_execution || ROWS!=32 {return Err(bad("model owner does not support prefix cache"));}
+        let role=|label:&[u8]| {let mut hash=Sha256::new();hash.update(label);hash.update(self.identity.catalog_digest);hash.finalize().into()};
+        let layout=crate::paged_kv::KvLayout::checked(30,self.identity.physical_block_count as usize,3,64).map_err(|_|bad("invalid model cache layout"))?;
+        Ok(crate::paged_kv::KvIdentity{model_revision:self.identity.catalog_digest,
+            numerical_profile:role(b"riley.cache.numerics.v1"),position_encoding:role(b"riley.cache.position.v1"),
+            partition:role(b"riley.cache.partition.v1"),layout:layout.into()})
+    }
     pub fn supports_packed_prefill(&self)->bool{self.identity.packed_prefill}
     pub fn supports_compact_greedy(&self)->bool{self.compact}
     pub fn issue(&mut self)->Result<(VariableSessionIdentity,u64,u64)>{let(i,r,c)=self.issue_rows(1)?;Ok((i,r,c[0]))}

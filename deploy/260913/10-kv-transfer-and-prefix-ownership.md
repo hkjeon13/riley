@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **구현 진행 중 — 공유 prefix의 retained native capability와 실제 model read parity 완료. 자동 serving cache·captured-model COW는 미연결**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — 자동 full-page serving cache·model parity·C32 serving screen 완료. Cache 기본값 승격 보류, captured-model partial-tail COW 및 확대 qualification 미완료**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -109,3 +109,19 @@ Native model capability를 기본값 false에서 명시적 opt-in으로 연결�
 4090에서 실제 SmolLM2의 독립 page와 공유 prefix page decode logits를 동기·buffered 각각 196,608 bytes씩 비교해 완전 일치를 확인했다. 각 mode 종료 후 host page와 CUDA allocation은 0이다. CUDA-enabled session 7 tests와 CUDA/server feature check도 통과했다. [모델 검증 기록](../../benchmarks/results/20260914-shared-prefix-model/README.md).
 
 이것은 full-page prefix 읽기 검증이다. 자동 cache descriptor의 실제 model/token binding, cache-only owner 및 lookup/publication/eviction, captured-model COW/drain, 다양한 prompt/model·partial tail 검증과 실제 vLLM serving 비교가 남아 있다. CLI serving cache는 아직 켜지 않았고 성능 승격도 하지 않았다.
+
+## 자동 full-page cache와 serving opt-in
+
+이후 scheduler admission의 longest matching full-page import, 완료 후 publication, bounded LRU eviction, cache-only owner ledger, pool 예산 및 shutdown/abort cleanup을 연결했다. 긴 export의 일부 prefix를 import할 때 원본 token digest를 검증한다. 마지막 prompt token은 새 logits를 위해 남긴다. 실제 retained model catalog에서 identity를 만들며 `RILEY_PREFIX_CACHE_PAGES`로 serving opt-in을 선택한다. 기본값은 cache off다.
+
+실제 모델 5 requests × 3 outputs에서 cache-off와 1,474,560 logits bytes가 완전히 같았다. Fixture의 prefill 계산은 157→77 tokens이고, 이것을 serving 속도 향상으로 해석하지 않는다. 최종 scheduler CUDA library 55 passed, CPU 전체 155 passed, runtime library 349 passed / 1 timing diagnostic ignored 및 release build가 통과했다. [검증 기록](../../benchmarks/results/20260914-automatic-prefix-cache/README.md).
+
+Serving 비교는 이전 binary·현재 cache-off·현재 cache-on·vLLM cache-on을 공유 prefix/고유 suffix 및 완전 고유 prompt로 나눠 역순 반복한다. 총 KV payload는 양쪽 720 MiB로 맞춘다. Cache lookup의 bounded scan 비용과 보수적인 page 예산에 의한 eviction도 결과로 평가한다. 이후 partial-tail COW와 확대 qualification을 계속 진행하며 PR10 전체 승격은 아직 하지 않는다.
+
+## C32 serving 결과와 판단
+
+[최종 비교표](../../benchmarks/results/20260914-prefix-cache-serving/README.md): 16 lanes, retained 4,096 requests 모두 32 output tokens / protocol errors 0. 공유 prefix에서 현재 cache-off 대비 throughput +90.0%, TTFT -70.8%, P99 -51.1%. 그러나 vLLM보다 throughput -39.8%, TPOT +121.6%다. 고유 prompt는 cache hit 0이며 cache-off 대비 throughput -4.3%, P99 +3.9%다. 기본값 승격은 하지 않는다.
+
+Riley는 이전 baseline의 token/text/finish와 모든 retained 응답이 일치했다. vLLM exact token/text agreement는 shared 436/512, unique 160/512이므로 cross-engine quality 완료 주장은 하지 않는다. 양쪽 input/output token 수, hardware, KV memory와 workload는 맞췄다. 단일 C32·2 reversed runs screen이며 soak/open-loop/tail 안정성 qualification은 아니다.
+
+이번 screen은 cache 변경을 분리하기 위해 standard V7를 사용했다. 다음에는 기존 prefill-FFN/paired-decode 구성과 cache 조합을 먼저 qualification하고, 긴 context workload의 GPU 실행 및 host/prefill-decode overlap을 profile한다. 낮아진 TTFT에도 남은 TPOT 차이만으로 특정 attention kernel을 원인으로 단정하지 않는다. Cache-miss admission/index 비용과 partial-tail COW도 별도 남은 범위로 유지한다.
