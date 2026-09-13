@@ -1,6 +1,6 @@
 # PR 10 — KV export/import와 공유 prefix 소유권
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **구현 진행 중 — host read lease 기반 추가, serving 미연결**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -51,4 +51,14 @@ cache/transfer를 끄고 local KV를 사용한다. in-flight transfer drain 이�
 
 [Adaptive projection 결과](../../benchmarks/results/20260914-adaptive-decode-serving/README.md)는 낮은 concurrency에서만 약4% 개선되고 고부하 격차는 남는다. 다음 구조 영역으로 본 PR을 선택한다. 현재 `paged_kv.rs`의 block 소유권은 sequence 단위이므로, frontend 응답 재사용으로 우회하지 않고 descriptor identity·immutable page 참조/generation·COW·완료 후 publication을 기존 reservation/commit/reclaim과 함께 연결해야 한다.
 
-현재 serving 기준은 vLLM prefix caching이 명시적으로 꺼져 있다. 새 cache-hit 및 cache-miss 실험에서는 양쪽 caching 설정, KV memory 상한과 workload를 맞추고 기존 cache-off 결과를 별도 유지한다. 세 개 반복 prompt만으로 일반화하지 않고 공유 prefix·고유 suffix 및 고유 prompt를 포함한다. Network/peer 성능은 실제 transport 및 장비 검증 전에는 주장하지 않는다. 본 PR의 구현 상태는 아직 미구현이다.
+현재 serving 기준은 vLLM prefix caching이 명시적으로 꺼져 있다. 새 cache-hit 및 cache-miss 실험에서는 양쪽 caching 설정, KV memory 상한과 workload를 맞추고 기존 cache-off 결과를 별도 유지한다. 세 개 반복 prompt만으로 일반화하지 않고 공유 prefix·고유 suffix 및 고유 prompt를 포함한다. Network/peer 성능은 실제 transport 및 장비 검증 전에는 주장하지 않는다.
+
+## 재개: host page 수명 기반
+
+`KvBlockPool::lease_prefix`는 pending/poison 상태를 거부하고, committed prefix의 generation-bound page에 non-cloneable `KvReadLease`를 발급한다. Sequence close/reset/orphan reclaim은 sequence 소유권을 해제하되 마지막 read lease가 끝나기 전까지 page와 sidecar를 반환하지 않는다. Allocated count에는 이렇게 보류된 page도 포함된다. 중복 lease 해제는 no-op이며 다른 pool에 대한 해제 실패는 원래 token을 보존한다.
+
+Lease가 있는 page에 쓰는 append는 `ImmutableBlock`으로 거부한다. Full-page prefix 뒤 새 page append는 허용하며, truncate로 partial page가 된 경우에도 보호한다. 아직 COW를 실행하는 기능은 아니다. 이 host token 자체는 CUDA event가 아니므로 acquisition은 device write 완료 후, release는 모든 reader의 device 작업 완료 후 호출해야 한다. Token을 버려도 자동 해제하지 않아 미완료 reader의 page가 재사용되지 않는다.
+
+남은 필수 범위는 identity descriptor, shared-prefix sequence import, partial-page COW, CUDA completion과 transport ticket 연결, local adapter, 모델/serving 연결 및 cache-hit/cache-miss 비교다. 이 기반 작업으로 PR10 완료나 serving 성능 개선을 주장하지 않는다. 기본 serving 경로에는 lease를 발급하는 호출을 아직 넣지 않았다.
+
+Host 검증: `cargo test -p riley-runtime --lib` 334 passed / 1 ignored / 0 failed. 이후 overflow/stale-completion 원자성 테스트를 추가한 최종 `cargo test -p riley-runtime --lib paged_kv --quiet`는 23 passed / 0 failed. `cargo test -p riley-scheduler --lib --quiet`는 48 passed / 0 failed. 새 테스트는 lease 회수 지연·중복 완료·foreign pool·partial/full-page append·truncate/reset·generation 재사용·overflow 실패 원자성을 확인한다. 이 단계에서는 새 GPU/serving 측정을 실행하지 않았다.

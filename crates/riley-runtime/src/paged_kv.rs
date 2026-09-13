@@ -71,6 +71,9 @@ pub enum PagedKvError {
     NoReservationInProgress,
     ReservationMismatch,
     ReservationNonceExhausted,
+    ImmutableBlock {
+        physical_index: u32,
+    },
     Poisoned,
     CorruptSequenceState {
         reason: &'static str,
@@ -106,6 +109,10 @@ pub enum PagedKvError {
 impl fmt::Display for PagedKvError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ImmutableBlock { physical_index } => write!(
+                formatter,
+                "physical KV block {physical_index} has a live read lease; copy before append"
+            ),
             Self::InvalidConfiguration { field, reason } => {
                 write!(
                     formatter,
@@ -595,6 +602,7 @@ impl<'a> BlockMetadataView<'a> {
 struct BlockSlot {
     generation: u64,
     owner: Option<SequenceId>,
+    read_leases: usize,
     sidecar: Option<OptionalBlockMetadata>,
 }
 
@@ -680,6 +688,8 @@ impl KvBlockPoolStats {
 }
 
 /// Deterministic, fixed-capacity physical block allocator.
+///
+/// Allocated counts include unowned pages retained by read leases.
 pub struct KvBlockPool {
     cookie: u64,
     layout: KvLayout,
@@ -695,6 +705,33 @@ pub struct KvBlockPool {
     maximum_allocation_latency_ns: u64,
 }
 
+/// Non-cloneable immutable page hold for a cache or an in-flight reader.
+///
+/// This is host ownership only, not a device completion event. Release only
+/// after all device reads have completed, including cancelled transfers.
+/// Dropping without release conservatively retains the pages until pool teardown.
+#[derive(Debug)]
+#[must_use = "release the lease after readers quiesce or its pages remain retained"]
+pub struct KvReadLease {
+    pool_cookie: u64,
+    blocks: Option<Box<[BlockId]>>,
+    logical_length: u32,
+}
+
+impl KvReadLease {
+    /// Generation-bound pages; empty after release.
+    #[must_use]
+    pub fn blocks(&self) -> &[BlockId] {
+        self.blocks.as_deref().unwrap_or(&[])
+    }
+
+    /// Original immutable prefix length, including a possible partial last page.
+    #[must_use]
+    pub const fn logical_length(&self) -> u32 {
+        self.logical_length
+    }
+}
+
 impl fmt::Debug for KvBlockPool {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -707,6 +744,93 @@ impl fmt::Debug for KvBlockPool {
 }
 
 impl KvBlockPool {
+    /// Pins a committed prefix. The caller must have completed its device writes.
+    /// Pending or poisoned sequences cannot be exported. No changes occur on error.
+    ///
+    /// # Errors
+    /// Rejects invalid lengths, ownership, allocation failure or reference overflow.
+    pub fn lease_prefix(
+        &mut self,
+        sequence: &SequenceState,
+        logical_length: usize,
+    ) -> PagedKvResult<KvReadLease> {
+        sequence.ensure_pool(self)?;
+        sequence.ensure_readable()?;
+        if logical_length == 0 || logical_length > sequence.logical_length as usize {
+            return Err(PagedKvError::InvalidConfiguration {
+                field: "prefix_length",
+                reason: "must be nonzero and within the committed sequence",
+            });
+        }
+        let count = blocks_for_length(logical_length);
+        let mut blocks = Vec::new();
+        blocks.try_reserve_exact(count).map_err(|_| {
+            PagedKvError::HostAllocation {
+                resource: "read_lease",
+                requested_elements: count,
+            }
+        })?;
+        for index in 0..count {
+            let block = sequence.allocated_block(index)?;
+            self.validate_block(block, sequence.sequence_id)?;
+            self.slots[block.physical_index as usize]
+                .read_leases
+                .checked_add(1)
+                .ok_or(PagedKvError::ArithmeticOverflow { field: "read_leases" })?;
+            blocks.push(block);
+        }
+        for block in &blocks {
+            self.slots[block.physical_index as usize].read_leases += 1;
+        }
+        Ok(KvReadLease {
+            pool_cookie: self.cookie,
+            blocks: Some(blocks.into_boxed_slice()),
+            // The validated committed sequence length already fits U32.
+            logical_length: logical_length as u32,
+        })
+    }
+
+    /// Releases an immutable hold after the caller has quiesced all its readers.
+    /// Duplicate completion is a no-op. A foreign-pool error preserves the token.
+    ///
+    /// # Errors
+    /// Rejects foreign or stale handles before decrementing any references.
+    pub fn release_read_lease(&mut self, lease: &mut KvReadLease) -> PagedKvResult<()> {
+        if lease.pool_cookie != self.cookie {
+            return Err(PagedKvError::ForeignPool {
+                expected_cookie: self.cookie,
+                actual_cookie: lease.pool_cookie,
+            });
+        }
+        for &block in lease.blocks() {
+            self.validate_block_index(block)?;
+            let slot = &self.slots[block.physical_index as usize];
+            if slot.generation != block.generation {
+                return Err(PagedKvError::StaleBlock {
+                    physical_index: block.physical_index,
+                    handle_generation: block.generation,
+                    current_generation: slot.generation,
+                });
+            }
+            if slot.read_leases == 0 {
+                return Err(PagedKvError::CorruptSequenceState {
+                    reason: "missing read lease",
+                });
+            }
+        }
+        if let Some(blocks) = lease.blocks.take() {
+            for block in blocks.iter().rev() {
+                let index = block.physical_index as usize;
+                let slot = &mut self.slots[index];
+                slot.read_leases -= 1;
+                if slot.read_leases == 0 && slot.owner.is_none() {
+                    self.recycle_unowned_slot(index);
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Preallocates every slot and the deterministic LIFO free list.
     ///
     /// Initial allocation order is physical `0, 1, ...`. Releasing a sequence
@@ -730,6 +854,7 @@ impl KvBlockPool {
             slots.push(BlockSlot {
                 generation: 0,
                 owner: None,
+                read_leases: 0,
                 sidecar: None,
             });
         }
@@ -878,6 +1003,8 @@ impl KvBlockPool {
     /// # Errors
     ///
     /// Returns when the orphan proof belongs to another pool.
+    /// The returned count is detached sequence blocks; leased blocks remain
+    /// allocated until their readers complete.
     pub fn reclaim_sequence(&mut self, token: &SequenceReclaimToken) -> PagedKvResult<usize> {
         let owner = token.owner;
         if owner.pool_cookie() != self.cookie {
@@ -929,6 +1056,7 @@ impl KvBlockPool {
         })?;
         let slot = &mut self.slots[physical_index as usize];
         debug_assert!(slot.owner.is_none());
+        debug_assert_eq!(slot.read_leases, 0);
         debug_assert!(slot.sidecar.is_none());
         let Some(generation) = slot.generation.checked_add(1) else {
             self.free_list.push(physical_index);
@@ -954,6 +1082,16 @@ impl KvBlockPool {
     fn release_slot(&mut self, index: usize) {
         let slot = &mut self.slots[index];
         debug_assert!(slot.owner.is_some());
+        slot.owner = None;
+        if slot.read_leases != 0 {
+            return;
+        }
+        self.recycle_unowned_slot(index);
+    }
+
+    fn recycle_unowned_slot(&mut self, index: usize) {
+        let slot = &mut self.slots[index];
+        debug_assert!(slot.owner.is_none() && slot.read_leases == 0);
         if let Some(sidecar) = slot.sidecar.take() {
             self.sidecar_count -= 1;
             self.sidecar_device_bytes -= sidecar.device_view().byte_len();
@@ -1354,6 +1492,19 @@ impl SequenceState {
             let tail = self.allocated_block(self.allocated_block_count - 1)?;
             pool.validate_block(tail, self.sequence_id)?;
         }
+        // A truncated sequence can retain an immutable page whose valid range
+        // exceeds its current length. Any append into that page needs COW.
+        if target_logical_length > self.logical_length as usize {
+            let first_written = self.logical_length as usize / KV_BLOCK_SIZE;
+            for index in first_written..self.allocated_block_count {
+                let block = self.allocated_block(index)?;
+                if pool.slots[block.physical_index as usize].read_leases != 0 {
+                    return Err(PagedKvError::ImmutableBlock {
+                        physical_index: block.physical_index,
+                    });
+                }
+            }
+        }
         let nonce = self.next_reservation_nonce;
         let next_nonce = nonce
             .checked_add(1)
@@ -1636,7 +1787,8 @@ impl SequenceState {
         Ok(())
     }
 
-    /// Returns every physical block while retaining retryable empty host state.
+    /// Releases sequence ownership while retaining retryable empty host state.
+    /// Read-leased pages return to the free list only after their last lease.
     ///
     /// # Errors
     ///
@@ -1855,6 +2007,115 @@ fn next_pool_cookie() -> PagedKvResult<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_leases_retain_orphans_until_last_completion() {
+        let mut pool = pool(2);
+        let mut sequence = pool.create_sequence(32).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 17);
+        let mut first = pool.lease_prefix(&sequence, 17).unwrap();
+        let old = first.blocks()[0];
+        let mut second = pool.lease_prefix(&sequence, 16).unwrap();
+        let token = sequence.abandon_for_reclaim();
+        assert_eq!(pool.reclaim_sequence(&token).unwrap(), 2);
+        assert_eq!(pool.stats().allocated_block_count(), 2);
+        assert_eq!(pool.reclaim_sequence(&token).unwrap(), 0);
+        pool.release_read_lease(&mut first).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        pool.release_read_lease(&mut first).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        pool.release_read_lease(&mut second).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+        let mut next = pool.create_sequence(16).unwrap();
+        reserve_and_commit(&mut next, &mut pool, 1);
+        let new = next.allocated_block(0).unwrap();
+        assert_eq!(old.physical_index, new.physical_index);
+        assert!(new.generation > old.generation);
+        pool.release_read_lease(&mut second).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        next.close(&mut pool).unwrap();
+    }
+
+    #[test]
+    fn read_lease_blocks_partial_page_append_but_not_full_page_append() {
+        for length in [1, 15, 16, 17, 31, 32] {
+            let mut pool = pool(4);
+            let mut sequence = pool.create_sequence(64).unwrap();
+            reserve_and_commit(&mut sequence, &mut pool, length);
+            let mut lease = pool.lease_prefix(&sequence, length).unwrap();
+            let before = pool.stats();
+            if length % KV_BLOCK_SIZE == 0 {
+                reserve_and_commit(&mut sequence, &mut pool, length + 1);
+            } else {
+                assert!(matches!(sequence.reserve_to(&mut pool, length + 1),
+                    Err(PagedKvError::ImmutableBlock { .. })));
+                assert_eq!(pool.stats(), before);
+                assert_eq!(sequence.block_table().unwrap().logical_length() as usize, length);
+            }
+            pool.release_read_lease(&mut lease).unwrap();
+            reserve_and_commit(&mut sequence, &mut pool, length + 2);
+            sequence.close(&mut pool).unwrap();
+            assert_eq!(pool.stats().allocated_block_count(), 0);
+        }
+    }
+
+    #[test]
+    fn read_lease_rejects_pending_and_foreign_release_without_changes() {
+        let mut other = pool(2);
+        let mut pool = pool(2);
+        let mut sequence = pool.create_sequence(32).unwrap();
+        let reservation = sequence.reserve_to(&mut pool, 17).unwrap();
+        assert!(matches!(pool.lease_prefix(&sequence, 1), Err(PagedKvError::ReservationInProgress)));
+        sequence.commit(&mut pool, reservation).unwrap();
+        let mut lease = pool.lease_prefix(&sequence, 17).unwrap();
+        assert!(matches!(other.release_read_lease(&mut lease), Err(PagedKvError::ForeignPool { .. })));
+        assert_eq!(lease.blocks().len(), 2);
+        sequence.close(&mut pool).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 2);
+        pool.release_read_lease(&mut lease).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+    }
+
+    #[test]
+    fn truncation_cannot_make_a_leased_page_writable() {
+        let mut pool = pool(3);
+        let mut sequence = pool.create_sequence(48).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 32);
+        let mut lease = pool.lease_prefix(&sequence, 32).unwrap();
+        sequence.truncate_to(&mut pool, 15).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 2);
+        assert!(matches!(sequence.reserve_to(&mut pool, 16), Err(PagedKvError::ImmutableBlock { .. })));
+        sequence.reset(&mut pool).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 1);
+        assert_eq!(pool.stats().allocated_block_count(), 3);
+        assert!(!lease.blocks().contains(&sequence.allocated_block(0).unwrap()));
+        pool.release_read_lease(&mut lease).unwrap();
+        sequence.close(&mut pool).unwrap();
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+    }
+
+    #[test]
+    fn lease_overflow_and_stale_completion_are_atomic() {
+        let mut pool = pool(2);
+        let mut sequence = pool.create_sequence(32).unwrap();
+        reserve_and_commit(&mut sequence, &mut pool, 17);
+        let tail = sequence.allocated_block(1).unwrap().physical_index as usize;
+        pool.slots[tail].read_leases = usize::MAX;
+        assert!(matches!(pool.lease_prefix(&sequence, 17),
+            Err(PagedKvError::ArithmeticOverflow { field: "read_leases" })));
+        let head = sequence.allocated_block(0).unwrap().physical_index as usize;
+        assert_eq!(pool.slots[head].read_leases, 0);
+        pool.slots[tail].read_leases = 0;
+        let mut lease = pool.lease_prefix(&sequence, 17).unwrap();
+        // Private fault injection: public callers cannot forge a lease generation.
+        lease.blocks.as_mut().unwrap()[1].generation += 1;
+        assert!(matches!(pool.release_read_lease(&mut lease), Err(PagedKvError::StaleBlock { .. })));
+        assert_eq!(pool.slots[head].read_leases, 1);
+        assert_eq!(pool.slots[tail].read_leases, 1);
+        lease.blocks.as_mut().unwrap()[1].generation -= 1;
+        pool.release_read_lease(&mut lease).unwrap();
+        sequence.close(&mut pool).unwrap();
+    }
 
     #[test]
     fn reserved_prefix_views_preserve_full_target_and_reject_before_write() {
