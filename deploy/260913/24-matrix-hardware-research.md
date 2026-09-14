@@ -54,3 +54,17 @@ Runtime은 Rust → C ABI → CUDA를 유지한다. FA4의 Python/CuTe-DSL 구�
 3. 일반 vendor GEMM과 비교할 때 K320 BF16 부분합 경계를 명시한다. 이 경계를 무시한 더 빠른 GEMM은 현 수치 계약의 대체 증거가 아니다. 동일 계약을 유지하는 pipeline 변경 또는 별도 품질 검증이 필요한 backend로 나누어 평가한다.
 
 이 대조 결과로 FFN의 단순 buffering/threshold 후보는 후순위로 내린다. 다음 GPU 연구 계측은 attention correction 빈도와 FFN stall을 같은 대표 shape 집합에서 확인해, 실제 절약 가능한 비용이 큰 영역 하나를 선택한다. 현재 serving 검증이 끝나기 전에는 실행하지 않는다.
+
+## 요청 간 shared-prefix attention — 새로운 실행 구조 후보
+
+[Hydragen](https://arxiv.org/abs/2402.05099)은 공통 prefix와 개별 suffix의 attention을 분해하고 여러 요청의 query를 묶어 prefix를 행렬곱으로 처리한다. [FlashInfer recursive attention](https://docs.flashinfer.ai/tutorials/recursive_attention.html)은 segment별 attention state 병합을 설명한다. 이 자료들의 exact attention은 실수 수식의 동등성을 뜻하며 현재 BF16 rounding 순서의 동일성을 보장하는 근거로 사용하지 않는다.
+
+C32 보관 archive의 `serving/fixtures.json`을 직접 확인했다. Shared 32개 fixture는 공통 선두 404 tokens/완전한 16-token page 25개, 전체 prompt 길이 498–518이다. Unique 576개는 공통 선두 0 tokens, 길이 552–603이다. 이는 입력 token 구조의 증거이며 실제 각 iteration의 resident physical-page 공유량이나 HBM cache miss 측정은 아니다.
+
+**검토할 batch:**
+
+1. 검증된 ownership ledger에서 같은 logical position의 immutable physical pages를 공유하는 활성 요청을 묶는다. Token prefix만 같다는 이유로 서로 다른 physical pages를 alias하지 않는다. 그룹 계산 비용·유효 기간·취소와 재할당에 따른 무효화를 포함한다.
+2. 각 요청의 고유 tail을 원래 역순 128-token recurrence로 처리한 뒤, 공통으로 정렬된 KV tile에서 여러 요청 query가 K/V를 재사용하도록 한다. 요청별 maximum, denominator, accumulator, BF16 probability 경계와 K16 순서를 유지하는 설계를 먼저 검토한다. 독립 state를 merge하는 Hydragen 원형과는 구별한다.
+3. 그룹이 작거나 prefix가 짧은 경우 기존 경로를 사용하고, bounded metadata/scratch를 graph replay에 결합한다. Prefix 일치가 없는 unique에서 grouping overhead로 회귀하지 않는지 함께 측정한다.
+
+기존 GQA staging은 같은 요청의 세 query head를 묶었지만 이 후보는 여러 요청을 묶는다. 다만 둘 다 추가 shared memory·barrier·register 비용을 지불하므로 과거 GQA serving 회귀를 무시하지 않는다. Group 크기/공통 aligned tile 수의 실측이 충분할 때만 native 구현으로 진행한다. 먼저 현재 compact decode의 실제 dispatch와 소유권 metadata 경로를 추적해야 한다. 이 후보는 4090에서도 연구 가능하고 Hopper/Blackwell 전용 pipeline으로 확장할 여지가 있으며, runtime Python을 요구하지 않는다.
