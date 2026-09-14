@@ -1,0 +1,25 @@
+{
+  "archive_sha256": "7567b683375ec39e6f58228da46c9a3b037d16c7f339f27ead977fcc2342f5c3",
+  "files": {
+    "build/binary.json": "27345e81ec4ffcda33faab760cb9d5b209384acf1fc261f496235cfa0cf733fa",
+    "build/build.log": "d116e858f2bf38b09d7b1fc6cd54b21fec28a73fa9cf2b770da098a2ab0c581a",
+    "build/exit.json": "124fd50cb6d223cdd18fedc166d00af7254199b6e6dedf9be82f71db87af6d01",
+    "build/cargo.jsonl": "58fc3c0b3027c54e12f02c42fcdb732a66398f5ae67f9ff222771b82cb5ae9d2",
+    "model/model.log": "8b079933c9fc12515796b037fa40f18b89bb4e50419d59a15af7bf44d19bba77",
+    "model/complete.txt": "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1",
+    "model/execution.json": "52ba4a27491d5ece57df13fc85d26ba661eefa4302d5eda93dc902617693c8d4",
+    "model/blender-restored.json": "b0bc5022c387fa8512cd2d37704a34dc53f0a11f5e4909a268ec3937ab31c583",
+    "model/memcheck.log": "7775668106baac6eeea620f06664c507f013dbd0a317426b9230eef2a69e9575",
+    "failed-controller/blender-restored.json": "a056b35ef56a58550134295e9ce7049f6f38146a3bc8cdcb9857015b1a3a30b6"
+  },
+  "source_snapshot_sha256": "fc8f587398118e3dd35558611c8def904c5f89864ceba111bb2ce81367aa7178",
+  "sources": {
+    "kernels/src/mixed_attention_v49.cuh": "efec09ba4c95d518a5e8818d5ab7c9c373d75bd854421013c69fb528f0ebdc63",
+    "kernels/src/mixed_model_v49.cuh": "5ce3acad5532afb93f3d694470ac80a811e881d8e46d0ef12c6a4916632cb1c7",
+    "kernels/src/graph_resources.cu": "992f0cc15bd41636e85bba771f356f364cd0c6ed9a1cd8e0025fb7a61350db0f",
+    "kernels/src/graph_numerics_precise.cu": "f16f38f7bd42a51066f86ad23b60e371188791f80aa6df810d7943b85ef9de30",
+    "kernels/src/ffi_internal.hpp": "ad8dfddc2a63e2adbed5eb330a75ad948a9082e20ff5500cfc897badb8226819",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "99658f295a75d4d55641790234767d30d6214a5bc3d0f3045d1163ca2581947d",
+    "crates/riley-scheduler/tests/prefix_cache_model_gpu.rs": "2b55680cccdd2a5048642fd1634efbc4fdfa768fb11945d383b39059f5d2d244"
+  }
+}

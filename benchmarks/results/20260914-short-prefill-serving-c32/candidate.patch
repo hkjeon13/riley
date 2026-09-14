@@ -1,0 +1,126 @@
+diff --git a/crates/riley-runtime/src/llama/graph_decode_full.rs b/crates/riley-runtime/src/llama/graph_decode_full.rs
+index 0e070ce7..2bf51b1e 100644
+--- a/crates/riley-runtime/src/llama/graph_decode_full.rs
++++ b/crates/riley-runtime/src/llama/graph_decode_full.rs
+@@ -2115,7 +2115,7 @@ impl PreparedLlamaBatchExecutor {
+         }
+         if scratch.ffn_split {
+             if scratch.ffn_adaptive || !scratch.projection_pipeline {return Err(rejected("split FFN requires independent projection profile"));}
+-            hash.update(b"riley.experimental.prefill-ffn-split.v1");
++            hash.update(b"riley.experimental.prefill-ffn-split.v2.short-prefill");
+             hash.update(include_bytes!("../../../../kernels/optional/prefill_ffn_row_reuse.cuh"));
+         }
+         if scratch.ffn_adaptive {
+diff --git a/crates/riley-scheduler/tests/prefix_cache_model_gpu.rs b/crates/riley-scheduler/tests/prefix_cache_model_gpu.rs
+index 7aa7bd5f..28893578 100644
+--- a/crates/riley-scheduler/tests/prefix_cache_model_gpu.rs
++++ b/crates/riley-scheduler/tests/prefix_cache_model_gpu.rs
+@@ -127,5 +127,10 @@ fn ffn_split_matches_full_model_logits()->TestResult<()> {
+     let shared=vec![vec![17;128];4];
+     let baseline=run(true,&shared,3)?;let reuse=run(true,&shared,5)?;
+     for (a,b) in baseline.iter().zip(&reuse){assert_eq!(a,b,"cached split FFN changed full model logits");}
++    // Full-page cache hits leave 1..16 inputs; revisit each prompt to exercise all tails.
++    let tails:Vec<Vec<u32>>=(1..=16).map(|n|vec![30+n as u32;128+n]).collect();
++    let repeated:Vec<Vec<u32>>=tails.iter().flat_map(|p|[p.clone(),p.clone()]).collect();
++    let baseline=run(true,&repeated,3)?;let candidate=run(true,&repeated,5)?;
++    for (a,b) in baseline.iter().zip(&candidate){assert_eq!(a,b,"short prefill changed full model logits");}
+     println!("ffn-split exact_logits_bytes={}",cold.iter().chain(&baseline).map(Vec::len).sum::<usize>());Ok(())
+ }
+diff --git a/kernels/src/ffi_internal.hpp b/kernels/src/ffi_internal.hpp
+index 6a5df3cb..ed02e889 100644
+--- a/kernels/src/ffi_internal.hpp
++++ b/kernels/src/ffi_internal.hpp
+@@ -2443,6 +2443,7 @@ cudaError_t enqueue_compiled_v7_query_reuse_model(cudaStream_t,void*const*,const
+ cudaError_t enqueue_compiled_v7_gqa_staging_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v7_context_split_mixed_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled,uint32_t context,void* split_workspace) noexcept;
+ cudaError_t enqueue_compiled_v7_projection_pipeline_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
++cudaError_t enqueue_compiled_v7_short_prefill_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v7_verification_attention_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v7_ffn_adaptive_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+ cudaError_t enqueue_compiled_v7_ffn_m32_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+diff --git a/kernels/src/graph_numerics_precise.cu b/kernels/src/graph_numerics_precise.cu
+index a49bdc04..3242b34f 100644
+--- a/kernels/src/graph_numerics_precise.cu
++++ b/kernels/src/graph_numerics_precise.cu
+@@ -407,6 +407,9 @@ cudaError_t enqueue_compiled_v7_context_split_mixed_model(cudaStream_t s,void*co
+ cudaError_t enqueue_compiled_v7_projection_pipeline_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+  return enqueue_mixed_model_v7<32,true,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+ }
++cudaError_t enqueue_compiled_v7_short_prefill_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
++ return enqueue_mixed_model_v7<32,true,false,false,false,true,false,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
++}
+ cudaError_t enqueue_compiled_v7_verification_attention_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+  return enqueue_mixed_model_v7<32,true,false,false,false,true,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+ }
+@@ -414,7 +417,7 @@ cudaError_t enqueue_compiled_v7_ffn_adaptive_model(cudaStream_t s,void*const* d,
+  return enqueue_mixed_model_v7<32,true,false,false,false,true,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+ }
+ cudaError_t enqueue_compiled_v7_ffn_m32_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+- return enqueue_mixed_model_v7<32,true,false,false,false,true,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
++ return enqueue_mixed_model_v7<32,true,false,false,false,true,false,true,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+ }
+ cudaError_t enqueue_compiled_v7_prefill_ffn_pipeline_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+  return enqueue_mixed_model_v7<32,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+diff --git a/kernels/src/graph_resources.cu b/kernels/src/graph_resources.cu
+index f4546222..6575e8f2 100644
+--- a/kernels/src/graph_resources.cu
++++ b/kernels/src/graph_resources.cu
+@@ -1564,7 +1564,7 @@ static RileyCudaStatus record_variable_shared(
+    if constexpr(ContextSplit) {
+     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_context_split_mixed_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,true,std::min<uint64_t>(4096,d[14]->byte_len/128),split_workspace->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental consistent context split model");
+    } else
+-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((verify_wide?enqueue_compiled_v7_verification_attention_model:FfnSplit && ffn_large?enqueue_compiled_v7_ffn_m32_model:FfnAdaptive?enqueue_compiled_v7_ffn_adaptive_model:ProjectionPipeline?enqueue_compiled_v7_projection_pipeline_model:GqaStaging?enqueue_compiled_v7_gqa_staging_model:QueryReuse?enqueue_compiled_v7_query_reuse_model:PrefillFfnPipeline?enqueue_compiled_v7_prefill_ffn_pipeline_model:Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
++   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((verify_wide?enqueue_compiled_v7_verification_attention_model:FfnSplit?(ffn_large?enqueue_compiled_v7_ffn_m32_model:enqueue_compiled_v7_short_prefill_model):FfnAdaptive?enqueue_compiled_v7_ffn_adaptive_model:ProjectionPipeline?enqueue_compiled_v7_projection_pipeline_model:GqaStaging?enqueue_compiled_v7_gqa_staging_model:QueryReuse?enqueue_compiled_v7_query_reuse_model:PrefillFfnPipeline?enqueue_compiled_v7_prefill_ffn_pipeline_model:Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
+    if(verify_wide){
+     if(result==RILEY_CUDA_STATUS_SUCCESS){riley_speculative_select::gather<256><<<256,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[1]->device_data),static_cast<__nv_bfloat16*>(d[17]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"wide verification gather");}
+     if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"wide verification head");
+diff --git a/kernels/src/mixed_attention_v49.cuh b/kernels/src/mixed_attention_v49.cuh
+index f203b626..28b319ce 100644
+--- a/kernels/src/mixed_attention_v49.cuh
++++ b/kernels/src/mixed_attention_v49.cuh
+@@ -190,6 +190,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
+   if(valid[h])for(int b=0;b<8;++b)for(int z=0;z<2;++z)out[(qr[h]*9+qh)*64+b*8+2*t+z]=__float2bfloat16_rn(accum[b][h*2+z]*inverse);
+  }
+ }
++template<bool ShortPrefill=false>
+ __global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta,bool skip_decode=false,bool skip_prefill=false){
+  const uint32_t active=meta[5],total=meta[9],tiles=meta[24],tile=blockIdx.x;
+  if(!active||active>32||!total||total>capacity||!tiles||tiles>total||tile>=tiles)return;
+@@ -197,6 +198,15 @@ __global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,c
+  if(owner>=active)return;const uint32_t* shape=meta+32+owner*416;const uint32_t count=shape[2],offset=shape[16],nt=count<32?count:(count+7)/8;
+  if((skip_decode&&shape[18]==1)||(skip_prefill&&shape[18]==0))return;
+  if(!count||offset>total||count>total-offset||local>=nt)return;
++ // Keep the wire tile directory stable; excess short-prefill entries do no work.
++ // Only stage-0 prefill uses reuse. Decode and verification retain their dispatch.
++ if constexpr(ShortPrefill){
++  if(shape[18]==0 && count>1 && count<=16){
++   if(local>=(count+7)/8)return;
++   attention_body<8,true>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
++   return;
++  }
++ }
+  attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
+ }
+ 
+diff --git a/kernels/src/mixed_model_v49.cuh b/kernels/src/mixed_model_v49.cuh
+index a4abb00b..59e32b89 100644
+--- a/kernels/src/mixed_model_v49.cuh
++++ b/kernels/src/mixed_model_v49.cuh
+@@ -29,7 +29,7 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16*
+  if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
+  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
+ }
+-template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false,bool GqaStaging=false,bool ProjectionPipeline=false,bool FfnAdaptive=false,bool FfnM32=false,bool ContextSplit=false,bool VerificationAttention=false>
++template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false,bool GqaStaging=false,bool ProjectionPipeline=false,bool FfnAdaptive=false,bool FfnM32=false,bool ContextSplit=false,bool VerificationAttention=false,bool ShortPrefill=false>
+ inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
+  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
+  uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false,void* split_workspace=nullptr){
+@@ -89,7 +89,7 @@ if constexpr(Fa3) {
+   if constexpr(VerificationAttention)riley_verification_attention::mapped<<<dim3(32,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+   else if constexpr(GqaStaging)riley_gqa_staging::mapped<true><<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+   else if constexpr(QueryReuse)riley_query_reuse::mapped<true><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
+-  else riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,ContextSplit || (attention_workspace!=nullptr&&!prefill_only),attention_workspace!=nullptr&&prefill_only);
++  else riley_mixed_attention::mapped_attention<ShortPrefill><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,ContextSplit || (attention_workspace!=nullptr&&!prefill_only),attention_workspace!=nullptr&&prefill_only);
+   if constexpr(ContextSplit) {
+    err=riley_split_fp32::enqueue_mixed(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),meta,static_cast<riley_split_fp32::MixedWorkspace*>(split_workspace),capacity,context);
+    if(err!=cudaSuccess)return err;
