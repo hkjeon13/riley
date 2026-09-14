@@ -143,6 +143,38 @@ mod tests {
         assert_eq!(s.prefix_cache_stats(),(1,2,0,0));assert_eq!(s.pool_stats().allocated_block_count(),2);
     }
     #[test]
+    fn wide_verification_keeps_cached_prefixes_immutable_through_rejection_and_cancel() {
+        for cancel in [false,true] {
+            let layout=KvLayout::checked(30,16,3,64).unwrap();
+            let mut config=scheduler().config().clone();config.max_promised_kv_blocks=16;
+            let mut s=Scheduler::new_with_execution_shape(config,layout,ExecutionShapePolicy::MixedPrefillDecode32).unwrap();
+            s.enable_prefix_cache(KvIdentity{model_revision:[1;32],numerical_profile:[2;32],position_encoding:[3;32],partition:[4;32],layout:layout.into()},1,2).unwrap();
+            warm(&mut s);
+            let mut ids=Vec::new();
+            for _ in 0..2 {ids.push(s.submit(RequestDescriptor::new(vec![17;33],16),3).unwrap().request_id());}
+            let p=s.plan_iteration(4).unwrap().into_parts().0.unwrap();
+            let outputs=p.output_slots().iter().map(|&slot|IterationOutput::new(slot,17,false)).collect();
+            s.complete_iteration(&IterationResult::new(p.iteration_id(),outputs,0,0).unwrap(),5).unwrap();
+            assert_eq!(s.prefix_cache_stats().2,2);
+            let p=s.plan_wide_speculative_iteration(6,None).unwrap().unwrap();
+            let owner=crate::authority::VariableOwnerGeometry{generation:1,last_accepted_replay:0,catalog_digest:[9;32],max_active_rows:32,physical_block_count:16,context_tokens:64,packed_prefill:true,mixed_execution:true,shared_prefixes:true};
+            let auth=s.authorize_speculative_execution(&p).unwrap();
+            let e=auth.verification_expectation(&owner,1,&[1,2]).unwrap();
+            assert!(e.shared_prefixes);
+            assert_eq!(&e.rows[0].physical_ids[..2],&e.rows[1].physical_ids[..2]);
+            assert_ne!(e.rows[0].physical_ids[2],e.rows[1].physical_ids[2]);
+            drop(auth);
+            if cancel {s.cancel(ids[0],7).unwrap();}
+            let targets=p.rows().iter().map(|r|vec![19;r.inputs().len()]).collect::<Vec<_>>();
+            let updates=s.complete_speculative_iteration(&p,&targets,8,crate::IterationTiming::default()).unwrap();
+            assert!(updates.settlement_failures().is_empty());
+            assert_eq!(updates.token_events().len(),if cancel{1}else{2});
+            assert_eq!(s.prefix_cache_stats().1,2);
+            s.close(9,None).unwrap();
+        }
+    }
+
+    #[test]
     fn shared_prefix_capacity_counts_unique_pages_and_keeps_all_lease_owners() {
         let layout=KvLayout::checked(30,16,3,64).unwrap();
         let mut s=Scheduler::new_with_execution_shape(SchedulerConfig {

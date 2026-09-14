@@ -137,3 +137,21 @@ are not performance evidence. Fixed M256 costs, shared-prefix ownership/COW,
 serving selection, fallback and matched vLLM measurements remain to be resolved.
 Do not disable prefix caching to present an unmatched serving comparison as
 qualification. No runtime Python or default policy promotion is introduced.
+
+### Immutable shared-prefix verification — 2026-09-14
+
+Connected wide verification to retained immutable prefix ownership. Host checks
+include off-batch cache/read leases; native checks enforce logical-position
+agreement and no shared writes. Existing full-page cache leaves private tails;
+append into a genuinely shared writable page still requires COW and is rejected.
+C32 warmed-cache generation: 1,024 exact tokens, 629 accepted drafts, 39 serial
+calls versus 33 wide calls; each lane records 52 cache hits / 6,640 reused tokens.
+Normal and full-model memcheck pass. This remains a correctness gate.
+Evidence: `benchmarks/results/20260914-speculative-shared-wide/README.md`.
+
+The remaining serving integration must stage detokenized output for every accepted
+position, truncate KV/output together on stop string or stop token, preserve
+cancellation and commit-before-publication, and expose acceptance/work counters.
+Do not publish multiple scheduler tokens through the current single-token staging
+path unchanged. Compare actual serving after that integration; no new throughput
+or vLLM improvement is established by the call counts above.

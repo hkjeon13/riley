@@ -1,0 +1,37 @@
+{
+  "archive_sha256": "509aeda364c2109cf39ee9f81af87e1636496d2ede6e76f9eea7b808e687f32e",
+  "files": {
+    "speculative-shared-wide-lifecycle-v1/blender-restored.json": "ac2b767a110d0d7a8c2f6e41b0a9d24ae836852d36b3940ba97b876d9f0dd1ca",
+    "speculative-shared-wide-lifecycle-v1/complete.txt": "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1",
+    "speculative-shared-wide-lifecycle-v1/execution.json": "a7c35e69c36f734f378da8b62629cf7d87dc6a4d95d1650538f2d8b56537beaf",
+    "speculative-shared-wide-lifecycle-v1/logits/cases.json": "e8a0fc1eaabf7147537cd483979341eff188a5109369dd1294321cce8ff237a0",
+    "speculative-shared-wide-lifecycle-v1/logits/generation.json": "d20f84477257a12b7797d1470d6082b2eac072405cc063838a56aa0b56fa544e",
+    "speculative-shared-wide-lifecycle-v1/memcheck-generation.json": "d20f84477257a12b7797d1470d6082b2eac072405cc063838a56aa0b56fa544e",
+    "speculative-shared-wide-lifecycle-v1/memcheck.log": "c759ea35fa2d538036a6951e01ab272401065cc2f0c8a78c9dab38ebdad8e464",
+    "speculative-shared-wide-lifecycle-v1/probe-generation.json": "d20f84477257a12b7797d1470d6082b2eac072405cc063838a56aa0b56fa544e",
+    "speculative-shared-wide-lifecycle-v1/probe.log": "a3892900cea7b938abbf3c51e23e16c4376522a514a98f442bcc14fd32063ec4",
+    "speculative-shared-wide-build-v1/build.log": "49cc563151a2de97eb4515989e984a74cfce2647c14d20b5c9cdf8e5e8a8addc",
+    "speculative-shared-wide-build-v1/cargo.jsonl": "6dd5819fe1c9f5e719dccda33db0a2f5f1ebc822941b840d617b40ae917f9a01",
+    "speculative-shared-wide-build-v1/exit.json": "2b70081b573872dcecace06d8e2b03c30a5c6b495484e8025803a64af1c1e48d",
+    "speculative-shared-wide-build-v2/binary.json": "8d7a24f3f7c6075721799e81db91f90600b16de1990f2d0ba544442b6aa6440f",
+    "speculative-shared-wide-build-v2/build.log": "74879f89bcdf71bff28b42b36e11e08d39453c7a6881c2019c896387dbd5e753",
+    "speculative-shared-wide-build-v2/cargo.jsonl": "810ef78005ef9ec8859f73e44acd28a81983862f135707c5b2ab91a26483c796",
+    "speculative-shared-wide-build-v2/exit.json": "124fd50cb6d223cdd18fedc166d00af7254199b6e6dedf9be82f71db87af6d01",
+    "speculative_shared_wide_gate_v1.py": "f9b39c939bdad7ef079626da8eecbf37360d94f98e334c9791e27d58b71d582e",
+    "build_shared_wide_v2.py": "93285aaea71f30aaafa5dc17202c6c51fd1f15bf63ff9d1db667f2eb7821e98a"
+  },
+  "sources": {
+    "crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs": "f6291adb156650f28e2fdcc299a6e4bb2e9ba41e478b8d3b7fa69dea3f11c3a8",
+    "crates/riley-runtime/src/llama/variable_session.rs": "181bc893a5dc5c43ae2c97cc760a2d7063aaf202b7dcae4c07dfc5bd0b6643cb",
+    "crates/riley-scheduler/src/scheduler/prefix_cache.rs": "979fa55fba418178960040850e31d75fbd8de4c7b85c886499031c1d70676dbc",
+    "crates/riley-scheduler/src/scheduler/speculative.rs": "cf78d6022e2654061c8ed291f0dbc90bb81d3e688b94cfdd733abdcd4bbc325b",
+    "crates/riley-scheduler/tests/speculative_serving_gpu.rs": "8216bf8f1d2bbd415e3b521e8047d9a075106e9bc36c0f7ad3c5c4a717a75ec3",
+    "kernels/src/prefill_shape_packet.hpp": "309972417520276f72a258c047c420a0157d12df394fb66acd6af834e78c97d2",
+    "benchmarks/analysis/speculative_prefix_packet_probe.cpp": "4c65aa62d7e9c815587738b6ccb183bacb8da99abb9e437868fab1097729526d"
+  },
+  "local_evidence": {
+    "wire-tests.log": "05b010881ea64b488a91773127695f5bbee46c4504730909f5dbd632038cf3b7",
+    "scheduler-tests.log": "cbf66c1573eba20d0ea6d4936c20bf72cccdcdf3702da582cb85a11fae759565",
+    "packet-probe.log": "a480d2e7560562fd461267b90808f1b9d4be843d25da1daedfd81ca134845a9b"
+  }
+}

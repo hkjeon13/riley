@@ -50,7 +50,7 @@ impl AuthorizedSpeculative<'_> {
     pub(crate) fn verification_expectation(&self,owner:&crate::authority::VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
         use crate::descriptor::{variable_wire::{Expectation,Row},shape_progress::{InputStage,Progress},BlockOwnership,ResultMode,Error};
         let bad=||Error{field:"speculative authority",reason:"owner or progress differs from live reservation"};
-        if !owner.mixed_execution || !owner.packed_prefill || owner.shared_prefixes || owner.max_active_rows!=32 || owner.physical_block_count as usize!=self.physical_block_count() || cookies.len()!=self.plan.rows.len(){return Err(bad());}
+        if !owner.mixed_execution || !owner.packed_prefill || (owner.shared_prefixes && !self.plan.wide) || owner.max_active_rows!=32 || owner.physical_block_count as usize!=self.physical_block_count() || cookies.len()!=self.plan.rows.len(){return Err(bad());}
         let mut rows=Vec::new();
         for (slot,(row,&cookie)) in self.plan.rows.iter().zip(cookies).enumerate(){
             let record=&self.scheduler.requests[self.scheduler.record_index(row.request_id).ok_or_else(bad)?];
@@ -58,7 +58,7 @@ impl AuthorizedSpeculative<'_> {
                 progress:Progress{prompt_tokens:record.descriptor.prompt_token_ids.len() as u32,output_limit:record.descriptor.max_new_tokens as u32,context_tokens:owner.context_tokens,committed_tokens:row.start,input_tokens:row.inputs.len() as u32,generated_index:record.generated_token_ids.len() as u32,stage:InputStage::Verification},
                 input_tokens:row.inputs.clone(),physical_ids:row.table.physical_block_ids().to_vec(),valid_tokens:row.table.valid_tokens().to_vec()});
         }
-        let e=Expectation{owner_generation:owner.generation,last_accepted_replay:owner.last_accepted_replay,replay_id:replay,iteration_id:self.plan.iteration_id.get(),catalog_digest:owner.catalog_digest,physical_block_count:owner.physical_block_count,max_active_rows:32,stage:InputStage::Verification,mode:if self.plan.wide{ResultMode::Greedy}else{ResultMode::FullLogits},rows,block_ownership:self.scheduler.execution_block_owners().map_err(|_|bad())?.into_iter().map(|(physical_id,id)|BlockOwnership{physical_id,sequence_tag:id.get()}).collect(),packed_prefill:true,mixed_execution:true,shared_prefixes:false};
+        let e=Expectation{owner_generation:owner.generation,last_accepted_replay:owner.last_accepted_replay,replay_id:replay,iteration_id:self.plan.iteration_id.get(),catalog_digest:owner.catalog_digest,physical_block_count:owner.physical_block_count,max_active_rows:32,stage:InputStage::Verification,mode:if self.plan.wide{ResultMode::Greedy}else{ResultMode::FullLogits},rows,block_ownership:self.scheduler.execution_block_owners().map_err(|_|bad())?.into_iter().map(|(physical_id,id)|BlockOwnership{physical_id,sequence_tag:id.get()}).collect(),packed_prefill:true,mixed_execution:true,shared_prefixes:owner.shared_prefixes};
         crate::descriptor::variable_wire::validate(&e)?;Ok(e)
     }
     pub fn physical_block_count(&self) -> usize {
@@ -87,8 +87,8 @@ impl Scheduler {
     }
 
     /// Try bounded prompt lookup after ordinary admission/prefill. None selects
-    /// ordinary scheduling. Shared prefix cache is excluded until append COW is
-    /// integrated. Never reinterpret these rows as ordinary prompt prefill.
+    /// ordinary scheduling. The narrow path excludes prefix cache; the wide path
+    /// admits immutable full-page prefixes with private writable tails. Never reinterpret these rows as ordinary prompt prefill.
     pub fn plan_speculative_iteration(&mut self,now_ns:u64,eos:Option<u32>)->SchedulerResult<Option<SpeculativePlan>>{self.plan_speculative_internal(now_ns,eos,false)}
     pub fn plan_wide_speculative_iteration(&mut self,now_ns:u64,eos:Option<u32>)->SchedulerResult<Option<SpeculativePlan>>{self.plan_speculative_internal(now_ns,eos,true)}
     fn plan_speculative_internal(
@@ -107,7 +107,7 @@ impl Scheduler {
         if eos.is_some_and(|x| x >= 49152) {
             return Err(invalid());
         }
-        if self.prefix_cache.is_some()
+        if (self.prefix_cache.is_some() && !wide)
             || !self.waiting.is_empty()
             || self.execution_shape_policy != ExecutionShapePolicy::MixedPrefillDecode32
         {

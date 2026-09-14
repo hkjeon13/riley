@@ -56,7 +56,7 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
     let verification=e.rows.iter().filter(|r|r.progress.stage==InputStage::Verification).count();
     if verification>0 {
-        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=32 && e.mixed_execution && !e.shared_prefixes,"verification","requires exclusive pure verification batch with full normal completion")?;
+        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=32 && e.mixed_execution && (!e.shared_prefixes || e.mode==ResultMode::Greedy),"verification","requires pure verification batch with retained ownership")?;
     } else {check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;}
     check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
     let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
@@ -414,6 +414,27 @@ pub(crate) mod tests {
                 BlockOwnership{physical_id,sequence_tag:r.sequence_tag})).collect();
             assert!(validate(&wrong).is_err());
         }
+    }
+
+    #[test]
+    fn verification_shared_prefix_binds_off_batch_readers_and_private_append() {
+        let mut e=shared_prefix_fixture();e.stage=InputStage::Verification;
+        for row in &mut e.rows {
+            row.progress.stage=InputStage::Verification;row.progress.input_tokens=8;row.progress.output_limit=16;
+            row.input_tokens=vec![7;8];row.valid_tokens[2]=8;
+        }
+        validate(&e).unwrap();
+        let mut packet=vec![0;MIXED_REQUEST_BYTES];encode_into(&mut packet,&e).unwrap();
+        validate_packet(&packet,&mut vec![0;MIXED_REQUEST_BYTES],&e).unwrap();
+        if let Ok(path)=std::env::var("RILEY_SHARED_VERIFY_PACKET") {std::fs::write(path,&packet).unwrap();}
+        let mut bad=e.clone();bad.shared_prefixes=false;assert!(validate(&bad).is_err());
+        let mut bad=e.clone();bad.rows.truncate(1);
+        bad.block_ownership.push(BlockOwnership{physical_id:2,sequence_tag:100});
+        assert!(validate(&bad).is_err(),"off-batch reader requires COW for a written page");
+        let mut bad=e.clone();bad.rows[1].physical_ids.swap(0,1);
+        assert!(validate(&bad).is_err(),"shared readers must agree on logical position");
+        let mut bad=e.clone();bad.block_ownership.retain(|x|!(x.physical_id==0&&x.sequence_tag==2));
+        assert!(validate(&bad).is_err(),"each reader requires retained authority");
     }
 
     #[test]

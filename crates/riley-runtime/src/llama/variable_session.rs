@@ -443,6 +443,10 @@ impl super::PreparedLlamaBatchExecutor {
     pub fn into_owned_variable_verification_wide_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         self.into_variable_session_profile::<32>(context,capacity,true,true,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,4096)
     }
+    /// Wide verification with immutable full-page prefix reads and private appends.
+    pub fn into_owned_variable_verification_prefix_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_profile::<32>(context,capacity,true,true,true,true,false,false,false,false,true,false,true,true,false,false,true,false,false,false,4096)
+    }
     fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool,query_reuse:bool,gqa_staging:bool,projection_pipeline:bool,ffn_adaptive:bool,ffn_split:bool,context_split:bool,verification_bytes:u64)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}

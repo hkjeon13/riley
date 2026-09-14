@@ -59,6 +59,7 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
  auto zero=[&](uint32_t a,uint32_t b){for(;a<b;++a)if(p[a])return false;return true;};
  uint32_t stage=u32(16),active=u32(20);
+ if constexpr(SharedPrefixes && Verification)if(stage==3 && u32(32)!=0)return false;
  if(u32(0)!=0x37444d52||u32(4)!=7||u32(8)!=extent||u32(12)!=stride||stage>(Verification?3u:2u)||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(100,128))return false;
  if(stage==1?(u32(36)||u32(96)):(!u32(36)||u32(36)>1024||!u32(96)||u32(96)>1024))return false;
  bool used[4096]{};
@@ -105,6 +106,7 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
 // Rust must additionally bind each reader to the complete live ownership ledger.
 inline bool valid_v7_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,
     uint32_t capacity,bool shared_prefixes=false,bool verification=false,bool wide=false) noexcept {
+ if(verification && wide && shared_prefixes)return valid_v7_shape_packet_impl<true,true,true>(p,bytes,physical,capacity);
  if(verification && wide && !shared_prefixes)return valid_v7_shape_packet_impl<false,true,true>(p,bytes,physical,capacity);
  if(verification && !shared_prefixes)return valid_v7_shape_packet_impl<false,true>(p,bytes,physical,capacity);
  return shared_prefixes?valid_v7_shape_packet_impl<true>(p,bytes,physical,capacity)
