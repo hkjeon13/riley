@@ -1,6 +1,7 @@
 """Verify archived per-request evidence and derive the C32 cache comparison."""
 import contextlib,hashlib,json,pathlib,re,statistics,sys,tarfile
 from paired_decode_serving_screen import summary
+from serving_evidence_validation import validate_row
 root=pathlib.Path(sys.argv[1]);prefix=('projection-long-c64-v1/' if root.name.endswith('c64') else 'projection-long-c8-v1/' if root.name.endswith('c8') else 'projection-long-c32-v1/')
 archives=sorted((root/'evidence').glob('*.tar.gz'));assert len(archives)==17
 manifest=json.loads((root/'evidence/manifest.json').read_text())
@@ -30,7 +31,7 @@ with contextlib.ExitStack() as stack:
     # Require the imports and every helper byte to match the canonical client.
     assert measured_client.split(b'def main():',1)[0]==canonical_client.split(b'def main():',1)[0]
 
-    fixtures=load('fixtures.json');assert len(fixtures['shared'])==32
+    fixtures=load('fixtures.json');assert len(fixtures['shared'])==32 and len(fixtures['unique'])==8448
     assert len({tuple(f['prompt_token_ids'][:16]) for f in fixtures['unique']})==len(fixtures['unique'])
     records=load('progress.json');assert len(records)==16;compared=[];agreements={};telemetry={}
     for record in records:
@@ -59,6 +60,11 @@ with contextlib.ExitStack() as stack:
         assert load(name+'-exit.json')['exit_code']==0
         for phase,count in [('warmup',256),('retained',8192)]:
             rows=load(name+'-'+phase+'.json');assert len(rows)==count
+            kind=name.split('-')[0];cases=fixtures[kind] if kind=='shared' else fixtures[kind][:256] if phase=='warmup' else fixtures[kind][256:]
+            bounds=load(name+'-'+phase+'-host.json')
+            for index,row in enumerate(rows):
+                validate_row(row,cases[index%len(cases)])
+                assert bounds['before']['monotonic_ns']<=row['started_ns']<=row['ended_ns']<=bounds['after']['monotonic_ns']
             assert all(r['valid'] and len(r['token_ids'])==32 and r['checks']['prompt'] and r['checks']['finish'] for r in rows)
             if lane!='vllm':assert all(all(r['checks'].values()) for r in rows)
         stats=summary(rows);assert all(record[k]==v for k,v in stats.items())

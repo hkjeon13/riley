@@ -47,3 +47,5 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 동일 candidate SHA `009697527d143357c3b3d1a2daa5d8b783298024ac1f8f2aa4ea388bbd3ad929` 및 frozen prior를 고정하고 C32 long comparison을 시작했다. 기존 observed controller에 `--warmup 256 --retained 8192`를 적용한다. Shared32 variant 집합은 유지하며 unique fixture는8192개 실측 요청을 모두 다른 초기 페이지로 구성하도록 확장한다. 실제 prompt 길이 범위는 새 fixture에서 산출하고 이전 짧은 screen과 합산하지 않는다. 전체16 lane의131,072 retained 요청(4,194,304 output tokens)을 검증한다.
 
 새 archive helper는 completed/exit receipt를 확인한 뒤 common 및16개 lane의 무손실 archive를 각각64MiB 미만으로 보존한다. Long exporter는 manifest hash,256/8192 request count, 동일 controller/client·budget,reference/stop/cancel/recovery,PSI delta를 검증한다. 첫 prior shared 구간은 약28초였고 전체 비교는 진행 중이다. 완료 전 성능 승격 또는 안정성 통과로 표시하지 않는다.
+
+긴 구간 exporter는 저장된 checks flag에만 의존하지 않고 fixture별 prompt/output token, text hash, finish, usage와 기록된 SSE frame을 다시 대조한다. 도착 시각 개수·순서 및 phase 시간 범위도 확인한다. 보강한 공통 validator는 기존 실제 응답2560개에서 검증했다. 전송 종료 `[DONE]`은 frames에 보존되지 않으므로 해당 transport 검사는 여전히 hash-bound client의 완료 조건에 의존한다. 현재 긴 C32 run은 같은 실행으로 계속 진행 중이며 재시작하지 않았다.
