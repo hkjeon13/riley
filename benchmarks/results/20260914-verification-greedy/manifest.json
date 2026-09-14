@@ -1,0 +1,35 @@
+{
+  "archive_sha256": "52e0fd3d16d1403a4c2ca4afa219ece32b46a2b2ab999757abbd96455e782d13",
+  "sources": {
+    "crates/riley-runtime/src/speculative.rs": "fb83bb32a8f398fec77c662d64be8186168e4f1d580f956fbf22cc0a09647443",
+    "crates/riley-runtime/src/llama/variable_session.rs": "3fa630009e640a7fcecf2e9827dcab1255d91b1c8d68512de8db07d5bfb697d1",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "b883234ddb64cd01bea3c5f07c7792fccbb28dde28072ec3bd2496e6b2961ccc",
+    "kernels/optional/speculative_select.cuh": "7aab8ebd1c2881fe12f516596f0c74d008b0a1b4b03c3e03581573451d581d02",
+    "kernels/src/graph_resources.cu": "e9d744fe72da316f783c593e020ceb78623d79105a08db2f0cad014795d887e4",
+    "crates/riley-scheduler/tests/speculative_verification_head_gpu.rs": "eaa60523c14fd0adb7b9994692890c2a329ee7afbf3ffa22cf4e138728c148eb",
+    "benchmarks/analysis/speculative_greedy_probe.cu": "fc7fe5d88017df88738c25ab1ee111c18efe878a86e2198d5859cc4f3c86f6a7"
+  },
+  "files": {
+    "verification-greedy-lifecycle-v1/select.log": "53d7ebee6cbeae0a55105d40adb03d665899e6ebccb47d2d083081259e442fb6",
+    "verification-greedy-lifecycle-v1/complete.txt": "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1",
+    "verification-greedy-lifecycle-v1/execution.json": "6defed303c8358c33d78a73e922b321be6793a9203ddf01f8741e2a62aa9985b",
+    "verification-greedy-lifecycle-v1/blender-restored.json": "4d6bb5d2bdcf21c410a7645e601cf65d4ddd31b06aaaf85f09ea7f46e4181bbf",
+    "verification-greedy-lifecycle-v1/select-memcheck.log": "3feda51f1ffb72485a418294336f626ab6bb31e7ce9f341bb2e42ff674c61de9",
+    "verification-greedy-lifecycle-v1/viewers.json": "a4b25e3ff6d230315bee3e7d088c558a554e584b526c2582f94d2895e58a6a73",
+    "verification-greedy-lifecycle-v1/memcheck.log": "793f5bc52a4688e3bdf3b5fd1be2b9b727e12e714efe985cbbde5eb2be1b8400",
+    "verification-greedy-lifecycle-v1/select-racecheck.log": "adcc0a840a7a453e1bf16e4155ed3a525eb5f4f40e44aeb80e0d4c063b0ce003",
+    "verification-greedy-lifecycle-v1/probe.log": "384814e6b8a453ac4e7107071910a9449c0e9bc11eae96a499ea0ddb94aa29b3",
+    "verification-greedy-lifecycle-v1/logits/serial.bf16": "2e4dc3a636b66c802285d0e8f623f99482c1ae09f3f8e28d985750f7254f8e30",
+    "verification-greedy-lifecycle-v1/logits/cases.json": "5129cbc4a44d8c9f1adb2060df14d3ddd3e4981b3d005a30734670f4c0ae99f1",
+    "verification-greedy-lifecycle-v1/logits/greedy.bf16": "f5657f43e4645df12575ec1a0308186a4a63b227e1b94511b9abc5042667d995",
+    "verification-greedy-lifecycle-v1/logits/multi.bf16": "2e4dc3a636b66c802285d0e8f623f99482c1ae09f3f8e28d985750f7254f8e30",
+    "verification-greedy-build-v1/binary.json": "7c9d0166317905eeb46871c470f52726ed89a208620cb55fb5166439da8d033b",
+    "verification-greedy-build-v1/sm_89.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification-greedy-build-v1/build.log": "ae0135eda77f8fbf2267809ddce77ca70a5174e082398c95038a94e1103580d3",
+    "verification-greedy-build-v1/sm_100a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification-greedy-build-v1/exit.json": "124fd50cb6d223cdd18fedc166d00af7254199b6e6dedf9be82f71db87af6d01",
+    "verification-greedy-build-v1/cargo.jsonl": "154757c7b66f8543edfabd44978f1d3bb07c1f31d069e2ac2ba60fe6a5a65ad6",
+    "verification-greedy-build-v1/native-builds.json": "f85d482bfc554b9c1b22156efb13d8ef2a99cdc9ea48d14115b27295bcbb1e77",
+    "verification-greedy-build-v1/sm_90a.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

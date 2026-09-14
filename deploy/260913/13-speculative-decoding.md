@@ -63,3 +63,18 @@ CPU5개 테스트는 KV252조합 및 독립 직렬 oracle11,250조합을 포함�
 순차 target과72행 BF16 logits7,077,888 bytes가 일치했고 실제 모델 memcheck 및 bounded selector memcheck/racecheck가 오류0이다. 완료 전·정산 후 읽기 거부도 검사했다. 초기 prompt까지8-token chunk로 처리하는 검증 fixture이므로 총 모델 실행 수는 양쪽10회이며 성능 향상을 주장하지 않는다.
 
 다음 구현 묶음은 GPU argmax의 작은 검증 결과, private speculative append와 greedy 승인/rollback, scheduler 다중 토큰 accounting을 연결하는 것이다. 아직 실제 speculative serving이나 vLLM 비교 완료가 아니다.
+
+### GPU argmax verification output — 2026-09-14
+
+The experimental head can now return 512 bytes of slot-validated GPU argmax
+records instead of the 3,145,728-byte auxiliary full-logit buffer. The normal
+output transfer remains unchanged. Exact serial target token agreement was
+verified at all 72 fixture positions; native memcheck/racecheck and full-model
+memcheck passed. SM90a/SM100a compile only; runtime tests skipped without hardware.
+Evidence: `benchmarks/results/20260914-verification-greedy/README.md`.
+
+This completes the compact auxiliary result primitive, not speculative serving.
+Next integrate private KV append, completed-prefix settlement, cancellation and
+multi-token scheduler accounting, with a 7-token draft cap for this 8-input head.
+Then run strict serial equivalence and a matched serving milestone against the
+current baseline and vLLM before selecting any default policy.

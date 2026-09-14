@@ -363,3 +363,48 @@ mod tests {
             .is_empty());
     }
 }
+
+/// Fixed CUDA verification record format. Every inactive record is checked too.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VerificationRecordError { Shape, Slot, Status, Token, Padding }
+pub fn parse_verification_tokens(bytes: &[u8], active: usize) -> Result<[u32;32], VerificationRecordError> {
+    use VerificationRecordError::*;
+    if bytes.len()!=512 || !(1..=32).contains(&active) { return Err(Shape); }
+    let mut tokens=[0;32];
+    for (slot, record) in bytes.chunks_exact(16).enumerate() {
+        let word=|i| u32::from_le_bytes(record[i..i+4].try_into().unwrap());
+        let (token,error,index,valid)=(word(0),word(4),word(8),word(12));
+        if index!=slot as u32 {return Err(Slot);}
+        if slot<active {
+            if error!=0 || valid!=1 {return Err(Status);}
+            if token>=49152 {return Err(Token);}
+            tokens[slot]=token;
+        } else if token!=0 || error!=0 || valid!=0 {return Err(Padding);}
+    }
+    Ok(tokens)
+}
+#[cfg(test)]
+mod verification_record_tests {
+    use super::*;
+    fn records(active:usize)->Vec<u8> {
+        (0..32u32).flat_map(|i| [if (i as usize)<active {49151-i}else{0},0,i,u32::from((i as usize)<active)]).flat_map(u32::to_le_bytes).collect()
+    }
+    #[test]
+    fn verification_records_validate_every_field_and_padding() {
+        for active in 1..=32 {
+            let bytes=records(active);
+            let parsed=parse_verification_tokens(&bytes,active).unwrap();
+            for slot in 0..32 {
+                assert_eq!(parsed[slot],if slot<active {49151-slot as u32}else{0});
+                for (offset,value) in [(0,49152u32),(4,1),(8,99),(12,2)] {
+                    let mut corrupt=bytes.clone();
+                    corrupt[slot*16+offset..slot*16+offset+4].copy_from_slice(&value.to_le_bytes());
+                    assert!(parse_verification_tokens(&corrupt,active).is_err(),"active={active} slot={slot} field={offset}");
+                }
+            }
+        }
+        assert!(parse_verification_tokens(&records(1)[..511],1).is_err());
+        assert!(parse_verification_tokens(&records(1),0).is_err());
+        assert!(parse_verification_tokens(&records(32),33).is_err());
+    }
+}

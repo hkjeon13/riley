@@ -659,7 +659,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(
 extern "C" RileyCudaStatus riley_cuda_graph_resources_read_verification(
  RileyCudaGraphResources* r,uint8_t* destination,uint64_t bytes,RileyCudaErrorInfo* error) noexcept {
  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
- if(r->last_catalog!=0 || !r->verification_host || !r->completion_visible || r->last_compact || r->buffered_ready || !destination || bytes!=riley_speculative_select::bytes || !riley_speculative_select::eligible(static_cast<const uint32_t*>(r->input->host_data),r->v3_prefill_capacity))return reject(error,"no completed verification output",RILEY_CUDA_STATUS_INVALID_STATE);
+ if(r->last_catalog!=0 || !r->verification_host || !r->completion_visible || r->last_compact || r->buffered_ready || !destination || bytes!=r->verification_host->byte_len || !riley_speculative_select::eligible(static_cast<const uint32_t*>(r->input->host_data),r->v3_prefill_capacity))return reject(error,"no completed verification output",RILEY_CUDA_STATUS_INVALID_STATE);
  std::memmove(destination,r->verification_host->host_data,static_cast<size_t>(bytes));return RILEY_CUDA_STATUS_SUCCESS;
 }
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_swiglu(
@@ -1464,7 +1464,7 @@ static RileyCudaStatus record_variable_shared(
   for(size_t i=0;i<weight_count;++i)if(w[i]==split_workspace)return reject(error,"context split weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  } else if(split_workspace)return reject(error,"unexpected context split workspace",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if constexpr(Verification) {
-  if(!verification_host || verification_host==staging || !same_context(verification_host->owner,r->owner) || !holds_counter(r,&verification_host->active_uses) || verification_host->byte_len!=riley_speculative_select::bytes)return reject(error,"verification host parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(!verification_host || verification_host==staging || !same_context(verification_host->owner,r->owner) || !holds_counter(r,&verification_host->active_uses) || (verification_host->byte_len!=riley_speculative_select::bytes && verification_host->byte_len!=riley_speculative_select::greedy_bytes))return reject(error,"verification host parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  }
  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
  for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],Rows*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1553,7 +1553,13 @@ static RileyCudaStatus record_variable_shared(
     result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"verification gather");
    }
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V6 packed head");
-   if constexpr(Verification)if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(verification_host->host_data,d[24]->device_data,riley_speculative_select::bytes,cudaMemcpyDeviceToHost);
+   if constexpr(Verification)if(result==RILEY_CUDA_STATUS_SUCCESS){
+    if(verification_host->byte_len==riley_speculative_select::greedy_bytes){
+     riley_speculative_select::greedy<<<32,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[24]->device_data),static_cast<riley_speculative_select::GreedyRecord*>(d[7]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));
+     result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"verification argmax");
+     if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(verification_host->host_data,d[7]->device_data,riley_speculative_select::greedy_bytes,cudaMemcpyDeviceToHost);
+    } else result=copy(verification_host->host_data,d[24]->device_data,riley_speculative_select::bytes,cudaMemcpyDeviceToHost);
+   }
 
    if(compact){
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 compact completion");

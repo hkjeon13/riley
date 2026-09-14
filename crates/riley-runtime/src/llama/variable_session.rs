@@ -39,6 +39,17 @@ impl VerificationLogits {
     pub fn rows(&self)->&[VerificationPosition]{&self.rows}
     pub fn logits(&self,index:usize)->Option<&[u8]>{let slot=self.rows.get(index)?.slot;Some(&self.bytes[slot*98304..(slot+1)*98304])}
 }
+/// Greedy verification tokens bound to one retained, validated completion.
+/// Reading these tokens does not authorize speculative KV settlement.
+pub struct VerificationTokens {rows:Vec<VerificationPosition>,tokens:[u32;32],iteration_id:u64,replay_id:u64,owner_generation:u64,catalog_digest:[u8;32]}
+impl VerificationTokens {
+    pub fn iteration_id(&self)->u64{self.iteration_id}
+    pub fn replay_id(&self)->u64{self.replay_id}
+    pub fn owner_generation(&self)->u64{self.owner_generation}
+    pub fn catalog_digest(&self)->[u8;32]{self.catalog_digest}
+    pub fn rows(&self)->&[VerificationPosition]{&self.rows}
+    pub fn token(&self,index:usize)->Option<u32>{Some(self.tokens[self.rows.get(index)?.slot])}
+}
 struct DecodeWindowState<const ROWS:usize> {
     successor:wire::Expectation<ROWS>, tickets:[u64;2], output:Vec<u8>, predecessor_validated:bool, complete:bool,
 }
@@ -191,6 +202,30 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
             extra+=row.input_tokens.len()-1;
         }
         Ok(VerificationLogits{rows:positions,bytes,iteration_id:e.iteration_id,replay_id:e.replay_id,owner_generation:e.owner_generation,catalog_digest:e.catalog_digest})
+    }
+    /// Read additional positions only after normal completion validation and
+    /// before scheduler settlement. Does not commit any speculative KV/output.
+    pub fn read_verification_tokens(&mut self)->Result<VerificationTokens> {
+        if self.poisoned || !self.completed || self.buffered || self.compact {return Err(bad("verification requires completed unbuffered full output"));}
+        let e=self.retained.as_ref().ok_or_else(||bad("verification completion is no longer retained"))?;
+        if !e.mixed_execution || e.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
+        let mut bytes=[0;512];
+        self.graph.read_verification(&mut bytes).map_err(|_|bad("no native verification completion"))?;
+        let active=e.rows.iter().map(|r|r.input_tokens.len()).sum();
+        let tokens=match crate::speculative::parse_verification_tokens(&bytes,active) {
+            Ok(tokens)=>tokens,
+            Err(_)=>{self.poisoned=true;return Err(bad("invalid verification token records"));}
+        };
+        let mut positions=Vec::with_capacity(e.rows.iter().map(|r|r.input_tokens.len()).sum());
+        let mut extra=e.rows.len();
+        for (owner,row) in e.rows.iter().enumerate(){
+            for local in 0..row.input_tokens.len(){
+                let slot=if local+1==row.input_tokens.len(){owner}else{extra+local};
+                positions.push(VerificationPosition{sequence_tag:row.sequence_tag,cookie:row.cookie,position:row.progress.committed_tokens+local as u32,slot});
+            }
+            extra+=row.input_tokens.len()-1;
+        }
+        Ok(VerificationTokens{rows:positions,tokens,iteration_id:e.iteration_id,replay_id:e.replay_id,owner_generation:e.owner_generation,catalog_digest:e.catalog_digest})
     }
     /// Only after successful scheduler settlement of this exact iteration.
     pub fn confirm_scheduler_commit(&mut self,iteration:u64)->Result<()> {
@@ -359,53 +394,56 @@ impl super::PreparedLlamaBatchExecutor {
         self.into_variable_session_mode::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true)
     }
     fn into_variable_session_mode<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
-        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false,false,false,false,false,false,false,false,false)
+        self.into_variable_session_profile::<ROWS>(context,capacity,shared,compact,packed,mixed,buffered,flashinfer,ffn_pipeline,prefill_only,prefill_ffn_pipeline,false,false,false,false,false,false,false,false,false,0)
     }
     /// Experimental Hopper FA3 model graph. Not an exact numerical profile.
     pub fn into_owned_variable_fa3_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         if !riley_cuda::FA3_COMPILED {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"FA3 backend",reason:"FA3 was not compiled"});}
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false,false,false,false,false,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,false,false,false,false,false,true,false,false,false,false,false,false,false,false,0)
     }
     /// Exact-order adaptive row tiles for pure decode, including paired graphs.
     pub fn into_owned_variable_adaptive_decode_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true,false,false,false,false,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,true,false,false,false,false,false,false,false,0)
     }
     /// Opt-in immutable shared prefixes with the existing V7 numerical profile.
     /// Automatic cache policy and captured-buffer COW are separate integrations.
     pub fn into_owned_variable_prefix_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,prefill_ffn:bool,adaptive:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,adaptive,true,false,false,false,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,prefill_ffn,false,adaptive,true,false,false,false,false,false,false,0)
     }
     /// Experimental exact-order mixed attention, composed with prefill FFN/adaptive decode.
     pub fn into_owned_variable_query_reuse_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,true,false,false,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,true,false,false,false,false,false,0)
     }
     /// Experimental GQA shared staging with distinct captured graph identity.
     pub fn into_owned_variable_gqa_staging_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,true,false,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,true,false,false,false,false,0)
     }
     pub fn into_owned_variable_projection_pipeline_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,false,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,false,false,false,0)
     }
     pub fn into_owned_variable_ffn_adaptive_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,true,false,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,true,false,false,0)
     }
     pub fn into_owned_variable_ffn_split_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool,shared_prefixes:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,false,true,false,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,shared_prefixes,false,false,true,false,true,false,0)
     }
     /// Experimental decode-only FP32 partial/merge; no serving qualification.
     /// Fixed 32 splits deliberately exercise this numerical path at short context.
     pub fn into_owned_variable_context_split_session(self,context:&riley_cuda::CudaContext,capacity:u32,compact:bool,buffered:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,false,false,false,true,false,false,true,false)
+        self.into_variable_session_profile::<32>(context,capacity,true,compact,true,true,buffered,false,false,false,true,false,true,false,false,false,true,false,false,true,0)
     }
     /// Diagnostic multi-position target head; no scheduler speculative commit.
     pub fn into_owned_variable_verification_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
-        self.into_variable_session_profile::<32>(context,capacity,true,false,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,true)
+        self.into_variable_session_profile::<32>(context,capacity,true,false,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,3145728)
     }
-    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool,query_reuse:bool,gqa_staging:bool,projection_pipeline:bool,ffn_adaptive:bool,ffn_split:bool,context_split:bool,verification:bool)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
+    pub fn into_owned_variable_verification_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_profile::<32>(context,capacity,true,false,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,512)
+    }
+    fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool,query_reuse:bool,gqa_staging:bool,projection_pipeline:bool,ffn_adaptive:bool,ffn_split:bool,context_split:bool,verification_bytes:u64)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
-        if verification {if buffered || compact {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"verification",reason:"unbuffered full outputs required"});}parents.scratch.verification_host=Some(context.allocate_pinned_host_buffer(3145728).map_err(cuda)?);}
+        if verification_bytes!=0 {if !matches!(verification_bytes,512|3145728) || buffered || compact {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"verification",reason:"unbuffered full outputs required"});}parents.scratch.verification_host=Some(context.allocate_pinned_host_buffer(verification_bytes).map_err(cuda)?);}
         if context_split {parents.scratch.context_split_workspace=Some(context.allocate_device_buffer(2613252).map_err(cuda)?);}
         parents.scratch.projection_pipeline=projection_pipeline;parents.scratch.ffn_adaptive=ffn_adaptive;parents.scratch.ffn_split=ffn_split;
         if projection_pipeline {for _ in 0..30 {for bytes in [663552,221184,221184,663552] {parents.scratch.projection_tiles.push(context.allocate_device_buffer(bytes).map_err(cuda)?);}}}
