@@ -1,0 +1,875 @@
+{
+  "scope": "host-wide PSI and readable surviving process counters; not serving causality or per-cgroup attribution",
+  "samples": [
+    {
+      "elapsed_us": 5023723.965,
+      "pressure_pct": {
+        "cpu": {
+          "some": 0.4951705183905342,
+          "full": 0.0
+        },
+        "io": {
+          "some": 44.01131541868065,
+          "full": 38.755095096073816
+        },
+        "memory": {
+          "some": 0.2685657112930169,
+          "full": 0.268545805740742
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 0
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 14213852,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 3436,
+        "Writeback": 12
+      },
+      "top_io": [
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 2,
+          "read_bytes": 307200,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 131,
+          "read_bytes": 0,
+          "write_bytes": 106496
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 0,
+          "read_bytes": 49152,
+          "write_bytes": 0
+        },
+        {
+          "pid": 3635783,
+          "comm": "python3",
+          "cpu_ticks": 0,
+          "read_bytes": 32768,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 3601786,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 131,
+          "read_bytes": 0,
+          "write_bytes": 106496
+        },
+        {
+          "pid": 3402718,
+          "comm": "python3",
+          "cpu_ticks": 15,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 41127,
+          "comm": "python3",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 2,
+          "read_bytes": 307200,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        }
+      ]
+    },
+    {
+      "elapsed_us": 5034966.791,
+      "pressure_pct": {
+        "cpu": {
+          "some": 0.3139047516311612,
+          "full": 0.0
+        },
+        "io": {
+          "some": 26.921607555047725,
+          "full": 24.679229309339846
+        },
+        "memory": {
+          "some": 0.14015981222784593,
+          "full": 0.14013995112366173
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 7
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 14024960,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 3856,
+        "Writeback": 0
+      },
+      "top_io": [
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 177,
+          "read_bytes": 0,
+          "write_bytes": 401408
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 401,
+          "read_bytes": 184320,
+          "write_bytes": 0
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 1,
+          "read_bytes": 135168,
+          "write_bytes": 16384
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 12288
+        },
+        {
+          "pid": 24450,
+          "comm": "minio",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 3601786,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 401,
+          "read_bytes": 184320,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 177,
+          "read_bytes": 0,
+          "write_bytes": 401408
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 41127,
+          "comm": "python3",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 1,
+          "read_bytes": 135168,
+          "write_bytes": 16384
+        }
+      ]
+    },
+    {
+      "elapsed_us": 5027005.614,
+      "pressure_pct": {
+        "cpu": {
+          "some": 1.4606309528581323,
+          "full": 0.0
+        },
+        "io": {
+          "some": 10.119722138030617,
+          "full": 8.980912986105928
+        },
+        "memory": {
+          "some": 0.2518397824092822,
+          "full": 0.25160107171505536
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 6
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 14316164,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 15120,
+        "Writeback": 0
+      },
+      "top_io": [
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 1449,
+          "read_bytes": 327680,
+          "write_bytes": 9494528
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 3,
+          "read_bytes": 847872,
+          "write_bytes": 0
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 472,
+          "read_bytes": 28672,
+          "write_bytes": 53248
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 3601786,
+          "comm": "java",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 1449,
+          "read_bytes": 327680,
+          "write_bytes": 9494528
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 472,
+          "read_bytes": 28672,
+          "write_bytes": 53248
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 3,
+          "read_bytes": 847872,
+          "write_bytes": 0
+        },
+        {
+          "pid": 41127,
+          "comm": "python3",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ]
+    },
+    {
+      "elapsed_us": 5024844.214,
+      "pressure_pct": {
+        "cpu": {
+          "some": 0.6210341787921547,
+          "full": 0.0
+        },
+        "io": {
+          "some": 18.96898609004319,
+          "full": 17.04797131049922
+        },
+        "memory": {
+          "some": 0.6724984608647213,
+          "full": 0.6560601402955256
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 175
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 13974472,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 13648,
+        "Writeback": 196
+      },
+      "top_io": [
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 2,
+          "read_bytes": 811008,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 10,
+          "read_bytes": 102400,
+          "write_bytes": 110592
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 500,
+          "read_bytes": 8192,
+          "write_bytes": 16384
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 12288
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 4096,
+          "write_bytes": 0
+        },
+        {
+          "pid": 3601786,
+          "comm": "java",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 500,
+          "read_bytes": 8192,
+          "write_bytes": 16384
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 10,
+          "read_bytes": 102400,
+          "write_bytes": 110592
+        },
+        {
+          "pid": 41127,
+          "comm": "python3",
+          "cpu_ticks": 3,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 2,
+          "read_bytes": 811008,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 4096,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ]
+    },
+    {
+      "elapsed_us": 5029687.936,
+      "pressure_pct": {
+        "cpu": {
+          "some": 0.9180092400865802,
+          "full": 0.0
+        },
+        "io": {
+          "some": 41.1367469776956,
+          "full": 35.12595656988291
+        },
+        "memory": {
+          "some": 0.3106753380892059,
+          "full": 0.30653989265707005
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 377
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 14274660,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 11704,
+        "Writeback": 8
+      },
+      "top_io": [
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 2,
+          "read_bytes": 118784,
+          "write_bytes": 4001792
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 1024000,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 158,
+          "read_bytes": 401408,
+          "write_bytes": 233472
+        },
+        {
+          "pid": 4017892,
+          "comm": "adb",
+          "cpu_ticks": 0,
+          "read_bytes": 36864,
+          "write_bytes": 0
+        },
+        {
+          "pid": 21626,
+          "comm": "nginx",
+          "cpu_ticks": 0,
+          "read_bytes": 16384,
+          "write_bytes": 0
+        },
+        {
+          "pid": 55487,
+          "comm": "kubewatch",
+          "cpu_ticks": 0,
+          "read_bytes": 12288,
+          "write_bytes": 0
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 387,
+          "read_bytes": 0,
+          "write_bytes": 8192
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 8192
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 387,
+          "read_bytes": 0,
+          "write_bytes": 8192
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 158,
+          "read_bytes": 401408,
+          "write_bytes": 233472
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 2,
+          "read_bytes": 118784,
+          "write_bytes": 4001792
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 1024000,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 24299,
+          "comm": "nats-server",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ]
+    },
+    {
+      "elapsed_us": 5022068.776,
+      "pressure_pct": {
+        "cpu": {
+          "some": 0.7621958540856113,
+          "full": 0.0
+        },
+        "io": {
+          "some": 51.85848932308609,
+          "full": 47.6197580453048
+        },
+        "memory": {
+          "some": 1.1560972696643135,
+          "full": 1.0885952072433347
+        }
+      },
+      "vmstat_delta": {
+        "pswpin": 0,
+        "pswpout": 0,
+        "pgmajfault": 74
+      },
+      "meminfo_after_kib": {
+        "MemAvailable": 14219836,
+        "SwapTotal": 2097148,
+        "SwapFree": 8,
+        "Dirty": 18624,
+        "Writeback": 0
+      },
+      "top_io": [
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 376832,
+          "write_bytes": 8192
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 4,
+          "read_bytes": 323584,
+          "write_bytes": 61440
+        },
+        {
+          "pid": 25171,
+          "comm": "minio",
+          "cpu_ticks": 1,
+          "read_bytes": 204800,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 8,
+          "read_bytes": 0,
+          "write_bytes": 65536
+        },
+        {
+          "pid": 3600106,
+          "comm": "java",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 16384
+        },
+        {
+          "pid": 3601786,
+          "comm": "java",
+          "cpu_ticks": 0,
+          "read_bytes": 0,
+          "write_bytes": 4096
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ],
+      "top_cpu": [
+        {
+          "pid": 609355,
+          "comm": "qemu-system-x86",
+          "cpu_ticks": 8,
+          "read_bytes": 0,
+          "write_bytes": 65536
+        },
+        {
+          "pid": 3238374,
+          "comm": "python3",
+          "cpu_ticks": 4,
+          "read_bytes": 323584,
+          "write_bytes": 61440
+        },
+        {
+          "pid": 14268,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 14269,
+          "comm": "blender",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 41127,
+          "comm": "python3",
+          "cpu_ticks": 2,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 609999,
+          "comm": "netsimd",
+          "cpu_ticks": 2,
+          "read_bytes": 376832,
+          "write_bytes": 8192
+        },
+        {
+          "pid": 14270,
+          "comm": "blender",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        },
+        {
+          "pid": 24450,
+          "comm": "minio",
+          "cpu_ticks": 1,
+          "read_bytes": 0,
+          "write_bytes": 0
+        }
+      ]
+    }
+  ]
+}

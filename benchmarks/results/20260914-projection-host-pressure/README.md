@@ -1,0 +1,9 @@
+# Host pressure and pre-measurement start condition
+
+Six read-only host observations with no serving workload showed I/O full PSI of 38.76, 24.68, 8.98, 17.05, 35.13 and 47.62 percent. CPU some remained 0.31–1.46 percent. Swap-in/out did not increase in these intervals; this does not exclude other memory-related interference. Counters cover only readable surviving processes, excluding PID reuse. Process command arguments and environment variables are not collected.
+
+A separate 60-second read-only start-condition probe failed to observe three consecutive two-second intervals with CPU some ≤5%, I/O full ≤5%, and memory full ≤0.5%. The CLI exited 1 and preserved every interval in `quiet-start.json`. This threshold is an operational criterion selected before the next comparison, not a derived hardware limit or proof of isolation. No GPU measurement was launched and Blender was left running.
+
+The previous C32 candidate's unique reverse-order throughput regression coincided with CPU some pressure of 24.23% (candidate) and 14.77% (prior). Higher I/O pressure did not consistently imply lower throughput: the faster vLLM unique run had higher I/O pressure. Do not attribute all variation to a single counter or numerically correct performance results using PSI.
+
+The controller now accepts `--host-quiet-timeout-seconds`; 0 retains historical behavior. Future gated comparisons apply the same start condition before warmup and retained phases for every engine, record the gate source and every wait sample, and abort the whole attempt on timeout. They must still report during-run variation. No production kernel or performance-success requirement changes in this batch. The positive native/model gates and non-qualified C32 results remain unchanged.
