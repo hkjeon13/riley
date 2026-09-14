@@ -1,0 +1,14 @@
+==PROF== Connected to process 3991449 (/data/riley-serving-260913-recovery/decode-request-pair-profile-v1)
+==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
+CHECK context=512 rows=32 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=512 rows=32 shared=1 scale=32 mismatch=0 replay=0
+TIME context=512 rows=32 shared=1 order=0 mode=0 us=318.218231
+TIME context=512 rows=32 shared=1 order=0 mode=1 us=259.829773
+TIME context=512 rows=32 shared=1 order=1 mode=1 us=319.774719
+TIME context=512 rows=32 shared=1 order=1 mode=0 us=306.350067
+RESOURCE kernel=original_scores registers=39 shared_bytes=0 local_bytes=0 resident_blocks=24 threads=32
+RESOURCE kernel=pair_scores registers=40 shared_bytes=0 local_bytes=0 resident_blocks=24 threads=32
+RESOURCE kernel=original_values registers=40 shared_bytes=2304 local_bytes=0 resident_blocks=16 threads=96
+RESOURCE kernel=pair_values registers=72 shared_bytes=3072 local_bytes=0 resident_blocks=9 threads=96
+DONE checks=2
+==PROF== Disconnected from process 3991449
