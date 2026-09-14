@@ -1,0 +1,267 @@
+{
+  "scope": "single diagnostic trace per condition, middle 80 percent of graph count including warmup; not serving performance",
+  "verified_requests": 512,
+  "archive_sha256": "d84ac6b9a591923615e8409ebe5be1361ee22bcf88e61d8ba848f7336d049d99",
+  "results": {
+    "control-shared": {
+      "selected": {
+        "launches": 120,
+        "window_ms": 383.770779,
+        "graph_span_ms": 243.307977,
+        "inter_graph_gap": {
+          "count": 119,
+          "median_us": 9.472,
+          "p95_us": 7330.188,
+          "max_us": 55484.081,
+          "sum_ms": 140.462802
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 119,
+          "median_us": 0.0,
+          "p95_us": 7312.256,
+          "max_us": 55458.933,
+          "sum_ms": 139.482598
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 119,
+          "median_us": 7.931,
+          "p95_us": 16.525,
+          "max_us": 25.148,
+          "sum_ms": 0.980204
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.36600702733545015,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.577304549287342,
+        "inside_graph_unoccupied_ms": 10.414882
+      },
+      "stages": {
+        "future_decode": {
+          "count": 75,
+          "median_us": 1520.265,
+          "p95_us": 1584.906,
+          "max_us": 1758.155,
+          "sum_ms": 114.569561
+        },
+        "ordinary_decode": {
+          "count": 18,
+          "median_us": 1617.2255,
+          "p95_us": 1705.675,
+          "max_us": 1707.467,
+          "sum_ms": 27.612392
+        },
+        "prefill_or_mixed": {
+          "count": 27,
+          "median_us": 3759.319,
+          "p95_us": 3915.032,
+          "max_us": 3924.824,
+          "sum_ms": 101.126024
+        }
+      },
+      "prefill_kernel_ms": {
+        "attention": 44.843794,
+        "projection": 24.556015,
+        "ffn": 15.856476
+      },
+      "prefill_fraction": {
+        "attention": 0.44344464684975654,
+        "projection": 0.24282587239858258,
+        "ffn": 0.15679916378399295
+      },
+      "raw_sqlite_sha256": "f3dc09d70e812475897da32e3a2a49cdc776dfdf27d9c8553bb0408771ee5a6d"
+    },
+    "projection-shared": {
+      "selected": {
+        "launches": 120,
+        "window_ms": 379.647082,
+        "graph_span_ms": 237.856451,
+        "inter_graph_gap": {
+          "count": 119,
+          "median_us": 8.544,
+          "p95_us": 7174.028,
+          "max_us": 59323.663,
+          "sum_ms": 141.790631
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 119,
+          "median_us": 0.0,
+          "p95_us": 7163.295,
+          "max_us": 59298.388,
+          "sum_ms": 140.91145
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 119,
+          "median_us": 6.879,
+          "p95_us": 14.42,
+          "max_us": 25.275,
+          "sum_ms": 0.879181
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.37348010223874184,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.596118500902042,
+        "inside_graph_unoccupied_ms": 10.061091
+      },
+      "stages": {
+        "ordinary_decode": {
+          "count": 18,
+          "median_us": 1632.715,
+          "p95_us": 1710.955,
+          "max_us": 1737.835,
+          "sum_ms": 28.135504
+        },
+        "future_decode": {
+          "count": 75,
+          "median_us": 1537.673,
+          "p95_us": 1585.962,
+          "max_us": 1590.953,
+          "sum_ms": 116.028974
+        },
+        "prefill_or_mixed": {
+          "count": 27,
+          "median_us": 3486.261,
+          "p95_us": 3614.071,
+          "max_us": 3655.894,
+          "sum_ms": 93.691973
+        }
+      },
+      "prefill_kernel_ms": {
+        "attention": 45.097785,
+        "projection": 16.829725,
+        "ffn": 15.907689
+      },
+      "prefill_fraction": {
+        "attention": 0.4813409682385491,
+        "projection": 0.17962824840928474,
+        "ffn": 0.16978710652192155
+      },
+      "raw_sqlite_sha256": "97db4eb3f3f62a5b66d11d55684fbaca89b1ff837c5a949bc4ae857b0acbcb60"
+    },
+    "projection-unique": {
+      "selected": {
+        "launches": 216,
+        "window_ms": 946.09148,
+        "graph_span_ms": 787.308878,
+        "inter_graph_gap": {
+          "count": 215,
+          "median_us": 142.753,
+          "p95_us": 832.645,
+          "max_us": 58270.413,
+          "sum_ms": 158.782602
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 215,
+          "median_us": 137.485,
+          "p95_us": 823.323,
+          "max_us": 58246.686,
+          "sum_ms": 157.27163
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 215,
+          "median_us": 6.273,
+          "p95_us": 12.356,
+          "max_us": 25.893,
+          "sum_ms": 1.510972
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.16783007283819953,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.201677647028896,
+        "inside_graph_unoccupied_ms": 25.94271
+      },
+      "stages": {
+        "prefill_or_mixed": {
+          "count": 133,
+          "median_us": 4894.879,
+          "p95_us": 5278.273,
+          "max_us": 5606.212,
+          "sum_ms": 648.940203
+        },
+        "ordinary_decode": {
+          "count": 15,
+          "median_us": 1749.387,
+          "p95_us": 1840.044,
+          "max_us": 1909.1,
+          "sum_ms": 24.793691
+        },
+        "future_decode": {
+          "count": 68,
+          "median_us": 1683.706,
+          "p95_us": 1736.843,
+          "max_us": 1742.507,
+          "sum_ms": 113.574984
+        }
+      },
+      "prefill_kernel_ms": {
+        "attention": 258.188427,
+        "projection": 114.03176,
+        "ffn": 198.778756
+      },
+      "prefill_fraction": {
+        "attention": 0.3978616609148501,
+        "projection": 0.17571998078226633,
+        "ffn": 0.3063129007589009
+      },
+      "raw_sqlite_sha256": "dc023da362b13d2d4e2bb0067b9fafa4f004c22a7d0b784d4b77a78947119488"
+    },
+    "control-unique": {
+      "selected": {
+        "launches": 215,
+        "window_ms": 1015.559686,
+        "graph_span_ms": 855.983947,
+        "inter_graph_gap": {
+          "count": 214,
+          "median_us": 144.737,
+          "p95_us": 886.438,
+          "max_us": 59422.556,
+          "sum_ms": 159.575739
+        },
+        "post_gpu_until_next_cpu_launch": {
+          "count": 214,
+          "median_us": 139.474,
+          "p95_us": 870.803,
+          "max_us": 59397.652,
+          "sum_ms": 158.040597
+        },
+        "remaining_gap_after_cpu_launch_starts": {
+          "count": 214,
+          "median_us": 6.002,
+          "p95_us": 14.013,
+          "max_us": 24.904,
+          "sum_ms": 1.535142
+        },
+        "removable_fraction_if_all_inter_graph_gaps_vanish": 0.15713083258407326,
+        "optimistic_trace_speedup_if_all_gaps_vanish": 1.1864237519398246,
+        "inside_graph_unoccupied_ms": 25.765474
+      },
+      "stages": {
+        "prefill_or_mixed": {
+          "count": 133,
+          "median_us": 5461.027,
+          "p95_us": 5794.629,
+          "max_us": 6283.72,
+          "sum_ms": 719.471551
+        },
+        "ordinary_decode": {
+          "count": 14,
+          "median_us": 1733.339,
+          "p95_us": 1868.364,
+          "max_us": 1973.644,
+          "sum_ms": 23.464215
+        },
+        "future_decode": {
+          "count": 68,
+          "median_us": 1684.235,
+          "p95_us": 1696.587,
+          "max_us": 1702.571,
+          "sum_ms": 113.048181
+        }
+      },
+      "prefill_kernel_ms": {
+        "attention": 257.59427,
+        "projection": 184.81240400000002,
+        "ffn": 199.37916
+      },
+      "prefill_fraction": {
+        "attention": 0.3580325999575208,
+        "projection": 0.2568724277466254,
+        "ffn": 0.2771188933362009
+      },
+      "raw_sqlite_sha256": "4849c6655b0f8b4dcadf77fe906c65668c0c24fa075d6923b916870f282de551"
+    }
+  }
+}
