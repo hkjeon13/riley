@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 serving 측정 진행 중. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 serving 완료·변동성으로 재측정 필요. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
 
 ## 근거와 범위
 
@@ -32,4 +32,8 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 
 ## Retained model 통합
 
-[Rust/C ABI/model gate](../../benchmarks/results/20260914-prefill-projection-model/README.md)를 완료했다. 483-parent 전용 recorder와120개 tile 수명·content/source identity, 환경변수 `RILEY_PREFILL_PROJECTION_PIPELINE=1`을 연결했다. 2,359,296 BF16 logits bytes가 일치했고 full-model memcheck 오류0이다. Packing 준비 단계는 약0.94초, 추가 device weight는50.625MiB다. 최초 Rust wrapper parent-count 거부를 수정하고 최종 gate를 다시 통과했다. 현재 C32 serving을 별도로 측정하며 native 개선을 serving 개선으로 표시하지 않는다.
+[Rust/C ABI/model gate](../../benchmarks/results/20260914-prefill-projection-model/README.md)를 완료했다. 483-parent 전용 recorder와120개 tile 수명·content/source identity, 환경변수 `RILEY_PREFILL_PROJECTION_PIPELINE=1`을 연결했다. 2,359,296 BF16 logits bytes가 일치했고 full-model memcheck 오류0이다. Packing 준비 단계는 약0.94초, 추가 device weight는50.625MiB다. 최초 Rust wrapper parent-count 거부를 수정하고 최종 gate를 다시 통과했다. C32 serving은 별도 완료했으며 native 개선을 serving 개선으로 표시하지 않는다.
+
+## C32 첫 serving screen
+
+[전체 비교표와 실행별 수치](../../benchmarks/results/20260914-prefill-projection-serving/README.md): 후보의 동일 binary control 대비 throughput은 shared +1.74%, unique +10.08%다. 그러나 frozen prior shared가 두 순서 사이27.8% 하락했고 late host I/O pressure도 높아 확정 개선으로 승격하지 않는다. 4096 retained 요청의 protocol,3072 Riley 기준 일치, stop/cancel/recovery 각96건은 통과했다. vLLM throughput에는 여전히 미달한다. 후보를 더 수정하기 전에 host pressure를 lane별 기록하는 C32 재측정으로 효과를 확인하고 이후 C8/C64로 확장한다.
