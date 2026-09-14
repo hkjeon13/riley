@@ -6,6 +6,7 @@
 #define CK(...) do{auto e=(__VA_ARGS__);if(e!=cudaSuccess){std::fprintf(stderr,"line %d: %s\n",__LINE__,cudaGetErrorString(e));std::exit(2);}}while(0)
 template<class T>T* alloc(size_t n){T*p;CK(cudaMalloc(&p,n*sizeof(T)));return p;}
 int main(int argc,char**argv){
+ bool profile=argc>1&&std::string(argv[1])=="--profile";
  bool small=argc>1&&std::string(argv[1])=="--small";
  constexpr unsigned Q=32*576,KV=512*16*192,S=32*9*4096,M=32*416;
  auto*q=alloc<__nv_bfloat16>(Q),*k=alloc<__nv_bfloat16>(KV),*v=alloc<__nv_bfloat16>(KV),*a=alloc<__nv_bfloat16>(Q),*b=alloc<__nv_bfloat16>(Q);
@@ -18,9 +19,9 @@ int main(int argc,char**argv){
  fill(v,KV,1);fill(k,KV,1);
  std::vector<unsigned> hs(M),hp(M);std::vector<unsigned short> ha(Q),hb(Q);
  unsigned checks=0;
- for(unsigned count:small?std::vector<unsigned>{1,129}:std::vector<unsigned>{1,15,16,17,63,64,65,127,128,129,512,4095,4096})
- for(unsigned rows:small?std::vector<unsigned>{1,8}:std::vector<unsigned>{1,3,8,16,32})
- for(unsigned shared=0;shared<3;++shared){
+ for(unsigned count:profile?std::vector<unsigned>{512}:small?std::vector<unsigned>{1,129}:std::vector<unsigned>{1,15,16,17,63,64,65,127,128,129,512,4095,4096})
+ for(unsigned rows:profile?std::vector<unsigned>{32}:small?std::vector<unsigned>{1,8}:std::vector<unsigned>{1,3,8,16,32})
+ for(unsigned shared=profile?1:0;shared<(profile?2:3);++shared){
   for(unsigned r=0;r<32;++r){hs[r*416+1]=count-1-((shared==2&&r%2)?min(count-1,17u):0);for(unsigned p=0;p<256;++p)hp[r*416+p]=(p*37+((shared&&p<((count-1)/128)*8)?0:r*13))%512;}
   CK(cudaMemcpy(shape,hs.data(),M*4,cudaMemcpyHostToDevice));CK(cudaMemcpy(pages,hp.data(),M*4,cudaMemcpyHostToDevice));CK(cudaMemcpy(active,&rows,4,cudaMemcpyHostToDevice));
   std::vector<riley_request_pair::Pair> descriptors;for(unsigned r=0;r<rows;r+=2)descriptors.push_back({r,min(r+1,rows-1)});CK(cudaMemcpy(pairs,descriptors.data(),descriptors.size()*sizeof(descriptors[0]),cudaMemcpyHostToDevice));
@@ -42,6 +43,8 @@ int main(int argc,char**argv){
   }
   for(unsigned mode=0;mode<2;++mode){CK(cudaGraphExecDestroy(execs[mode]));CK(cudaGraphDestroy(graphs[mode]));}
  }
+ auto attributes=[&](const char* name,auto kernel,unsigned threads){cudaFuncAttributes a;CK(cudaFuncGetAttributes(&a,kernel));int blocks;CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks,kernel,threads,0));std::printf("RESOURCE kernel=%s registers=%d shared_bytes=%zu local_bytes=%zu resident_blocks=%d threads=%u\n",name,a.numRegs,a.sharedSizeBytes,a.localSizeBytes,blocks,threads);};
+ attributes("original_scores",riley_gqa50_attention::scores,32);attributes("pair_scores",riley_request_pair::scores,32);attributes("original_values",riley_gqa50_attention::independent_values,96);attributes("pair_values",riley_request_pair::values,96);
  std::printf("DONE checks=%u\n",checks);CK(cudaStreamDestroy(stream));
  for(void*p:{(void*)q,(void*)k,(void*)v,(void*)a,(void*)b,(void*)score,(void*)alpha,(void*)inverse,(void*)prob,(void*)shape,(void*)pages,(void*)active,(void*)pairs})CK(cudaFree(p));
 }

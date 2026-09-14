@@ -1,0 +1,12 @@
+
+NOTICE: Existing SQLite export found: /data/riley-serving-260913-recovery/decode-request-pair-profile-evidence-v1/trace.sqlite
+        It is assumed file was previously exported from: /data/riley-serving-260913-recovery/decode-request-pair-profile-evidence-v1/trace.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/data/riley-serving-260913-recovery/decode-request-pair-profile-evidence-v1/trace.sqlite] with [/data/cuda-12.8.1/nsight-systems-2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+53.2,5266383,224,23510.6,23520.0,23392,23936,59.6,"riley_request_pair::values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const riley_request_pair::Pair *, unsigned int)"
+24.5,2423317,222,10915.8,10912.0,10656,11296,105.9,"riley_gqa50_attention::independent_values(const float *, const __nv_bfloat16 *, __nv_bfloat16 *, const unsigned int *, const unsigned int *, const unsigned int *)"
+11.2,1112331,224,4965.8,4960.0,4864,5152,45.7,"riley_request_pair::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const riley_request_pair::Pair *, unsigned int)"
+11.0,1093193,222,4924.3,4928.0,4832,5440,56.6,"riley_gqa50_attention::scores(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *, const unsigned int *, const unsigned int *)"
+

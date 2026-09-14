@@ -1,0 +1,16 @@
+CHECK context=512 rows=32 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=512 rows=32 shared=1 scale=32 mismatch=0 replay=0
+TIME context=512 rows=32 shared=1 order=0 mode=0 us=16.930882
+TIME context=512 rows=32 shared=1 order=0 mode=1 us=29.556480
+TIME context=512 rows=32 shared=1 order=1 mode=1 us=29.560001
+TIME context=512 rows=32 shared=1 order=1 mode=0 us=16.919039
+RESOURCE kernel=original_scores registers=39 shared_bytes=0 local_bytes=0 resident_blocks=24 threads=32
+RESOURCE kernel=pair_scores registers=40 shared_bytes=0 local_bytes=0 resident_blocks=24 threads=32
+RESOURCE kernel=original_values registers=40 shared_bytes=2304 local_bytes=0 resident_blocks=16 threads=96
+RESOURCE kernel=pair_values registers=72 shared_bytes=3072 local_bytes=0 resident_blocks=9 threads=96
+DONE checks=2
+Collecting data...
+Generating '/tmp/nsys-report-3115.qdstrm'
+[1/1] [0%                          ] trace.nsys-rep[1/1] [0%                          ] trace.nsys-rep[1/1] [11%                         ] trace.nsys-rep[1/1] [===========52%              ] trace.nsys-rep[1/1] [=======================93%  ] trace.nsys-rep[1/1] [=======================94%  ] trace.nsys-rep[1/1] [========================100%] trace.nsys-rep[1/1] [========================100%] trace.nsys-rep
+Generated:
+    /data/riley-serving-260913-recovery/decode-request-pair-profile-evidence-v1/trace.nsys-rep
