@@ -1,0 +1,52 @@
+{
+  "host": "macOS-26.6.2-arm64-arm-64bit",
+  "scope": "local CPU validator only; not remote serving",
+  "rows": 32,
+  "ledger_entries": 1152,
+  "iterations_per_measurement": 2000,
+  "order_0": "baseline then candidate",
+  "order_1": "candidate then baseline",
+  "values_ns_per_call_baseline_candidate": {
+    "0": [
+      [
+        10582,
+        8038
+      ],
+      [
+        5228,
+        6325
+      ]
+    ],
+    "4": [
+      [
+        6341,
+        5595
+      ],
+      [
+        5251,
+        5417
+      ]
+    ],
+    "16": [
+      [
+        12282,
+        8526
+      ],
+      [
+        12485,
+        8683
+      ]
+    ],
+    "32": [
+      [
+        24528,
+        22388
+      ],
+      [
+        24521,
+        22590
+      ]
+    ]
+  },
+  "source_sha256": "f0364813d882f7908e3784de8ece9ed892799758cee4cb85cb05fa831aa1c198"
+}

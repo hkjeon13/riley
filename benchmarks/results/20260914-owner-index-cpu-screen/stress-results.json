@@ -1,0 +1,154 @@
+{
+  "host": "macOS-26.6.2-arm64-arm-64bit",
+  "scope": "local CPU structural validator only; no serving or retention timing",
+  "iterations_per_measurement": 200,
+  "separate_warmup": false,
+  "source_sha256": "ebd7b9242d5a6af6f10cfed6d44f2ab2e231551611e551ccb1b2c2d431f66b63",
+  "base_commit": "57387a6b7800c9454e6bf84480ee6379c461a21b",
+  "measurements": [
+    {
+      "owners": 16,
+      "off_batch": 0,
+      "rows": 32,
+      "ledger": 1152,
+      "order": 0,
+      "mode": 0,
+      "ns_per_call": 15009
+    },
+    {
+      "owners": 16,
+      "off_batch": 0,
+      "rows": 32,
+      "ledger": 1152,
+      "order": 0,
+      "mode": 1,
+      "ns_per_call": 9842
+    },
+    {
+      "owners": 16,
+      "off_batch": 0,
+      "rows": 32,
+      "ledger": 1152,
+      "order": 1,
+      "mode": 1,
+      "ns_per_call": 9423
+    },
+    {
+      "owners": 16,
+      "off_batch": 0,
+      "rows": 32,
+      "ledger": 1152,
+      "order": 1,
+      "mode": 0,
+      "ns_per_call": 14339
+    },
+    {
+      "owners": 16,
+      "off_batch": 32,
+      "rows": 32,
+      "ledger": 1920,
+      "order": 0,
+      "mode": 0,
+      "ns_per_call": 32345
+    },
+    {
+      "owners": 16,
+      "off_batch": 32,
+      "rows": 32,
+      "ledger": 1920,
+      "order": 0,
+      "mode": 1,
+      "ns_per_call": 46540
+    },
+    {
+      "owners": 16,
+      "off_batch": 32,
+      "rows": 32,
+      "ledger": 1920,
+      "order": 1,
+      "mode": 1,
+      "ns_per_call": 43560
+    },
+    {
+      "owners": 16,
+      "off_batch": 32,
+      "rows": 32,
+      "ledger": 1920,
+      "order": 1,
+      "mode": 0,
+      "ns_per_call": 29064
+    },
+    {
+      "owners": 16,
+      "off_batch": 128,
+      "rows": 32,
+      "ledger": 4224,
+      "order": 0,
+      "mode": 0,
+      "ns_per_call": 88492
+    },
+    {
+      "owners": 16,
+      "off_batch": 128,
+      "rows": 32,
+      "ledger": 4224,
+      "order": 0,
+      "mode": 1,
+      "ns_per_call": 395087
+    },
+    {
+      "owners": 16,
+      "off_batch": 128,
+      "rows": 32,
+      "ledger": 4224,
+      "order": 1,
+      "mode": 1,
+      "ns_per_call": 395903
+    },
+    {
+      "owners": 16,
+      "off_batch": 128,
+      "rows": 32,
+      "ledger": 4224,
+      "order": 1,
+      "mode": 0,
+      "ns_per_call": 86991
+    },
+    {
+      "owners": 16,
+      "off_batch": 512,
+      "rows": 32,
+      "ledger": 13440,
+      "order": 0,
+      "mode": 0,
+      "ns_per_call": 501507
+    },
+    {
+      "owners": 16,
+      "off_batch": 512,
+      "rows": 32,
+      "ledger": 13440,
+      "order": 0,
+      "mode": 1,
+      "ns_per_call": 7978298
+    },
+    {
+      "owners": 16,
+      "off_batch": 512,
+      "rows": 32,
+      "ledger": 13440,
+      "order": 1,
+      "mode": 1,
+      "ns_per_call": 7730693
+    },
+    {
+      "owners": 16,
+      "off_batch": 512,
+      "rows": 32,
+      "ledger": 13440,
+      "order": 1,
+      "mode": 0,
+      "ns_per_call": 509334
+    }
+  ]
+}

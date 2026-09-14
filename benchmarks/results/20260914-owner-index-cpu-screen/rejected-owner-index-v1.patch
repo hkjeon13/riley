@@ -1,0 +1,162 @@
+diff --git a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+index ce108d49..f24e229b 100644
+--- a/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
++++ b/crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs
+@@ -47,6 +47,21 @@ pub const MIXED_REQUEST_BYTES:usize=Layout::<32>::REQUEST_BYTES+4096;
+ pub fn request_bytes<const ROWS:usize>(e:&Expectation<ROWS>)->usize{if e.mixed_execution{MIXED_REQUEST_BYTES}else{Layout::<ROWS>::REQUEST_BYTES}}
+ fn stage_number(stage:InputStage)->u32{match stage {InputStage::Prefill=>0,InputStage::Decode=>1,InputStage::Verification=>3}}
+ fn packet_stage<const ROWS:usize>(e:&Expectation<ROWS>)->u32{if e.mixed_execution && e.rows.iter().any(|r|r.progress.stage==InputStage::Prefill) && e.rows.iter().any(|r|r.progress.stage==InputStage::Decode){2}else{stage_number(e.stage)}}
++// Sparse shared-owner nodes indexed by physical page. Exclusive pages allocate
++// no nodes; duplicate detection preserves the original ledger iteration order.
++struct SharedOwnerIndex { heads:Vec<usize>, nodes:Vec<(u64,usize)> }
++impl SharedOwnerIndex {
++    fn new(pages:usize)->Self{Self{heads:vec![usize::MAX;pages],nodes:Vec::new()}}
++    fn contains(&self,page:u32,tag:u64)->bool {
++        let mut at=self.heads[page as usize];
++        while at!=usize::MAX {let (owner,next)=self.nodes[at];if owner==tag{return true;}at=next;}
++        false
++    }
++    fn insert(&mut self,page:u32,tag:u64)->bool {
++        if self.contains(page,tag){return false;}
++        let head=&mut self.heads[page as usize];self.nodes.push((tag,*head));*head=self.nodes.len()-1;true
++    }
++}
+ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
+     validate_after(e,e.last_accepted_replay)
+ }
+@@ -71,13 +86,13 @@ fn validate_after<const ROWS:usize>(e:&Expectation<ROWS>,last_accepted_replay:u6
+     // are allocated only for actual shared pages, not once per ordinary page.
+     let mut ownership=vec![0u64;e.physical_block_count as usize];
+     let mut shared_pages=vec![false;e.physical_block_count as usize];
+-    let mut shared_owners=BTreeSet::new();
++    let mut shared_owners=SharedOwnerIndex::new(e.physical_block_count as usize);
+     for x in &e.block_ownership {
+         check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count,
+             "ownership","invalid owner/page pair")?;
+         let owner=&mut ownership[x.physical_id as usize];
+         if *owner==0 {*owner=x.sequence_tag;} else {
+-            check(*owner!=x.sequence_tag && shared_owners.insert((x.physical_id,x.sequence_tag)),
++            check(*owner!=x.sequence_tag && shared_owners.insert(x.physical_id,x.sequence_tag),
+                 "ownership","duplicate owner/page pair")?;
+             shared_pages[x.physical_id as usize]=true;
+         }
+@@ -98,7 +113,7 @@ fn validate_after<const ROWS:usize>(e:&Expectation<ROWS>,last_accepted_replay:u6
+             check(id<e.physical_block_count,"pages","out of pool")?;
+             let owner=ownership[id as usize];
+             check(owner!=0,"ownership","page is absent from retained authority")?;
+-            check(owner==row.sequence_tag || shared_owners.contains(&(id,row.sequence_tag)),
++            check(owner==row.sequence_tag || shared_owners.contains(id,row.sequence_tag),
+                 "ownership","page not reserved by this request")?;
+             let shared=shared_pages[id as usize];
+             check(!shared || (e.shared_prefixes && ROWS==32 && e.mixed_execution),
+@@ -216,6 +231,10 @@ impl<const ROWS:usize> CheckedExpectation<'_,ROWS> {
+     /// Check the whole predecessor ledger, including cache-only/off-batch owners.
+     /// Sorting once replaces a quadratic scan for every predecessor pair.
+     pub(super) fn retains_ownership(&self, previous:&Expectation<ROWS>)->bool {
++        // An identical ordered prefix proves inclusion without sorting. If the
++        // scheduler reordered or removed entries, retain the full set check.
++        if self.expectation.block_ownership.len()>=previous.block_ownership.len()
++            && self.expectation.block_ownership.iter().zip(&previous.block_ownership).all(|(a,b)|a.physical_id==b.physical_id && a.sequence_tag==b.sequence_tag) {return true;}
+         let mut pairs:Vec<_>=self.expectation.block_ownership.iter().map(|p|(p.physical_id,p.sequence_tag)).collect();
+         pairs.sort_unstable();
+         previous.block_ownership.iter().all(|p|pairs.binary_search(&(p.physical_id,p.sequence_tag)).is_ok())
+@@ -758,3 +777,99 @@ mod lane_argmax_tests {
+   for winner in 0..32 {let mut values=vec![0xbf80u16;32];values[winner]=0;values[(winner+8).min(31)]=0x8000;let bytes:Vec<_>=values.iter().flat_map(|x|x.to_le_bytes()).collect();assert_eq!(finite_argmax(&bytes).unwrap(),winner as u32);}
+  }
+ }
++
++#[cfg(test)]
++fn owner_index_baseline<const ROWS:usize>(e:&Expectation<ROWS>,last_accepted_replay:u64)->Result<()> {
++    check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
++    check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
++    check(e.replay_id==last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
++    check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
++    check(!e.mixed_execution || (e.packed_prefill&&ROWS==32),"capacity","mixed execution requires packed32 capability")?;
++    check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
++    check(!e.shared_prefixes || (ROWS==32 && e.mixed_execution),"capability","shared prefixes require V7")?;
++    let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
++    let verification=e.rows.iter().filter(|r|r.progress.stage==InputStage::Verification).count();
++    if verification>0 {
++        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=32 && e.mixed_execution && (!e.shared_prefixes || e.mode==ResultMode::Greedy),"verification","requires pure verification batch with retained ownership")?;
++    } else {check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;}
++    check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
++    let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
++    check(e.stage==InputStage::Decode || total<=1024,"tokens","packed token capacity exceeded")?;
++    check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
++    // Preserve the exclusive path's one-owner map. Extra ownership/alias nodes
++    // are allocated only for actual shared pages, not once per ordinary page.
++    let mut ownership=vec![0u64;e.physical_block_count as usize];
++    let mut shared_pages=vec![false;e.physical_block_count as usize];
++    let mut shared_owners=BTreeSet::new();
++    for x in &e.block_ownership {
++        check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count,
++            "ownership","invalid owner/page pair")?;
++        let owner=&mut ownership[x.physical_id as usize];
++        if *owner==0 {*owner=x.sequence_tag;} else {
++            check(*owner!=x.sequence_tag && shared_owners.insert((x.physical_id,x.sequence_tag)),
++                "ownership","duplicate owner/page pair")?;
++            shared_pages[x.physical_id as usize]=true;
++        }
++    }
++    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage!=InputStage::Prefill).count();
++    let (mut tags,mut cookies,mut slots)=(BTreeSet::new(),BTreeSet::new(),0u32);
++    let mut used=vec![None;e.physical_block_count as usize];
++    for row in &e.rows {
++        check(row.sequence_tag!=0 && tags.insert(row.sequence_tag) && row.cookie!=0 && cookies.insert(row.cookie),"row_identity","duplicate or zero request identity")?;
++        check(row.output_slot<e.rows.len() as u32 && slots&(1u32<<row.output_slot)==0,"slot","slots not unique and dense")?;
++        slots|=1u32<<row.output_slot;
++        check(e.mixed_execution || row.progress.stage==e.stage,"stage","row stage differs")?;
++        let v=row.progress.validate()?;
++        if e.packed_prefill {check(((row.output_slot as usize)<published)==v.logits_input_row.is_some(),"slot","published slots must precede internal partial slots")?;}
++        check(row.input_tokens.len()==row.progress.input_tokens as usize && row.input_tokens.iter().all(|&t|t<49152),"tokens","invalid token count or vocabulary")?;
++        check(row.physical_ids.len()==v.live_pages as usize && row.valid_tokens.len()==v.live_pages as usize,"pages","page map does not cover target exactly")?;
++        for (i,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
++            check(id<e.physical_block_count,"pages","out of pool")?;
++            let owner=ownership[id as usize];
++            check(owner!=0,"ownership","page is absent from retained authority")?;
++            check(owner==row.sequence_tag || shared_owners.contains(&(id,row.sequence_tag)),
++                "ownership","page not reserved by this request")?;
++            let shared=shared_pages[id as usize];
++            check(!shared || (e.shared_prefixes && ROWS==32 && e.mixed_execution),
++                "ownership","shared prefixes require the V7 owner capability")?;
++            let writes=i>=row.progress.committed_tokens as usize/16;
++            // The ledger includes off-batch consumers. A writer cannot ignore
++            // them merely because their rows are absent from this iteration.
++            check(!shared || !writes,"ownership","shared page requires COW before append")?;
++            if let Some((tag,index))=used[id as usize] {
++                check(shared && tag!=row.sequence_tag && index==i,
++                    "pages","alias is not an immutable position-identical prefix")?;
++            } else {used[id as usize]=Some((row.sequence_tag,i));}
++            check(valid==if i+1==row.physical_ids.len(){v.last_page_tokens}else{16},"valid_tokens","invalid page occupancy")?;
++        }
++    }
++    Ok(())
++}
++
++// Frozen tree-based oracle for differential contract tests.
++
++#[cfg(test)]
++mod owner_index_bench {
++ use super::*;
++ #[test]
++ #[ignore = "manual CPU cost experiment; not serving qualification"]
++ fn compare_shared_owner_cost() {
++  use std::{hint::black_box,time::Instant};
++  for owners in [16usize] {
++  for off_batch in [0u64,32,128,512] {
++   let mut e=tests::fixture_rows::<32>(InputStage::Decode,32);
++   e.shared_prefixes=true;e.mixed_execution=true;e.packed_prefill=true;
++   for (r,row) in e.rows.iter_mut().enumerate(){
++    row.progress.prompt_tokens=512;row.progress.committed_tokens=575;
++    row.physical_ids=(0..36).map(|p|if r<owners&&p<24 {p as u32}else{(r*64+p) as u32}).collect();row.valid_tokens=vec![16;36];
++   }
++   e.block_ownership=e.rows.iter().flat_map(|r|r.physical_ids.iter().map(move |&physical_id|BlockOwnership{physical_id,sequence_tag:r.sequence_tag})).collect();
++   for owner in 0..off_batch {for physical_id in 0..24 {e.block_ownership.push(BlockOwnership{physical_id,sequence_tag:10000+owner});}}
++   assert_eq!(owner_index_baseline(&e,e.last_accepted_replay),Ok(()));assert_eq!(validate(&e),Ok(()));
++   for order in 0..2 {for at in 0..2 {let mode=if order==0 {at}else{1-at};let start=Instant::now();
++    for _ in 0..200 {let result=if mode==0 {owner_index_baseline(black_box(&e),e.last_accepted_replay)}else{validate(black_box(&e))};black_box(result).unwrap();}
++    println!("OWNER_STRESS owners={} off_batch={} rows=32 ledger={} order={} mode={} ns_per_call={}",owners,off_batch,e.block_ownership.len(),order,mode,start.elapsed().as_nanos()/200);
++   }}
++  }}
++ }
++}
