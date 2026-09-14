@@ -68,3 +68,11 @@ C32 보관 archive의 `serving/fixtures.json`을 직접 확인했다. Shared 32�
 3. 그룹이 작거나 prefix가 짧은 경우 기존 경로를 사용하고, bounded metadata/scratch를 graph replay에 결합한다. Prefix 일치가 없는 unique에서 grouping overhead로 회귀하지 않는지 함께 측정한다.
 
 기존 GQA staging은 같은 요청의 세 query head를 묶었지만 이 후보는 여러 요청을 묶는다. 다만 둘 다 추가 shared memory·barrier·register 비용을 지불하므로 과거 GQA serving 회귀를 무시하지 않는다. Group 크기/공통 aligned tile 수의 실측이 충분할 때만 native 구현으로 진행한다. 먼저 현재 compact decode의 실제 dispatch와 소유권 metadata 경로를 추적해야 한다. 이 후보는 4090에서도 연구 가능하고 Hopper/Blackwell 전용 pipeline으로 확장할 여지가 있으며, runtime Python을 요구하지 않는다.
+
+### 실제 decode dispatch 및 비용 확인
+
+`graph_resources.cu`의 compact shared-model 선택 → `graph_numerics_precise.cu`의 `enqueue_compiled_v7_ffn_pipeline_shared_model` → `decode_shared32_model.cuh`의 grouped attention → `decode_gqa_attention_v50.cuh` 경로를 확인했다. AdaptiveRows 선택도 같은 shared32 model의 grouped attention을 사용한다. `compact_mixed_attention.cuh`를 이 pure-decode 경로라고 가정해서 수정하면 안 된다.
+
+실제 QK `scores`는 CTA y를 요청/3 KV heads로 나누고 세 query heads를 처리한다. `independent_values`가 이후 softmax와 V 곱을 수행한다. C32 profile archive의 원래 per-kernel export에서 candidate shared decode는 QK 16.040ms, values 33.021ms / graph span 144.803ms이며, unique는 QK 22.755ms, values 31.244ms / span 135.529ms다. 같은 trace의 선택 구간 수치이고 새 serving 결과가 아니다.
+
+QK-only 비용 제거의 이론적 한계도 shared decode 구간 약 11.1%이므로 QK packing만을 획기적 serving 개선으로 제시하지 않는다. 요청 간 QK packing은 기존 per-row K16 score 순서를 보존할 가능성이 있으나, values 단계의 공통 V reuse까지 비용과 correctness를 함께 검토해야 한다. 이 분리 구조에서는 새로운 prefix/suffix state merge 없이 score 생산과 value 소비를 각각 개선할 여지가 있다. 실제 반복별 공유 page grouping의 비용·수명을 먼저 확인한다.
