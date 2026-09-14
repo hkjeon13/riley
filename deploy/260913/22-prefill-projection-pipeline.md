@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 serving 완료·변동성으로 재측정 필요. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 긴 구간 검증 완료, C8/C64 및 승격 판정 대기. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
 
 ## 근거와 범위
 
@@ -49,3 +49,11 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 새 archive helper는 completed/exit receipt를 확인한 뒤 common 및16개 lane의 무손실 archive를 각각64MiB 미만으로 보존한다. Long exporter는 manifest hash,256/8192 request count, 동일 controller/client·budget,reference/stop/cancel/recovery,PSI delta를 검증한다. 첫 prior shared 구간은 약28초였고 전체 비교는 진행 중이다. 완료 전 성능 승격 또는 안정성 통과로 표시하지 않는다.
 
 긴 구간 exporter는 저장된 checks flag에만 의존하지 않고 fixture별 prompt/output token, text hash, finish, usage와 기록된 SSE frame을 다시 대조한다. 도착 시각 개수·순서 및 phase 시간 범위도 확인한다. 보강한 공통 validator는 기존 실제 응답2560개에서 검증했다. 전송 종료 `[DONE]`은 frames에 보존되지 않으므로 해당 transport 검사는 여전히 hash-bound client의 완료 조건에 의존한다. 현재 긴 C32 run은 같은 실행으로 계속 진행 중이며 재시작하지 않았다.
+
+## 긴 C32 비교 완료
+
+[전체 결과 및 원본 증거](../../benchmarks/results/20260914-projection-long-serving/README.md): 16개 lane,131,072 retained 요청/4,194,304 output tokens를 완료했다.98,304개 Riley 응답이 기준과 일치하며 stop/cancel/recovery 각96건이 통과했다. 보강한 verifier의 fixture·SSE frame·시간 경계 대조도 통과했다. Blender3개는 복구했고 웹 서버는 유지했다.
+
+후보 throughput은 frozen prior 대비 shared +3.56%, unique +8.54%; 동일 binary control 대비 +4.01%, +8.37%다. 기존 Riley 대비 shared E2E P99는362.44→364.43ms(+0.55%)로 악화했고 다른 표의 latency 지표는 개선됐지만 vLLM throughput보다 각각9.57%,19.86% 낮으며 latency 전체 목표도 미달이다. 모델을 고정한 채 같은 긴 구간 평가를 C8/C64로 확장한다. 추가 모델·장기/open-loop·다른 GPU runtime gate는 미완료다.
+
+긴 구간에서 모든 engine의 shared E2E P99가 짧은 screen보다 크게 늘었다. Client가 phase 전체의 SSE frame 객체를 보존하는 현재 경로와 host stall을 구분하기 위해, C8/C64 확대 전에 같은 frozen binary를 유지한 bounded client-pause diagnostic을 수행한다. GC timing은 이번 run에서 측정하지 않았으므로 원인으로 단정하거나 latency에서 임의 차감하지 않는다.

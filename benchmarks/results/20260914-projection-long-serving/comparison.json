@@ -1,0 +1,486 @@
+{
+  "scope": "closed-loop C32 extended fixed-count comparison; two reversed-order runs; not overall qualification",
+  "aggregation": "median of two lane throughput / percentile estimates, not pooled percentiles",
+  "retained_requests": 131072,
+  "retained_tokens": 4194304,
+  "archive_sha256": {
+    "common.tar.gz": "859aefc62ab67fa2ec7b1b8c87bffaa59cf53a4948dbe6fccefee838aa7f0c8c",
+    "shared-p0-control.tar.gz": "3df4a42e9d99da102b260516c6c5b3e8752ebf3f988af6079b874be3b7e720fd",
+    "shared-p0-prior.tar.gz": "1a721dcb40b6fc7159ce0dd3cf6f46bd984857ca65bdce24dee4d202c242ed36",
+    "shared-p0-projection.tar.gz": "80ac3f3a69783185f34a82867f1da913216053de4a65755800ff763b51f18473",
+    "shared-p0-vllm.tar.gz": "e2d789ffb672e371b8769f23fb65ffbeb418721287f14923b57e34d772a5b87c",
+    "shared-p1-control.tar.gz": "88afad27a8591ce0c484c8aa48063226b8dca76f4262a563339000dbb663b232",
+    "shared-p1-prior.tar.gz": "792a5ba928f11a6022f2a6a35ee34f8a0108e4b170e3e55655d45ab050ed2b66",
+    "shared-p1-projection.tar.gz": "9e8bd1312fc70b4adbc2fea8995ecf0767bbc8e01d0495570556fcfa0448587d",
+    "shared-p1-vllm.tar.gz": "2f5e26f995b61ae5a05d01425080208e1518d517b9f2d216a7f5e8038d1d2213",
+    "unique-p0-control.tar.gz": "e0fe08b83a1766b5824a625c155b87ff1853f4dc1c9bad23a0a8fe0330945c22",
+    "unique-p0-prior.tar.gz": "3b2d97fd14d738022295f6cc028322c1b047388368729a399d40ce4516892086",
+    "unique-p0-projection.tar.gz": "23a81e66d45bdb4fe6a725c3f13690dfd68fb38d5e26e89e6bf97f83f6ebb3b9",
+    "unique-p0-vllm.tar.gz": "ff59295258e2ba256573ca07f19433715225e8425bc9f5a40c86a7df1ece8faa",
+    "unique-p1-control.tar.gz": "b773e18eebaab3823564ce541751a5ea57cdd644989f7ec264145249250c5c33",
+    "unique-p1-prior.tar.gz": "3658ceb51ef2cce5113705f4f5e80a8d8d9e70cb51f0c3ab9c378b57aa0a8159",
+    "unique-p1-projection.tar.gz": "3be3f159874021cc9cc8b9d09371cb93cdd637298c664308f02e2b9688179c09",
+    "unique-p1-vllm.tar.gz": "d5afc1548fd369d12c76e434e6e42bf5c13105fe66ebf936a5c60b33c9808fd8"
+  },
+  "preparation": {
+    "hashes": {
+      "current": "009697527d143357c3b3d1a2daa5d8b783298024ac1f8f2aa4ea388bbd3ad929",
+      "prior": "b51b1c4ea6a6c6d3953a639c6459081241e25b51d37ecf0f260384184d8a84b8"
+    },
+    "controller_sha256": "0d5b62f8bfd5c53c511b15971920674210047c38ecf62f84d5c515677f143163",
+    "client_sha256": "adf9930078b8c9fd4a83ef0fd5936749fb9088a5114c47644883458d5dd9cf7e",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "concurrency": 32,
+    "active_capacity": 32,
+    "warmup": 256,
+    "retained": 8192,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "qualification": false,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "prompt_token_ranges": {
+    "shared": [
+      498,
+      518
+    ],
+    "unique": [
+      552,
+      623
+    ]
+  },
+  "comparison": [
+    {
+      "workload": "shared",
+      "lane": "prior",
+      "throughput_tokens_s": 9360.070658265679,
+      "ttft_0.5_ms": 14.907021749999998,
+      "tpot_0.5_ms": 2.786314427419355,
+      "e2e_0.95_ms": 117.08004632499997,
+      "e2e_0.99_ms": 362.44449359500027,
+      "itl_0.5_ms": 1.61261725,
+      "itl_0.95_ms": 11.124494924999997,
+      "itl_0.99_ms": 12.094401269999999
+    },
+    {
+      "workload": "shared",
+      "lane": "control",
+      "throughput_tokens_s": 9319.654592249375,
+      "ttft_0.5_ms": 14.62951925,
+      "tpot_0.5_ms": 2.7641455322580644,
+      "e2e_0.95_ms": 124.79715325,
+      "e2e_0.99_ms": 402.89501658500035,
+      "itl_0.5_ms": 1.616811,
+      "itl_0.95_ms": 10.855837274999999,
+      "itl_0.99_ms": 11.822615184999997
+    },
+    {
+      "workload": "shared",
+      "lane": "projection",
+      "throughput_tokens_s": 9693.23351100968,
+      "ttft_0.5_ms": 13.99507125,
+      "tpot_0.5_ms": 2.698509193548387,
+      "e2e_0.95_ms": 109.52197534999999,
+      "e2e_0.99_ms": 364.42764346500024,
+      "itl_0.5_ms": 1.6105155,
+      "itl_0.95_ms": 10.516489699999997,
+      "itl_0.99_ms": 11.461561499999997
+    },
+    {
+      "workload": "shared",
+      "lane": "vllm",
+      "throughput_tokens_s": 10719.27344964433,
+      "ttft_0.5_ms": 30.0968205,
+      "tpot_0.5_ms": 1.7983572983870968,
+      "e2e_0.95_ms": 111.16502835,
+      "e2e_0.99_ms": 394.62285231000004,
+      "itl_0.5_ms": 1.627012,
+      "itl_0.95_ms": 3.9506080249999953,
+      "itl_0.99_ms": 7.217402514999995
+    },
+    {
+      "workload": "unique",
+      "lane": "prior",
+      "throughput_tokens_s": 3401.942254323103,
+      "ttft_0.5_ms": 71.78978275,
+      "tpot_0.5_ms": 7.200248556451613,
+      "e2e_0.95_ms": 346.19514775000005,
+      "e2e_0.99_ms": 499.70198479500016,
+      "itl_0.5_ms": 6.56864225,
+      "itl_0.95_ms": 10.084622875,
+      "itl_0.99_ms": 11.849557084999997
+    },
+    {
+      "workload": "unique",
+      "lane": "control",
+      "throughput_tokens_s": 3407.1979314242462,
+      "ttft_0.5_ms": 71.94169500000001,
+      "tpot_0.5_ms": 7.169489846774194,
+      "e2e_0.95_ms": 346.403980525,
+      "e2e_0.99_ms": 510.6117102450004,
+      "itl_0.5_ms": 6.55677925,
+      "itl_0.95_ms": 10.0429108,
+      "itl_0.99_ms": 11.693745895
+    },
+    {
+      "workload": "unique",
+      "lane": "projection",
+      "throughput_tokens_s": 3692.440131002428,
+      "ttft_0.5_ms": 66.23470025,
+      "tpot_0.5_ms": 6.605652177419355,
+      "e2e_0.95_ms": 319.24687944999994,
+      "e2e_0.99_ms": 481.2849900400002,
+      "itl_0.5_ms": 5.99623,
+      "itl_0.95_ms": 9.363469999999996,
+      "itl_0.99_ms": 11.047212429999991
+    },
+    {
+      "workload": "unique",
+      "lane": "vllm",
+      "throughput_tokens_s": 4607.670941201663,
+      "ttft_0.5_ms": 48.69917525,
+      "tpot_0.5_ms": 5.18369195967742,
+      "e2e_0.95_ms": 288.6832942,
+      "e2e_0.99_ms": 477.3149397100003,
+      "itl_0.5_ms": 5.0554594999999996,
+      "itl_0.95_ms": 6.728046674999998,
+      "itl_0.99_ms": 11.867689474999993
+    }
+  ],
+  "reference_agreement": {
+    "shared-p0-prior": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "shared-p0-control": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "shared-p0-projection": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "shared-p0-vllm": {
+      "prompt": 8192,
+      "tokens": 6897,
+      "text": 6897,
+      "finish": 8192
+    },
+    "shared-p1-vllm": {
+      "prompt": 8192,
+      "tokens": 6908,
+      "text": 6908,
+      "finish": 8192
+    },
+    "shared-p1-projection": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "shared-p1-control": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "shared-p1-prior": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p0-prior": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p0-control": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p0-projection": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p0-vllm": {
+      "prompt": 8192,
+      "tokens": 2544,
+      "text": 2544,
+      "finish": 8192
+    },
+    "unique-p1-vllm": {
+      "prompt": 8192,
+      "tokens": 2547,
+      "text": 2547,
+      "finish": 8192
+    },
+    "unique-p1-projection": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p1-control": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    },
+    "unique-p1-prior": {
+      "prompt": 8192,
+      "tokens": 8192,
+      "text": 8192,
+      "finish": 8192
+    }
+  },
+  "cache_telemetry_including_warmup": {
+    "shared-p0-prior": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 8530,
+      "reused_tokens": 4321696,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p0-projection": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 8512,
+      "reused_tokens": 4311936,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p1-projection": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 8434,
+      "reused_tokens": 4273728,
+      "host_capacity_bytes": 194152
+    },
+    "shared-p1-prior": {
+      "entries": 32,
+      "pages": 489,
+      "hits": 8416,
+      "reused_tokens": 4264688,
+      "host_capacity_bytes": 194152
+    },
+    "unique-p0-prior": {
+      "entries": 13,
+      "pages": 494,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 146312
+    },
+    "unique-p0-projection": {
+      "entries": 13,
+      "pages": 494,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 146312
+    },
+    "unique-p1-projection": {
+      "entries": 13,
+      "pages": 494,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 146312
+    },
+    "unique-p1-prior": {
+      "entries": 13,
+      "pages": 494,
+      "hits": 0,
+      "reused_tokens": 0,
+      "host_capacity_bytes": 146312
+    }
+  },
+  "host_pressure_by_retained_lane": {
+    "shared-p0-prior": {
+      "elapsed_ms": 28027.450694,
+      "fraction_percent": {
+        "cpu_some": 2.9628274403771218,
+        "cpu_full": 0.0,
+        "io_some": 6.811572057849323,
+        "io_full": 5.49252594111084,
+        "memory_some": 0.15370288389882772,
+        "memory_full": 0.1533782022108871
+      }
+    },
+    "shared-p0-control": {
+      "elapsed_ms": 28196.604068999997,
+      "fraction_percent": {
+        "cpu_some": 1.6483155165163235,
+        "cpu_full": 0.0,
+        "io_some": 6.19426720936307,
+        "io_full": 5.120393209291902,
+        "memory_some": 0.15687350112005435,
+        "memory_full": 0.15652594153536045
+      }
+    },
+    "shared-p0-projection": {
+      "elapsed_ms": 27124.07459,
+      "fraction_percent": {
+        "cpu_some": 1.4104333725031244,
+        "cpu_full": 0.0,
+        "io_some": 6.755128157166744,
+        "io_full": 5.916006441715068,
+        "memory_some": 0.17407782832675067,
+        "memory_full": 0.17342527150158527
+      }
+    },
+    "shared-p0-vllm": {
+      "elapsed_ms": 24476.606257,
+      "fraction_percent": {
+        "cpu_some": 1.2641907818062263,
+        "cpu_full": 0.0,
+        "io_some": 6.368305244744535,
+        "io_full": 5.394649021746528,
+        "memory_some": 0.18038039888545976,
+        "memory_full": 0.17971037135681453
+      }
+    },
+    "shared-p1-vllm": {
+      "elapsed_ms": 24446.727566,
+      "fraction_percent": {
+        "cpu_some": 1.357813634171866,
+        "cpu_full": 0.0,
+        "io_some": 8.585189957771545,
+        "io_full": 7.358927673011072,
+        "memory_some": 0.19742928729293796,
+        "memory_full": 0.19666435873759186
+      }
+    },
+    "shared-p1-projection": {
+      "elapsed_ms": 26975.682234,
+      "fraction_percent": {
+        "cpu_some": 1.3070253309686877,
+        "cpu_full": 0.0,
+        "io_some": 10.362110495492427,
+        "io_full": 8.688936871616027,
+        "memory_some": 0.16658707501884937,
+        "memory_full": 0.16608662428389132
+      }
+    },
+    "shared-p1-control": {
+      "elapsed_ms": 28069.980386,
+      "fraction_percent": {
+        "cpu_some": 1.4647641157778186,
+        "cpu_full": 0.0,
+        "io_some": 12.397550522463696,
+        "io_full": 10.312030718210563,
+        "memory_some": 0.16483445789323325,
+        "memory_full": 0.1642787040314393
+      }
+    },
+    "shared-p1-prior": {
+      "elapsed_ms": 27997.330677,
+      "fraction_percent": {
+        "cpu_some": 1.3600260838895115,
+        "cpu_full": 0.0,
+        "io_some": 10.408395834656949,
+        "io_full": 8.8633914019474,
+        "memory_some": 0.1574471527609339,
+        "memory_full": 0.1566149305655822
+      }
+    },
+    "unique-p0-prior": {
+      "elapsed_ms": 77201.23297,
+      "fraction_percent": {
+        "cpu_some": 1.1437589349682118,
+        "cpu_full": 0.0,
+        "io_some": 19.821954146699426,
+        "io_full": 17.256588382697174,
+        "memory_some": 0.15108696521119824,
+        "memory_full": 0.15057402003562845
+      }
+    },
+    "unique-p0-control": {
+      "elapsed_ms": 76958.97553200001,
+      "fraction_percent": {
+        "cpu_some": 1.1295121770930487,
+        "cpu_full": 0.0,
+        "io_some": 13.550988598677074,
+        "io_full": 11.852023674882927,
+        "memory_some": 0.16048290553016192,
+        "memory_full": 0.15900809379812678
+      }
+    },
+    "unique-p0-projection": {
+      "elapsed_ms": 71086.384181,
+      "fraction_percent": {
+        "cpu_some": 1.2657599769162187,
+        "cpu_full": 0.0,
+        "io_some": 7.511147263313919,
+        "io_full": 6.600482010806919,
+        "memory_some": 0.1714575884035145,
+        "memory_full": 0.17108902274495896
+      }
+    },
+    "unique-p0-vllm": {
+      "elapsed_ms": 56286.208376,
+      "fraction_percent": {
+        "cpu_some": 1.2445553186323584,
+        "cpu_full": 0.0,
+        "io_some": 10.783433766677422,
+        "io_full": 9.408025789596312,
+        "memory_some": 0.186102427259365,
+        "memory_full": 0.18559253325818656
+      }
+    },
+    "unique-p1-vllm": {
+      "elapsed_ms": 57525.801781,
+      "fraction_percent": {
+        "cpu_some": 1.32065608210423,
+        "cpu_full": 0.0,
+        "io_some": 11.676233606566582,
+        "io_full": 10.111846892886334,
+        "memory_some": 0.20655600847139455,
+        "memory_full": 0.20583285470887297
+      }
+    },
+    "unique-p1-projection": {
+      "elapsed_ms": 70913.10960899999,
+      "fraction_percent": {
+        "cpu_some": 1.0600677422621358,
+        "cpu_full": 0.0,
+        "io_some": 26.054092257230717,
+        "io_full": 23.073794239483412,
+        "memory_some": 0.16698604905766432,
+        "memory_full": 0.16666029828848541
+      }
+    },
+    "unique-p1-control": {
+      "elapsed_ms": 76928.852086,
+      "fraction_percent": {
+        "cpu_some": 1.1001880010556226,
+        "cpu_full": 0.0,
+        "io_some": 24.237706002886373,
+        "io_full": 21.423564180544037,
+        "memory_some": 0.17565841207266913,
+        "memory_full": 0.17538153285996247
+      }
+    },
+    "unique-p1-prior": {
+      "elapsed_ms": 76923.20485699999,
+      "fraction_percent": {
+        "cpu_some": 1.192462016767529,
+        "cpu_full": 0.0,
+        "io_some": 16.76109442393666,
+        "io_full": 14.719932718676379,
+        "memory_some": 0.17467030949864681,
+        "memory_full": 0.17429331012564991
+      }
+    }
+  }
+}
