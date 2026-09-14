@@ -3,6 +3,7 @@
 Run locally after confirming the orchestrator process has exited. Remote terminal
 receipts are checked again before any compression. Never overwrites an export.
 """
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -45,28 +46,37 @@ def members(path):
 
 
 def main():
-    destinations = {c: ROOT / f'benchmarks/results/20260914-dense-wire-matrix-c{c}' for c in (8, 16, 64)}
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--concurrency', type=int, nargs='+', choices=[8,16,64], default=[8,16,64])
+    parser.add_argument('--version', type=int, choices=[2,3], default=2)
+    args = parser.parse_args()
+    version = args.version
+    destinations = {c: ROOT / f'benchmarks/results/20260914-dense-wire-matrix-c{c}' for c in args.concurrency}
     assert not any(path.exists() for path in destinations.values()), 'export already exists; inspect before retry'
-    # Read-only preflight. Do not compress until all three conditions are terminal.
+    # Read-only preflight. No matrix or serving controller may remain live.
     preflight = '''from pathlib import Path
 import json,hashlib
 r=Path(ROOT)
-assert json.loads((r/'dense-wire-matrix-v2/execution.json').read_text())==[{'concurrency':c,'exit_code':0} for c in (8,16,64)]
-for c in (8,16,64):
- p=Path(f'/dev/shm/riley-dense-wire-matrix-c{c}-v2')
- life=r/f'dense-wire-matrix-c{c}-lifecycle-v2'
+for proc in Path('/proc').iterdir():
+ if not proc.name.isdigit():continue
+ try: argv=proc.joinpath('cmdline').read_bytes().split(b'\\0')
+ except (FileNotFoundError,ProcessLookupError,PermissionError):continue
+ assert not any(Path(a.decode(errors='replace')).name.startswith('dense_wire_matrix') or a.endswith(b'/dense_wire_serving_screen.py') for a in argv), 'matrix process still live'
+for c in CONDITIONS:
+ p=Path(f'/dev/shm/riley-dense-wire-matrix-c{c}-vVERSION')
+ life=r/f'dense-wire-matrix-c{c}-lifecycle-vVERSION'
  assert json.loads((p/'complete.json').read_text())=={'lanes':12,'all_complete':True}
  assert json.loads((life/'execution.json').read_text())==[{'name':'serving','exit_code':0}]
  assert json.loads((life/'blender-restored.json').read_text())['restored']
  assert (life/'complete.txt').read_text()=='complete\\n'
 print(json.dumps({s:hashlib.sha256((r/'source'/s).read_bytes()).hexdigest() for s in SOURCES}))
-'''.replace('ROOT', repr(REMOTE)).replace('SOURCES', repr(SOURCES[:5]))
+'''.replace('ROOT', repr(REMOTE)).replace('SOURCES', repr(SOURCES[:5])).replace('CONDITIONS', repr(args.concurrency)).replace('VERSION', str(version))
     hashes = json.loads(subprocess.check_output(['ssh', 'ai-assistant', 'python3', '-'], input=preflight, text=True))
     assert hashes == {s: digest(ROOT / s) for s in SOURCES[:5]}, 'source changed since remote deployment'
     packages = subprocess.check_output(['ssh', 'ai-assistant', REMOTE + '/vllm029-venv/bin/python', '-m', 'pip', 'freeze'])
     assert b'vllm==0.29.0' in packages.splitlines()
     for concurrency, directory in destinations.items():
-        remote_archive = f'{REMOTE}/dense-wire-matrix-c{concurrency}-v2-evidence.tar.gz'
+        remote_archive = f'{REMOTE}/dense-wire-matrix-c{concurrency}-v{version}-evidence.tar.gz'
         code = '''from pathlib import Path
 import tarfile
 r=Path(ROOT)
@@ -76,7 +86,7 @@ with tarfile.open(ARCHIVE,'x:gz') as archive:
   for f in sorted(path.rglob('*')):
    if f.is_file() and f.suffix in ('.json','.jsonl','.log','.txt','.py'):
     archive.add(f,arcname=alias+'/'+str(f.relative_to(path)))
-'''.replace('ROOT', repr(REMOTE)).replace('SPOOL', repr(f'/dev/shm/riley-dense-wire-matrix-c{concurrency}-v2')).replace('LIFECYCLE', repr(f'dense-wire-matrix-c{concurrency}-lifecycle-v2')).replace('ARCHIVE', repr(remote_archive))
+'''.replace('ROOT', repr(REMOTE)).replace('SPOOL', repr(f'/dev/shm/riley-dense-wire-matrix-c{concurrency}-v{version}')).replace('LIFECYCLE', repr(f'dense-wire-matrix-c{concurrency}-lifecycle-v{version}')).replace('ARCHIVE', repr(remote_archive))
         subprocess.run(['ssh', 'ai-assistant', 'python3', '-'], input=code, text=True, check=True)
         directory.mkdir()
         subprocess.run(['scp', 'ai-assistant:' + remote_archive, str(directory / 'evidence.tar.gz')], check=True)
