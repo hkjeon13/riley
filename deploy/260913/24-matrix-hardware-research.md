@@ -1,5 +1,17 @@
 # 행렬·GPU·수치 알고리즘 연구 후보 — 2026-09-14
 
+## 추가 탐색: 수식 변환과 GPU 작업 분할
+
+아래는 추가로 확인한 연구 후보이며 현재 엔진의 성능 개선을 입증한 결과가 아니다.
+
+| 구체적 검색어 | 원문 | 적용 판단과 첫 실험 |
+|---|---|---|
+| GPU GEMM wave quantization work-centric decomposition small M large K Stream-K | [Stream-K](https://arxiv.org/abs/2301.03598) | 출력 tile 수가 SM을 충분히 채우지 못할 때 K-loop 작업 분할을 검토한다. 실제 대표 shape의 마지막 wave 비용과 partial-sum scratch/동기화 비용을 먼저 비교한다. 기존 FFN K320 BF16 부분합 경계를 바꾸는 일반 Stream-K를 strict 경로에 곧바로 대입하지 않는다. |
+| attention hidden softmax division stable exponential algebraic reformulation FLASH-D | [FLASH-D](https://arxiv.org/html/2505.14201v1) | normalization을 다른 비선형 연산과 결합하는 수식 변환을 검토한다. 논문의 수학적 동등성은 BF16/FP32 실행 동일성이 아니다. 현재 values 단계에서 실제 division 비용을 계측하고 극단 logits·마스킹·rounding 경계에 대한 oracle 실험 후 채택 여부를 결정한다. |
+| distributed exact attention blockwise ring KV communication computation overlap | [Ring Attention](https://arxiv.org/abs/2310.01889) | 장기 multi-GPU/긴 context 후보다. KV 통신과 block attention을 겹치는 설계에서 링크 대역폭, block 계산 시간, workspace를 함께 모델링한다. 짧은 decode serving에 논문의 overlap 성립을 가정하지 않는다. 단일 4090에서는 분할/수치 계약만 검증하고 실제 통신 성능은 미검증으로 남긴다. |
+
+우선순위는 요청 간 KV 재사용과 attention의 비행렬 연산 비용 확인, 이후 실제 wave 낭비가 있는 GEMM으로 둔다. 통계적 저랭크·random-feature·저정밀 방법은 품질 예산이 필요한 별도 경로로 유지한다. 위상수학 분야는 기존 모델을 유지하는 연산 변환과 실제 CUDA 비용 감소를 연결하는 근거가 있어야 구현 후보로 올린다. 분야 이름 자체를 채택 근거로 삼지 않는다.
+
 상태: 1차 논문 초록 및 기존 코드 대조로 후보를 선별했다. 본문·공개 구현·수치 조건의 상세 검토 및 구현 성능은 아직 미검증이다. 엔진 기능명에 한정하지 않고 GPU 자원 불균형, 통신 복잡도, 선형대수와 통계적 근사를 탐색한다. 아래 우선순위는 연구 순서이며 승격 결정이 아니다.
 
 ## 구체적인 검색과 적용 가설
