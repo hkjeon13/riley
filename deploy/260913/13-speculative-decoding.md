@@ -155,3 +155,22 @@ cancellation and commit-before-publication, and expose acceptance/work counters.
 Do not publish multiple scheduler tokens through the current single-token staging
 path unchanged. Compare actual serving after that integration; no new throughput
 or vLLM improvement is established by the call counts above.
+
+### Serving integration and measured regression — 2026-09-14
+
+Connected opt-in multi-token staging, stop-token/string truncation, prefix KV
+settlement and commit-before-publication, with ordinary request-processor fallback
+and counters. Scheduler 72 / runtime policy 7 / server 69 CPU tests pass; CUDA
+release builds. Matched C32 serving completes 16 lanes, 9,216 total warmup/retained
+requests, exact Riley references and stop/cancel/recovery (96 each).
+
+**Performance gate fails:** speculative throughput versus frozen best prior is
+−38.73% shared / −9.00% unique, and versus same-binary unbuffered control is
+−28.56% / −1.25%. Default remains disabled. vLLM 0.27.1 comparison and tails are
+recorded in `benchmarks/results/20260914-speculative-serving-c32/README.md`.
+
+Four bounded Nsight traces locate 56–60% of verification kernel time in mapped
+attention; M256 head GEMM is only approximately 2.5%. Prioritize short multi-query
+attention and KV reuse, including one-input owners, with strict token gates and
+matched serving remeasurement. Do not treat model-call reduction as speedup or
+start head bucketing before addressing the measured attention cost.

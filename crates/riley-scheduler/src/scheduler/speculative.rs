@@ -225,28 +225,10 @@ impl Scheduler {
         self.refresh_metric_gauges();
         Ok(Some(plan))
     }
-    /// The caller must establish GPU completion and append-only writes before
-    /// calling. Unknown writes use quiesced abort. Target rows are untrusted and
-    /// must include every input endpoint, even after mismatch or cancellation.
-    /// No publication occurs before every row and reservation is validated.
-    pub fn complete_speculative_iteration(
-        &mut self,
-        plan: &SpeculativePlan,
-        targets: &[Vec<u32>],
-        now_ns: u64,
-        timing: crate::IterationTiming,
-    ) -> SchedulerResult<IterationUpdates> {
-        let started = Instant::now();
-        self.ensure_completion_backlog_empty()?;
-        self.validate_now(now_ns)?;
+    /// Validate the complete target result before detokenization stages output.
+    pub fn preview_speculative_iteration(&self,plan:&SpeculativePlan,targets:&[Vec<u32>])->SchedulerResult<Vec<riley_runtime::speculative::GreedyDecision>> {
         self.validate_inflight_reservations()?;
-        let pending = self
-            .inflight
-            .as_ref()
-            .ok_or(SchedulerError::NoIterationInFlight)?;
-        if pending.speculative.as_ref() != Some(plan) || targets.len() != plan.rows.len() {
-            return Err(invalid());
-        }
+        if self.inflight.as_ref().and_then(|p|p.speculative.as_ref())!=Some(plan) || targets.len()!=plan.rows.len(){return Err(invalid());}
         let mut decisions = Vec::new();
         try_reserve_exact(&mut decisions, targets.len(), "speculative decisions")?;
         for (row, target) in plan.rows.iter().zip(targets) {
@@ -262,6 +244,40 @@ impl Scheduler {
                 )
                 .map_err(|_| invalid())?,
             );
+        }
+        Ok(decisions)
+    }
+    /// The caller must establish GPU completion and append-only writes before
+    /// calling. Unknown writes use quiesced abort. Target rows are untrusted and
+    /// must include every input endpoint, even after mismatch or cancellation.
+    /// No publication occurs before every row and reservation is validated.
+    pub fn complete_speculative_iteration(
+        &mut self,
+        plan: &SpeculativePlan,
+        targets: &[Vec<u32>],
+        now_ns: u64,
+        timing: crate::IterationTiming,
+    ) -> SchedulerResult<IterationUpdates> {
+        self.complete_speculative_iteration_with_stops(plan,targets,&vec![None;targets.len()],now_ns,timing)
+    }
+    /// Stop positions count emitted tokens, including the stopping token. They
+    /// cannot extend the verified prefix or bypass complete target validation.
+    pub fn complete_speculative_iteration_with_stops(&mut self,plan:&SpeculativePlan,targets:&[Vec<u32>],stops:&[Option<usize>],now_ns:u64,timing:crate::IterationTiming)->SchedulerResult<IterationUpdates> {
+        let started = Instant::now();
+        self.ensure_completion_backlog_empty()?;
+        self.validate_now(now_ns)?;
+        self.validate_inflight_reservations()?;
+        let pending = self
+            .inflight
+            .as_ref()
+            .ok_or(SchedulerError::NoIterationInFlight)?;
+        if pending.speculative.as_ref() != Some(plan) || targets.len() != plan.rows.len() {
+            return Err(invalid());
+        }
+        let mut decisions=self.preview_speculative_iteration(plan,targets)?;
+        if stops.len()!=decisions.len(){return Err(invalid());}
+        for (decision,stop) in decisions.iter_mut().zip(stops) {
+            if let Some(count)=stop {decision.stop_after(*count).map_err(|_|invalid())?;}
         }
         let mut updates = IterationUpdates::empty();
         try_reserve_exact(&mut updates.token_events, 256, "speculative token events")?;
@@ -352,7 +368,7 @@ impl Scheduler {
                 record.state = RequestState::Decoding;
                 record.ready_since_ns = now_ns;
                 let reason = match decision.stop() {
-                    Some(Stop::Eos) => Some(RequestFinishReason::Stop),
+                    Some(Stop::Eos | Stop::External) => Some(RequestFinishReason::Stop),
                     Some(Stop::Length) => Some(RequestFinishReason::Length),
                     Some(Stop::Cancelled) => Some(RequestFinishReason::Cancelled),
                     None => None,
@@ -447,6 +463,28 @@ mod tests {
         }
         (s, ids)
     }
+    #[test]
+    fn external_stop_truncates_verified_output_and_releases_kv_at_every_position() {
+        for prompt in [16,17,31,32,33] {for stop in 1..=8 {
+            let (mut s,ids)=ready(prompt,32);let p=s.plan_wide_speculative_iteration(3,None).unwrap().unwrap();
+            let targets=p.rows().iter().map(|r|{let mut t=r.inputs()[1..].to_vec();t.push(77);t}).collect::<Vec<_>>();
+            let before=s.pool_stats().allocated_block_count();
+            let preview=s.preview_speculative_iteration(&p,&targets).unwrap();assert!(preview.iter().all(|d|d.tokens().len()==8));
+            for invalid_count in [0,9] {
+                assert!(s.complete_speculative_iteration_with_stops(&p,&targets,&[Some(invalid_count);4],4,crate::IterationTiming::default()).is_err());
+                assert_eq!(s.pool_stats().allocated_block_count(),before);
+                assert_eq!(s.preview_speculative_iteration(&p,&targets).unwrap(),preview);
+            }
+            let u=s.complete_speculative_iteration_with_stops(&p,&targets,&[Some(stop),None,None,None],5,crate::IterationTiming::default()).unwrap();
+            assert!(u.settlement_failures().is_empty());
+            let tokens=u.token_events().iter().filter(|e|e.request_id()==ids[0]).map(|e|e.token_id()).collect::<Vec<_>>();
+            assert_eq!(tokens,&targets[0][..stop]);assert_eq!(u.completions().len(),1);
+            assert!(s.record_index(ids[0]).is_none());
+            for id in &ids[1..]{assert_eq!(s.requests[s.record_index(*id).unwrap()].sequence.as_ref().unwrap().logical_length(),prompt as u32+8);}
+            s.close(6,None).unwrap();
+        }}
+    }
+
     #[test]
     fn speculative_scheduler_commits_only_accepted_prefix_and_routes_all_tokens() {
         for prompt in [16, 17, 31, 32, 33] {

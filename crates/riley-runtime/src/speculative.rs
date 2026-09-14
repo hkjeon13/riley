@@ -17,6 +17,7 @@ pub enum Stop {
     Eos,
     Length,
     Cancelled,
+    External,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,6 +26,7 @@ pub enum VerifyError {
     TargetRowCount,
     InvalidVocabulary,
     TokenOutOfRange,
+    InvalidStopPosition,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -44,6 +46,12 @@ impl GreedyDecision {
     }
     pub fn stop(&self) -> Option<Stop> {
         self.stop
+    }
+    /// Stop-token/string processing may shorten only the verified output prefix.
+    pub fn stop_after(&mut self, count: usize) -> Result<(), VerifyError> {
+        if count == 0 || count > self.length {return Err(VerifyError::InvalidStopPosition);}
+        self.output[count..].fill(0);self.length=count;
+        self.accepted=self.accepted.min(count);self.stop=Some(Stop::External);Ok(())
     }
     /// The final emitted token is not in the retained KV; decode it next.
     pub fn pending_token(&self) -> Option<u32> {

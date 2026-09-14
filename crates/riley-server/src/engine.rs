@@ -2568,6 +2568,8 @@ mod cuda_backend {
         window_pending_tokens: Vec<PendingToken>,
         decode_window: bool,
         rolling_decode: bool,
+        speculative_decode: bool,
+        speculative_stats: [u64; 4],
         rolling_state: Option<RollingDecodeState>,
         rolling_steps: u64,
         host_phase_timing: Option<HostPhaseTiming>,
@@ -2708,6 +2710,14 @@ mod cuda_backend {
                 _=>return Err(internal("RILEY_PREFILL_FFN_SPLIT must be 0 or 1")),
             };
             if ffn_split && (!projection_pipeline || ffn_adaptive) {return Err(internal("split FFN requires projection pipeline and excludes adaptive FFN"));}
+            let speculative_decode=match std::env::var("RILEY_SPECULATIVE_DECODE") {
+                Ok(v) if v=="1"=>true,Ok(v) if v=="0"=>false,
+                Err(std::env::VarError::NotPresent)=>false,
+                _=>return Err(internal("RILEY_SPECULATIVE_DECODE must be 0 or 1")),
+            };
+            if speculative_decode && (!projection_pipeline || !resources.gpu_greedy || decode_window || ffn_split || ffn_adaptive) {
+                return Err(internal("speculative decode requires unbuffered GPU greedy projection profile"));
+            }
             let prefix_pages=match std::env::var("RILEY_PREFIX_CACHE_PAGES") {
                 Ok(value)=>value.parse::<usize>().map_err(|_|internal("RILEY_PREFIX_CACHE_PAGES must be an unsigned page count"))?,
                 Err(std::env::VarError::NotPresent)=>0,
@@ -2735,7 +2745,7 @@ mod cuda_backend {
                 && resources.executor.config().vllm_smol_p128_batched_prefill()
                 && resources.scheduler.config().max_active_sequences > 1;
             let (executor, decode_graph, multi_graph, variable_graph) = if use_variable {
-                let graph=if ffn_split {resources.executor.into_owned_variable_ffn_split_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if ffn_adaptive {resources.executor.into_owned_variable_ffn_adaptive_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if projection_pipeline {resources.executor.into_owned_variable_projection_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if gqa_staging {resources.executor.into_owned_variable_gqa_staging_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if query_reuse {resources.executor.into_owned_variable_query_reuse_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if prefix_pages>0 {resources.executor.into_owned_variable_prefix_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline,use_adaptive_decode).map(VariableServingSession::ThirtyTwo)}else if use_adaptive_decode {resources.executor.into_owned_variable_adaptive_decode_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline).map(VariableServingSession::ThirtyTwo)}else if use_prefill_ffn_pipeline {resources.executor.into_owned_variable_prefill_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window).map(VariableServingSession::ThirtyTwo)}else if decode_window {resources.executor.into_owned_buffered_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,true).map(VariableServingSession::ThirtyTwo)}else if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_fa3_experimental {resources.executor.into_owned_variable_fa3_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
+                let graph=if speculative_decode {if prefix_pages>0 {resources.executor.into_owned_variable_verification_prefix_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_verification_wide_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32).map(VariableServingSession::ThirtyTwo)}}else if ffn_split {resources.executor.into_owned_variable_ffn_split_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if ffn_adaptive {resources.executor.into_owned_variable_ffn_adaptive_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if projection_pipeline {resources.executor.into_owned_variable_projection_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if gqa_staging {resources.executor.into_owned_variable_gqa_staging_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if query_reuse {resources.executor.into_owned_variable_query_reuse_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,prefix_pages>0).map(VariableServingSession::ThirtyTwo)}else if prefix_pages>0 {resources.executor.into_owned_variable_prefix_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline,use_adaptive_decode).map(VariableServingSession::ThirtyTwo)}else if use_adaptive_decode {resources.executor.into_owned_variable_adaptive_decode_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window,use_prefill_ffn_pipeline).map(VariableServingSession::ThirtyTwo)}else if use_prefill_ffn_pipeline {resources.executor.into_owned_variable_prefill_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy,decode_window).map(VariableServingSession::ThirtyTwo)}else if decode_window {resources.executor.into_owned_buffered_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,true).map(VariableServingSession::ThirtyTwo)}else if use_ffn_pipeline {resources.executor.into_owned_variable_ffn_pipeline_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_fa3_experimental {resources.executor.into_owned_variable_fa3_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if use_flashinfer_experimental {resources.executor.into_owned_variable_flashinfer_experimental_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().mixed_execution() {resources.executor.into_owned_variable_mixed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().packed_prefill() {resources.executor.into_owned_variable_packed_session(&resources.context,resources.scheduler.config().iteration_token_budget as u32,resources.gpu_greedy).map(VariableServingSession::ThirtyTwo)}else if resources.executor.config().variable_graph_rows()==32 {if resources.gpu_greedy{resources.executor.into_owned_variable_shared_greedy_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}else{resources.executor.into_owned_variable_shared_session_rows::<32>(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::ThirtyTwo)}}else if resources.gpu_greedy {resources.executor.into_owned_variable_shared16_greedy_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.executor.config().variable_graph_rows()==16 {resources.executor.into_owned_variable_shared16_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Sixteen)}else if resources.scheduler.config().max_active_sequences>1 {resources.executor.into_owned_variable_shared_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}else{resources.executor.into_owned_variable_session(&resources.context,resources.scheduler.config().max_prefill_chunk_tokens as u32).map(VariableServingSession::Eight)}
                     .map_err(|e|internal(format!("V3 preparation failed: {e}")))?;
                 if query_reuse {eprintln!("RILEY_QUERY_REUSE prepared=true profile=mixed-query-reuse-v1");}
                 if ffn_adaptive {eprintln!("RILEY_PREFILL_FFN_ADAPTIVE enabled threshold=192");}
@@ -2801,6 +2811,7 @@ mod cuda_backend {
                 pending_tokens,
                 window_pending_tokens,
                 decode_window,
+                speculative_decode,speculative_stats:[0;4],
                 rolling_decode, rolling_state:None, rolling_steps:0,
                 host_phase_timing: (std::env::var("RILEY_SERVING_PHASE_TIMING").ok().as_deref() == Some("1")).then(HostPhaseTiming::default),
                 completed_decode_windows: 0,
@@ -3081,6 +3092,61 @@ mod cuda_backend {
                 physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens,max_active_rows:32,
                 packed_prefill:identity.packed_prefill,mixed_execution:identity.mixed_execution,shared_prefixes:identity.shared_prefixes}
         }
+        fn try_speculative_decode(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            // Any request processor that changes raw argmax uses ordinary sampling.
+            for request in &self.requests {
+                let params=request.state.request().sampling_params;
+                if gpu_greedy_ineligibility(self.gpu_greedy,self.addressable_tokens==self.sampling.vocabulary_size(),params.temperature,params.repetition_penalty,!request.state.masked_finish_token_ids().is_empty()).is_some(){return Ok(None);}
+            }
+            let now=self.now_ns();
+            let Some(plan)=self.scheduler_mut()?.plan_wide_speculative_iteration(now,None).map_err(|e|internal(format!("speculative planning failed: {e}")))? else{return Ok(None)};
+            for row in plan.rows(){
+                let index=self.request_index_by_scheduler(row.request_id()).ok_or_else(||internal("speculative request missing"))?;
+                let request=&mut self.requests[index];request.pre_iteration_cancel_delta.clear();
+                request.pre_iteration_cancel_delta.push_str(visible_utf8_prefix(request.state.stop_state().pending_bytes()));
+            }
+            let execution={
+                let scheduler=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?;
+                let authority=scheduler.authorize_speculative_execution(&plan).map_err(|e|internal(e.to_string()))?;
+                let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("wide graph missing"))};
+                riley_scheduler::execution::execute_speculative_variable_graph(&authority,graph)
+            };
+            let targets=match execution {Ok(t)=>t,Err(e)=>return self.settle_execution_failure(&e).map(Some)};
+            let staged=(|| {
+                let decisions=self.scheduler.as_ref().ok_or_else(||internal("scheduler closed"))?.preview_speculative_iteration(&plan,&targets).map_err(|e|internal(e.to_string()))?;
+                self.pending_tokens.clear();self.pending_tokens.try_reserve(256).map_err(|_|internal("speculative output allocation failed"))?;
+                let mut stops=vec![None;plan.rows().len()];let mut accepted=0u64;
+                let selection=C02CommittedSamplingSelection{iteration_id:plan.iteration_id().get(),configured_backend:C02SamplingBackend::GpuGreedy,selected_backend:C02SamplingBackend::GpuGreedy,ineligibility_reason:None,committed:false};
+                for (slot,(row,decision)) in plan.rows().iter().zip(&decisions).enumerate(){
+                    let index=self.request_index_by_scheduler(row.request_id()).ok_or_else(||internal("speculative request missing"))?;
+                    let request=&mut self.requests[index];let mut emitted=0;
+                    for &token_id in decision.tokens(){
+                        let generated_index=request.state.generated_token_ids().len();
+                        let needs=request.state.token_needs_decoding(token_id).map_err(|e|internal(e.to_string()))?;
+                        let count=if needs {self.model.tokenizer().decode_token_bytes_into(token_id,DecodeOptions{skip_special_tokens:true},&mut request.decoded_token_bytes).map_err(|e|internal(e.to_string()))?}else{0};
+                        let generated=request.state.accept_token(token_id,Some(0.0),needs.then_some(&request.decoded_token_bytes[..count])).map_err(|e|internal(e.to_string()))?;
+                        emitted+=1;
+                        let stop=matches!(generated.finish_reason(),Some(RuntimeFinishReason::Eos|RuntimeFinishReason::StopToken|RuntimeFinishReason::StopString));
+                        self.pending_tokens.push(PendingToken{scheduler_id:row.request_id(),generated_index,token_id,text_delta:generated.text_delta().to_owned(),selection,native_fallback_request_local:false});
+                        if stop {stops[slot]=Some(emitted);break;}
+                    }
+                    accepted+=decision.accepted_draft_tokens().min(emitted) as u64;
+                }
+                Ok::<_,BackendError>((stops,accepted))
+            })();
+            let (stops,accepted)=match staged {Ok(v)=>v,Err(e)=>{
+                let now=self.now_ns();self.scheduler_mut()?.abort_iteration(plan.iteration_id(),ExecutionAbort::DeviceQuiescedMutationUnknown,now).map_err(|x|internal(x.to_string()))?;return Err(e);
+            }};
+            let now=self.now_ns();
+            let updates=self.scheduler_mut()?.complete_speculative_iteration_with_stops(&plan,&targets,&stops,now,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("speculative settlement failed: {e}")))?;
+            if !updates.settlement_failures().is_empty(){return Err(internal("speculative settlement failure"));}
+            let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("wide graph missing"))};
+            graph.confirm_scheduler_commit(plan.iteration_id().get()).map_err(|e|internal(e.to_string()))?;
+            self.speculative_stats[0]+=1;self.speculative_stats[1]+=plan.rows().iter().map(|r|r.inputs().len() as u64).sum::<u64>();
+            self.speculative_stats[2]+=updates.token_events().len() as u64;self.speculative_stats[3]+=accepted;
+            let mut events=Vec::new();self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
+        }
+
         fn try_rolling_decode(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
             let mut state=if let Some(state)=self.rolling_state.take(){state}else{
                 let now=self.now_ns();
@@ -3455,6 +3521,7 @@ mod cuda_backend {
         }
 
         fn close_resources(&mut self) -> Result<(), BackendError> {
+            if self.speculative_decode {eprintln!("RILEY_SPECULATIVE rounds={} verified_inputs={} emitted_tokens={} accepted_drafts={}",self.speculative_stats[0],self.speculative_stats[1],self.speculative_stats[2],self.speculative_stats[3]);}
             if self.rolling_decode {eprintln!("RILEY_ROLLING_DECODE completed_steps={} drains={}",self.rolling_steps,self.completed_decode_windows);}
             if let Some(scheduler)=self.scheduler.as_ref() {
                 let (entries,pages,hits,reused)=scheduler.prefix_cache_stats();
@@ -3749,6 +3816,7 @@ mod cuda_backend {
             if let Some(event) = self.pending_events.pop_front() {
                 return Ok(vec![event]);
             }
+            if self.speculative_decode {if let Some(events)=self.try_speculative_decode()? {return Ok(events);}}
             if self.decode_window {
                 if let Some(events)=self.try_decode_window()? {return Ok(events);}
             }
