@@ -92,3 +92,32 @@ do not disguise speculative inputs as a longer original prompt.
 Evidence and limitations: `benchmarks/results/20260914-speculative-scheduler/README.md`.
 Next milestone combines GPU binding, exact serial equivalence and serving/vLLM
 comparison. Host metadata tests alone are not a throughput result.
+
+### Explicit GPU stage and generation gate — 2026-09-14
+
+Connected host speculation to a native-capability-gated verification stage,
+preserving actual prompt/generated/KV progress and checking returned completion
+identities. Final 12-request gate: all 384 tokens match serial decode; 144 draft
+tokens are accepted, with full-model memcheck clean. A failed zero-acceptance
+control revealed first-four-candidate blocking; the fixed selection scans for
+eligible owners. Failure evidence is retained.
+
+This is not a serving promotion: model calls rise from 36 to 63 because only four
+owners verify at once, and ordinary completion still transfers full logits.
+Evidence: `benchmarks/results/20260914-speculative-gpu-stage/README.md`.
+
+The next optimization batch must address the structural constraints together:
+
+1. Widen the query/head mapping to cover the active owner batch, with bounded
+   query-count buckets, explicit capacity/ownership checks and unchanged greedy
+   numerical policy. Do not silently narrow C32 serving to four active requests.
+2. Return compact normal completion plus compact verification tokens; avoid the
+   full normal-logit copy and retain an explicit diagnostic full mode.
+3. Extend immutable shared-prefix read ownership to verification. Require COW
+   for shared writable tails and test off-batch readers and cancellation.
+4. Add opt-in greedy serving selection, serial fallback and acceptance/work
+   counters. Compare same-model/hardware/workload serving against current Riley
+   and vLLM at low and high concurrency, including P95/P99 and stop/cancel cases.
+
+Do not use artificial repetition controls as performance evidence, relax the
+strict token gate, or tune draft lengths to compensate for the four-owner cap.

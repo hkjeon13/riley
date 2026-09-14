@@ -2,7 +2,7 @@
 use super::{check, overflow, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InputStage { Prefill, Decode }
+pub enum InputStage { Prefill, Decode, Verification }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Progress {
     pub prompt_tokens: u32,
@@ -38,6 +38,12 @@ impl Progress {
                 check(self.generated_index==0 && self.committed_tokens<self.prompt_tokens && target<=self.prompt_tokens,
                     "prefill", "prefill must extend only the unfinished prompt")?;
                 target==self.prompt_tokens
+            },
+            InputStage::Verification=>{
+                let committed=self.prompt_tokens.checked_add(self.generated_index).and_then(|v|v.checked_sub(1)).ok_or_else(||overflow("verification"))?;
+                check(self.generated_index>0 && self.committed_tokens==committed && self.input_tokens<=8 && self.input_tokens<=self.output_limit-self.generated_index,
+                    "verification", "verification must append pending plus bounded drafts within remaining output budget")?;
+                true
             },
             InputStage::Decode=>{
                 let committed=self.prompt_tokens.checked_add(self.generated_index).and_then(|v|v.checked_sub(1)).ok_or_else(||overflow("decode"))?;

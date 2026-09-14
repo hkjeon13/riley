@@ -43,7 +43,7 @@ fn result_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {if e.mixed_executi
 fn compact_magic<const ROWS:usize>(e:&Expectation<ROWS>)->u32 {result_magic(e)^0x8000_0000}
 pub const MIXED_REQUEST_BYTES:usize=Layout::<32>::REQUEST_BYTES+4096;
 pub fn request_bytes<const ROWS:usize>(e:&Expectation<ROWS>)->usize{if e.mixed_execution{MIXED_REQUEST_BYTES}else{Layout::<ROWS>::REQUEST_BYTES}}
-fn stage_number(stage:InputStage)->u32{if stage==InputStage::Prefill{0}else{1}}
+fn stage_number(stage:InputStage)->u32{match stage {InputStage::Prefill=>0,InputStage::Decode=>1,InputStage::Verification=>3}}
 fn packet_stage<const ROWS:usize>(e:&Expectation<ROWS>)->u32{if e.mixed_execution && e.rows.iter().any(|r|r.progress.stage==InputStage::Prefill) && e.rows.iter().any(|r|r.progress.stage==InputStage::Decode){2}else{stage_number(e.stage)}}
 pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
@@ -54,10 +54,13 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
     check(!e.shared_prefixes || (ROWS==32 && e.mixed_execution),"capability","shared prefixes require V7")?;
     let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
-    check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;
+    let verification=e.rows.iter().filter(|r|r.progress.stage==InputStage::Verification).count();
+    if verification>0 {
+        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=4 && e.mixed_execution && !e.shared_prefixes && e.mode==ResultMode::FullLogits,"verification","requires exclusive pure verification batch with full normal completion")?;
+    } else {check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;}
     check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
     let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
-    check(e.stage!=InputStage::Prefill || total<=1024,"tokens","packed token capacity exceeded")?;
+    check(e.stage==InputStage::Decode || total<=1024,"tokens","packed token capacity exceeded")?;
     check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
     // Preserve the exclusive path's one-owner map. Extra ownership/alias nodes
     // are allocated only for actual shared pages, not once per ordinary page.
@@ -74,7 +77,7 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
             }
         }
     }
-    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage==InputStage::Decode).count();
+    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage!=InputStage::Prefill).count();
     let (mut tags,mut cookies,mut slots,mut used)=(BTreeSet::new(),BTreeSet::new(),BTreeSet::new(),BTreeSet::new());
     let mut shared_positions:BTreeMap<u32,(u64,usize)>=BTreeMap::new();
     for row in &e.rows {
@@ -163,7 +166,7 @@ pub(crate) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked:
             (32,p.prompt_tokens),(36,p.context_tokens),(40,row.output_slot),(44,v.logits_input_row.unwrap_or(u32::MAX))] {u32_at(packet,b+at,value);}
         u64_at(packet,b+48,row.sequence_tag);u64_at(packet,b+56,row.cookie);
         if e.mixed_execution {u32_at(packet,b+72,stage_number(p.stage));}
-        if e.stage==InputStage::Prefill {
+        if e.stage!=InputStage::Decode {
             if e.mixed_execution {
                 u32_at(packet,b+68,tile_offset as u32);
                 let tiles=if p.input_tokens<32{p.input_tokens}else{p.input_tokens.div_ceil(8)};
@@ -174,7 +177,7 @@ pub(crate) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked:
         }
         for (j,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate(){u32_at(packet,b+128+j*4,id);packet[b+1152+j*2..b+1154+j*2].copy_from_slice(&valid.to_le_bytes());}
     }
-    if e.packed_prefill && e.stage==InputStage::Prefill {u32_at(packet,36,token_offset as u32);}
+    if e.packed_prefill && e.stage!=InputStage::Decode {u32_at(packet,36,token_offset as u32);}
     if e.mixed_execution {u32_at(packet,96,tile_offset as u32);}
     Ok(())
 }
@@ -548,7 +551,7 @@ pub(crate) mod tests {
             let mut p=vec![0;REQUEST_BYTES];let mut scratch=p.clone();encode_into(&mut p,&e).unwrap();validate_packet(&p,&mut scratch,&e).unwrap();
             if let Some(dir)=std::env::var_os("RILEY_V3_FIXTURES") {let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();std::fs::write(dir.join(if e.stage==InputStage::Prefill{"prefill.bin"}else{"decode.bin"}),&p).unwrap();}
             for offset in 0..REQUEST_BYTES {p[offset]^=1;assert!(validate_packet(&p,&mut scratch,&e).is_err(),"offset{offset}");p[offset]^=1;}
-            if e.stage==InputStage::Prefill {assert_eq!(&p[HEADER_BYTES+44..HEADER_BYTES+48],&u32::MAX.to_le_bytes());}
+            if e.stage!=InputStage::Decode {assert_eq!(&p[HEADER_BYTES+44..HEADER_BYTES+48],&u32::MAX.to_le_bytes());}
         }
     }
     #[test] fn rejects_stale_replay_foreign_page_and_overlapping_reservations_without_writes(){

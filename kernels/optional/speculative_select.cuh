@@ -6,10 +6,10 @@ namespace riley_speculative_select {
 constexpr uint64_t bytes=32ULL*49152*2;
 // Existing V7 validation remains mandatory; this is an additional narrow gate.
 __host__ __device__ inline bool eligible(const uint32_t* meta,uint32_t capacity) {
- if(meta[4]!=0 || meta[5]<1 || meta[5]>4 || meta[9]<1 || meta[9]>capacity)return false;
+ if((meta[4]!=0 && meta[4]!=3) || meta[5]<1 || meta[5]>4 || meta[9]<1 || meta[9]>capacity)return false;
  unsigned offset=0;
  for(unsigned owner=0;owner<meta[5];++owner){const auto* row=meta+32+owner*416;
-  if(row[18]!=0 || row[2]<1 || row[2]>8 || row[16]!=offset)return false;
+  if(row[18]!=meta[4] || row[2]<1 || row[2]>8 || row[16]!=offset)return false;
   offset+=row[2];
  }
  return offset==meta[9] && offset<=32;

@@ -1,0 +1,33 @@
+warning: struct `OwnedCheckedExpectation` is never constructed
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:127:19
+    |
+127 | pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `new` and `checked` are never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:129:19
+    |
+128 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- associated items in this implementation
+129 |     pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+    |                   ^^^
+...
+132 |     pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    |                   ^^^^^^^
+
+warning: `riley-runtime` (lib) generated 2 warnings
+   Compiling riley-scheduler v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-scheduler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.59s
+     Running unittests src/lib.rs (target/debug/deps/riley_scheduler-79707b6f5c34a155)
+
+running 5 tests
+test scheduler::speculative::tests::speculative_candidates_skip_missing_drafts_without_hiding_later_owners ... ok
+test scheduler::speculative::tests::speculative_scheduler_rejects_foreign_plans_and_contains_commit_fault ... ok
+test scheduler::speculative::tests::speculative_scheduler_cancellation_eos_length_and_abort ... ok
+test scheduler::speculative::tests::speculative_explicit_progress_preserves_original_request_geometry ... ok
+test scheduler::speculative::tests::speculative_scheduler_commits_only_accepted_prefix_and_routes_all_tokens ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.00s
+

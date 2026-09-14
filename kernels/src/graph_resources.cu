@@ -444,7 +444,7 @@ static RileyCudaStatus replay_transfer_impl(
   if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
     return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   if(r->v3_prefill_capacity){
-    if(!(r->mixed_execution?valid_v7_shape_packet(source,bytes,r->v3_prefill_physical,32,r->shared_prefixes):r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+    if(!(r->mixed_execution?valid_v7_shape_packet(source,bytes,r->v3_prefill_physical,32,r->shared_prefixes,r->verification_host!=nullptr):r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
     if((!r->v3_shared&&value(20)!=1)||(r->packed_prefill&&value(16)!=1?value(36):value(136))>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);

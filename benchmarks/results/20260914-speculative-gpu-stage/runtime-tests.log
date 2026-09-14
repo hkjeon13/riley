@@ -1,0 +1,76 @@
+warning: method `into_unchecked` is never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:134:19
+    |
+128 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- method in this implementation
+...
+134 |     pub(crate) fn into_unchecked(self)->Expectation<ROWS> {self.expectation}
+    |                   ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/lib.rs (target/debug/deps/riley_runtime-278f35c187cd6f05)
+
+running 55 tests
+test llama::multi_descriptor::result_scan::tests::scan_timing_diagnostic ... ignored, CPU scan timing diagnostic, not serving qualification
+test llama::multi_descriptor::shape_progress::tests::rejects_cross_stage_overlap_overflow_and_context_exhaustion ... ok
+test llama::multi_descriptor::shape_progress::tests::chunked_requests_publish_only_after_complete_prompt_then_exact_output_budget ... ok
+test llama::multi_descriptor::future_token::tests::invalid_pairs_do_not_gain_authority ... ok
+test llama::multi_descriptor::future_token::tests::page_boundary_reorder_preserves_commit_and_encodes_distinct_cookies ... ok
+test llama::multi_descriptor::future_token::tests::host_prefill_admission_keeps_previous_pages_retained ... ok
+test llama::multi_descriptor::future_token::tests::partial_prefill_can_continue_without_inventing_a_sampled_token ... ok
+test llama::multi_descriptor::future_token::tests::owned_window_keeps_the_exact_cookie_and_page_binding ... ok
+test llama::multi_descriptor::future_token::tests::indexed_owner_retention_keeps_off_batch_readers_and_is_order_independent ... ok
+test llama::multi_descriptor::tests::checked_overflow_and_no_catalog_fallback ... ok
+test llama::multi_descriptor::tests::duplicate_physical_tags_cookies_slots_and_sparse_output_rejected ... ok
+test llama::multi_descriptor::tests::canonical_target_table_and_generation_bounds ... ok
+test llama::multi_descriptor::tests::explicit_ownership_blocks_forged_off_batch_reassignment ... ok
+test llama::multi_descriptor::tests::greedy_tokens_scatter_independently_from_execution_rows ... ok
+test llama::multi_descriptor::tests::caller_changes_cannot_rewrite_admitted_snapshot ... ok
+test llama::multi_descriptor::tests::independent_golden_request_exact_and_result_scatter ... ok
+test llama::multi_descriptor::tests::old_wire_version_is_not_admitted ... ok
+test llama::multi_descriptor::tests::bf16_bits_preserved_and_nonfinite_rejected ... ok
+test llama::multi_descriptor::tests::p128_compatibility_view_and_all_prompt_tokens ... ok
+test llama::multi_descriptor::tests::malformed_last_row_never_exposes_earlier_rows ... ok
+test llama::multi_descriptor::tests::prefill_then_decode_requires_new_binding_and_respects_o1_terminal ... ok
+test llama::multi_descriptor::tests::shrinking_and_growing_buckets_need_fresh_replay_and_result_shape ... ok
+test llama::multi_descriptor::tests::owner_preflight_failure_does_not_advance_and_stale_replay_cannot_reenter ... ok
+test llama::multi_descriptor::tests::any_repeated_result_attempt_invalidates_ready_output ... ok
+test llama::multi_descriptor::tests::two_row_owner_has_exact_catalog_capacity_and_pool_bounds ... ok
+test llama::multi_descriptor::tests::unknown_completion_retains_snapshot_no_late_publication ... ok
+test llama::multi_descriptor::tests::unknown_stage_mode_version_and_lengths_rejected ... ok
+test llama::multi_descriptor::tests::eighth_row_identity_and_cross_row_block_alias_are_rejected ... ok
+test llama::multi_descriptor::tests::inactive_rows_logits_and_arbitrary_spans_rejected ... ok
+test llama::multi_descriptor::tests::unsettled_ledger_cannot_be_replaced_or_published_after_busy_attempt ... ok
+test llama::multi_descriptor::tests::all_exact_bucket_and_output_mode_sizes ... ok
+test llama::multi_descriptor::variable_wire::tests::export_versioned_wire_fixtures_when_requested ... ok
+test llama::multi_descriptor::variable_wire::tests::maximum_prefill16_tokens_do_not_overlap_unused_descriptors ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_over_budget_and_stage_fail_before_write ... ok
+test llama::multi_descriptor::variable_wire::lane_argmax_tests::independent_lanes_match_scalar_and_reject_nonfinite ... ok
+test llama::multi_descriptor::tests::result_header_every_byte_and_row_identity_rejected ... ok
+test llama::multi_descriptor::result_scan::tests::zero_scan_covers_unaligned_vectors_and_every_tail_byte ... ok
+test llama::multi_descriptor::variable_wire::tests::packed_v6_rejects_capacity_before_write ... ok
+test llama::multi_descriptor::variable_wire::tests::rejects_stale_replay_foreign_page_and_overlapping_reservations_without_writes ... ok
+test llama::multi_descriptor::variable_wire::tests::result_binds_replay_and_suppresses_partial_output ... ok
+test llama::multi_descriptor::variable_wire::tests::shared_prefix_wire_binds_all_owners_and_exports_native_fixture ... ok
+test llama::multi_descriptor::variable_wire::tests::single_decode_completion_is_bound_to_its_generated_index ... ok
+test llama::multi_descriptor::tests::every_request_byte_is_bound_in_both_stages ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_invalid_authority_and_capacity_never_mutate_packet ... ok
+test llama::multi_descriptor::variable_wire::tests::owned_expectation_preserves_authority_and_checked_result_validation ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_eight_identity_status_and_publication ... ok
+test llama::multi_descriptor::result_scan::tests::every_bf16_word_and_unaligned_tail_matches_scalar ... ok
+test llama::multi_descriptor::variable_wire::tests::batch_results_bind_all_rows_before_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_sixteen_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::variable_shapes_and_partial_output_round_trip_with_every_byte_bound ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_contract_rejects_old_versions_and_binds_all_bytes ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_results_bind_upper_rows_and_reject_old_single_result_magic ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_thirtytwo_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_stage_tiles_and_result_identity has been running for over 60 seconds
+test llama::multi_descriptor::variable_wire::tests::packed_v6_offsets_publication_and_corruption has been running for over 60 seconds
+test llama::multi_descriptor::variable_wire::tests::packed_v6_offsets_publication_and_corruption ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_stage_tiles_and_result_identity ... ok
+
+test result: ok. 54 passed; 0 failed; 1 ignored; 0 measured; 307 filtered out; finished in 319.81s
+

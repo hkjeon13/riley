@@ -50,7 +50,7 @@ inline bool valid_v5_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physi
 inline bool valid_v6_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32,true>(p,bytes,physical,capacity);}
 
 // V7 mixed stages retain the V6 token slab and append1024 canonical tile entries.
-template<bool SharedPrefixes>
+template<bool SharedPrefixes,bool Verification=false>
 inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
  constexpr uint32_t header=128,stride=1664,tokens=53376,map=57472,extent=61568;
  if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||capacity==16||capacity==32))return false;
@@ -59,7 +59,7 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
  auto u16=[&](uint32_t at){uint16_t v;std::memcpy(&v,p+at,2);return v;};
  auto zero=[&](uint32_t a,uint32_t b){for(;a<b;++a)if(p[a])return false;return true;};
  uint32_t stage=u32(16),active=u32(20);
- if(u32(0)!=0x37444d52||u32(4)!=7||u32(8)!=extent||u32(12)!=stride||stage>2||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(100,128))return false;
+ if(u32(0)!=0x37444d52||u32(4)!=7||u32(8)!=extent||u32(12)!=stride||stage>(Verification?3u:2u)||!active||active>capacity||u32(24)!=capacity||u32(28)!=physical||u32(32)>1||!u64(40)||!u64(48)||!u64(56)||zero(64,96)||!zero(100,128))return false;
  if(stage==1?(u32(36)||u32(96)):(!u32(36)||u32(36)>1024||!u32(96)||u32(96)>1024))return false;
  bool used[4096]{};
  // Uninitialized slots are read only after used[id]. The legacy specialization
@@ -68,9 +68,10 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
  uint32_t slots=0,input=0,tiles=0,prefills=0,decodes=0,published=0;
  for(uint32_t row=0;row<active;++row){
   uint32_t b=header+row*stride,count=u32(b+8),live=u32(b+12),committed=u32(b+16),target=u32(b+20),generated=u32(b+24),limit=u32(b+28),prompt=u32(b+32),context=u32(b+36),slot=u32(b+40),logit=u32(b+44),kind=u32(b+72);
-  if(!count||count>1024||!prompt||!limit||!context||context>4096||uint64_t(prompt)+limit-1>context||generated>=limit||uint64_t(committed)+count!=target||!target||target>context||u32(b+4)!=target-1||u32(b)>=49152||live!=(target+15)/16||slot>=active||(slots&(1U<<slot))||!u64(b+48)||!u64(b+56)||kind>1||!zero(b+76,b+128))return false;
+  if(!count||count>1024||!prompt||!limit||!context||context>4096||uint64_t(prompt)+limit-1>context||generated>=limit||uint64_t(committed)+count!=target||!target||target>context||u32(b+4)!=target-1||u32(b)>=49152||live!=(target+15)/16||slot>=active||(slots&(1U<<slot))||!u64(b+48)||!u64(b+56)||(kind>1 && !(Verification && kind==3))||!zero(b+76,b+128))return false;
   slots|=1U<<slot;
-  if(kind==0){++prefills;if(generated||committed>=prompt||target>prompt||logit!=(target==prompt?count-1:UINT32_MAX))return false;}
+  if(kind==3){++prefills;if(stage!=3 || !generated || uint64_t(prompt)+generated-1!=committed || count>8 || count>limit-generated || logit!=count-1)return false;}
+  else if(kind==0){++prefills;if(stage==3||generated||committed>=prompt||target>prompt||logit!=(target==prompt?count-1:UINT32_MAX))return false;}
   else {++decodes;if(count!=1||!generated||uint64_t(prompt)+generated-1!=committed||logit!=0)return false;}
   published+=logit!=UINT32_MAX;
   if(stage!=1){
@@ -94,7 +95,7 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
    used[id]=true;
   }
  }
- if(prefills>4||(stage==0&&decodes)||(stage==1&&prefills)||(stage==2&&(!prefills||!decodes))||u32(36)!=input||u32(96)!=tiles||!zero(header+active*stride,tokens))return false;
+ if(prefills>4||((stage==0||stage==3)&&decodes)||(stage==1&&prefills)||(stage==2&&(!prefills||!decodes))||u32(36)!=input||u32(96)!=tiles||!zero(header+active*stride,tokens))return false;
  for(uint32_t row=0;row<active;++row){uint32_t b=header+row*stride;if((u32(b+40)<published)!=(u32(b+44)!=UINT32_MAX))return false;}
  for(uint32_t i=0;i<1024;++i){uint32_t t=u32(tokens+i*4);if(i<input){if(t>=49152)return false;}else if(t)return false;if(i>=tiles&&u32(map+i*4))return false;}
  return true;
@@ -103,7 +104,8 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
 // This capability comes from retained owner configuration, never packet bytes.
 // Rust must additionally bind each reader to the complete live ownership ledger.
 inline bool valid_v7_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,
-    uint32_t capacity,bool shared_prefixes=false) noexcept {
+    uint32_t capacity,bool shared_prefixes=false,bool verification=false) noexcept {
+ if(verification && !shared_prefixes)return valid_v7_shape_packet_impl<false,true>(p,bytes,physical,capacity);
  return shared_prefixes?valid_v7_shape_packet_impl<true>(p,bytes,physical,capacity)
                        :valid_v7_shape_packet_impl<false>(p,bytes,physical,capacity);
 }

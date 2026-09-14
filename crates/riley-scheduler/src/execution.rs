@@ -2406,3 +2406,32 @@ pub fn read_llama_decode_window_step<G:riley_runtime::llama::variable_session::V
     Ok(DownloadedLlamaIteration{iteration_id:id,vocabulary_size:49152,output_count:prepared.output_count,
         output:DownloadedLlamaOutput::GreedyTokens(tokens),commit_outputs:prepared.commit_outputs})
 }
+
+/// Executes one bounded greedy verification round. All input endpoints are
+/// routed using retained identity and position, never returned order alone.
+#[cfg(feature="cuda")]
+pub fn execute_speculative_variable_graph<G:riley_runtime::llama::variable_session::VariableGraph>(
+    authority:&crate::AuthorizedSpeculative<'_>,
+    executor:&mut riley_runtime::llama::variable_session::VariableSession<G,32>,
+)->Result<Vec<Vec<u32>>,IterationExecutionFailure>{
+    let plan=authority.plan();let id=plan.iteration_id();
+    let fail=|e:crate::descriptor::Error,abort|IterationExecutionFailure::new(id,abort,IterationAdapterError::InvalidRuntimeOutput{field:e.field,reason:e.reason});
+    let bad=||crate::descriptor::Error{field:"verification completion",reason:"identity or endpoint differs from scheduler plan"};
+    let mut targets:Vec<Vec<u32>>=plan.rows().iter().map(|r|vec![0;r.inputs().len()]).collect();
+    let (identity,replay,cookies)=executor.issue_rows(plan.rows().len()).map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;
+    let owner=crate::authority::VariableOwnerGeometry{generation:identity.generation,last_accepted_replay:identity.last_accepted_replay,catalog_digest:identity.catalog_digest,max_active_rows:32,physical_block_count:identity.physical_block_count,context_tokens:identity.context_tokens,packed_prefill:identity.packed_prefill,mixed_execution:identity.mixed_execution,shared_prefixes:identity.shared_prefixes};
+    let expectation=match authority.verification_expectation(&owner,replay,&cookies){Ok(e)=>e,Err(e)=>{executor.abandon_issued().map_err(|e|fail(e,Some(ExecutionAbort::NotDispatched)))?;return Err(fail(e,Some(ExecutionAbort::NotDispatched)));}};
+    executor.execute_rows(expectation).map_err(|e|fail(e,None))?;
+    let output=executor.read_verification_tokens().map_err(|e|fail(e,Some(ExecutionAbort::DeviceQuiescedMutationUnknown)))?;
+    let reject=||fail(bad(),Some(ExecutionAbort::DeviceQuiescedMutationUnknown));
+    if output.iteration_id()!=id.get() || output.replay_id()!=replay || output.owner_generation()!=identity.generation || output.catalog_digest()!=identity.catalog_digest || output.rows().len()!=plan.rows().iter().map(|r|r.inputs().len()).sum::<usize>(){return Err(reject());}
+    let mut seen=[[false;8];4];
+    for (index,row) in output.rows().iter().enumerate(){
+        let owner=plan.rows().iter().position(|r|r.request_id().get()==row.sequence_tag).ok_or_else(reject)?;
+        let expected=&plan.rows()[owner];let local=row.position.checked_sub(expected.committed_tokens()).ok_or_else(reject)? as usize;
+        if local>=expected.inputs().len() || row.cookie!=cookies[owner] || seen[owner][local]{return Err(reject());}
+        seen[owner][local]=true;targets[owner][local]=output.token(index).ok_or_else(reject)?;
+    }
+    for (owner,row) in plan.rows().iter().enumerate(){if seen[owner][..row.inputs().len()].iter().any(|&v|!v){return Err(reject());}}
+    Ok(targets)
+}

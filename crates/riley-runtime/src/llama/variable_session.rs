@@ -188,7 +188,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     pub fn read_verification_logits(&mut self)->Result<VerificationLogits> {
         if self.poisoned || !self.completed || self.buffered || self.compact {return Err(bad("verification requires completed unbuffered full output"));}
         let e=self.retained.as_ref().ok_or_else(||bad("verification completion is no longer retained"))?;
-        if !e.mixed_execution || e.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
+        if !e.mixed_execution || e.stage==super::multi_descriptor::shape_progress::InputStage::Decode || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=e.stage || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
         let mut bytes=vec![0;32*98304];
         self.graph.read_verification(&mut bytes).map_err(|_|bad("no native verification completion"))?;
         let mut positions=Vec::with_capacity(e.rows.iter().map(|r|r.input_tokens.len()).sum());
@@ -208,7 +208,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     pub fn read_verification_tokens(&mut self)->Result<VerificationTokens> {
         if self.poisoned || !self.completed || self.buffered || self.compact {return Err(bad("verification requires completed unbuffered full output"));}
         let e=self.retained.as_ref().ok_or_else(||bad("verification completion is no longer retained"))?;
-        if !e.mixed_execution || e.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Prefill || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
+        if !e.mixed_execution || e.stage==super::multi_descriptor::shape_progress::InputStage::Decode || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=e.stage || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
         let mut bytes=[0;512];
         self.graph.read_verification(&mut bytes).map_err(|_|bad("no native verification completion"))?;
         let active=e.rows.iter().map(|r|r.input_tokens.len()).sum();

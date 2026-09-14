@@ -46,6 +46,20 @@ impl AuthorizedSpeculative<'_> {
     pub fn plan(&self) -> &SpeculativePlan {
         self.plan
     }
+    pub(crate) fn verification_expectation(&self,owner:&crate::authority::VariableOwnerGeometry,replay:u64,cookies:&[u64])->crate::descriptor::Result<crate::descriptor::variable_wire::Expectation<32>> {
+        use crate::descriptor::{variable_wire::{Expectation,Row},shape_progress::{InputStage,Progress},BlockOwnership,ResultMode,Error};
+        let bad=||Error{field:"speculative authority",reason:"owner or progress differs from live reservation"};
+        if !owner.mixed_execution || !owner.packed_prefill || owner.shared_prefixes || owner.max_active_rows!=32 || owner.physical_block_count as usize!=self.physical_block_count() || cookies.len()!=self.plan.rows.len(){return Err(bad());}
+        let mut rows=Vec::new();
+        for (slot,(row,&cookie)) in self.plan.rows.iter().zip(cookies).enumerate(){
+            let record=&self.scheduler.requests[self.scheduler.record_index(row.request_id).ok_or_else(bad)?];
+            rows.push(Row{sequence_tag:row.request_id.get(),cookie,output_slot:slot as u32,
+                progress:Progress{prompt_tokens:record.descriptor.prompt_token_ids.len() as u32,output_limit:record.descriptor.max_new_tokens as u32,context_tokens:owner.context_tokens,committed_tokens:row.start,input_tokens:row.inputs.len() as u32,generated_index:record.generated_token_ids.len() as u32,stage:InputStage::Verification},
+                input_tokens:row.inputs.clone(),physical_ids:row.table.physical_block_ids().to_vec(),valid_tokens:row.table.valid_tokens().to_vec()});
+        }
+        let e=Expectation{owner_generation:owner.generation,last_accepted_replay:owner.last_accepted_replay,replay_id:replay,iteration_id:self.plan.iteration_id.get(),catalog_digest:owner.catalog_digest,physical_block_count:owner.physical_block_count,max_active_rows:32,stage:InputStage::Verification,mode:ResultMode::FullLogits,rows,block_ownership:self.scheduler.execution_block_owners().map_err(|_|bad())?.into_iter().map(|(physical_id,id)|BlockOwnership{physical_id,sequence_tag:id.get()}).collect(),packed_prefill:true,mixed_execution:true,shared_prefixes:false};
+        crate::descriptor::variable_wire::validate(&e)?;Ok(e)
+    }
     pub fn physical_block_count(&self) -> usize {
         self.scheduler.pool_physical_block_count()
     }
@@ -102,11 +116,12 @@ impl Scheduler {
         }
         let mut drafts = Vec::new();
         let mut budget = self.config.iteration_token_budget;
-        for c in candidates.iter().take(4) {
+        for c in &candidates {
+            if drafts.len()==4 || budget<2 {break;}
             let record = &self.requests[self.record_index(c.request_id).ok_or_else(invalid)?];
             let remaining = record.descriptor.max_new_tokens - record.generated_token_ids.len();
-            if remaining < 2 || budget < 2 {
-                return Ok(None);
+            if remaining < 2 {
+                continue;
             }
             let mut history = Vec::new();
             let total = record.descriptor.prompt_token_ids.len() + record.generated_token_ids.len();
@@ -128,7 +143,7 @@ impl Scheduler {
                 .min(remaining - 1)
                 .min(budget - 1);
             if count == 0 {
-                return Ok(None);
+                continue;
             }
             let mut input = Vec::new();
             try_reserve_exact(&mut input, count + 1, "speculative inputs")?;
@@ -137,6 +152,7 @@ impl Scheduler {
             budget -= input.len();
             drafts.push((c.request_id, input));
         }
+        if drafts.is_empty(){return Ok(None);}
         let id = self.peek_iteration_id()?;
         let next = self
             .next_iteration_id
@@ -599,4 +615,36 @@ mod tests {
             .unwrap();
         s.close(6, None).unwrap();
     }
+    #[test]
+    fn speculative_explicit_progress_preserves_original_request_geometry(){
+        use crate::descriptor::{shape_progress::InputStage,variable_wire};
+        let(mut s,_)=ready(32,32);let plan=s.plan_speculative_iteration(3,None).unwrap().unwrap();
+        let authority=s.authorize_speculative_execution(&plan).unwrap();
+        let owner=crate::authority::VariableOwnerGeometry{generation:1,last_accepted_replay:0,catalog_digest:[7;32],max_active_rows:32,physical_block_count:64,context_tokens:128,packed_prefill:true,mixed_execution:true,shared_prefixes:false};
+        let e=authority.verification_expectation(&owner,1,&[1,2,3,4]).unwrap();
+        assert_eq!(e.stage,InputStage::Verification);
+        for row in &e.rows{assert_eq!(row.progress.prompt_tokens,32);assert_eq!(row.progress.generated_index,1);assert_eq!(row.progress.committed_tokens,32);assert_eq!(row.progress.input_tokens,8);}
+        let mut bytes=vec![0;variable_wire::MIXED_REQUEST_BYTES];variable_wire::encode_into(&mut bytes,&e).unwrap();
+        variable_wire::validate_packet(&bytes,&mut vec![0;bytes.len()],&e).unwrap();
+        assert_eq!(u32::from_le_bytes(bytes[16..20].try_into().unwrap()),3);
+        if let Ok(path)=std::env::var("RILEY_SPECULATIVE_PACKET"){std::fs::write(path,&bytes).unwrap();}
+        for change in 0..6 {let mut bad=e.clone();match change {
+            0=>bad.rows[0].progress.generated_index=0,
+            1=>bad.rows[0].progress.committed_tokens=33,
+            2=>bad.rows[0].progress.input_tokens=9,
+            3=>bad.rows[0].progress.output_limit=8,
+            4=>bad.rows[0].progress.stage=InputStage::Prefill,
+            _=>bad.shared_prefixes=true,
+        }assert!(variable_wire::validate(&bad).is_err());}
+        drop(authority);s.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,4).unwrap();s.close(5,None).unwrap();
+    }
+
+    #[test]
+    fn speculative_candidates_skip_missing_drafts_without_hiding_later_owners(){
+        let(mut s,ids)=ready(32,32);
+        for id in &ids[..3]{let i=s.record_index(*id).unwrap();s.requests[i].descriptor.prompt_token_ids=(100..132).collect();s.requests[i].generated_token_ids[0]=999;}
+        let plan=s.plan_speculative_iteration(3,None).unwrap().unwrap();assert_eq!(plan.rows.len(),1);assert_eq!(plan.rows[0].request_id,ids[3]);
+        s.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,4).unwrap();s.close(5,None).unwrap();
+    }
+
 }

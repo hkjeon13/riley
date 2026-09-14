@@ -2103,7 +2103,7 @@ impl PreparedLlamaBatchExecutor {
         }
         if scratch.verification_host.is_some() {
             if !scratch.projection_pipeline || scratch.context_split_workspace.is_some() || scratch.ffn_split || scratch.ffn_adaptive || scratch.compact || buffered {return Err(rejected("verification requires independent unbuffered full projection profile"));}
-            hash.update(b"riley.experimental.target-verification-head.v2.owners4.rows8");
+            hash.update(b"riley.experimental.target-verification-head.v3.explicit-stage.owners4.rows8");
             hash.update(include_bytes!("../../../../kernels/optional/speculative_select.cuh"));
             hash.update(scratch.verification_host.as_ref().unwrap().byte_len().to_le_bytes());
         }
