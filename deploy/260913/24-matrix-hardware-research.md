@@ -40,3 +40,17 @@ Runtime은 Rust → C ABI → CUDA를 유지한다. FA4의 Python/CuTe-DSL 구�
 `dense-wire-matrix-v1`은 C8 unique prior 완료 후 다음 lane 시작 전 48°C cooldown의 120초 제한으로 실패했다. 후보 서버 실행 오류로 해석하지 않는다. Lifecycle은 serving exit 1 및 Blender 세 개의 복구 성공을 기록했다. C16/C64는 시작하지 않았다.
 
 실패 spool과 lifecycle을 보존하고 `dense-wire-matrix-v2`에서 전체 순서를 다시 실행한다. 시작 온도 기준 48°C, workload, binary, warmup 및 retained 수는 유지한다. 대기 한도만 600초로 늘리고 lane별 온도 시계열을 기록한다. 측정 결과가 없는 lane을 성공으로 표시하거나 기존 부분 결과와 새 실행을 합치지 않는다.
+
+## Flat GEMM 본문 대조 — 중복 도입 후보 제외
+
+[FlashDecoding++ §3–5](https://arxiv.org/html/2311.01282v3)의 핵심은 작은 M의 padding 낭비, N 방향 병렬성과 재사용의 상충, double buffering 및 shape별 사전 선택이다. Unified maximum은 입력 범위 검사를 벗어나면 기존 softmax로 재계산한다. Overflow 회피가 기존 rounding 순서의 일치를 증명하지는 않는다.
+
+현재 `kernels/optional/prefill_ffn_pipeline.cuh`와 `prefill_ffn_row_reuse.cuh`는 이미 `stages[2]`, `cp.async`, 다음 K64 tile 선행 load를 사용한다. 따라서 **double buffering 도입 자체를 새로운 optimization batch로 삼지 않는다.** M32 경로는 두 M16 tile이 weight fragment를 재사용한다. Gate/up은 25,600B, down은 13,312B의 두 shared stage를 선언하며, down은 K16 MMA를 유지하고 K320 경계에서 BF16로 반올림한 부분합을 합친다.
+
+이 사실에서 얻는 다음 확인 항목은 다음과 같다. 아직 GPU 병목을 확정한 결과는 아니다.
+
+1. Gate/up과 down 각각에서 async wait 및 shared load 의존 stall을 측정해 실제로 copy가 숨겨지는지 판단한다. Double buffering이 존재한다는 소스 사실과 latency hiding의 실효성을 구별한다.
+2. Down의 CTA는 출력 16열을 맡으므로 N=576에서 M32 tile당 36 CTA다. Gate/up은 출력 32열로 N=1536에서 48 CTA다. 전체 grid는 행 tile 수에 따라 증가하므로 N만으로 GPU 병렬성 부족을 단정하지 않는다.
+3. 일반 vendor GEMM과 비교할 때 K320 BF16 부분합 경계를 명시한다. 이 경계를 무시한 더 빠른 GEMM은 현 수치 계약의 대체 증거가 아니다. 동일 계약을 유지하는 pipeline 변경 또는 별도 품질 검증이 필요한 backend로 나누어 평가한다.
+
+이 대조 결과로 FFN의 단순 buffering/threshold 후보는 후순위로 내린다. 다음 GPU 연구 계측은 attention correction 빈도와 FFN stall을 같은 대표 shape 집합에서 확인해, 실제 절약 가능한 비용이 큰 영역 하나를 선택한다. 현재 serving 검증이 끝나기 전에는 실행하지 않는다.
