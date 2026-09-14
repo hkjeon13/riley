@@ -1372,11 +1372,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v3_prefill(
  return status;
 }
 
-template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false,bool PrefillFlashinfer=false,bool PrefillFfnPipeline=false,bool Fa3=false,bool AdaptiveRows=false,bool QueryReuse=false,bool GqaStaging=false>
+template<uint32_t Rows,bool Compact=false,bool Packed=false,bool Mixed=false,bool FfnPipeline=false,bool PrefillFlashinfer=false,bool PrefillFfnPipeline=false,bool Fa3=false,bool AdaptiveRows=false,bool QueryReuse=false,bool GqaStaging=false,bool ProjectionPipeline=false>
 static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error,RileyCudaDeviceBuffer* attention_workspace=nullptr) noexcept {
+ static_assert(!ProjectionPipeline || (PrefillFfnPipeline && AdaptiveRows && Mixed && !GqaStaging && !QueryReuse && !Fa3),"projection requires composed V7");
  static_assert(Rows==8||Rows==16||Rows==32,"wire capacity");
  static_assert(!Compact||Rows==16||Rows==32,"compact capture currently requires sixteen rows");
  static_assert(!Packed||Rows==32,"V6 requires32 rows");
@@ -1386,10 +1387,10 @@ static RileyCudaStatus record_variable_shared(
  static_assert(!PrefillFfnPipeline || (Mixed && !FfnPipeline && !PrefillFlashinfer),"prefill FFN requires independent mixed32");
  static_assert(!FfnPipeline||Mixed,"FFN pipeline requires mixed32");
  static_assert(!PrefillFlashinfer||Mixed,"FlashInfer prefill requires mixed32");
- if((FfnPipeline || PrefillFfnPipeline) && (weight_count!=363 || attention_workspace))return reject(error,"FFN pipeline requires tiled V7 without FlashInfer",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if((FfnPipeline || PrefillFfnPipeline) && (weight_count!=(ProjectionPipeline?483:363) || attention_workspace))return reject(error,"FFN pipeline requires tiled V7 without FlashInfer",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  constexpr uint64_t request_bytes=128+Rows*1664+4096+(Mixed?4096:0);
  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
- if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(weight_count!=273&&weight_count!=363)||!capacity||capacity>1024||!physical||physical>4096||
+ if(!d||!w||!head||!shared_head||!holds_plan(r,shared_head)||capacity<Rows||!staging||(ProjectionPipeline?weight_count!=483:(weight_count!=273&&weight_count!=363))||!capacity||capacity>1024||!physical||physical>4096||
     r->graph||r->exec||r->prefill_graph||r->prefill_exec||thread_has_active_graph_capture()||thread_has_active_command_batch()||
     !same_context(staging->owner,r->owner)||!holds_counter(r,&staging->active_uses)||!holds_plan(r,head)||staging->byte_len<2*Rows*98432)
    return reject(error,"V3 recorder lifecycle",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1427,18 +1428,24 @@ static RileyCudaStatus record_variable_shared(
  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
  for(size_t i=3;i<273;++i)if(w[i]->byte_len!=sizes[(i-3)%9])return reject(error,"V3 layer weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
- if(weight_count==363)for(size_t i=273;i<363;++i){
+ if((weight_count==363 || (ProjectionPipeline && weight_count==483)))for(size_t i=273;i<363;++i){
   if(w[i]->byte_len!=1769472)return reject(error,"V3 tiled weight extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   for(size_t j=0;j<i;++j)if(w[i]==w[j])return reject(error,"V3 tiled weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ }
+ if constexpr(ProjectionPipeline)for(size_t i=363;i<483;++i){
+  const auto part=(i-363)%4;const uint64_t expected=(part==1||part==2)?221184:663552;
+  if(w[i]->byte_len!=expected)return reject(error,"projection tile extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  for(size_t j=0;j<i;++j)if(w[i]==w[j])return reject(error,"projection tile alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  }
  if(d[23]->byte_len!=Rows*1152||d[24]->byte_len!=Rows*98304||d[25]->byte_len!=Rows*98432)return reject(error,"V3 shared output extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  RileyCudaCanonicalGemmBf16GraphState shared_state{};
  status=bind_reserved_shared_row_gemm_state(shared_head,r->stream,d[23],w[2],d[24],Rows,49152,576,&shared_state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
  RileyCudaCanonicalGemmBf16GraphState state{};
  status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
- void* scratch[12];const void* weights[363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
+ void* scratch[12];const void* weights[ProjectionPipeline?483:363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
  const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];
- if(weight_count==363)for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
+ if((weight_count==363 || (ProjectionPipeline && weight_count==483)))for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
+ if constexpr(ProjectionPipeline)for(size_t l=0;l<30;++l)for(size_t j=0;j<4;++j)prefill_weights[3+l*9+1+j]=weights[363+l*4+j];
  if constexpr(Fa3) {
 #ifdef RILEY_CUDA_ENABLE_FA3
   if(!attention_workspace)return reject(error,"FA3 requires retained workspace",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1459,15 +1466,15 @@ static RileyCudaStatus record_variable_shared(
   if(row_capacity==1){
 #ifdef RILEY_CUDA_ENABLE_FA3
    if constexpr(Fa3) {
-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 decode model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),(weight_count==363 || (ProjectionPipeline && weight_count==483)),attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 decode model");
    }else
 #endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
    if(attention_workspace&&!PrefillFlashinfer){
-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363,attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FlashInfer model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_flashinfer_shared_model(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),(weight_count==363 || (ProjectionPipeline && weight_count==483)),attention_workspace->device_data,attention_workspace->byte_len),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FlashInfer model");
    }else
 #endif
-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:(AdaptiveRows?enqueue_compiled_v7_adaptive_shared_model:FfnPipeline?enqueue_compiled_v7_ffn_pipeline_shared_model:Mixed?enqueue_compiled_v7_gqa_shared_model:enqueue_compiled_v5_shared_model)))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_shared_model:(Rows==16?enqueue_compiled_v4_shared_model:(AdaptiveRows?enqueue_compiled_v7_adaptive_shared_model:FfnPipeline?enqueue_compiled_v7_ffn_pipeline_shared_model:Mixed?enqueue_compiled_v7_gqa_shared_model:enqueue_compiled_v5_shared_model)))(r->stream->stream,scratch,weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,static_cast<uint32_t*>(d[18]->device_data),physical,std::min<uint64_t>(4096,d[14]->byte_len/128),(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 shared model");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(d[23]->device_data,d[1]->device_data,Rows*1152,cudaMemcpyDeviceToDevice);
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V3 shared head");
    if(compact){
@@ -1482,15 +1489,15 @@ static RileyCudaStatus record_variable_shared(
   if constexpr(Packed){
 #ifdef RILEY_CUDA_ENABLE_FA3
    if constexpr(Fa3) {
-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 mixed model");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_fa3_prefill_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483)),attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental FA3 mixed model");
    }else
 #endif
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
    if(attention_workspace){
-    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((PrefillFlashinfer?enqueue_compiled_v7_flashinfer_prefill_only_model:enqueue_compiled_v7_flashinfer_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,weight_count==363,attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,PrefillFlashinfer?"experimental prefill attention":"experimental consistent decode attention");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((PrefillFlashinfer?enqueue_compiled_v7_flashinfer_prefill_only_model:enqueue_compiled_v7_flashinfer_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483)),attention_workspace->device_data,attention_workspace->byte_len,std::min<uint64_t>(4096,d[14]->byte_len/128)),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,PrefillFlashinfer?"experimental prefill attention":"experimental consistent decode attention");
    }else
 #endif
-   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((GqaStaging?enqueue_compiled_v7_gqa_staging_model:QueryReuse?enqueue_compiled_v7_query_reuse_model:PrefillFfnPipeline?enqueue_compiled_v7_prefill_ffn_pipeline_model:Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
+   if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((ProjectionPipeline?enqueue_compiled_v7_projection_pipeline_model:GqaStaging?enqueue_compiled_v7_gqa_staging_model:QueryReuse?enqueue_compiled_v7_query_reuse_model:PrefillFfnPipeline?enqueue_compiled_v7_prefill_ffn_pipeline_model:Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V6 packed head");
    if(compact){
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[24]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 compact completion");
@@ -1499,7 +1506,7 @@ static RileyCudaStatus record_variable_shared(
    return result;
   }
   if(!compact&&result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(cudaMemsetAsync(d[25]->device_data,0,transfer,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 clear inactive output");
-  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:(Rows==16?enqueue_compiled_v4_prefill_model:enqueue_compiled_v5_prefill_model))(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,weight_count==363),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
+  if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((Rows==8?enqueue_compiled_v3_prefill_model:(Rows==16?enqueue_compiled_v4_prefill_model:enqueue_compiled_v5_prefill_model))(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[17]->device_data,static_cast<uint32_t*>(d[18]->device_data),static_cast<uint32_t*>(d[19]->device_data),row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V3 model");
   if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"V3 head");
   if(compact){
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"compact prefill validation");
@@ -1654,6 +1661,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_gqa_staging(
  if(compact>1||prefill_ffn!=1)return reject(error,"GQA staging requires prefill FFN",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if(compact)return record_variable_shared<32,true,true,true,false,false,true,false,true,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
  return record_variable_shared<32,false,true,true,false,false,true,false,true,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+}
+extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_projection_pipeline(
+ RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
+ uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
+ uint32_t capacity,uint32_t physical,uint32_t compact,uint32_t prefill_ffn,RileyCudaErrorInfo* error) noexcept {
+ if(compact>1||prefill_ffn!=1)return reject(error,"projection pipeline requires prefill FFN",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(compact)return record_variable_shared<32,true,true,true,false,false,true,false,true,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
+ return record_variable_shared<32,false,true,true,false,false,true,false,true,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error);
 }
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_adaptive_decode(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,

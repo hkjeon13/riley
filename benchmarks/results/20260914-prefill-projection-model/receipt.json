@@ -1,0 +1,27 @@
+{
+  "base_commit": "fd9a525a",
+  "candidate_binary_sha256": "009697527d143357c3b3d1a2daa5d8b783298024ac1f8f2aa4ea388bbd3ad929",
+  "prior_binary_sha256": "b51b1c4ea6a6c6d3953a639c6459081241e25b51d37ecf0f260384184d8a84b8",
+  "source_sha256": {
+    "crates/riley-cuda/build.rs": "710c5d7343e8b179f50347231bf1177811c03a8ecbb7773149d12237fa38359a",
+    "crates/riley-cuda/src/ffi.rs": "ee4f53c1a2241eda69ac22fe2ed9f6e558587ed8261846f514044317fcf1b410",
+    "crates/riley-cuda/src/graph_resources.rs": "9c9a48f1287dcd5016b103f7305a3328fd445ba8be34d6d40dbd270b899b5f23",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "23d864bc5c80c3a5d2cbf1e1bbd5c5a0cc4dd221842e029db60ca83bb9874f1d",
+    "crates/riley-runtime/src/llama/variable_session.rs": "1a5abf94b44f8c812923f31c44b005e786db0ec8e4ed0f987b5ca73685e715f3",
+    "crates/riley-scheduler/tests/prefix_cache_model_gpu.rs": "4844a3f6e984708cd524dc548729050337159f43d0d86a3183c4fd49d327f0cb",
+    "crates/riley-server/src/engine.rs": "dce70bc696967d523f51770ab7c8ff6006d16436978d63f8c3ff804d603d36ad",
+    "kernels/include/riley_cuda.h": "b7e0f960589960052434f9a13b631017745a00eb607e0e75047196f624ed6994",
+    "kernels/src/ffi_internal.hpp": "9fd4a79921bcbf7ad67e40a680df2b311b7539742a2f48f53872fb974bcc060b",
+    "kernels/src/graph_numerics_precise.cu": "55b17b2234b880b7145b11a3ffb322d0e3d9a9fd58dffe139bb9320d24345920",
+    "kernels/src/graph_resources.cu": "758161faae7985f92e60f16b52725749c9b5ce7e547aea88f620b55571530c64",
+    "kernels/src/mixed_model_v49.cuh": "cd3605b8cc6e170f112da2b4005ce7ada00e883784bf89fa75964ac21cf31e88"
+  },
+  "exact_logits_bytes": 2359296,
+  "whole_model_memcheck_errors": 0,
+  "local_tests": {
+    "server": 105,
+    "cuda_host": 95
+  },
+  "additional_device_weight_bytes": 53084160,
+  "serving_qualified": false
+}

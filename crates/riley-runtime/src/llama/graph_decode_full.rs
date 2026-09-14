@@ -2101,6 +2101,11 @@ impl PreparedLlamaBatchExecutor {
             hash.update(include_bytes!("../../../../kernels/optional/query_reuse_mixed_attention.cuh"));
             hash.update(include_bytes!("../../../../kernels/optional/compact_mixed_attention.cuh"));
         }
+        if scratch.projection_pipeline {
+            if scratch.gqa_staging || scratch.query_reuse || !scratch.prefill_ffn_pipeline || !scratch.adaptive_decode || scratch.projection_tiles.len()!=120 {return Err(rejected("projection pipeline profile"));}
+            hash.update(b"riley.experimental.prefill-projection-pipeline.v1");
+            hash.update(include_bytes!("../../../../kernels/optional/prefill_projection_pipeline.cuh"));
+        }
         if scratch.gqa_staging {
             if scratch.query_reuse || !scratch.prefill_ffn_pipeline || !scratch.adaptive_decode {return Err(rejected("GQA staging requires prefill FFN/adaptive decode"));}
             hash.update(b"riley.experimental.mixed-gqa-staging.v1");
@@ -2230,6 +2235,30 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
             }}
         }
         }
+        let projection_pack_started=std::time::Instant::now();
+        if !scratch.projection_tiles.is_empty() {
+        for (index,buffer) in f.weights.borrow_graph_weight_parents().enumerate() {
+            for layer in 0..30 { for part in 0..4 {
+                if weights[3+layer*9+1+part]!=index {continue;}
+                let (n,k)=if part==1 || part==2 {(192usize,576usize)}else{(576usize,576usize)};
+                let mut source=vec![0u8;n*k*2];
+                for (i,bytes) in source.chunks_mut(chunk.len()).enumerate() {
+                    buffer.download_to_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
+                }
+                let mut packed=vec![0u8;source.len()];
+                for row in (0..n).step_by(8) {for depth in (0..k).step_by(16) {for lane in 0..32 {for hi in 0..2 {
+                    let from=((row+lane/4)*k+depth+2*(lane%4)+hi*8)*2;
+                    let to=(((row/8)*(k/16)+depth/16)*128+hi*64+lane*2)*2;
+                    packed[to..to+4].copy_from_slice(&source[from..from+4]);
+                }}}}
+                hash.update(&packed);
+                for (i,bytes) in packed.chunks(chunk.len()).enumerate() {
+                    scratch.projection_tiles[layer*4+part].upload_from_slice((i*chunk.len()) as u64,bytes,&mut f.io_staging,stream).map_err(cuda)?;
+                }
+            }}
+        }
+        }
+        if scratch.projection_pipeline {eprintln!("RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms={:.3}",projection_pack_started.elapsed().as_secs_f64()*1000.0);}
         let shared=scratch.shared_head.is_some();
         let mut devices:Vec<_>=f.weights.borrow_graph_weight_parents().collect();let base=devices.len();
         let (rows,tail)=scratch.devices.split_at_mut(12);devices.extend(rows);
@@ -2238,12 +2267,14 @@ include_bytes!("../../../../kernels/src/decode_tiled.cuh").as_slice(),
         devices.extend(scratch.shared_devices.iter_mut());
         weights.extend(devices.len()..devices.len()+scratch.tiled.len());
         devices.extend(scratch.tiled.iter_mut());
+        weights.extend(devices.len()..devices.len()+scratch.projection_tiles.len());
+        devices.extend(scratch.projection_tiles.iter_mut());
         let attention_workspace=scratch.attention_workspace.as_mut().map(|workspace|{let index=devices.len();devices.push(workspace);index});
         let mut plans=vec![&mut scratch.head];if let Some(h)=scratch.shared_head.as_mut(){plans.push(h);}
         let mut pinned=vec![&mut scratch.staging];pinned.extend(scratch.buffered_staging.iter_mut());
         let mut graph=BorrowedGraphResourceReservation::reserve(BorrowedGraphResourceParents{stream,devices,
             pinned,plans}).map_err(cuda)?;
-        if scratch.gqa_staging {graph.record_v7_gqa_staging(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,true)}else if scratch.query_reuse {graph.record_v7_query_reuse(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,true)}else if scratch.adaptive_decode {graph.record_v7_adaptive_decode(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,scratch.prefill_ffn_pipeline)}else if scratch.prefill_ffn_pipeline {graph.record_v7_prefill_ffn_pipeline(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact)}else if scratch.ffn_pipeline {graph.record_v7_ffn_pipeline(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact)}else if let Some(workspace)=attention_workspace {if scratch.fa3_attention {graph.record_v7_fa3_experimental(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}else if scratch.flashinfer_prefill_only {graph.record_v7_flashinfer_prefill_only(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}else{graph.record_v7_flashinfer_experimental(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}}else if scratch.mixed_execution && scratch.compact {graph.record_v7_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.mixed_execution {graph.record_v7_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill && scratch.compact {graph.record_v6_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill {graph.record_v6_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
+        if scratch.projection_pipeline {graph.record_v7_projection_pipeline(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,true)}else if scratch.gqa_staging {graph.record_v7_gqa_staging(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,true)}else if scratch.query_reuse {graph.record_v7_query_reuse(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,true)}else if scratch.adaptive_decode {graph.record_v7_adaptive_decode(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact,scratch.prefill_ffn_pipeline)}else if scratch.prefill_ffn_pipeline {graph.record_v7_prefill_ffn_pipeline(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact)}else if scratch.ffn_pipeline {graph.record_v7_ffn_pipeline(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,scratch.compact)}else if let Some(workspace)=attention_workspace {if scratch.fa3_attention {graph.record_v7_fa3_experimental(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}else if scratch.flashinfer_prefill_only {graph.record_v7_flashinfer_prefill_only(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}else{graph.record_v7_flashinfer_experimental(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32,workspace,scratch.compact)}}else if scratch.mixed_execution && scratch.compact {graph.record_v7_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.mixed_execution {graph.record_v7_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill && scratch.compact {graph.record_v6_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.packed_prefill {graph.record_v6_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact && ROWS==32 {graph.record_v5_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==32 {graph.record_v5_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if scratch.compact {graph.record_v4_shared_greedy(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared && ROWS==16 {graph.record_v4_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else if shared {graph.record_v3_shared(&std::array::from_fn(|i|base+i),None,&weights,0,1,0,scratch.capacity,physical as u32)}else{graph.record_v3_prefill(&std::array::from_fn(|i|base+i),None,&weights,0,0,scratch.capacity,physical as u32)}.map_err(cuda)?;
         if scratch.shared_prefixes {graph.enable_shared_prefixes().map_err(cuda)?;}
         if buffered {graph.prepare_buffered_transfers(0,1).map_err(cuda)?;}
         let mut session=(if scratch.mixed_execution {crate::llama::variable_session::BorrowedVariableSession::new_shared_mixed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact,scratch.shared_prefixes)}else if scratch.packed_prefill {crate::llama::variable_session::BorrowedVariableSession::new_shared_packed(graph,hash.finalize().into(),physical as u32,context as u32,scratch.compact)}else if scratch.compact {crate::llama::variable_session::BorrowedVariableSession::new_shared_compact(graph,hash.finalize().into(),physical as u32,context as u32)}else if shared {crate::llama::variable_session::BorrowedVariableSession::new_shared(graph,hash.finalize().into(),physical as u32,context as u32)}else{crate::llama::variable_session::BorrowedVariableSession::new(graph,hash.finalize().into(),physical as u32,context as u32)})

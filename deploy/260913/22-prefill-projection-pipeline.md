@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server 연결 대기. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 serving 측정 진행 중. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
 
 ## 근거와 범위
 
@@ -29,3 +29,7 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 [측정 보고](../../benchmarks/results/20260914-prefill-projection-native/README.md): weight packing, shared A 재사용과 두 K64 buffer를 구현했다. 78조건의 전체30-layer 출력과 graph replay가 bitwise 일치하며 memcheck/racecheck 오류0, SM90a/SM100a compile 통과다. 30개 weight를 순환하는 native graph에서 각 projection 시간이18.96–44.51% 감소했다. 실제 chained model 또는 serving 개선 수치가 아니다. 모델 연결과 품질·serving gate 전 기본값을 변경하지 않는다.
 
 다음 연결은 기존273개 원본 weight 및90개 FFN tile 뒤에120개 projection tile을 별도 retained owner로 추가한다(총483 parent, 추가50.625MiB). 원본 weight는 decode/fallback용으로 유지하며 recorder의 extent·parent·layout 검증과 catalog source identity를 함께 확장해야 한다. 기존363-parent 경로의 계약을 전역 완화하지 않고 새 backend에서만 새 layout을 받는다. Pack 준비시간 및 peak allocation은 모델 gate에서 측정한다.
+
+## Retained model 통합
+
+[Rust/C ABI/model gate](../../benchmarks/results/20260914-prefill-projection-model/README.md)를 완료했다. 483-parent 전용 recorder와120개 tile 수명·content/source identity, 환경변수 `RILEY_PREFILL_PROJECTION_PIPELINE=1`을 연결했다. 2,359,296 BF16 logits bytes가 일치했고 full-model memcheck 오류0이다. Packing 준비 단계는 약0.94초, 추가 device weight는50.625MiB다. 최초 Rust wrapper parent-count 거부를 수정하고 최종 gate를 다시 통과했다. 현재 C32 serving을 별도로 측정하며 native 개선을 serving 개선으로 표시하지 않는다.

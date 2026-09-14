@@ -1,0 +1,14 @@
+
+running 1 test
+test projection_pipeline_matches_full_model_logits ... automatic-prefix-cache enabled=false prefill_tokens=1355 entries=0 pages=0 hits=0 reused_tokens=0
+RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms=946.405
+Error: Cuda { site: ExecutionSite { layer: None, op: IterationCompletion }, source: CudaError { kind: InvalidArgument, domain: Rust, stage: Validation, native_code: 0, operation: "record V7 mixed", message: "parent count mismatch" } }
+FAILED
+
+failures:
+
+failures:
+    projection_pipeline_matches_full_model_logits
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 21.48s
+

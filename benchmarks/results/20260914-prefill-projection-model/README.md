@@ -1,0 +1,13 @@
+# Prefill projection model integration
+
+`RILEY_PREFILL_PROJECTION_PIPELINE=1` selects the new prefill projection recorder through Rust → C ABI → CUDA. It requires V7 mixed execution, prefill FFN and adaptive decode, and rejects competing attention backends. Unset/0 preserves existing behavior. Ordinary/future pure decode keeps the original weights and adaptive path. No Python runtime is introduced.
+
+The new recorder requires exactly483 retained weight parents:273 original,90 existing FFN tiles,120 projection tiles. The prior recorder contracts remain273/363. New tile extents and aliases are checked; Rust owns their allocations through graph close. Packing occurs once during session preparation, its bytes enter the graph content identity, and the optional header enters the source identity. Extra resident projection storage is53,084,160 bytes (50.625MiB); measured extra CPU pack/download/upload phase took936.927 and940.490ms in the unsanitized model test. These timings exclude original model preparation and do not measure whole-process peak memory.
+
+Actual RTX4090 SmolLM2-135M model test:2,359,296 BF16 logits bytes match baseline across long/ragged prefills and repeated cached prefixes. The test uses teacher-forced token7, not free-generation quality qualification. Both cached/uncached sessions close with zero tracked allocations. Whole-model memcheck reports0 errors. CUDA model-test/release builds succeed; local server105 and CUDA-wrapper95 host tests pass.
+
+The first model attempt was rejected before candidate execution because the cloned Rust FFI wrapper still limited parent count to273/363. Only the new wrapper was corrected to require483. [initial-failure](initial-failure/) preserves that failed run. The final [GPU logs](gpu/) show the successful rerun and successful Blender scene-query restoration; no failed numeric comparison was ignored. Public3d/3dsol/3dfable static servers remained up.
+
+[receipt.json](receipt.json) binds12 integration source files to hashes verified against the measurement host, plus frozen prior/current binary hashes. The native header and its dependencies are covered by [native evidence](../20260914-prefill-projection-native/README.md). Run `projection_pipeline_matches_full_model_logits --ignored --nocapture --test-threads=1` in the CUDA scheduler model test binary with `RILEY_REAL_CHECKPOINT` set to the frozen model.
+
+Matched serving is running separately. Full-model greedy streaming, stop/cancel/recovery, C8/C32/C64 performance, other models/hardware runtime and sustained/open-loop qualification are not proved by this model gate. Keep defaults unchanged until actual serving evidence supports promotion.
