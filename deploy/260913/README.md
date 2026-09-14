@@ -109,3 +109,7 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 ## Projection GC 통제 concurrency matrix 완료
 
 [C8/C32/C64 전체 표](../../benchmarks/results/20260914-projection-serving-matrix/README.md): 393216 retained 요청을 검증했다. C64 후보 throughput은 vLLM 대비 shared −21.46%, unique −17.26%다. C8 shared의 제한된 최소 지표 통과 외 전체 목표는 미달이며 기본값 승격은 보류한다. C64 shared의 동일 binary control 대비 E2E P95/P99 및 ITL P99 회귀도 보존했다. 다음은 고정 후보/control의 bounded C32 Nsight profile로 남은 prefill·decode·graph 대기를 분석한 후 영역 단위 optimization batch를 결정한다.
+
+## Adaptive FFN C32 serving 완료
+
+[전체 표와 원본 검증](../../benchmarks/results/20260914-ffn-adaptive-serving-c32/README.md):131072 retained/4194304 tokens,4096 warmup,98304 Riley reference 일치,stop/cancel/recovery 각96건,16 exit0 및 Blender 복구를 검증했다. 후보 throughput은 prior 대비 shared −2.02%/unique +8.14%, 같은 binary control 대비 −0.80%/+6.46%다. vLLM 대비 −8.79%/−14.91%로 전체 목표 미달이다. Shared 회귀 및 vLLM tail 변동을 보존하고 default 비승격을 유지한다. 다음 판단은 실제 활성 prefill 행 분포와 graph/backend 자원 분리 비용을 근거로 하며 기존 작은 threshold 변형을 반복하지 않는다.

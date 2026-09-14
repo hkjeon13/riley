@@ -31,3 +31,7 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## Opt-in 모델 통합
 
 [모델 검증](../../benchmarks/results/20260914-ffn-adaptive-model/README.md):별도 recorder·graph identity·Rust session·엄격한 env 선택을 연결했다. BF16 logits3,244,032 bytes 일치/full-model memcheck0/CUDA release build 통과. 자유 생성·serving 결과는 아직 미완료이며 C32 prior/control/adaptive/vLLM16 lane 비교를 시작했다. Native 작은 행 회귀와 default 비승격은 유지한다.
+
+## Adaptive FFN C32 serving 완료
+
+[전체 표와 원본 검증](../../benchmarks/results/20260914-ffn-adaptive-serving-c32/README.md):131072 retained/4194304 tokens,4096 warmup,98304 Riley reference 일치,stop/cancel/recovery 각96건,16 exit0 및 Blender 복구를 검증했다. 후보 throughput은 prior 대비 shared −2.02%/unique +8.14%, 같은 binary control 대비 −0.80%/+6.46%다. vLLM 대비 −8.79%/−14.91%로 전체 목표 미달이다. Shared 회귀 및 vLLM tail 변동을 보존하고 default 비승격을 유지한다. 다음 판단은 실제 활성 prefill 행 분포와 graph/backend 자원 분리 비용을 근거로 하며 기존 작은 threshold 변형을 반복하지 않는다.
