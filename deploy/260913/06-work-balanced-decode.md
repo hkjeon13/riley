@@ -71,3 +71,5 @@ unsplit backend로 복귀한다.
 이 gate의 목적은 무효한 exact-profile 통합을 미리 막는 것이다. 실제 LeanAttention 라이브러리 전체를 구현하거나 검증한 것이 아니며, 논문 오류를 주장하지 않는다. 별도 numerical backend를 도입하려면 결과를 보기 전에 새 profile과 모델 수준 기준을 명시해야 하고 기존 profile의 실패를 tolerance 완화로 덮지 않는다.
 
 [GPU 확인 결과](../../benchmarks/results/20260914-attention-split-compatibility/README.md):3개 대조군은 일치했고 두-tile counterexample의576개 BF16 출력이 달랐다(0.4765625 vs0.474609375). 두 graph replay/비활성 sentinel,memcheck/racecheck0,SM90a/SM100a compile 통과 및 Blender 복구 확인. Legacy exact profile과의 독립 partial merge 호환성은 **REJECT**다. 성능 검증이나 LeanAttention 전체 구현 완료를 의미하지 않으며 PR06은 별도 numerical profile 계약이 필요한 미완료 작업으로 유지한다.
+
+[후속 구현·수치 계약](06-attention-split-numerical-contract.md)을 후보 모델 결과 전에 고정했다. 기존 NLL/KL 및 strict generation 기준은 유지하며, metric 판정 도구는 과거 실패를 exit 1로 반환한다. 이 준비는 새 backend 구현이나 성능 향상 증거가 아니다.

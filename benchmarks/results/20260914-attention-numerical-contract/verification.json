@@ -1,0 +1,66 @@
+{
+  "kind": "offline_historical_metric_adjudication",
+  "gpu_executed": false,
+  "checks": [
+    {
+      "case": "flashinfer-rejected",
+      "input": "benchmarks/results/20260913-flashinfer-natural-screen/metrics.json",
+      "exit_code": 1,
+      "result": {
+        "schema": "attention-natural-metric-check-v1",
+        "aggregate": {
+          "baseline": {
+            "nll": 2.9592894315719604,
+            "kl_from_fp32": 0.0007591519097331911,
+            "argmax_fp32_matches": 244.0
+          },
+          "candidate": {
+            "nll": 2.952134996652603,
+            "kl_from_fp32": 0.0007855655130697414,
+            "argmax_fp32_matches": 243.0
+          }
+        },
+        "conditions": {
+          "nll": true,
+          "kl_from_fp32": false
+        },
+        "relative_screen_passed": false,
+        "general_quality_accepted": false,
+        "serving_qualified": false,
+        "raw_logits_verified": false,
+        "resource_cleanup_verified": false,
+        "metrics_sha256": "a9bdbc28b5fe85a2bbb043e62a4bbc89f6aefcbb80f407c00b80cb2934e20efe"
+      }
+    },
+    {
+      "case": "residual-screen-only-pass",
+      "input": "benchmarks/results/20260913-prefill-residual/natural-metrics.json",
+      "exit_code": 0,
+      "result": {
+        "schema": "attention-natural-metric-check-v1",
+        "aggregate": {
+          "baseline": {
+            "nll": 2.9592894315719604,
+            "kl_from_fp32": 0.0007591519097331911,
+            "argmax_fp32_matches": 244.0
+          },
+          "candidate": {
+            "nll": 2.9571445882320404,
+            "kl_from_fp32": 0.0007462196663254872,
+            "argmax_fp32_matches": 250.0
+          }
+        },
+        "conditions": {
+          "nll": true,
+          "kl_from_fp32": true
+        },
+        "relative_screen_passed": true,
+        "general_quality_accepted": false,
+        "serving_qualified": false,
+        "raw_logits_verified": false,
+        "resource_cleanup_verified": false,
+        "metrics_sha256": "877e8b597dea4304678582ebc76ffea48388ad4c6e23239b1591190821664c98"
+      }
+    }
+  ]
+}
