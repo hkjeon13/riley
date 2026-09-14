@@ -57,3 +57,7 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 후보 throughput은 frozen prior 대비 shared +3.56%, unique +8.54%; 동일 binary control 대비 +4.01%, +8.37%다. 기존 Riley 대비 shared E2E P99는362.44→364.43ms(+0.55%)로 악화했고 다른 표의 latency 지표는 개선됐지만 vLLM throughput보다 각각9.57%,19.86% 낮으며 latency 전체 목표도 미달이다. 모델을 고정한 채 같은 긴 구간 평가를 C8/C64로 확장한다. 추가 모델·장기/open-loop·다른 GPU runtime gate는 미완료다.
 
 긴 구간에서 모든 engine의 shared E2E P99가 짧은 screen보다 크게 늘었다. Client가 phase 전체의 SSE frame 객체를 보존하는 현재 경로와 host stall을 구분하기 위해, C8/C64 확대 전에 같은 frozen binary를 유지한 bounded client-pause diagnostic을 수행한다. GC timing은 이번 run에서 측정하지 않았으므로 원인으로 단정하거나 latency에서 임의 차감하지 않는다.
+
+## Client GC 진단 완료
+
+[관측 결과](../../benchmarks/results/20260914-client-gc-diagnostic/README.md): 고정 control/vLLM의 shared C32 역순4 lane32768 retained 응답을 검증했다. 최대 GC 구간435–442ms, P99 이상 요청328개 중310개가10ms 이상 GC와 겹쳤다. 다만 Riley의10ms 이상 ITL 중 GC와 겹친 것은1.16%이므로 서버 쪽 ITL 격차는 별도로 남는다. GC 구간은 wall time이며 인과·독점 CPU 정지로 단정하지 않는다. 기본 GC와 timed-phase GC 비활성의 양 engine 공통 AB/BA intervention으로 클라이언트 영향을 확인한 뒤 versioned 조건으로 후보 비교와 C8/C64를 진행한다. 기존 수치는 유지하고 임의 보정하지 않는다.

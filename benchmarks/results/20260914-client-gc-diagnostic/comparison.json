@@ -1,0 +1,257 @@
+{
+  "qualification": false,
+  "scope": "Observational shared-prefix C32; interval overlap is not causal attribution. No pause subtraction or GC policy change. Callback overhead is included.",
+  "preparation": {
+    "hashes": {
+      "current": "009697527d143357c3b3d1a2daa5d8b783298024ac1f8f2aa4ea388bbd3ad929",
+      "prior": "b51b1c4ea6a6c6d3953a639c6459081241e25b51d37ecf0f260384184d8a84b8"
+    },
+    "controller_sha256": "7a5162e31a5e7d2a8064eb5b014e9875cffeeed0b30b49059a73ccb6fc085d76",
+    "client_sha256": "adf9930078b8c9fd4a83ef0fd5936749fb9088a5114c47644883458d5dd9cf7e",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "concurrency": 32,
+    "active_capacity": 32,
+    "warmup": 256,
+    "retained": 8192,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "qualification": false,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "lanes": [
+    {
+      "name": "shared-p0-control",
+      "summary": {
+        "requests": 8192,
+        "errors": 0,
+        "reference_matches": 8192,
+        "throughput_tokens_s": 9565.504514709046,
+        "ttft_ms": {
+          "0.5": 14.498084500000001,
+          "0.95": 18.633269299999995,
+          "0.99": 56.43837395000002
+        },
+        "tpot_ms": {
+          "0.5": 2.7448753709677423,
+          "0.95": 2.944626138709677,
+          "0.99": 10.152252130967753
+        },
+        "e2e_ms": {
+          "0.5": 100.22579,
+          "0.95": 117.0504686,
+          "0.99": 343.0197271900001
+        },
+        "itl_ms": {
+          "0.5": 1.604596,
+          "0.95": 10.809278599999999,
+          "0.99": 11.679187249999995
+        }
+      },
+      "gc_generations": [
+        {
+          "generation": 0,
+          "count": 1512,
+          "total_ms": 97.70427499999997,
+          "max_ms": 0.458297
+        },
+        {
+          "generation": 1,
+          "count": 138,
+          "total_ms": 143.17752699999997,
+          "max_ms": 1.686823
+        },
+        {
+          "generation": 2,
+          "count": 10,
+          "total_ms": 1766.248179,
+          "max_ms": 441.99488
+        }
+      ],
+      "gc_at_least_10ms": 9,
+      "requests_overlapping_long_gc": 351,
+      "e2e_at_or_above_p99": 82,
+      "p99_requests_overlapping_long_gc": 82,
+      "itl_at_least_10ms": 21765,
+      "long_itl_overlapping_long_gc": 248,
+      "max_gc_ms": 441.99488,
+      "process_cpu_s": 12.878062745,
+      "peak_rss_mib": 656.71484375
+    },
+    {
+      "name": "shared-p0-vllm",
+      "summary": {
+        "requests": 8192,
+        "errors": 0,
+        "reference_matches": 6927,
+        "throughput_tokens_s": 11061.793676168292,
+        "ttft_ms": {
+          "0.5": 29.1743375,
+          "0.95": 44.5611274,
+          "0.99": 53.54115743000001
+        },
+        "tpot_ms": {
+          "0.5": 1.7933815967741935,
+          "0.95": 2.3064694741935483,
+          "0.99": 8.360456154838714
+        },
+        "e2e_ms": {
+          "0.5": 85.746077,
+          "0.95": 105.98197379999999,
+          "0.99": 346.1233845200001
+        },
+        "itl_ms": {
+          "0.5": 1.622504,
+          "0.95": 3.9385062,
+          "0.99": 7.050170309999997
+        }
+      },
+      "gc_generations": [
+        {
+          "generation": 0,
+          "count": 1446,
+          "total_ms": 110.65443000000003,
+          "max_ms": 2.586137
+        },
+        {
+          "generation": 1,
+          "count": 131,
+          "total_ms": 171.17639200000002,
+          "max_ms": 2.130537
+        },
+        {
+          "generation": 2,
+          "count": 8,
+          "total_ms": 1793.087243,
+          "max_ms": 435.110381
+        }
+      ],
+      "gc_at_least_10ms": 8,
+      "requests_overlapping_long_gc": 304,
+      "e2e_at_or_above_p99": 82,
+      "p99_requests_overlapping_long_gc": 82,
+      "itl_at_least_10ms": 621,
+      "long_itl_overlapping_long_gc": 222,
+      "max_gc_ms": 435.110381,
+      "process_cpu_s": 13.58747469,
+      "peak_rss_mib": 2164.96484375
+    },
+    {
+      "name": "shared-p1-vllm",
+      "summary": {
+        "requests": 8192,
+        "errors": 0,
+        "reference_matches": 6907,
+        "throughput_tokens_s": 11015.528443508108,
+        "ttft_ms": {
+          "0.5": 28.863604000000002,
+          "0.95": 41.1230443,
+          "0.99": 54.47160865000004
+        },
+        "tpot_ms": {
+          "0.5": 1.769691193548387,
+          "0.95": 2.243941632258064,
+          "0.99": 11.510744727741937
+        },
+        "e2e_ms": {
+          "0.5": 84.18845350000001,
+          "0.95": 105.44638169999999,
+          "0.99": 395.56619896000007
+        },
+        "itl_ms": {
+          "0.5": 1.620034,
+          "0.95": 3.7290428999999987,
+          "0.99": 6.466954169999995
+        }
+      },
+      "gc_generations": [
+        {
+          "generation": 0,
+          "count": 1453,
+          "total_ms": 107.80215999999992,
+          "max_ms": 0.440059
+        },
+        {
+          "generation": 1,
+          "count": 132,
+          "total_ms": 165.87824099999995,
+          "max_ms": 1.955784
+        },
+        {
+          "generation": 2,
+          "count": 8,
+          "total_ms": 1780.669444,
+          "max_ms": 442.194681
+        }
+      ],
+      "gc_at_least_10ms": 8,
+      "requests_overlapping_long_gc": 292,
+      "e2e_at_or_above_p99": 82,
+      "p99_requests_overlapping_long_gc": 64,
+      "itl_at_least_10ms": 496,
+      "long_itl_overlapping_long_gc": 227,
+      "max_gc_ms": 442.194681,
+      "process_cpu_s": 13.346196361,
+      "peak_rss_mib": 2277.421875
+    },
+    {
+      "name": "shared-p1-control",
+      "summary": {
+        "requests": 8192,
+        "errors": 0,
+        "reference_matches": 8192,
+        "throughput_tokens_s": 9526.052483913129,
+        "ttft_ms": {
+          "0.5": 14.5619415,
+          "0.95": 22.473948799999967,
+          "0.99": 54.185432060000025
+        },
+        "tpot_ms": {
+          "0.5": 2.7539365806451612,
+          "0.95": 2.999151911290322,
+          "0.99": 10.030420010645164
+        },
+        "e2e_ms": {
+          "0.5": 100.51782750000001,
+          "0.95": 122.86479309999999,
+          "0.99": 326.9243103000001
+        },
+        "itl_ms": {
+          "0.5": 1.6120480000000001,
+          "0.95": 10.7538767,
+          "0.99": 11.63011437
+        }
+      },
+      "gc_generations": [
+        {
+          "generation": 0,
+          "count": 1518,
+          "total_ms": 101.871477,
+          "max_ms": 0.578236
+        },
+        {
+          "generation": 1,
+          "count": 138,
+          "total_ms": 159.30424900000003,
+          "max_ms": 1.897456
+        },
+        {
+          "generation": 2,
+          "count": 8,
+          "total_ms": 1737.4680059999998,
+          "max_ms": 441.517549
+        }
+      ],
+      "gc_at_least_10ms": 8,
+      "requests_overlapping_long_gc": 301,
+      "e2e_at_or_above_p99": 82,
+      "p99_requests_overlapping_long_gc": 82,
+      "itl_at_least_10ms": 21526,
+      "long_itl_overlapping_long_gc": 256,
+      "max_gc_ms": 441.517549,
+      "process_cpu_s": 12.640220378,
+      "peak_rss_mib": 2281.92578125
+    }
+  ]
+}
