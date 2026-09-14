@@ -2,6 +2,7 @@
 import contextlib,hashlib,json,pathlib,re,statistics,sys,tarfile
 from paired_decode_serving_screen import summary
 from serving_evidence_validation import validate_row
+from serving_comparison_assessment import assess
 root=pathlib.Path(sys.argv[1]);prefix=('projection-gc-controlled-c64-v1/' if root.name.endswith('c64') else 'projection-gc-controlled-c8-v1/' if root.name.endswith('c8') else 'projection-gc-controlled-c32-v1/')
 archives=sorted((root/'evidence').glob('*.tar.gz'));assert len(archives)==17
 manifest=json.loads((root/'evidence/manifest.json').read_text())
@@ -112,5 +113,7 @@ with contextlib.ExitStack() as stack:
                 assert delta<=elapsed*1.02, 'pressure interval inconsistent'
                 pressure[name]['fraction_percent'][resource+'_'+category]=100*delta/elapsed
     result['host_pressure_by_retained_lane']=pressure
+    result['descriptive_assessment']=assess(compared)
+    result['per_run_measurements']=records
     (root/'comparison.json').write_text(json.dumps(result,indent=2)+'\n')
     for r in compared:print(r)
