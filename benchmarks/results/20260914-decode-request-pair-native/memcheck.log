@@ -1,0 +1,27 @@
+========= COMPUTE-SANITIZER
+CHECK context=1 rows=1 shared=0 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=1 shared=0 scale=32 mismatch=0 replay=0
+CHECK context=1 rows=1 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=1 shared=1 scale=32 mismatch=0 replay=0
+CHECK context=1 rows=1 shared=2 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=1 shared=2 scale=32 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=0 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=0 scale=32 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=1 scale=32 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=2 scale=1 mismatch=0 replay=0
+CHECK context=1 rows=8 shared=2 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=0 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=0 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=1 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=2 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=1 shared=2 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=0 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=0 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=1 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=1 scale=32 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=2 scale=1 mismatch=0 replay=0
+CHECK context=129 rows=8 shared=2 scale=32 mismatch=0 replay=0
+DONE checks=24
+========= ERROR SUMMARY: 0 errors
