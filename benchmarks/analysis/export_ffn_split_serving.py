@@ -95,6 +95,7 @@ with contextlib.ExitStack() as stack:
     for lane in ('prior','control','split'):
         name='shared-p0-'+lane
         stopped=load(name+'-stop.json');assert len(stopped)==concurrency
+        for row in stopped:validate_row(row,fixtures['shared'][0])
         assert all(r['valid'] and r['finish_reason']=='stop' for r in stopped)
         identities=[(r['token_ids'],r['text'],r['finish_reason'],r['usage']) for r in stopped]
         if stop_reference is None:stop_reference=identities
@@ -102,6 +103,8 @@ with contextlib.ExitStack() as stack:
         cancelled=load(name+'-cancel.json');assert len(cancelled)==concurrency
         assert all(r['connection_closed_before_output_budget'] and 4<=r['received_tokens']<32 for r in cancelled)
         recovery=load(name+'-recovery.json');assert len(recovery)==concurrency
+        by_id={f['id']:f for f in fixtures['shared']}
+        for row in recovery:assert all(validate_row(row,by_id[row['id']]).values())
         assert all(r['valid'] and all(r['checks'].values()) for r in recovery)
     for kind in ('shared','unique'):
         for lane in ('prior','control','split','vllm'):

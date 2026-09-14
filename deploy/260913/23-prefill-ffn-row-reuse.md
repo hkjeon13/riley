@@ -1,6 +1,6 @@
 # PR 23 — Prefill FFN weight reuse across row tiles
 
-상태: unified adaptive native/model/C32 serving 검증 완료, 전체 성능 목표 미달. Packed-row 계측 후 split graph native/model 통합 검증 완료, serving 비교 대기. 기본 backend 변경 없음.
+상태: unified adaptive native/model/C32 serving 검증 완료, 전체 성능 목표 미달. Packed-row 계측 후 split graph native/model/C32 serving 검증 완료, 추가 이득1% 미만 및 전체 목표 미달. 기본 backend 변경 없음.
 
 Projection 적용 후 [진단](../../benchmarks/results/20260914-projection-pipeline-profile/README.md)의 unique prefill/mixed에서 FFN은198.779ms, graph span의30.63%다. 기존 FFN pipeline은 gate/up과 down에서 M16마다 같은 weight를 다시 stage한다. 다음 batch는 새로운 shared staging 방식의 두 연산을 함께 평가한다.
 
@@ -52,3 +52,12 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 Split serving 비교 준비: current 바이너리를 `riley-ffn-split-serving-v1`로 고정했으며 prior는 이전 측정의 unified adaptive 바이너리 `riley-ffn-adaptive-serving-v1`(SHA256 `3ae029380abc732a96f65e361548daef92a794ea9a74905dd6e245ccaf4786fc`)다. Prior만 adaptive=1, control은 두 FFN flag=0, split은 split=1/adaptive=0이다. 네 번째 lane은 vLLM이다. 각 lane C32/active32/warm256/ret8192, shared·unique와 역순16 lane 비교를 유지한다. 준비 완료 시간과 준비 직후 RSS/global GPU memory를 추가 수집하지만 이를 isolated graph allocation으로 해석하지 않는다. 모델 gate가 완료되기 전 serving을 시작하지 않는다. Controller/client 원본은 timed phase 전 tmpfs에 저장하고 source hash를 묶는다.
 
 [Split 모델 검증](../../benchmarks/results/20260914-ffn-split-model/README.md):full logits4,128,768 BF16 bytes exact, full-model memcheck0 errors, 두 실행exit0 및 Blender 복구 완료. Compact/buffered/rolling serving parity와 성능은 이어지는16 lane 비교에서 검증하며 현재 미완료다.
+
+
+## Split C32 결과 — FFN 추가 변형 중단
+
+[전체 비교와 검증](../../benchmarks/results/20260914-ffn-split-serving-c32/README.md):16 lane/131072 retained/4194304 tokens,98304 Riley reference 일치,stop/cancel/recovery 각96 및 Blender 복구를 검증했다.184개 파일4,735,499,038bytes의 archive/materialization hash와 controller/client snapshot도 확인했다. V1은 vLLM 준비300초 timeout으로 실패했고 보존했다. V2는 모든 엔진에 동일한600초 준비 한도를 사전 적용해 전체16개를 새로 실행했다.
+
+Split throughput은 unified prior 대비 shared+0.90%/unique+0.75%, 같은 binary M16 control 대비+0.41%/+6.98%다. Shared control 대비 방향은 순서에 따라+0.93%/−0.10%로 바뀐다. vLLM 대비−13.77%/−16.83%로 목표 미달이다. 준비 시간 중앙값4757.68ms vscontrol1002.17ms, global GPU readiness memory1916 vs1900, 서버 RSS803986 vs795000KiB가 관측됐다. 메모리 측정은 graph allocation 격리값이 아니며 host IO PSI4.37–27.37%도 함께 보존한다.
+
+기본값 비승격. FFN threshold/tile 작은 변형을 더 이어가지 않는다. 다음 의미 있는 영역은 남아 있는 PR06 attention 작업 분배다. Native/모델 수치 계약과128-token recurrence/BF16 probability rounding을 먼저 검토하고 graph/scratch/serving을 묶어 평가한다. 기존 FFN 개선을 새 attention 성능으로 합산하지 않는다.
