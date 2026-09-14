@@ -7,6 +7,7 @@ pub mod paged_kv;
 pub mod reference;
 pub mod rng;
 pub mod sampling;
+pub mod speculative;
 
 #[cfg(any(feature = "cuda", test))]
 mod cuda_weights;

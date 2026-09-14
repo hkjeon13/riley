@@ -1,6 +1,6 @@
 # PR 13 — Draft-target speculative decoding
 
-상태: **계획만 작성 / 미구현**. 공통 계약은 [README](README.md)를 따른다.
+상태: **Rust greedy 승인·KV 정산 기반 구현, target-prefix 수치 전제 검증 완료 / 실제 speculative serving 미구현**. 공통 계약은 [README](README.md)를 따른다.
 
 ## 문제와 가설
 
@@ -46,3 +46,12 @@ draft 경로를 끄고 target 단독으로 복귀한다.
 ## 연구 근거
 
 [EAGLE-3](https://arxiv.org/abs/2503.01840), [Speculation limits](https://arxiv.org/abs/2601.11580). 논문 성능 배수는 Riley의 예상 개선율이 아니다.
+
+
+## 첫 구현 batch — 2026-09-14
+
+[기반 구현과 GPU 증거](../../benchmarks/results/20260914-speculative-foundation/README.md): 최대8개 draft의 greedy prefix 승인, replacement/bonus, EOS·길이·취소 처리, 기존 KV reservation의 완료된 prefix 정산을 연결했다. 추가 모델 없는 prompt lookup을 최초 제안기로 구현했으며, 지원되는 큰 target/draft 모델 쌍 도입을 대체 완료하지 않는다. Python은 serving 경로에 들어가지 않는다.
+
+CPU5개 테스트는 KV252조합 및 독립 직렬 oracle11,250조합을 포함해 통과했다. 기존 accepted target의 순차9출력과72개 독립 prefix 요청에서 BF16 logits7,077,888 bytes가 일치했고 full-model memcheck0이다. 이것은 기존 경로의 수치 전제 검사이며, 한 번의 fused verification이나 serving 이득이 아니다.
+
+다음 묶음은 K+1 target prediction 반환, private KV append의 GPU 완료와 승인 prefix 정산, scheduler 출력·길이·취소 accounting 연결, 실제 acceptance·draft·verify·rollback 비용 및 vLLM serving 비교다. 검증된 target 수치 계약을 그대로 사용하며, FP32 분할 attention의 strict 실패를 우회하지 않는다. 미지원 sampling/stop-string/processor 경로는 ordinary decode를 유지한다.
