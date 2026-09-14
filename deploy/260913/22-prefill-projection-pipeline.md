@@ -61,3 +61,9 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 ## Client GC 진단 완료
 
 [관측 결과](../../benchmarks/results/20260914-client-gc-diagnostic/README.md): 고정 control/vLLM의 shared C32 역순4 lane32768 retained 응답을 검증했다. 최대 GC 구간435–442ms, P99 이상 요청328개 중310개가10ms 이상 GC와 겹쳤다. 다만 Riley의10ms 이상 ITL 중 GC와 겹친 것은1.16%이므로 서버 쪽 ITL 격차는 별도로 남는다. GC 구간은 wall time이며 인과·독점 CPU 정지로 단정하지 않는다. 기본 GC와 timed-phase GC 비활성의 양 engine 공통 AB/BA intervention으로 클라이언트 영향을 확인한 뒤 versioned 조건으로 후보 비교와 C8/C64를 진행한다. 기존 수치는 유지하고 임의 보정하지 않는다.
+
+## Client GC intervention 완료 및 다음 비교
+
+[65536 retained 응답의 대조 결과](../../benchmarks/results/20260914-client-gc-intervention/README.md): Riley는 두 순서 모두 GC 비활성 시 throughput 약5.7–5.9% 증가, E2E P99 약106ms로 감소했다. vLLM은 한 순서에서 같은 개선이 있었지만 역순 disabled 실행은8839 tok/s/P99 362.96ms로 흔들렸고 해당 구간 global IO pressure25.15%였다. GC만으로 전체 tail 원인을 설명하지 않는다. 두 run 중앙값으로 목표 접근을 주장하지 않고 모든 run을 보존한다.
+
+다음 projection comparison은 `gc-phase-disabled-v1`과 tmpfs 원본 응답·로그 저장을 양 engine/모든 Riley lane에 공통 적용한다. 요청·모델·binary·KV budget은 유지하며 기존 측정과 합산하지 않는다. GPU 측정 밖에서 디스크로 복사하고 Blender를 복구한다. 외부 host stall은 계속 가능하며 PSI를 함께 기록한다. 새 controller/exporter는 준비됐고 전체16 lane 검증 후 판정한다.
