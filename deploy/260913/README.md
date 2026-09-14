@@ -105,3 +105,7 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 `3d.fin-ally.net`은 별도 정적 웹 뷰어다. Cloudflare origin은 localhost:31840이며 기존 `/home/psyche/lotte-tower/output/scripts/serve_local.py --directory /home/psyche/lotte-tower/output/web/site --port 31840`로 복구했다. 공개 HTTP200, GLB Range206, 실제 브라우저의 타워 렌더·탐색 가능 상태를 확인했다. 해당 웹 서버는 Blender MCP나 서버 GPU에 의존하지 않으므로 이후 GPU 측정 중에도 유지한다. 실행 기록은 위 원격 폴더의 `viewer-launch.json`이다.
 
 비교 뷰어도 복구했다: `3dsol.fin-ally.net`→127.0.0.1:31970 (`codex_gpt5_20260908_132327/output/web/site`), `3dfable.fin-ally.net`→127.0.0.1:32010 (`claude_fable51_20260908_1410/output/web`). 각 기존 문서의 Python 정적 서버 명령을 사용했다. 두 공개 사이트 HTTP200 및 브라우저 모델 로딩 완료·실제 타워 렌더를 확인했다. 실행 기록은 `3dsol-launch.json`, `3dfable-launch.json`이다. 세 웹 서버 모두 GPU 측정 대상에서 제외하고 계속 유지한다.
+
+## Projection GC 통제 concurrency matrix 완료
+
+[C8/C32/C64 전체 표](../../benchmarks/results/20260914-projection-serving-matrix/README.md): 393216 retained 요청을 검증했다. C64 후보 throughput은 vLLM 대비 shared −21.46%, unique −17.26%다. C8 shared의 제한된 최소 지표 통과 외 전체 목표는 미달이며 기본값 승격은 보류한다. C64 shared의 동일 binary control 대비 E2E P95/P99 및 ITL P99 회귀도 보존했다. 다음은 고정 후보/control의 bounded C32 Nsight profile로 남은 prefill·decode·graph 대기를 분석한 후 영역 단위 optimization batch를 결정한다.

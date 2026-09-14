@@ -79,3 +79,7 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 [전체 비교표](../../benchmarks/results/20260914-projection-gc-controlled-serving-c8/README.md): 16 lane131072 retained/4096 warmup 응답, Riley98304 retained exact, stop/cancel/recovery 각24건을 검증했다. GC event/counter 증가0, server exit0, Blender 복구 및 모든 원본/압축 해시 일치도 확인했다.
 
 후보 throughput은 prior 대비 shared +1.64%/unique +6.00%, control 대비 +0.98%/+5.95%다. Shared는 vLLM 대비 +13.93% 및 보고 latency 감소로 이 제한된 조건의 최소 지표를 만족하지만 목표폭 +15% throughput/−10% TPOT에는 못 미친다. Unique는 vLLM 대비 throughput −4.36%와 TTFT 증가로 미달이다. Shared ITL P95의 prior 대비 약0.49% 악화도 남는다. C32·unique·전체 qualification 실패를 덮어쓰지 않는다. 남은 C64(client64/active32)를 같은 조건에서 측정하고 기본값은 유지한다.
+
+## Projection GC 통제 concurrency matrix 완료
+
+[C8/C32/C64 전체 표](../../benchmarks/results/20260914-projection-serving-matrix/README.md): 393216 retained 요청을 검증했다. C64 후보 throughput은 vLLM 대비 shared −21.46%, unique −17.26%다. C8 shared의 제한된 최소 지표 통과 외 전체 목표는 미달이며 기본값 승격은 보류한다. C64 shared의 동일 binary control 대비 E2E P95/P99 및 ITL P99 회귀도 보존했다. 다음은 고정 후보/control의 bounded C32 Nsight profile로 남은 prefill·decode·graph 대기를 분석한 후 영역 단위 optimization batch를 결정한다.

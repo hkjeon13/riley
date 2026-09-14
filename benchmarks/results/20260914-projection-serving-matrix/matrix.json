@@ -1,0 +1,229 @@
+{
+  "qualified": false,
+  "aggregation": "Separate concurrency conditions; medians of two run-level estimates; no pooling.",
+  "common_preparation": {
+    "hashes": {
+      "current": "009697527d143357c3b3d1a2daa5d8b783298024ac1f8f2aa4ea388bbd3ad929",
+      "prior": "b51b1c4ea6a6c6d3953a639c6459081241e25b51d37ecf0f260384184d8a84b8"
+    },
+    "controller_sha256": "ee9b9efa0c560ba59095dd9d62477493cfc9c8e0231149379a740d66c3fed20d",
+    "client_sha256": "adf9930078b8c9fd4a83ef0fd5936749fb9088a5114c47644883458d5dd9cf7e",
+    "source_fixture_sha256": "b5a10cbd54bbd2a6cddad2fd26f10146f38d36a85377432973959d740678e2d5",
+    "warmup": 256,
+    "retained": 8192,
+    "kv_payload_bytes_per_engine": 754974720,
+    "riley_cache_page_limit": 512,
+    "vllm_prefix_caching": true,
+    "client_treatment": "gc-phase-disabled-v1",
+    "artifact_storage": "tmpfs:/dev/shm",
+    "phase_cleanup": "release previous rows and full collect before every phase",
+    "qualification": false,
+    "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+    "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+  },
+  "sources": [
+    {
+      "concurrency": 8,
+      "active_capacity": 8,
+      "source": "benchmarks/results/20260914-projection-gc-controlled-serving-c8/comparison.json",
+      "source_sha256": "6e97eebec82d9ebfc43085dc41944c991ff5a7e6b1b7caa7f2cf83f913114b83",
+      "fixture_sha256": "3bd9f651ba76769c24856c64503c3f2bcf5ed06e3c07ee0767d2338c93892b01",
+      "retained_requests": 131072,
+      "retained_tokens": 4194304,
+      "rows": [
+        {
+          "workload": "shared",
+          "candidate": {
+            "workload": "shared",
+            "lane": "projection",
+            "throughput_tokens_s": 5141.115872064598,
+            "ttft_0.5_ms": 11.75790275,
+            "tpot_0.5_ms": 1.2227887822580645,
+            "e2e_0.95_ms": 51.32054445,
+            "e2e_0.99_ms": 52.915838210000004,
+            "itl_0.5_ms": 1.15305825,
+            "itl_0.95_ms": 1.7308162999999985,
+            "itl_0.99_ms": 3.3377846349999993
+          },
+          "vllm": {
+            "workload": "shared",
+            "lane": "vllm",
+            "throughput_tokens_s": 4512.614482981987,
+            "ttft_0.5_ms": 14.2910105,
+            "tpot_0.5_ms": 1.3235370161290323,
+            "e2e_0.95_ms": 63.822768275,
+            "e2e_0.99_ms": 71.77503170500003,
+            "itl_0.5_ms": 1.2998272499999999,
+            "itl_0.95_ms": 1.8790628249999999,
+            "itl_0.99_ms": 4.409241344999995
+          },
+          "throughput_change_percent": 13.927655275069938
+        },
+        {
+          "workload": "unique",
+          "candidate": {
+            "workload": "unique",
+            "lane": "projection",
+            "throughput_tokens_s": 2762.3340660927815,
+            "ttft_0.5_ms": 50.21993225,
+            "tpot_0.5_ms": 1.3640347499999999,
+            "e2e_0.95_ms": 93.63036965,
+            "e2e_0.99_ms": 95.438518215,
+            "itl_0.5_ms": 1.225514,
+            "itl_0.95_ms": 4.809471549999999,
+            "itl_0.99_ms": 5.162409524999999
+          },
+          "vllm": {
+            "workload": "unique",
+            "lane": "vllm",
+            "throughput_tokens_s": 2888.2748737448487,
+            "ttft_0.5_ms": 29.409276499999997,
+            "tpot_0.5_ms": 1.8605628306451614,
+            "e2e_0.95_ms": 102.0257474,
+            "e2e_0.99_ms": 115.54019723500005,
+            "itl_0.5_ms": 1.37539925,
+            "itl_0.95_ms": 5.044529899999999,
+            "itl_0.99_ms": 5.898411509999999
+          },
+          "throughput_change_percent": -4.360416274673195
+        }
+      ]
+    },
+    {
+      "concurrency": 32,
+      "active_capacity": 32,
+      "source": "benchmarks/results/20260914-projection-gc-controlled-serving/comparison.json",
+      "source_sha256": "79d73a5bb113c79b2aea187f35b5dbe2ed76006738c4e75e3edc6ac1376a3773",
+      "fixture_sha256": "3bd9f651ba76769c24856c64503c3f2bcf5ed06e3c07ee0767d2338c93892b01",
+      "retained_requests": 131072,
+      "retained_tokens": 4194304,
+      "rows": [
+        {
+          "workload": "shared",
+          "candidate": {
+            "workload": "shared",
+            "lane": "projection",
+            "throughput_tokens_s": 10339.93895446249,
+            "ttft_0.5_ms": 13.89256475,
+            "tpot_0.5_ms": 2.723463556451613,
+            "e2e_0.95_ms": 102.30557895000001,
+            "e2e_0.99_ms": 104.88567936999999,
+            "itl_0.5_ms": 1.6213517499999999,
+            "itl_0.95_ms": 10.448615425,
+            "itl_0.99_ms": 11.291247015
+          },
+          "vllm": {
+            "workload": "shared",
+            "lane": "vllm",
+            "throughput_tokens_s": 11886.597513701188,
+            "ttft_0.5_ms": 28.62035575,
+            "tpot_0.5_ms": 1.7981898629032258,
+            "e2e_0.95_ms": 101.33018770000001,
+            "e2e_0.99_ms": 111.05179445,
+            "itl_0.5_ms": 1.6328355,
+            "itl_0.95_ms": 3.9195877499999954,
+            "itl_0.99_ms": 6.9045988599999975
+          },
+          "throughput_change_percent": -13.011785394903196
+        },
+        {
+          "workload": "unique",
+          "candidate": {
+            "workload": "unique",
+            "lane": "projection",
+            "throughput_tokens_s": 3811.23303371594,
+            "ttft_0.5_ms": 62.180310000000006,
+            "tpot_0.5_ms": 6.615593346774194,
+            "e2e_0.95_ms": 291.67907325,
+            "e2e_0.99_ms": 303.99552154,
+            "itl_0.5_ms": 6.06503575,
+            "itl_0.95_ms": 9.258971449999995,
+            "itl_0.99_ms": 10.619520754999998
+          },
+          "vllm": {
+            "workload": "unique",
+            "lane": "vllm",
+            "throughput_tokens_s": 5001.030743361354,
+            "ttft_0.5_ms": 46.98120675,
+            "tpot_0.5_ms": 4.990654330645161,
+            "e2e_0.95_ms": 226.40391405,
+            "e2e_0.99_ms": 245.466649845,
+            "itl_0.5_ms": 4.928384250000001,
+            "itl_0.95_ms": 6.2244727499999986,
+            "itl_0.99_ms": 8.647788494999993
+          },
+          "throughput_change_percent": -23.791049699600787
+        }
+      ]
+    },
+    {
+      "concurrency": 64,
+      "active_capacity": 32,
+      "source": "benchmarks/results/20260914-projection-gc-controlled-serving-c64/comparison.json",
+      "source_sha256": "3da7284fc2bf71e432d663a0358987b457b97a46e1854ebeff3a7b8730d12045",
+      "fixture_sha256": "3bd9f651ba76769c24856c64503c3f2bcf5ed06e3c07ee0767d2338c93892b01",
+      "retained_requests": 131072,
+      "retained_tokens": 4194304,
+      "rows": [
+        {
+          "workload": "shared",
+          "candidate": {
+            "workload": "shared",
+            "lane": "projection",
+            "throughput_tokens_s": 10286.597067490138,
+            "ttft_0.5_ms": 112.68558875,
+            "tpot_0.5_ms": 2.707985112903226,
+            "e2e_0.95_ms": 210.422851325,
+            "e2e_0.99_ms": 218.69867307,
+            "itl_0.5_ms": 1.6184960000000002,
+            "itl_0.95_ms": 10.7082371,
+            "itl_0.99_ms": 12.006299089999992
+          },
+          "vllm": {
+            "workload": "shared",
+            "lane": "vllm",
+            "throughput_tokens_s": 13097.802601706782,
+            "ttft_0.5_ms": 84.36895100000001,
+            "tpot_0.5_ms": 2.2052831532258064,
+            "e2e_0.95_ms": 190.41317375,
+            "e2e_0.99_ms": 223.33116886,
+            "itl_0.5_ms": 1.7717245,
+            "itl_0.95_ms": 5.362630824999999,
+            "itl_0.99_ms": 8.362344604999997
+          },
+          "throughput_change_percent": -21.463184472258835
+        },
+        {
+          "workload": "unique",
+          "candidate": {
+            "workload": "unique",
+            "lane": "projection",
+            "throughput_tokens_s": 3780.188218177625,
+            "ttft_0.5_ms": 333.64338925,
+            "tpot_0.5_ms": 6.641906685483871,
+            "e2e_0.95_ms": 574.481640975,
+            "e2e_0.99_ms": 599.056347815,
+            "itl_0.5_ms": 6.06013875,
+            "itl_0.95_ms": 9.791460699999998,
+            "itl_0.99_ms": 11.167295419999999
+          },
+          "vllm": {
+            "workload": "unique",
+            "lane": "vllm",
+            "throughput_tokens_s": 4568.827480804496,
+            "ttft_0.5_ms": 270.0768075,
+            "tpot_0.5_ms": 5.404674177419356,
+            "e2e_0.95_ms": 513.372234,
+            "e2e_0.99_ms": 567.4313955299999,
+            "itl_0.5_ms": 5.271958,
+            "itl_0.95_ms": 7.241286249999995,
+            "itl_0.99_ms": 13.062299179999986
+          },
+          "throughput_change_percent": -17.26130535548268
+        }
+      ]
+    }
+  ],
+  "retained_requests": 393216,
+  "retained_tokens": 12582912
+}
