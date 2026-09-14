@@ -1,0 +1,18 @@
+{
+  "binaries": {
+    "decode-projection-split-probe-v1": "b78dbf52eef055efb87f211e5333741cd1fdd1c2dfe72d4630083a583fe0fa6b",
+    "decode-projection-cta-probe-v1": "cffcbca3d14380e5586b83f6478531c85c00289e42292d6e4b60fb6f83cb9edd"
+  },
+  "cta_source_dependencies_sha256": {
+    "benchmarks/analysis/decode_projection_split_probe.cu": "ab9b4f287fb69642c3b82cdaf3b48dbf4bf0c812bbeb0f883531e4ba893252fb",
+    "kernels/optional/decode_projection_split_rows.cuh": "5fb401fa6ad8c240d93e55ff6c1c5216b4fba0d10c2ff4a3e02c9e50234b85fc",
+    "kernels/optional/decode_adaptive_rows.cuh": "a5e0498300fe6491bdf6ef0a8eaf63f1cb706b69e25dd68dd366e8c49adf7094",
+    "kernels/src/decode_shared32.cuh": "bbf2be89c3560c28c8ee7d08fd92043b6fa6cc95a7c74fcc8555768ef116f96d",
+    "kernels/src/decode_tiled.cuh": "43f2ec1840888fad92532034ce07329c2e017adabeb26f597b43b1905975064f",
+    "kernels/src/decode_shape.cuh": "0bd0c93b7fdf0905208f74b7f136f62428c9376673bc231beabf409cee20dff7",
+    "kernels/src/prefill_shape_attention.cuh": "6d476f74c8cf5afc498862dc1a892c59ba1259fc0b641eec86b1e3fb459a4d12"
+  },
+  "compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "gpu": "NVIDIA GeForce RTX 4090, 580.178.04",
+  "flags": "-std=c++17 -O3 -arch=sm_89; CTA variant additionally -DRILEY_PROJECTION_CTA_SPLIT"
+}

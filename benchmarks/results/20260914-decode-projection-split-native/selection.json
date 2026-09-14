@@ -1,0 +1,28 @@
+{
+  "scope": "Existing profiled decode subset only; no serving forecast or counter measurements",
+  "archive_sha256": "274c0557afe5695650babb484547a7dc90d222182acf9100a1f92d61a7af6a77",
+  "lanes": {
+    "candidate-shared": {
+      "projection_ms": 40.252289000000005,
+      "graph_span_ms": 144.802829,
+      "fraction": 0.2779799902942504,
+      "optimistic_graph_speedup_if_twice_as_fast": 1.1614266900079462,
+      "kernels_ms": {
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 17.150838,
+        "riley_adaptive_decode::qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 12.57679,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 10.524661
+      }
+    },
+    "candidate-unique": {
+      "projection_ms": 34.491697,
+      "graph_span_ms": 135.528643,
+      "fraction": 0.25449747180011245,
+      "optimistic_graph_speedup_if_twice_as_fast": 1.1458018351096702,
+      "kernels_ms": {
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)1536, (int)320, (bool)1>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 14.692252,
+        "riley_adaptive_decode::qkv_parts(const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 10.907384,
+        "void riley_adaptive_decode::projection_parts<(int)576, (int)576, (int)128, (bool)0>(const __nv_bfloat16 *, const __nv_bfloat16 *, float *, const unsigned int *)": 8.892061
+      }
+    }
+  }
+}
