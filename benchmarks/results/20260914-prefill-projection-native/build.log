@@ -1,0 +1,51 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN24riley_prefill_projection7projectILi576ELi576ELi128ELi2EEEvPK13__nv_bfloat16S3_PS1_jPKj' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_prefill_projection7projectILi576ELi576ELi128ELi2EEEvPK13__nv_bfloat16S3_PS1_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 8704 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 6.362 ms
+ptxas info    : Compiling entry function '_ZN24riley_prefill_projection7projectILi192ELi576ELi192ELi1EEEvPK13__nv_bfloat16S3_PS1_jPKj' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_prefill_projection7projectILi192ELi576ELi192ELi1EEEvPK13__nv_bfloat16S3_PS1_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 39 registers, used 1 barriers, 6656 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 7.218 ms
+ptxas info    : Compiling entry function '_ZN24riley_prefill_projection4packILi192ELi576EEEvPK13__nv_bfloat16PS1_' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_prefill_projection4packILi192ELi576EEEvPK13__nv_bfloat16PS1_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.888 ms
+ptxas info    : Compiling entry function '_ZN24riley_prefill_projection7projectILi576ELi576ELi192ELi2EEEvPK13__nv_bfloat16S3_PS1_jPKj' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_prefill_projection7projectILi576ELi576ELi192ELi2EEEvPK13__nv_bfloat16S3_PS1_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 39 registers, used 1 barriers, 8704 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 6.765 ms
+ptxas info    : Compiling entry function '_ZN24riley_prefill_projection4packILi576ELi576EEEvPK13__nv_bfloat16PS1_' for 'sm_89'
+ptxas info    : Function properties for _ZN24riley_prefill_projection4packILi576ELi576EEEvPK13__nv_bfloat16PS1_
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 10 registers, used 0 barriers, 368 bytes cmem[0]
+ptxas info    : Compile time = 0.834 ms
+ptxas info    : Compiling entry function '_ZN26riley_prefill_ffn_pipeline4downEPK13__nv_bfloat16S2_PS0_jPKj' for 'sm_89'
+ptxas info    : Function properties for _ZN26riley_prefill_ffn_pipeline4downEPK13__nv_bfloat16S2_PS0_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 39 registers, used 1 barriers, 8704 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 6.719 ms
+ptxas info    : Compiling entry function '_ZN26riley_prefill_ffn_pipeline7gate_upEPK13__nv_bfloat16S2_S2_PS0_jPKj' for 'sm_89'
+ptxas info    : Function properties for _ZN26riley_prefill_ffn_pipeline7gate_upEPK13__nv_bfloat16S2_S2_PS0_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 20992 bytes smem, 400 bytes cmem[0]
+ptxas info    : Compile time = 11.204 ms
+ptxas info    : Compiling entry function '_Z25gemm_prefill_shape_vectorILi576ELi576ELi128ELi2ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj' for 'sm_89'
+ptxas info    : Function properties for _Z25gemm_prefill_shape_vectorILi576ELi576ELi128ELi2ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 0 barriers, 392 bytes cmem[0]
+ptxas info    : Compile time = 4.206 ms
+ptxas info    : Compiling entry function '_Z25gemm_prefill_shape_vectorILi192ELi576ELi192ELi1ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj' for 'sm_89'
+ptxas info    : Function properties for _Z25gemm_prefill_shape_vectorILi192ELi576ELi192ELi1ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 40 registers, used 0 barriers, 392 bytes cmem[0], 8 bytes cmem[2]
+ptxas info    : Compile time = 4.409 ms
+ptxas info    : Compiling entry function '_Z25gemm_prefill_shape_vectorILi576ELi576ELi192ELi2ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj' for 'sm_89'
+ptxas info    : Function properties for _Z25gemm_prefill_shape_vectorILi576ELi576ELi192ELi2ELb0EEvPK13__nv_bfloat16S2_PS0_jPKj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 39 registers, used 0 barriers, 392 bytes cmem[0], 8 bytes cmem[2]
+ptxas info    : Compile time = 4.360 ms

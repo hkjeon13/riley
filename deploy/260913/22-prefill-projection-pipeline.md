@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 실제 model profile 기반 구현 대기. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server 연결 대기. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
 
 ## 근거와 범위
 
@@ -23,3 +23,9 @@ Native에서는 N576/K576/interval192, N192/K576/interval192, N576/K576/interval
 Native 통과 후 기존 logits/greedy gate를 그대로 적용하고 현재 frozen rolling Riley 및 같은 binary control과 C8/C32/C64 shared/unique serving을 vLLM과 비교한다. TTFT/TPOT/E2E P95/P99 및 실제 SSE token-interval tail, stop/cancel/recovery와 오류를 함께 기록한다. 수치 실패의 tolerance를 바꾸지 않는다. 이득 미확인 시 기본값은 유지하고 증거와 원인을 정리한다.
 
 Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을 구분하고 후자의 runtime만 장비 부재로 skip한다. Multi-GPU 장치별 owner 및 packed layout identity를 유지하되 테스트하지 않은 지원을 완료로 표시하지 않는다. GPU 시험 동안 세 Blender만 일시 중지 후 복구하고 3d/3dsol/3dfable 웹 서버는 계속 유지한다. 롤백은 backend 비활성 및 기존 weight owner 선택이며 checkpoint 파일을 덮어쓰지 않는다.
+
+## Native gate 결과
+
+[측정 보고](../../benchmarks/results/20260914-prefill-projection-native/README.md): weight packing, shared A 재사용과 두 K64 buffer를 구현했다. 78조건의 전체30-layer 출력과 graph replay가 bitwise 일치하며 memcheck/racecheck 오류0, SM90a/SM100a compile 통과다. 30개 weight를 순환하는 native graph에서 각 projection 시간이18.96–44.51% 감소했다. 실제 chained model 또는 serving 개선 수치가 아니다. 모델 연결과 품질·serving gate 전 기본값을 변경하지 않는다.
+
+다음 연결은 기존273개 원본 weight 및90개 FFN tile 뒤에120개 projection tile을 별도 retained owner로 추가한다(총483 parent, 추가50.625MiB). 원본 weight는 decode/fallback용으로 유지하며 recorder의 extent·parent·layout 검증과 catalog source identity를 함께 확장해야 한다. 기존363-parent 경로의 계약을 전역 완화하지 않고 새 backend에서만 새 layout을 받는다. Pack 준비시간 및 peak allocation은 모델 gate에서 측정한다.

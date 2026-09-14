@@ -1,0 +1,140 @@
+{
+  "scope": "30-layer weight rotation native graph; two order estimates; not serving",
+  "audit_conditions": 78,
+  "per_layer_comparisons": 2340,
+  "memcheck_conditions": 12,
+  "racecheck_conditions": 12,
+  "resources": [
+    {
+      "N": 576,
+      "interval": 192,
+      "shared": 8704,
+      "registers": 39,
+      "local": 0
+    },
+    {
+      "N": 192,
+      "interval": 192,
+      "shared": 6656,
+      "registers": 39,
+      "local": 0
+    },
+    {
+      "N": 576,
+      "interval": 128,
+      "shared": 8704,
+      "registers": 36,
+      "local": 0
+    }
+  ],
+  "comparison": [
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 192,
+      "M": 32,
+      "prior_us": 6.187690999999999,
+      "candidate_us": 4.2649595,
+      "reduction_percent": 31.07348928703776
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 192,
+      "M": 128,
+      "prior_us": 6.5198085,
+      "candidate_us": 4.46976,
+      "reduction_percent": 31.44338518531641
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 192,
+      "M": 398,
+      "prior_us": 14.230527,
+      "candidate_us": 8.49681,
+      "reduction_percent": 40.29167015388819
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 192,
+      "M": 512,
+      "prior_us": 15.3221125,
+      "candidate_us": 8.5019305,
+      "reduction_percent": 44.51202143307589
+    },
+    {
+      "N": 192,
+      "K": 576,
+      "interval": 192,
+      "M": 32,
+      "prior_us": 4.8715095,
+      "candidate_us": 3.930112,
+      "reduction_percent": 19.32455432961796
+    },
+    {
+      "N": 192,
+      "K": 576,
+      "interval": 192,
+      "M": 128,
+      "prior_us": 4.9479679999999995,
+      "candidate_us": 4.009983999999999,
+      "reduction_percent": 18.95695364238411
+    },
+    {
+      "N": 192,
+      "K": 576,
+      "interval": 192,
+      "M": 398,
+      "prior_us": 6.1265925,
+      "candidate_us": 4.666709,
+      "reduction_percent": 23.828637207387303
+    },
+    {
+      "N": 192,
+      "K": 576,
+      "interval": 192,
+      "M": 512,
+      "prior_us": 6.3389015,
+      "candidate_us": 4.7448745,
+      "reduction_percent": 25.146738752763397
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 128,
+      "M": 32,
+      "prior_us": 5.677056,
+      "candidate_us": 3.929429,
+      "reduction_percent": 30.784036655618696
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 128,
+      "M": 128,
+      "prior_us": 5.876735999999999,
+      "candidate_us": 4.1352535,
+      "reduction_percent": 29.633498935463486
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 128,
+      "M": 398,
+      "prior_us": 13.163861,
+      "candidate_us": 8.0100695,
+      "reduction_percent": 39.151062898643495
+    },
+    {
+      "N": 576,
+      "K": 576,
+      "interval": 128,
+      "M": 512,
+      "prior_us": 14.4527365,
+      "candidate_us": 8.481791999999999,
+      "reduction_percent": 41.31359137420101
+    }
+  ]
+}

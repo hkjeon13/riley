@@ -1,0 +1,5 @@
+/data/riley-serving-260913-recovery/source/benchmarks/analysis/prefill_projection_pipeline_probe.cu(37): error: a variable declared with an auto type specifier cannot appear in its own initializer
+    for(auto e:execs)do{auto e=(cudaGraphLaunch(e,stream));if(e!=cudaSuccess){std::fprintf(
+                                                ^
+
+1 error detected in the compilation of "/data/riley-serving-260913-recovery/source/benchmarks/analysis/prefill_projection_pipeline_probe.cu".
