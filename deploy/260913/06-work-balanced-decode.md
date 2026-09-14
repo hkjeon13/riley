@@ -58,3 +58,16 @@ unsplit backend로 복귀한다.
 ### Adaptive 모델·serving 결과
 
 [통합 및 비교표](../../benchmarks/results/20260914-adaptive-decode-serving/README.md): 위 후속 묶음을 구현했다. 자유 생성3,616토큰·자연어12,582,912 BF16 logits가 baseline과 일치했고 paired terminal/cancel·자원 회수가 통과했다. 실제 ordinary472개/future430개 graph에서 각각 새 커널90개를 확인했다. C8/C16 throughput은 직전 대비 약4% 개선됐지만 C32+0.64%, C64−0.06%이고 고부하 P99도 높아 기본값으로 승격하지 않는다. 동일 projection family의 작은 variant를 이어가기보다 PR10의 prefix ownership/transfer를 다음 구조 영역으로 선택한다. 기존 cache-off 격차와 attention split 미구현 범위는 남아 있다.
+
+
+## Attention 분할 착수 전 계약 확인 — 2026-09-14
+
+`decode_gqa_attention_v50.cuh`는 이미 QK context tile 분할과 V 출력8개 block 분산을 구현한다. 이것을 새 LeanAttention 구현으로 재포장하지 않는다. `planned_softmax_values.cuh`의 normalize-once 접근도 이미 native 성능 실패로 중단됐다([기록](../../benchmarks/results/20260913-attention-task-costs/README.md)).
+
+[LeanAttention v2 본문](https://arxiv.org/html/2405.10480v2)의 부분 online-softmax rescaling은 수학적 결합 성질을 사용한다. 현재 Riley의128-token 역순 recurrence와 각 tile probability BF16 반올림은 별도 계약이다. 독립 split에서 local maximum으로 반올림한 뒤 재스케일하면 원래 running maximum으로 먼저 정규화해 반올림한 값과 달라질 수 있다.
+
+이를 실제 기존 CUDA kernel과 비교하는 `attention_split_numerics_probe.cu`를 추가했다. Q dim0=1, K dim0=51/64로 실현 가능한 score51/512, 두128-token tile과 V1/0을 사용한다. Host 계산에서는 기존 결과0.4765625와 독립 split 결과0.474609375로 달랐다. 이는 CPU rounding 메커니즘 예시이며 GPU 검증을 대체하지 않는다. Probe는1-tile/동일max 대조군, 두 replay, inactive sentinel을 포함한다. 예상 mismatch 확인은 기존 backend와의 compatibility **거부**를 뜻하며 backend correctness pass나 성능 향상이 아니다. GPU·sanitizer 검증 전 결과를 확정하지 않는다.
+
+이 gate의 목적은 무효한 exact-profile 통합을 미리 막는 것이다. 실제 LeanAttention 라이브러리 전체를 구현하거나 검증한 것이 아니며, 논문 오류를 주장하지 않는다. 별도 numerical backend를 도입하려면 결과를 보기 전에 새 profile과 모델 수준 기준을 명시해야 하고 기존 profile의 실패를 tolerance 완화로 덮지 않는다.
+
+[GPU 확인 결과](../../benchmarks/results/20260914-attention-split-compatibility/README.md):3개 대조군은 일치했고 두-tile counterexample의576개 BF16 출력이 달랐다(0.4765625 vs0.474609375). 두 graph replay/비활성 sentinel,memcheck/racecheck0,SM90a/SM100a compile 통과 및 Blender 복구 확인. Legacy exact profile과의 독립 partial merge 호환성은 **REJECT**다. 성능 검증이나 LeanAttention 전체 구현 완료를 의미하지 않으며 PR06은 별도 numerical profile 계약이 필요한 미완료 작업으로 유지한다.
