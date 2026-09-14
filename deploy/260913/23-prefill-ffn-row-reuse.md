@@ -23,3 +23,7 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## 실제 모델 weight native 검증
 
 [30-layer 결과](../../benchmarks/results/20260914-prefill-ffn-model-weight-native/README.md):1440개 layer별 출력과48회 graph replay가 일치했다. 측정한192행 이상에서11.5–26.7% 개선,160 이하에서는6.3–23.9% 회귀했다.192행을 선택 조건 후보로 삼고191/193 경계·행 수 전환과 기존 M16 fallback을 검증한다. Activation은 합성이며 full-model/serving 검증은 미완료다.
+
+## Device adaptive dispatch native 결과
+
+[선택 경계 검증](../../benchmarks/results/20260914-prefill-ffn-adaptive-native/README.md):1560 layer별 출력/52 graph replay와 bounded sanitizer 통과.192 이상 개선은 유지됐지만 M16을 선택한128/160에서4.08%/14.76% 회귀했다. 최대 shared/register footprint가 공통인 unified dispatch가 원래 M16 자원 특성을 보존하지 않는다. 기본값 승격을 보류하고 graph/backend 자원 분리 비용과 opt-in 모델/serving 손익을 평가한다.
