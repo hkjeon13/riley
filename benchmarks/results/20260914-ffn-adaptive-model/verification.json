@@ -1,0 +1,30 @@
+{
+  "logits_bytes_exact": 3244032,
+  "scope": "teacher-forced token7; cold ragged/boundary and repeated prefix; not free generation",
+  "memcheck_errors": 0,
+  "cpu_server_tests": {
+    "passed": 69,
+    "ignored": 1,
+    "cuda": false
+  },
+  "files": {
+    "crates/riley-cuda/build.rs": "509418b7e92882f6ecb895deb7d8498984c15f75e27d4a499fc01eb873fae080",
+    "crates/riley-cuda/src/ffi.rs": "a0a12e1f78fd4291cec5e987719853402a47f6b5d020cab27e52895a4cfaa7f5",
+    "crates/riley-cuda/src/graph_resources.rs": "dbb5ac2188325868be677fe0a081747d9f8a0c480c3491fa36f243647c5d8d34",
+    "crates/riley-runtime/src/llama/graph_decode_full.rs": "4fc7ad6dc7f1bbc1a217c8c3142f3054698a4539c60a11d7bd1bcb31443a0b20",
+    "crates/riley-runtime/src/llama/variable_session.rs": "304f3cbe286ac25262c8995c6e8acbdf2571147a23f586e8a4ec0f1cddb78236",
+    "crates/riley-scheduler/tests/prefix_cache_model_gpu.rs": "78d223fc8615754f9263899fb3d53258e73b25f34f39729bd2851c6a66b6dc9a",
+    "crates/riley-server/src/engine.rs": "22c60e3635bcb359b0dd8fa036c82b5e026aa0640a222bf2b625bcd59c531d3a",
+    "kernels/include/riley_cuda.h": "f1b364bbf6c925ce01fc730104a7d0f999d973837e8c7ffa678f9ad940f2fd83",
+    "kernels/src/ffi_internal.hpp": "61a044866820ed8c25c6c02c5139468b2a52b98e77fde79362e34b706b97b98d",
+    "kernels/src/graph_numerics_precise.cu": "7fc227dbea5d4cd46c5f01b7ec1327009cac4afaa5e40e132d1344fe2fe6f8c0",
+    "kernels/src/graph_resources.cu": "7a43d19f75d2d4550281290c1c9916a1fff2913ca71f9d9cc009230710634686",
+    "kernels/src/mixed_model_v49.cuh": "0c0483dd590b3398bde4dff1f7a484f0c36b854f809f6ecc3f9f051924757127",
+    "benchmarks/analysis/ffn_adaptive_serving_screen.py": "880c15a8132cee36462f518cff62cd52e8a550ff4c8dc2ad2281ef97dfdf2af9",
+    "benchmarks/results/20260914-ffn-adaptive-model/evidence/blender-restored.json": "498a11925bf04e087c61e077308f5fc3ff45e86e7bc9bfa6277b1af0eb9a3c71",
+    "benchmarks/results/20260914-ffn-adaptive-model/evidence/model.log": "326e6602de343bf9aa540c4ffa785a98a03e419145f0af5400b1943a35c8dd01",
+    "benchmarks/results/20260914-ffn-adaptive-model/evidence/memcheck.log": "6d91c55f6c0e8aad0767db5f40bcab632d0ba6f1cb9e87129beb27680e75bbb0",
+    "benchmarks/results/20260914-ffn-adaptive-model/evidence/execution.json": "52ba4a27491d5ece57df13fc85d26ba661eefa4302d5eda93dc902617693c8d4",
+    "benchmarks/results/20260914-ffn-adaptive-model/evidence/receipt.json": "ebe9bf66c11ea557cfc75be6593ed78a3e8105369c97e33355dedd62c1a4e0b6"
+  }
+}

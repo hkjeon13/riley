@@ -27,3 +27,7 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## Device adaptive dispatch native 결과
 
 [선택 경계 검증](../../benchmarks/results/20260914-prefill-ffn-adaptive-native/README.md):1560 layer별 출력/52 graph replay와 bounded sanitizer 통과.192 이상 개선은 유지됐지만 M16을 선택한128/160에서4.08%/14.76% 회귀했다. 최대 shared/register footprint가 공통인 unified dispatch가 원래 M16 자원 특성을 보존하지 않는다. 기본값 승격을 보류하고 graph/backend 자원 분리 비용과 opt-in 모델/serving 손익을 평가한다.
+
+## Opt-in 모델 통합
+
+[모델 검증](../../benchmarks/results/20260914-ffn-adaptive-model/README.md):별도 recorder·graph identity·Rust session·엄격한 env 선택을 연결했다. BF16 logits3,244,032 bytes 일치/full-model memcheck0/CUDA release build 통과. 자유 생성·serving 결과는 아직 미완료이며 C32 prior/control/adaptive/vLLM16 lane 비교를 시작했다. Native 작은 행 회귀와 default 비승격은 유지한다.

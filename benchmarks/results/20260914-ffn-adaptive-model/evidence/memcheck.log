@@ -1,0 +1,17 @@
+========= COMPUTE-SANITIZER
+
+running 1 test
+test ffn_adaptive_matches_full_model_logits ... RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms=950.229
+automatic-prefix-cache enabled=false prefill_tokens=1931 entries=0 pages=0 hits=0 reused_tokens=0
+RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms=956.140
+automatic-prefix-cache enabled=false prefill_tokens=1931 entries=0 pages=0 hits=0 reused_tokens=0
+RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms=949.754
+automatic-prefix-cache enabled=true prefill_tokens=176 entries=1 pages=7 hits=3 reused_tokens=336
+RILEY_PROJECTION_PACK bytes=53084160 elapsed_ms=943.412
+automatic-prefix-cache enabled=true prefill_tokens=176 entries=1 pages=7 hits=3 reused_tokens=336
+ffn-adaptive exact_logits_bytes=3244032
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 51.41s
+
+========= ERROR SUMMARY: 0 errors
