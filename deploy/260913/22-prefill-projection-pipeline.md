@@ -37,3 +37,7 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 ## C32 첫 serving screen
 
 [전체 비교표와 실행별 수치](../../benchmarks/results/20260914-prefill-projection-serving/README.md): 후보의 동일 binary control 대비 throughput은 shared +1.74%, unique +10.08%다. 그러나 frozen prior shared가 두 순서 사이27.8% 하락했고 late host I/O pressure도 높아 확정 개선으로 승격하지 않는다. 4096 retained 요청의 protocol,3072 Riley 기준 일치, stop/cancel/recovery 각96건은 통과했다. vLLM throughput에는 여전히 미달한다. 후보를 더 수정하기 전에 host pressure를 lane별 기록하는 C32 재측정으로 효과를 확인하고 이후 C8/C64로 확장한다.
+
+## Host 관측을 추가한 C32 재측정
+
+[재측정 결과](../../benchmarks/results/20260914-projection-observed-serving/README.md): 후보의 frozen prior 대비 throughput은 shared +3.50%, unique +7.92%다. 기존 baseline은 이번 두 순서에서 안정적이지만 same-binary shared control 일부가 여전히 흔들렸다. IO pressure와 느린 lane이 일치하지 않아 인과를 단정하지 않는다. 실측 구간이0.67–2.35초에 불과함을 확인했으므로 후보 구현을 고정한 채 lane당8192 retained 요청으로 비교 시간을 늘린다. 원본 두 screen은 유지하고 긴 구간 결과와 섞지 않는다. C32 후 C8/C64로 확장하며 기본값 승격은 보류한다.
