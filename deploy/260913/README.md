@@ -1,6 +1,6 @@
 # 260913 — 연구 기반 serving 최적화 PR 계획
 
-상태: **구조별 구현·검증 진행 중, 전체 serving 목표 미달**. 현재 작업 브랜치는 `codex/260913-serving-integration`이다. PR02 실행 ticket·staging·KV 부분 commit, PR03 attention 모델 실험, PR05/07/19 실행 후보의 구현 및 측정 이력이 각 카드와 결과 문서에 있다. 후보별 correctness·성능 실패와 승격 보류를 구분한다. PR20 rolling decode의 모델·serving 통합을 완료했고, PR21 GQA staging은 serving 개선 미확인으로 승격하지 않았다. 현재 PR22 prefill projection의 비교를 Python 측정 클라이언트 GC와 결과 기록 IO 영향을 통제한 조건에서 진행한다. Rust serving 경로에 Python을 도입하지 않는다. 계획 커밋은 `894f0713`이며, 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
+상태: **구조별 구현·검증 진행 중, 전체 serving 목표 미달**. 현재 작업 브랜치는 `codex/260913-serving-integration`이다. PR02 실행 ticket·staging·KV 부분 commit, PR03 attention 모델 실험, PR05/07/19 실행 후보의 구현 및 측정 이력이 각 카드와 결과 문서에 있다. 후보별 correctness·성능 실패와 승격 보류를 구분한다. PR20 rolling decode의 모델·serving 통합을 완료했고, PR21 GQA staging은 serving 개선 미확인으로 승격하지 않았다. PR22 prefill projection의 GC 통제·tmpfs C32 비교를 완료했고 vLLM throughput/latency 목표는 미달이다. 같은 조건의 C8/C64 검증이 남아 있다. Rust serving 경로에 Python을 도입하지 않는다. 계획 커밋은 `894f0713`이며, 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
 
 ## 목표와 현재 증거
 

@@ -67,3 +67,9 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 [65536 retained 응답의 대조 결과](../../benchmarks/results/20260914-client-gc-intervention/README.md): Riley는 두 순서 모두 GC 비활성 시 throughput 약5.7–5.9% 증가, E2E P99 약106ms로 감소했다. vLLM은 한 순서에서 같은 개선이 있었지만 역순 disabled 실행은8839 tok/s/P99 362.96ms로 흔들렸고 해당 구간 global IO pressure25.15%였다. GC만으로 전체 tail 원인을 설명하지 않는다. 두 run 중앙값으로 목표 접근을 주장하지 않고 모든 run을 보존한다.
 
 다음 projection comparison은 `gc-phase-disabled-v1`과 tmpfs 원본 응답·로그 저장을 양 engine/모든 Riley lane에 공통 적용한다. 요청·모델·binary·KV budget은 유지하며 기존 측정과 합산하지 않는다. GPU 측정 밖에서 디스크로 복사하고 Blender를 복구한다. 외부 host stall은 계속 가능하며 PSI를 함께 기록한다. 새 controller/exporter는 준비됐고 전체16 lane 검증 후 판정한다.
+
+## GC 통제 및 tmpfs C32 비교 완료
+
+[전체 비교표·원본](../../benchmarks/results/20260914-projection-gc-controlled-serving/README.md): 16 lane131072 retained 응답과4096 warmup, Riley retained98304 exact 응답, stop/cancel/recovery 각96건을 검증했다. 모든 측정 GC event/counter 증가0, server exit0, Blender3개 복구, tmpfs/디스크 원본 및 archive hash 일치가 확인됐다.
+
+후보 throughput은 prior 대비 shared +3.36%/unique +9.34%, control 대비 +2.48%/+8.85%다. vLLM 대비 shared −13.01%/unique −23.79%로 목표 미달이며 shared TPOT·ITL 및 unique latency 격차가 남는다. 이전 결과를 보정·합산하지 않고 기본값 승격도 보류한다. 동일 source/binary·GC 통제·tmpfs 조건을 C8/C64로 확대하여 적용 범위를 판정한다.
