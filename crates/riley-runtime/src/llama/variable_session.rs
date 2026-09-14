@@ -4,7 +4,7 @@ use riley_cuda::BorrowedGraphResourceReservation;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 #[derive(Default)]
-struct HostRuntimeTiming { counts: [u64; 6], nanos: [u128; 6] }
+struct HostRuntimeTiming { counts: [u64; 8], nanos: [u128; 8] }
 fn runtime_phase_record(timing: &mut Option<HostRuntimeTiming>, stage: usize, start: Option<Instant>) {
     if let (Some(timing), Some(start)) = (timing.as_mut(), start) {
         timing.counts[stage] = timing.counts[stage].saturating_add(1);
@@ -75,7 +75,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// Opt-in diagnostic wall time; native execution includes GPU waits.
     pub fn report_host_phase_timing(&self) {
         if let Some(timing) = self.host_phase_timing.as_ref() {
-            for (stage, name) in ["retain_encode", "sync_transfer", "buffered_submit", "buffered_wait", "read_validate", "future_prepare"].iter().enumerate() {
+            for (stage, name) in ["retain_encode", "sync_transfer", "buffered_submit", "buffered_wait", "read_validate", "future_prepare", "future_authority", "future_check_encode"].iter().enumerate() {
                 eprintln!("RILEY_RUNTIME_PHASE kind={} calls={} wall_ns={}", name, timing.counts[stage], timing.nanos[stage]);
             }
         }
@@ -532,6 +532,8 @@ impl<G:VariableGraph> VariableSession<G,32> {
         let result=(|| {
             let phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
             let second=prepare()?;
+            runtime_phase_record(&mut self.host_phase_timing,6,phase);
+            let check_phase=self.host_phase_timing.as_ref().map(|_|Instant::now());
             let first=self.retained.as_ref().unwrap();
             if first.rows.len()!=second.rows.len() || second.rows.iter().any(|r|r.progress.stage!=super::multi_descriptor::shape_progress::InputStage::Decode)
                 || self.issued_successor.as_deref()!=Some(second.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {
@@ -540,6 +542,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
             let sources=(0..second.rows.len()).map(|i|super::multi_descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();
             let future=super::multi_descriptor::future_token::prepare_checked(&first.checked(),&second,&sources)?;
             let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
+            runtime_phase_record(&mut self.host_phase_timing,7,check_phase);
             runtime_phase_record(&mut self.host_phase_timing,5,phase);
             let first_ticket=self.window_predecessor_ticket.take().unwrap();
             self.window=Some(DecodeWindowState{successor:second,tickets:[first_ticket,0],output,predecessor_validated:false,complete:false});

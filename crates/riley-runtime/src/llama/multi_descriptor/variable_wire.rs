@@ -2,7 +2,9 @@
 //! V3 retains eight rows; V4 uses sixteen. Packet bytes never establish ownership.
 use super::{check, overflow, BlockOwnership, Result, ResultMode};
 use super::shape_progress::{InputStage, Progress};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+#[cfg(test)]
+use std::collections::BTreeMap;
 pub const HEADER_BYTES:usize=128;
 pub const ROW_BYTES:usize=1664; // 128 header +256*u32 pages +256*u16 valid counts
 pub const TOKENS_OFFSET:usize=HEADER_BYTES+8*ROW_BYTES;
@@ -46,6 +48,78 @@ pub fn request_bytes<const ROWS:usize>(e:&Expectation<ROWS>)->usize{if e.mixed_e
 fn stage_number(stage:InputStage)->u32{match stage {InputStage::Prefill=>0,InputStage::Decode=>1,InputStage::Verification=>3}}
 fn packet_stage<const ROWS:usize>(e:&Expectation<ROWS>)->u32{if e.mixed_execution && e.rows.iter().any(|r|r.progress.stage==InputStage::Prefill) && e.rows.iter().any(|r|r.progress.stage==InputStage::Decode){2}else{stage_number(e.stage)}}
 pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
+    validate_after(e,e.last_accepted_replay)
+}
+fn validate_after<const ROWS:usize>(e:&Expectation<ROWS>,last_accepted_replay:u64)->Result<()> {
+    check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
+    check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
+    check(e.replay_id==last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
+    check(matches!(e.max_active_rows,1|2|4|8|16|32) && e.max_active_rows as usize<=ROWS && !e.rows.is_empty() && e.rows.len()<=e.max_active_rows as usize,"rows","unsupported active rows")?;
+    check(!e.mixed_execution || (e.packed_prefill&&ROWS==32),"capacity","mixed execution requires packed32 capability")?;
+    check(!e.packed_prefill || ROWS==32,"capacity","packed prefill requires V6 capacity")?;
+    check(!e.shared_prefixes || (ROWS==32 && e.mixed_execution),"capability","shared prefixes require V7")?;
+    let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
+    let verification=e.rows.iter().filter(|r|r.progress.stage==InputStage::Verification).count();
+    if verification>0 {
+        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=32 && e.mixed_execution && (!e.shared_prefixes || e.mode==ResultMode::Greedy),"verification","requires pure verification batch with retained ownership")?;
+    } else {check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;}
+    check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
+    let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;
+    check(e.stage==InputStage::Decode || total<=1024,"tokens","packed token capacity exceeded")?;
+    check(e.physical_block_count>0 && e.physical_block_count<=4096,"pool","unsupported physical pool")?;
+    // Preserve the exclusive path's one-owner map. Extra ownership/alias nodes
+    // are allocated only for actual shared pages, not once per ordinary page.
+    let mut ownership=vec![0u64;e.physical_block_count as usize];
+    let mut shared_pages=vec![false;e.physical_block_count as usize];
+    let mut shared_owners=BTreeSet::new();
+    for x in &e.block_ownership {
+        check(x.sequence_tag!=0 && x.physical_id<e.physical_block_count,
+            "ownership","invalid owner/page pair")?;
+        let owner=&mut ownership[x.physical_id as usize];
+        if *owner==0 {*owner=x.sequence_tag;} else {
+            check(*owner!=x.sequence_tag && shared_owners.insert((x.physical_id,x.sequence_tag)),
+                "ownership","duplicate owner/page pair")?;
+            shared_pages[x.physical_id as usize]=true;
+        }
+    }
+    let published=e.rows.iter().filter(|r|r.progress.committed_tokens.checked_add(r.progress.input_tokens)==Some(r.progress.prompt_tokens) || r.progress.stage!=InputStage::Prefill).count();
+    let (mut tags,mut cookies,mut slots)=(BTreeSet::new(),BTreeSet::new(),0u32);
+    let mut used=vec![None;e.physical_block_count as usize];
+    for row in &e.rows {
+        check(row.sequence_tag!=0 && tags.insert(row.sequence_tag) && row.cookie!=0 && cookies.insert(row.cookie),"row_identity","duplicate or zero request identity")?;
+        check(row.output_slot<e.rows.len() as u32 && slots&(1u32<<row.output_slot)==0,"slot","slots not unique and dense")?;
+        slots|=1u32<<row.output_slot;
+        check(e.mixed_execution || row.progress.stage==e.stage,"stage","row stage differs")?;
+        let v=row.progress.validate()?;
+        if e.packed_prefill {check(((row.output_slot as usize)<published)==v.logits_input_row.is_some(),"slot","published slots must precede internal partial slots")?;}
+        check(row.input_tokens.len()==row.progress.input_tokens as usize && row.input_tokens.iter().all(|&t|t<49152),"tokens","invalid token count or vocabulary")?;
+        check(row.physical_ids.len()==v.live_pages as usize && row.valid_tokens.len()==v.live_pages as usize,"pages","page map does not cover target exactly")?;
+        for (i,(&id,&valid)) in row.physical_ids.iter().zip(&row.valid_tokens).enumerate() {
+            check(id<e.physical_block_count,"pages","out of pool")?;
+            let owner=ownership[id as usize];
+            check(owner!=0,"ownership","page is absent from retained authority")?;
+            check(owner==row.sequence_tag || shared_owners.contains(&(id,row.sequence_tag)),
+                "ownership","page not reserved by this request")?;
+            let shared=shared_pages[id as usize];
+            check(!shared || (e.shared_prefixes && ROWS==32 && e.mixed_execution),
+                "ownership","shared prefixes require the V7 owner capability")?;
+            let writes=i>=row.progress.committed_tokens as usize/16;
+            // The ledger includes off-batch consumers. A writer cannot ignore
+            // them merely because their rows are absent from this iteration.
+            check(!shared || !writes,"ownership","shared page requires COW before append")?;
+            if let Some((tag,index))=used[id as usize] {
+                check(shared && tag!=row.sequence_tag && index==i,
+                    "pages","alias is not an immutable position-identical prefix")?;
+            } else {used[id as usize]=Some((row.sequence_tag,i));}
+            check(valid==if i+1==row.physical_ids.len(){v.last_page_tokens}else{16},"valid_tokens","invalid page occupancy")?;
+        }
+    }
+    Ok(())
+}
+
+// Frozen tree-based oracle for differential contract tests.
+#[cfg(test)]
+fn validate_tree_reference<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     check(matches!(ROWS,8|16|32),"capacity","unsupported wire capacity")?;
     check(e.owner_generation!=0 && e.iteration_id!=0 && e.catalog_digest!=[0;32],"owner","missing retained owner identity")?;
     check(e.replay_id==e.last_accepted_replay.checked_add(1).ok_or_else(||overflow("replay"))?,"replay","not next replay")?;
@@ -150,6 +224,12 @@ impl<const ROWS:usize> CheckedExpectation<'_,ROWS> {
 pub(crate) fn checked_expectation<const ROWS: usize>(e: &Expectation<ROWS>) -> Result<CheckedExpectation<'_, ROWS>> {
     validate(e)?;
     Ok(CheckedExpectation { expectation: e })
+}
+// Only future packet construction can override the structural replay predecessor.
+// The original expectation and its actual committed replay remain immutable.
+pub(super) fn checked_tentative_expectation<const ROWS:usize>(e:&Expectation<ROWS>,predecessor:u64)->Result<CheckedExpectation<'_,ROWS>> {
+    validate_after(e,predecessor)?;
+    Ok(CheckedExpectation{expectation:e})
 }
 pub(crate) fn encode_checked_into<const ROWS: usize>(packet: &mut [u8], checked: &CheckedExpectation<'_, ROWS>) -> Result<()> {
     let e = checked.expectation;
@@ -374,6 +454,46 @@ pub(crate) mod tests {
         let mut published=0;let mut partial=e.rows.iter().filter(|r|r.progress.validate().unwrap().logits_input_row.is_some()).count() as u32;
         for row in &mut e.rows{row.output_slot=if row.progress.validate().unwrap().logits_input_row.is_some(){let n=published;published+=1;n}else{let n=partial;partial+=1;n};}e
     }
+    fn differential_mutations<const N:usize>(base:Expectation<N>) {
+        assert_eq!(validate(&base),validate_tree_reference(&base));
+        let mut seed=0x914c013u64;
+        for case in 0..2400 {
+            seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let mut e=base.clone();let i=(seed as usize)%e.rows.len();
+            let j=(seed as usize)%e.block_ownership.len();
+            match case%20 {
+                0=>e.owner_generation=0,
+                1=>e.replay_id=e.replay_id.wrapping_add(2),
+                2=>e.physical_block_count=if case%40==2 {0}else{4097},
+                3=>e.rows[i].sequence_tag=0,
+                4=>e.rows[i].cookie=e.rows[0].cookie,
+                5=>e.rows[i].output_slot=32,
+                6=>e.rows[i].output_slot=e.rows[0].output_slot,
+                7=>e.rows[i].physical_ids[0]=e.physical_block_count,
+                8=>e.rows[i].valid_tokens[0]=0,
+                9=>e.block_ownership.push(e.block_ownership[j].clone()),
+                10=>{e.block_ownership.remove(j);},
+                11=>e.block_ownership[j].sequence_tag=9999,
+                12=>e.rows[i].input_tokens[0]=49152,
+                13=>e.rows[i].progress.committed_tokens=0,
+                14=>e.rows[i].physical_ids[0]=e.rows[0].physical_ids[0],
+                15=>e.block_ownership.rotate_left(j),
+                16=>e.shared_prefixes=!e.shared_prefixes,
+                17=>e.block_ownership.push(BlockOwnership{physical_id:e.rows[i].physical_ids[0],sequence_tag:9999}),
+                18=>e.rows[i].physical_ids.reverse(),
+                _=>{e.rows[i].cookie=0;e.block_ownership[j].sequence_tag=0;},
+            }
+            assert_eq!(validate(&e),validate_tree_reference(&e),"capacity={N} case={case}");
+        }
+    }
+    #[test]
+    fn dense_validation_preserves_tree_contract_and_error_order() {
+        differential_mutations(fixture_rows::<8>(InputStage::Decode,8));
+        differential_mutations(fixture_rows::<16>(InputStage::Decode,16));
+        differential_mutations(fixture_rows::<32>(InputStage::Decode,32));
+        differential_mutations(shared_prefix_fixture());
+    }
+
     fn shared_prefix_fixture()->Expectation<32> {
         let mut e=fixture_rows::<32>(InputStage::Decode,2);
         e.shared_prefixes=true;e.mixed_execution=true;e.packed_prefill=true;e.physical_block_count=8;

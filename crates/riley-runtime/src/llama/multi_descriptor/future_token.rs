@@ -70,11 +70,9 @@ pub(crate) fn prepare_checked(checked_previous:&wire::CheckedExpectation<'_,32>,
           previous.iteration_id.checked_add(1)==Some(successor.iteration_id),
           "future_order", "successor must depend on uncommitted predecessor")?;
     check(sources.len()==successor.rows.len(), "future_rows", "source count differs")?;
-    // Structural validation needs the immediate predecessor number. This clone
-    // never changes session state and is not returned as an accepted expectation.
-    let mut structural=successor.clone();
-    structural.last_accepted_replay=previous.replay_id;
-    let checked_structural = wire::checked_expectation(&structural)?;
+    // Validate relative to the tentative predecessor without copying the ledger
+    // or changing the actual committed replay in the immutable expectation.
+    let checked_structural = wire::checked_tentative_expectation(successor,previous.replay_id)?;
     let last_cookie=previous.rows.iter().map(|r|r.cookie).max().unwrap();
     check(successor.rows.iter().all(|r|r.cookie>last_cookie), "future_cookie", "successor cookies must be freshly issued")?;
     check(checked_structural.retains_ownership(previous),
@@ -111,7 +109,7 @@ pub(crate) fn prepare_checked(checked_previous:&wire::CheckedExpectation<'_,32>,
         references[base+4..base+132].copy_from_slice(&expected);
         references[base+132..base+140].copy_from_slice(&new.cookie.to_le_bytes());
     }
-    let mut packet=vec![0;wire::request_bytes(&structural)];
+    let mut packet=vec![0;wire::request_bytes(successor)];
     wire::encode_checked_into(&mut packet,&checked_structural)?;
     Ok(PreparedFutureBatch {packet,references,predecessor_replay:previous.replay_id,committed_replay:previous.last_accepted_replay})
 }

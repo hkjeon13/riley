@@ -21,3 +21,34 @@ Corrupt owner, replay, cookie, slot, page mapping, alias/writable ownership and 
 ## Status and rollback
 
 Opt-in rolling instrumentation is implemented and validated against 512 exact serving responses. Optimization implementation is pending finer attribution. Rollback the eventual batch to the frozen prior code/identity; keep measurement receipts and rejected variants. Do not treat this plan or diagnostic as a serving performance improvement.
+
+## Candidate batch in verification
+
+Implemented bounded direct page-owner/shared/alias lookup tables (pool limit
+remains 4,096), dense output-slot bit checks, and tentative structural replay
+validation against an immutable successor without cloning the whole ledger.
+All ownership, COW, alias-position, cookie, slot, progress and committed replay
+checks remain. No proof is cached across mutable iterations.
+
+The old tree validator is retained only under cfg(test). A deterministic
+9,600-case differential check covers capacities 8/16/32 plus shared-prefix
+mutations, including identical error values/order. Six future-wire tests,
+72 scheduler tests, 21 existing wire tests, and nine CUDA-feature runtime
+ticket tests pass. Final server build passes. New opt-in subcounters separate
+future authority construction from structural validation/encoding for the
+next profile; they do not change runtime policy.
+
+Frozen candidate SHA256:
+`a525729d037b519e9c796b7574f960820fb6cbeb1e0d60e4a8a504c4cd616403`.
+Matched C32 serving and the follow-up profile are complete. Throughput improves
+5.48% shared / 6.31% unique over frozen best; TTFT/TPOT and E2E P95/P99 improve
+in the run-median summary. Candidate remains 10.54% / 9.75% below vLLM 0.29.0.
+All 6,912 serving and 512 profiler responses validate, including exact Riley
+references and stop/cancel/recovery. Retain this measured C32 implementation;
+broader concurrency and hardware qualification remain pending.
+Evidence: `benchmarks/results/20260914-dense-wire-serving-c32/README.md`.
+
+Future preparation drops in the diagnostic profile, with candidate check/encode
+still larger than authority construction. Call/shape mixes differ, so do not
+turn those sums into a serving speedup claim. Unique CPU preparation is now a
+smaller target; next establish C8/16/64 behavior before another execution batch.
