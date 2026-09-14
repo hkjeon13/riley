@@ -63,6 +63,7 @@ pub mod execution;
 pub mod metrics;
 pub mod plan;
 mod scheduler;
+pub use scheduler::speculative::{AuthorizedSpeculative,SpeculativePlan,SpeculativeRow};
 
 pub use config::{ExecutionShapePolicy, OverloadPolicy, SchedulerConfig};
 pub use error::{SchedulerError, SchedulerResult};

@@ -1,0 +1,602 @@
+//! Experimental multi-token scheduling. GPU adapter integration is separate.
+use super::*;
+use riley_runtime::speculative::{prompt_lookup, settle_completed_greedy, verify_greedy, Stop};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeculativeRow {
+    request_id: RequestId,
+    start: u32,
+    inputs: Vec<u32>,
+    table: OwnedBlockTable,
+}
+impl SpeculativeRow {
+    pub fn request_id(&self) -> RequestId {
+        self.request_id
+    }
+    pub fn committed_tokens(&self) -> u32 {
+        self.start
+    }
+    pub fn inputs(&self) -> &[u32] {
+        &self.inputs
+    }
+    pub fn table(&self) -> &OwnedBlockTable {
+        &self.table
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpeculativePlan {
+    iteration_id: IterationId,
+    rows: Vec<SpeculativeRow>,
+    eos: Option<u32>,
+}
+impl SpeculativePlan {
+    pub fn iteration_id(&self) -> IterationId {
+        self.iteration_id
+    }
+    pub fn rows(&self) -> &[SpeculativeRow] {
+        &self.rows
+    }
+}
+/// Retains an immutable scheduler borrow throughout device execution.
+pub struct AuthorizedSpeculative<'a> {
+    scheduler: &'a Scheduler,
+    plan: &'a SpeculativePlan,
+}
+impl AuthorizedSpeculative<'_> {
+    pub fn plan(&self) -> &SpeculativePlan {
+        self.plan
+    }
+    pub fn physical_block_count(&self) -> usize {
+        self.scheduler.pool_physical_block_count()
+    }
+}
+fn invalid() -> SchedulerError {
+    SchedulerError::InvalidPlan {
+        field: "speculative round",
+        reason: "result or plan differs from live bounded append",
+    }
+}
+impl Scheduler {
+    pub fn authorize_speculative_execution<'a>(
+        &'a self,
+        plan: &'a SpeculativePlan,
+    ) -> SchedulerResult<AuthorizedSpeculative<'a>> {
+        self.validate_inflight_reservations()?;
+        if self.inflight.as_ref().and_then(|p| p.speculative.as_ref()) != Some(plan) {
+            return Err(invalid());
+        }
+        Ok(AuthorizedSpeculative {
+            scheduler: self,
+            plan,
+        })
+    }
+
+    /// Try bounded prompt lookup after ordinary admission/prefill. None selects
+    /// ordinary scheduling. Shared prefix cache is excluded until append COW is
+    /// integrated. Never reinterpret these rows as ordinary prompt prefill.
+    pub fn plan_speculative_iteration(
+        &mut self,
+        now_ns: u64,
+        eos: Option<u32>,
+    ) -> SchedulerResult<Option<SpeculativePlan>> {
+        let started = Instant::now();
+        self.ensure_completion_backlog_empty()?;
+        self.observe_now(now_ns)?;
+        if let Some(p) = &self.inflight {
+            return Err(SchedulerError::IterationInFlight {
+                iteration_id: p.iteration_id,
+            });
+        }
+        if eos.is_some_and(|x| x >= 49152) {
+            return Err(invalid());
+        }
+        if self.prefix_cache.is_some()
+            || !self.waiting.is_empty()
+            || self.execution_shape_policy != ExecutionShapePolicy::MixedPrefillDecode32
+        {
+            return Ok(None);
+        }
+        let (candidates, aging) = self.select_candidates(now_ns)?;
+        if candidates.is_empty() || candidates.iter().any(|c| c.kind != WorkKind::Decode) {
+            return Ok(None);
+        }
+        let mut drafts = Vec::new();
+        let mut budget = self.config.iteration_token_budget;
+        for c in candidates.iter().take(4) {
+            let record = &self.requests[self.record_index(c.request_id).ok_or_else(invalid)?];
+            let remaining = record.descriptor.max_new_tokens - record.generated_token_ids.len();
+            if remaining < 2 || budget < 2 {
+                return Ok(None);
+            }
+            let mut history = Vec::new();
+            let total = record.descriptor.prompt_token_ids.len() + record.generated_token_ids.len();
+            try_reserve_exact(&mut history, total.min(4096), "speculative lookup history")?;
+            history.extend(
+                record
+                    .descriptor
+                    .prompt_token_ids
+                    .iter()
+                    .chain(&record.generated_token_ids)
+                    .skip(total.saturating_sub(4096))
+                    .copied(),
+            );
+            let found = prompt_lookup(&history, 8, 4096);
+            let count = found
+                .tokens()
+                .len()
+                .min(7)
+                .min(remaining - 1)
+                .min(budget - 1);
+            if count == 0 {
+                return Ok(None);
+            }
+            let mut input = Vec::new();
+            try_reserve_exact(&mut input, count + 1, "speculative inputs")?;
+            input.push(*record.generated_token_ids.last().ok_or_else(invalid)?);
+            input.extend_from_slice(&found.tokens()[..count]);
+            budget -= input.len();
+            drafts.push((c.request_id, input));
+        }
+        let id = self.peek_iteration_id()?;
+        let next = self
+            .next_iteration_id
+            .checked_add(1)
+            .ok_or(SchedulerError::IdentifierExhausted { kind: "iteration" })?;
+        let mut rows = Vec::new();
+        let mut items = Vec::new();
+        try_reserve_exact(&mut rows, drafts.len(), "speculative rows")?;
+        try_reserve_exact(&mut items, drafts.len(), "speculative reservations")?;
+        for (request_id, inputs) in drafts {
+            let index = self.record_index(request_id).ok_or_else(invalid)?;
+            let record = &mut self.requests[index];
+            let sequence = record.sequence.as_mut().ok_or_else(invalid)?;
+            let start = sequence.logical_length();
+            let target = start as usize + inputs.len();
+            let reservation = match sequence.reserve_to(&mut self.pool, target) {
+                Ok(r) => r,
+                Err(e) => return self.rollback_prepared_plan(items, e.into()),
+            };
+            items.push(InflightItem {
+                request_id,
+                kind: WorkKind::Decode,
+                target_logical_length: target,
+                output_slot: None,
+                previous_state: record.state,
+                previous_ready_since_ns: record.ready_since_ns,
+                reservation,
+            });
+            let table = match sequence
+                .execution_block_table(&self.pool, Some(&items.last().unwrap().reservation))
+                .map_err(SchedulerError::from)
+                .and_then(|t| OwnedBlockTable::copy_from_v1(request_id, t))
+            {
+                Ok(t) => t,
+                Err(e) => return self.rollback_prepared_plan(items, e),
+            };
+            rows.push(SpeculativeRow {
+                request_id,
+                start,
+                inputs,
+                table,
+            });
+        }
+        let plan = SpeculativePlan {
+            iteration_id: id,
+            rows,
+            eos,
+        };
+        self.inflight = Some(InflightPlan {
+            speculative: Some(plan.clone()),
+            mixed_cost_bucket: 0,
+            iteration_id: id,
+            successor: None,
+            prefix_settlement: None,
+            device_progress: false,
+            prefill_tokens: 0,
+            decode_tokens: plan.rows.iter().map(|r| r.inputs.len()).sum(),
+            prefill_count: 0,
+            decode_count: items.len(),
+            scheduler_cpu_ns: elapsed_ns(started),
+            expected_output_slots: Vec::new(),
+            items,
+        });
+        self.next_iteration_id = next;
+        self.aging_override_last_iteration = aging;
+        self.refresh_metric_gauges();
+        Ok(Some(plan))
+    }
+    /// The caller must establish GPU completion and append-only writes before
+    /// calling. Unknown writes use quiesced abort. Target rows are untrusted and
+    /// must include every input endpoint, even after mismatch or cancellation.
+    /// No publication occurs before every row and reservation is validated.
+    pub fn complete_speculative_iteration(
+        &mut self,
+        plan: &SpeculativePlan,
+        targets: &[Vec<u32>],
+        now_ns: u64,
+        timing: crate::IterationTiming,
+    ) -> SchedulerResult<IterationUpdates> {
+        let started = Instant::now();
+        self.ensure_completion_backlog_empty()?;
+        self.validate_now(now_ns)?;
+        self.validate_inflight_reservations()?;
+        let pending = self
+            .inflight
+            .as_ref()
+            .ok_or(SchedulerError::NoIterationInFlight)?;
+        if pending.speculative.as_ref() != Some(plan) || targets.len() != plan.rows.len() {
+            return Err(invalid());
+        }
+        let mut decisions = Vec::new();
+        try_reserve_exact(&mut decisions, targets.len(), "speculative decisions")?;
+        for (row, target) in plan.rows.iter().zip(targets) {
+            let record = &self.requests[self.record_index(row.request_id).ok_or_else(invalid)?];
+            decisions.push(
+                verify_greedy(
+                    &row.inputs[1..],
+                    target,
+                    49152,
+                    record.descriptor.max_new_tokens - record.generated_token_ids.len(),
+                    plan.eos,
+                    record.cancellation_deferred,
+                )
+                .map_err(|_| invalid())?,
+            );
+        }
+        let mut updates = IterationUpdates::empty();
+        try_reserve_exact(&mut updates.token_events, 32, "speculative token events")?;
+        try_reserve_exact(
+            &mut updates.completions,
+            plan.rows.len(),
+            "speculative completions",
+        )?;
+        try_reserve_exact(
+            &mut updates.settlement_failures,
+            plan.rows.len(),
+            "speculative failures",
+        )?;
+        self.ensure_completion_capacity(plan.rows.len())?;
+        self.last_now_ns = Some(now_ns);
+        let inflight = self.inflight.take().unwrap();
+        self.record_dispatched_shape(&inflight);
+        let metric = IterationMetricSample {
+            batch_size: inflight.items.len(),
+            prefill_tokens: 0,
+            decode_tokens: inflight.decode_tokens,
+            scheduler_cpu_ns: inflight.scheduler_cpu_ns,
+            gpu_execution_ns: timing.gpu_execution_ns(),
+            gpu_idle_gap_ns: timing.gpu_idle_gap_ns(),
+        };
+        #[allow(unused_variables)]
+        let mut settled_count = 0;
+        for ((item, row), decision) in inflight.items.into_iter().zip(&plan.rows).zip(&decisions) {
+            let index = self
+                .record_index(item.request_id)
+                .expect("prevalidated owner");
+            #[cfg(test)]
+            let forced_failure = self.take_test_post_validation_commit_fault(settled_count);
+            #[cfg(not(test))]
+            let forced_failure = false;
+            let result = if forced_failure {
+                Err(riley_runtime::paged_kv::PagedKvError::ReservationMismatch)
+            } else {
+                settle_completed_greedy(
+                    self.requests[index].sequence.as_mut().unwrap(),
+                    &mut self.pool,
+                    item.reservation,
+                    row.start,
+                    decision,
+                )
+            };
+            if result.is_ok() {
+                settled_count += 1;
+            }
+            if let Err(error) = result {
+                let error =
+                    self.contain_live_request_failure(item.request_id, now_ns, error.into());
+                updates.settlement_failures.push(RequestSettlementFailure {
+                    request_id: item.request_id,
+                    error,
+                });
+            }
+        }
+        if !updates.settlement_failures.is_empty() {
+            for row in &plan.rows {
+                if self.record_index(row.request_id).is_some() {
+                    if let Err(e) = self.finish_live_request(
+                        row.request_id,
+                        RequestFinishReason::ExecutorFailure,
+                        now_ns,
+                    ) {
+                        let error = self.contain_live_request_failure(row.request_id, now_ns, e);
+                        updates.settlement_failures.push(RequestSettlementFailure {
+                            request_id: row.request_id,
+                            error,
+                        });
+                    }
+                }
+            }
+        } else {
+            for (row, decision) in plan.rows.iter().zip(&decisions) {
+                let index = self.record_index(row.request_id).unwrap();
+                let record = &mut self.requests[index];
+                for &token in decision.tokens() {
+                    let generated_index = record.generated_token_ids.len();
+                    record.generated_token_ids.push(token);
+                    updates.token_events.push(TokenEvent {
+                        request_id: row.request_id,
+                        token_id: token,
+                        generated_index,
+                    });
+                }
+                record.state = RequestState::Decoding;
+                record.ready_since_ns = now_ns;
+                let reason = match decision.stop() {
+                    Some(Stop::Eos) => Some(RequestFinishReason::Stop),
+                    Some(Stop::Length) => Some(RequestFinishReason::Length),
+                    Some(Stop::Cancelled) => Some(RequestFinishReason::Cancelled),
+                    None => None,
+                };
+                if let Some(reason) = reason {
+                    if let Err(e) = self.finish_live_request(row.request_id, reason, now_ns) {
+                        let error = self.contain_live_request_failure(row.request_id, now_ns, e);
+                        updates.settlement_failures.push(RequestSettlementFailure {
+                            request_id: row.request_id,
+                            error,
+                        });
+                    }
+                }
+            }
+        }
+        self.drain_completion_outbox_into(&mut updates.completions);
+        if updates.settlement_failures.is_empty() {
+            let metric = IterationMetricSample {
+                scheduler_cpu_ns: metric.scheduler_cpu_ns.saturating_add(elapsed_ns(started)),
+                ..metric
+            };
+            observe_metric(
+                &mut self.metrics_degraded,
+                self.metrics.record_iteration(metric),
+                "speculative completed iteration",
+            );
+            updates.iteration_metric = Some(metric);
+        } else {
+            observe_metric(
+                &mut self.metrics_degraded,
+                self.metrics.record_aborted_iteration(),
+                "speculative failed settlement",
+            );
+        }
+        self.refresh_metric_gauges();
+        Ok(updates)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use riley_runtime::paged_kv::KvLayout;
+    fn ready(prompt: usize, limit: usize) -> (Scheduler, Vec<RequestId>) {
+        let config = SchedulerConfig {
+            max_waiting_requests: 8,
+            max_waiting_prompt_tokens: 1024,
+            max_active_sequences: 4,
+            max_sequence_tokens: 128,
+            iteration_token_budget: 512,
+            max_prefill_chunk_tokens: 128,
+            aging_threshold_ns: 1000,
+            overload_policy: OverloadPolicy::Wait,
+            admission_timeout_ns: None,
+            max_promised_kv_blocks: 64,
+            metrics_window_samples: 8,
+        };
+        let mut s = Scheduler::new_with_execution_shape(
+            config,
+            KvLayout::checked(30, 64, 3, 64).unwrap(),
+            ExecutionShapePolicy::MixedPrefillDecode32,
+        )
+        .unwrap();
+        let ids = (0..4)
+            .map(|_| {
+                s.submit(
+                    RequestDescriptor::new((0..prompt).map(|i| i as u32 % 3 + 1).collect(), limit),
+                    0,
+                )
+                .unwrap()
+                .request_id()
+            })
+            .collect();
+        let p = s.plan_iteration(1).unwrap().into_parts().0.unwrap();
+        let result = IterationResult::new(
+            p.iteration_id(),
+            p.output_slots()
+                .iter()
+                .map(|&slot| IterationOutput::new(slot, prompt as u32 % 3 + 1, false))
+                .collect(),
+            0,
+            0,
+        )
+        .unwrap();
+        assert!(s
+            .complete_iteration(&result, 2)
+            .unwrap()
+            .settlement_failures()
+            .is_empty());
+        (s, ids)
+    }
+    #[test]
+    fn speculative_scheduler_commits_only_accepted_prefix_and_routes_all_tokens() {
+        for prompt in [16, 17, 31, 32, 33] {
+            for mismatch in 0..=7 {
+                let (mut s, ids) = ready(prompt, 32);
+                let p = s.plan_speculative_iteration(3, None).unwrap().unwrap();
+                assert_eq!(p.rows.len(), 4);
+                let authority = s.authorize_speculative_execution(&p).unwrap();
+                assert_eq!(authority.plan(), &p);
+                drop(authority);
+                assert!(s.plan_iteration(4).is_err());
+                let mut targets = Vec::new();
+                let mut counts = Vec::new();
+                for (i, row) in p.rows.iter().enumerate() {
+                    assert_eq!(row.inputs.len(), 8);
+                    let mut t = row.inputs[1..].to_vec();
+                    t.push(100 + i as u32);
+                    let first = (mismatch + i) % 8;
+                    if first < 7 {
+                        t[first] = 200 + i as u32;
+                    }
+                    counts.push(first + 1);
+                    targets.push(t);
+                }
+                let before: Vec<_> = ids
+                    .iter()
+                    .map(|id| s.request_snapshot(*id).unwrap().logical_kv_tokens())
+                    .collect();
+                let mut corrupt = targets.clone();
+                corrupt[3][7] = 49152;
+                assert!(s
+                    .complete_speculative_iteration(
+                        &p,
+                        &corrupt,
+                        5,
+                        crate::IterationTiming::new(0, 0)
+                    )
+                    .is_err());
+                for (id, n) in ids.iter().zip(before) {
+                    assert_eq!(s.request_snapshot(*id).unwrap().logical_kv_tokens(), n);
+                }
+                let ordinary = IterationResult::new(p.iteration_id(), Vec::new(), 0, 0).unwrap();
+                assert!(s.complete_iteration(&ordinary, 5).is_err());
+                let updates = s
+                    .complete_speculative_iteration(
+                        &p,
+                        &targets,
+                        5,
+                        crate::IterationTiming::new(0, 0),
+                    )
+                    .unwrap();
+                assert!(updates.settlement_failures().is_empty());
+                assert_eq!(updates.token_events().len(), counts.iter().sum::<usize>());
+                for ((row, target), count) in p.rows.iter().zip(&targets).zip(&counts) {
+                    let snapshot = s.request_snapshot(row.request_id).unwrap();
+                    assert_eq!(snapshot.logical_kv_tokens(), prompt + count);
+                    assert_eq!(snapshot.generated_tokens(), 1 + count);
+                    let events: Vec<_> = updates
+                        .token_events()
+                        .iter()
+                        .filter(|e| e.request_id() == row.request_id)
+                        .collect();
+                    for (i, event) in events.iter().enumerate() {
+                        assert_eq!(event.token_id(), target[i]);
+                        assert_eq!(event.generated_index(), i + 1);
+                    }
+                }
+                assert!(s
+                    .complete_speculative_iteration(
+                        &p,
+                        &targets,
+                        6,
+                        crate::IterationTiming::new(0, 0)
+                    )
+                    .is_err());
+                let next = s.plan_iteration(6).unwrap().into_parts().0.unwrap();
+                let authority = s.authorize_execution(&next).unwrap();
+                drop(authority);
+                for item in next.decode_items() {
+                    let i = p
+                        .rows
+                        .iter()
+                        .position(|r| r.request_id == item.request_id())
+                        .unwrap();
+                    assert_eq!(item.input_tokens(), &targets[i][counts[i] - 1..counts[i]]);
+                }
+                s.abort_iteration(next.iteration_id(), ExecutionAbort::NotDispatched, 7)
+                    .unwrap();
+                s.close(8, None).unwrap();
+            }
+        }
+    }
+    #[test]
+    fn speculative_scheduler_cancellation_eos_length_and_abort() {
+        for limit in 3..=9 {
+            let (mut s, ids) = ready(32, limit);
+            let p = s.plan_speculative_iteration(3, Some(99)).unwrap().unwrap();
+            s.cancel(ids[0], 4).unwrap();
+            let mut targets: Vec<_> = p
+                .rows
+                .iter()
+                .map(|r| {
+                    let mut t = r.inputs[1..].to_vec();
+                    t.push(100);
+                    t
+                })
+                .collect();
+            targets[1][0] = 99;
+            let updates = s
+                .complete_speculative_iteration(&p, &targets, 5, crate::IterationTiming::new(0, 0))
+                .unwrap();
+            assert!(updates.settlement_failures().is_empty());
+            assert!(!updates
+                .token_events()
+                .iter()
+                .any(|e| e.request_id() == ids[0]));
+            assert_eq!(updates.completions().len(), 4);
+            assert_eq!(s.pool.stats().allocated_block_count(), 0);
+            s.close(6, None).unwrap();
+        }
+        for abort in [
+            ExecutionAbort::NotDispatched,
+            ExecutionAbort::DeviceQuiescedMutationUnknown,
+        ] {
+            let (mut s, _) = ready(32, 32);
+            let p = s.plan_speculative_iteration(3, None).unwrap().unwrap();
+            assert!(s
+                .abort_iteration(p.iteration_id(), abort, 4)
+                .unwrap()
+                .settlement_failures()
+                .is_empty());
+            s.close(5, None).unwrap();
+        }
+    }
+    #[test]
+    fn speculative_scheduler_rejects_foreign_plans_and_contains_commit_fault() {
+        let (mut s, _) = ready(32, 32);
+        let p = s.plan_speculative_iteration(3, None).unwrap().unwrap();
+        let targets: Vec<_> = p
+            .rows
+            .iter()
+            .map(|r| {
+                let mut t = r.inputs[1..].to_vec();
+                t.push(100);
+                t
+            })
+            .collect();
+        let mut foreign = p.clone();
+        foreign.rows[0].inputs[0] += 1;
+        assert!(s.authorize_speculative_execution(&foreign).is_err());
+        assert!(s
+            .complete_speculative_iteration(
+                &foreign,
+                &targets,
+                4,
+                crate::IterationTiming::new(0, 0)
+            )
+            .is_err());
+        s.test_post_validation_commit_fault_after_successful_commits = Some(1);
+        let result = s
+            .complete_speculative_iteration(&p, &targets, 4, crate::IterationTiming::new(0, 0))
+            .unwrap();
+        assert!(result.token_events().is_empty());
+        assert_eq!(result.completions().len(), 4);
+        assert_eq!(result.settlement_failures().len(), 1);
+        assert!(result.iteration_metric().is_none());
+        assert_eq!(s.pool.stats().allocated_block_count(), 0);
+        s.close(5, None).unwrap();
+        let (mut s, _) = ready(32, 2);
+        assert!(s.plan_speculative_iteration(3, None).unwrap().is_none());
+        let ordinary = s.plan_iteration(4).unwrap().into_parts().0.unwrap();
+        s.abort_iteration(ordinary.iteration_id(), ExecutionAbort::NotDispatched, 5)
+            .unwrap();
+        s.close(6, None).unwrap();
+    }
+}

@@ -5,6 +5,7 @@
 //! publishes state after versioned runtime feedback has been validated in full.
 
 mod decode_window;
+pub mod speculative;
 mod mixed_time;
 mod prefix_cache;
 
@@ -488,6 +489,7 @@ struct PrefixSettlement { result: IterationResult, committed_items: usize }
 
 #[derive(Debug)]
 struct InflightPlan {
+    speculative: Option<speculative::SpeculativePlan>,
     mixed_cost_bucket: usize,
     iteration_id: IterationId,
     successor: Option<IterationId>,
@@ -2033,6 +2035,7 @@ impl Scheduler {
         let prefill_count = plan.prefill_items().len();
         let decode_count = plan.decode_items().len();
         self.inflight = Some(InflightPlan {
+            speculative: None,
             mixed_cost_bucket: if self.mixed_time.is_some(){self.mixed_cost_bucket()}else{0},
             iteration_id,
             successor,
@@ -2167,6 +2170,9 @@ impl Scheduler {
     }
 
     fn validate_iteration_result(&self, result: &IterationResult) -> SchedulerResult<()> {
+        if self.inflight.as_ref().is_some_and(|p|p.speculative.is_some()) {
+            return Err(SchedulerError::InvalidPlan{field:"speculative round",reason:"requires speculative authority and completion"});
+        }
         if self.inflight.as_ref().is_some_and(|p|p.successor.is_some()) {
             return Err(SchedulerError::InvalidPlan {field:"decode window",reason:"requires both results and window-wide device drain"});
         }
@@ -3371,6 +3377,9 @@ impl Scheduler {
         &'a self,
         plan: &'a IterationPlan,
     ) -> SchedulerResult<crate::AuthorizedExecution<'a>> {
+        if self.inflight.as_ref().is_some_and(|p|p.speculative.is_some()) {
+            return Err(SchedulerError::InvalidPlan{field:"speculative round",reason:"requires speculative authority and completion"});
+        }
         if self.inflight.as_ref().is_some_and(|p|p.successor.is_some()) {
             return Err(SchedulerError::InvalidPlan {field:"decode window",reason:"requires a window-aware execution adapter"});
         }

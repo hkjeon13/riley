@@ -78,3 +78,17 @@ Next integrate private KV append, completed-prefix settlement, cancellation and
 multi-token scheduler accounting, with a 7-token draft cap for this 8-input head.
 Then run strict serial equivalence and a matched serving milestone against the
 current baseline and vLLM before selecting any default policy.
+
+### Host scheduler batch — 2026-09-14
+
+Implemented bounded prompt-lookup plans, borrowed execution authority, private
+append reservations, and multi-token completed-prefix settlement with cancellation,
+EOS, length, rejection and whole-batch commit-failure containment. This is an
+experimental host path; ordinary serving does not select it. Shared-prefix cache
+and the GPU verification adapter remain unsupported. Existing progress validation
+must gain an explicit verification contract before generated-token chunks can run;
+do not disguise speculative inputs as a longer original prompt.
+
+Evidence and limitations: `benchmarks/results/20260914-speculative-scheduler/README.md`.
+Next milestone combines GPU binding, exact serial equivalence and serving/vLLM
+comparison. Host metadata tests alone are not a throughput result.
