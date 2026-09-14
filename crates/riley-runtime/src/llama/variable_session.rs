@@ -3,8 +3,30 @@ use super::multi_descriptor::{variable_wire as wire, Error, Result};
 use riley_cuda::BorrowedGraphResourceReservation;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-#[derive(Default)]
-struct HostRuntimeTiming { counts: [u64; 8], nanos: [u128; 8] }
+struct HostRuntimeTiming { counts: [u64; 8], nanos: [u128; 8], decode_batches:u64, kv_tile_groups:[u64;33] }
+impl Default for HostRuntimeTiming {
+    fn default()->Self{Self{counts:[0;8],nanos:[0;8],decode_batches:0,kv_tile_groups:[0;33]}}
+}
+impl HostRuntimeTiming {
+    // Diagnostic only: validated physical pages, never token-prefix guesses.
+    // Histogram units are (logical 128-token tile, identical 8-page map) groups.
+    fn observe_decode<const ROWS:usize>(&mut self,e:&wire::Expectation<ROWS>) {
+        use super::multi_descriptor::shape_progress::InputStage;
+        if e.rows.is_empty() || e.rows.iter().any(|r|r.progress.stage!=InputStage::Decode) {return;}
+        self.decode_batches+=1;
+        for tile in 0..32 {
+            let mut groups=std::collections::BTreeMap::<[u32;8],usize>::new();
+            for row in &e.rows {
+                let end=(tile+1)*8;
+                // Exclude the current append page and all partial tiles.
+                if end*16>row.progress.committed_tokens as usize {continue;}
+                let ids:[u32;8]=row.physical_ids[tile*8..end].try_into().unwrap();
+                *groups.entry(ids).or_default()+=1;
+            }
+            for owners in groups.into_values(){self.kv_tile_groups[owners]+=1;}
+        }
+    }
+}
 fn runtime_phase_record(timing: &mut Option<HostRuntimeTiming>, stage: usize, start: Option<Instant>) {
     if let (Some(timing), Some(start)) = (timing.as_mut(), start) {
         timing.counts[stage] = timing.counts[stage].saturating_add(1);
@@ -75,6 +97,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// Opt-in diagnostic wall time; native execution includes GPU waits.
     pub fn report_host_phase_timing(&self) {
         if let Some(timing) = self.host_phase_timing.as_ref() {
+            eprintln!("RILEY_KV_TILE_GROUPS decode_batches={} groups_by_owner_count={:?}",timing.decode_batches,timing.kv_tile_groups);
             for (stage, name) in ["retain_encode", "sync_transfer", "buffered_submit", "buffered_wait", "read_validate", "future_prepare", "future_authority", "future_check_encode"].iter().enumerate() {
                 eprintln!("RILEY_RUNTIME_PHASE kind={} calls={} wall_ns={}", name, timing.counts[stage], timing.nanos[stage]);
             }
@@ -128,6 +151,7 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
             || e.physical_block_count!=i.physical_block_count || e.rows.iter().any(|r|r.progress.context_tokens!=i.context_tokens)
             || self.issued.as_deref()!=Some(e.rows.iter().map(|r|r.cookie).collect::<Vec<_>>().as_slice()) {return Err(bad("submission differs from issued owner"));}
         let e=wire::OwnedCheckedExpectation::new(e)?;
+        if let Some(timing)=self.host_phase_timing.as_mut(){timing.observe_decode(&e);}
         wire::encode_checked_into(&mut self.input,&e.checked())?;
         self.retained=Some(e);self.issued=None;self.started=true;self.completed=false;
         runtime_phase_record(&mut self.host_phase_timing, 0, phase);
@@ -541,6 +565,7 @@ impl<G:VariableGraph> VariableSession<G,32> {
             }
             let sources=(0..second.rows.len()).map(|i|super::multi_descriptor::future_token::TokenSource::PreviousRow(i as u32)).collect::<Vec<_>>();
             let future=super::multi_descriptor::future_token::prepare_checked(&first.checked(),&second,&sources)?;
+            if let Some(timing)=self.host_phase_timing.as_mut(){timing.observe_decode(&second);}
             let output=vec![0;wire::Layout::<32>::COMPACT_RESULT_BYTES];
             runtime_phase_record(&mut self.host_phase_timing,7,check_phase);
             runtime_phase_record(&mut self.host_phase_timing,5,phase);
@@ -687,6 +712,32 @@ impl<G:VariableGraph> VariableSession<G,32> {
 mod staged_window_tests {
     use super::*;
     use super::super::multi_descriptor::shape_progress::InputStage;
+    #[test]
+    fn kv_tile_census_uses_validated_physical_groups() {
+        let mut e=wire::tests::fixture_rows::<32>(InputStage::Decode,3);
+        e.shared_prefixes=true;e.mixed_execution=true;e.packed_prefill=true;
+        let first=e.rows[0].physical_ids[..8].to_vec();
+        e.rows[1].physical_ids[..8].copy_from_slice(&first);
+        e.block_ownership=e.rows.iter().flat_map(|r|r.physical_ids.iter().map(move |&physical_id|super::super::multi_descriptor::BlockOwnership{physical_id,sequence_tag:r.sequence_tag})).collect();
+        let checked=wire::OwnedCheckedExpectation::new(e).unwrap();
+        let mut timing=HostRuntimeTiming::default();timing.observe_decode(&checked);
+        assert_eq!(timing.decode_batches,1);
+        assert_eq!(timing.kv_tile_groups[1],1);
+        assert_eq!(timing.kv_tile_groups[2],1);
+        assert_eq!(timing.kv_tile_groups.iter().sum::<u64>(),2);
+    }
+    #[test]
+    fn kv_tile_census_excludes_append_tile_and_prefill() {
+        let mut e=wire::tests::fixture_rows::<32>(InputStage::Decode,1);
+        let r=&mut e.rows[0];r.progress.prompt_tokens=127;r.progress.generated_index=1;r.progress.committed_tokens=127;
+        r.physical_ids.truncate(8);r.valid_tokens=vec![16;8];
+        e.block_ownership.truncate(8);
+        let checked=wire::OwnedCheckedExpectation::new(e).unwrap();
+        let mut timing=HostRuntimeTiming::default();timing.observe_decode(&checked);
+        assert_eq!(timing.decode_batches,1);assert_eq!(timing.kv_tile_groups.iter().sum::<u64>(),0);
+        let prefill=wire::OwnedCheckedExpectation::new(wire::tests::fixture_rows::<32>(InputStage::Prefill,1)).unwrap();
+        timing.observe_decode(&prefill);assert_eq!(timing.decode_batches,1);
+    }
     struct FakeGraph { outputs:Vec<Vec<u8>>, calls:Vec<(&'static str,u64)> }
     impl sealed::Sealed for FakeGraph {}
     impl VariableGraph for FakeGraph {
