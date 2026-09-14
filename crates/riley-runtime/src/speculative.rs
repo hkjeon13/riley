@@ -367,10 +367,11 @@ mod tests {
 /// Fixed CUDA verification record format. Every inactive record is checked too.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VerificationRecordError { Shape, Slot, Status, Token, Padding }
-pub fn parse_verification_tokens(bytes: &[u8], active: usize) -> Result<[u32;32], VerificationRecordError> {
+pub fn parse_verification_tokens(bytes:&[u8],active:usize)->Result<[u32;32],VerificationRecordError>{parse_verification_tokens_capacity::<32>(bytes,active)}
+pub fn parse_verification_tokens_capacity<const N:usize>(bytes: &[u8], active: usize) -> Result<[u32;N], VerificationRecordError> {
     use VerificationRecordError::*;
-    if bytes.len()!=512 || !(1..=32).contains(&active) { return Err(Shape); }
-    let mut tokens=[0;32];
+    if !matches!(N,32|256) || bytes.len()!=N*16 || !(1..=N).contains(&active) { return Err(Shape); }
+    let mut tokens=[0;N];
     for (slot, record) in bytes.chunks_exact(16).enumerate() {
         let word=|i| u32::from_le_bytes(record[i..i+4].try_into().unwrap());
         let (token,error,index,valid)=(word(0),word(4),word(8),word(12));
@@ -406,5 +407,18 @@ mod verification_record_tests {
         assert!(parse_verification_tokens(&records(1)[..511],1).is_err());
         assert!(parse_verification_tokens(&records(1),0).is_err());
         assert!(parse_verification_tokens(&records(32),33).is_err());
+    }
+}
+
+#[cfg(test)]
+mod wide_verification_record_tests {
+    use super::*;
+    #[test]
+    fn wide_records_validate_upper_slots_and_inactive_tail(){
+        for active in [1,31,32,33,127,255,256] {
+            let bytes:Vec<_>=(0..256u32).flat_map(|i|[if (i as usize)<active{i}else{0},0,i,u32::from((i as usize)<active)]).flat_map(u32::to_le_bytes).collect();
+            let parsed=parse_verification_tokens_capacity::<256>(&bytes,active).unwrap();assert_eq!(parsed[active-1],active as u32-1);
+            for slot in [0,31,32,127,255]{for field in [0,4,8,12]{let mut corrupt=bytes.clone();corrupt[slot*16+field..slot*16+field+4].copy_from_slice(&999999u32.to_le_bytes());assert!(parse_verification_tokens_capacity::<256>(&corrupt,active).is_err());}}
+        }
     }
 }

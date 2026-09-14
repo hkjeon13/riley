@@ -1,0 +1,41 @@
+warning: method `into_unchecked` is never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:134:19
+    |
+128 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- method in this implementation
+...
+134 |     pub(crate) fn into_unchecked(self)->Expectation<ROWS> {self.expectation}
+    |                   ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running unittests src/lib.rs (target/debug/deps/riley_runtime-278f35c187cd6f05)
+
+running 20 tests
+test llama::multi_descriptor::variable_wire::tests::export_versioned_wire_fixtures_when_requested ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_over_budget_and_stage_fail_before_write ... ok
+test llama::multi_descriptor::variable_wire::tests::packed_v6_rejects_capacity_before_write ... ok
+test llama::multi_descriptor::variable_wire::tests::rejects_stale_replay_foreign_page_and_overlapping_reservations_without_writes ... ok
+test llama::multi_descriptor::variable_wire::tests::maximum_prefill16_tokens_do_not_overlap_unused_descriptors ... ok
+test llama::multi_descriptor::variable_wire::tests::shared_prefix_wire_binds_all_owners_and_exports_native_fixture ... ok
+test llama::multi_descriptor::variable_wire::tests::single_decode_completion_is_bound_to_its_generated_index ... ok
+test llama::multi_descriptor::variable_wire::tests::result_binds_replay_and_suppresses_partial_output ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_invalid_authority_and_capacity_never_mutate_packet ... ok
+test llama::multi_descriptor::variable_wire::lane_argmax_tests::independent_lanes_match_scalar_and_reject_nonfinite ... ok
+test llama::multi_descriptor::variable_wire::tests::owned_expectation_preserves_authority_and_checked_result_validation ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_eight_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::batch_results_bind_all_rows_before_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_sixteen_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::variable_shapes_and_partial_output_round_trip_with_every_byte_bound ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_contract_rejects_old_versions_and_binds_all_bytes ... ok
+test llama::multi_descriptor::variable_wire::tests::sixteen_row_results_bind_upper_rows_and_reject_old_single_result_magic ... ok
+test llama::multi_descriptor::variable_wire::tests::compact_thirtytwo_identity_status_and_publication ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_stage_tiles_and_result_identity has been running for over 60 seconds
+test llama::multi_descriptor::variable_wire::tests::packed_v6_offsets_publication_and_corruption has been running for over 60 seconds
+test llama::multi_descriptor::variable_wire::tests::packed_v6_offsets_publication_and_corruption ... ok
+test llama::multi_descriptor::variable_wire::tests::mixed_v7_stage_tiles_and_result_identity ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 343 filtered out; finished in 316.01s
+

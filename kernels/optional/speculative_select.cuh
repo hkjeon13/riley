@@ -5,20 +5,21 @@
 namespace riley_speculative_select {
 constexpr uint64_t bytes=32ULL*49152*2;
 // Existing V7 validation remains mandatory; this is an additional narrow gate.
-__host__ __device__ inline bool eligible(const uint32_t* meta,uint32_t capacity) {
- if((meta[4]!=0 && meta[4]!=3) || meta[5]<1 || meta[5]>4 || meta[9]<1 || meta[9]>capacity)return false;
+__host__ __device__ inline bool eligible(const uint32_t* meta,uint32_t capacity,unsigned slots=32) {
+ if((meta[4]!=0 && meta[4]!=3) || meta[5]<1 || meta[5]>(slots==256?32:4) || meta[9]<1 || meta[9]>capacity)return false;
  unsigned offset=0;
  for(unsigned owner=0;owner<meta[5];++owner){const auto* row=meta+32+owner*416;
   if(row[18]!=meta[4] || row[2]<1 || row[2]>8 || row[16]!=offset)return false;
   offset+=row[2];
  }
- return offset==meta[9] && offset<=32;
+ return offset==meta[9] && offset<=slots;
 }
 // Preserve each owner's usual last-query slot. Additional query positions fill
 // slots after the owners, allowing the existing 32-row head GEMM to verify all.
+template<unsigned Slots=32>
 __global__ void gather(const __nv_bfloat16* hidden,__nv_bfloat16* selected,
                        const uint32_t* meta,unsigned capacity,const uint32_t* status) {
- if(!eligible(meta,capacity))return;
+ if(!eligible(meta,capacity,Slots))return;
  unsigned slot=blockIdx.x,active=meta[5],source=0;bool valid=false;
  if(slot<active){const auto* row=meta+32+slot*416;source=row[16]+row[2]-1;valid=true;}
  else {unsigned begin=active;for(unsigned owner=0;owner<active;++owner){const auto* row=meta+32+owner*416;
@@ -36,10 +37,11 @@ struct GreedyRecord {uint32_t token,error,slot,valid;};
 constexpr uint64_t greedy_bytes=32*sizeof(GreedyRecord);
 static_assert(greedy_bytes==512,"Rust verification record contract");
 // Same greedy tie rule as the ordinary target: lowest vocabulary ID wins.
+template<unsigned Slots=32>
 __global__ void greedy(const __nv_bfloat16* logits,GreedyRecord* output,
                         const uint32_t* meta,unsigned capacity,const uint32_t* status) {
  unsigned slot=blockIdx.x,tid=threadIdx.x;
- bool valid=eligible(meta,capacity) && slot<meta[9];
+ bool valid=eligible(meta,capacity,Slots) && slot<meta[9];
  if(!valid){if(tid==0)output[slot]={0,0,slot,0};return;}
  __shared__ float maxima[256];__shared__ unsigned tokens[256],errors[256];
  float maximum=-CUDART_INF_F;unsigned token=0xffffffffu,error=*status;

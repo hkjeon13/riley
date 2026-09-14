@@ -2425,7 +2425,7 @@ pub fn execute_speculative_variable_graph<G:riley_runtime::llama::variable_sessi
     let output=executor.read_verification_tokens().map_err(|e|fail(e,Some(ExecutionAbort::DeviceQuiescedMutationUnknown)))?;
     let reject=||fail(bad(),Some(ExecutionAbort::DeviceQuiescedMutationUnknown));
     if output.iteration_id()!=id.get() || output.replay_id()!=replay || output.owner_generation()!=identity.generation || output.catalog_digest()!=identity.catalog_digest || output.rows().len()!=plan.rows().iter().map(|r|r.inputs().len()).sum::<usize>(){return Err(reject());}
-    let mut seen=[[false;8];4];
+    let mut seen=[[false;8];32];
     for (index,row) in output.rows().iter().enumerate(){
         let owner=plan.rows().iter().position(|r|r.request_id().get()==row.sequence_tag).ok_or_else(reject)?;
         let expected=&plan.rows()[owner];let local=row.position.checked_sub(expected.committed_tokens()).ok_or_else(reject)? as usize;

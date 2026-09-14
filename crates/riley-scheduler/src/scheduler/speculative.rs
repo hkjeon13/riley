@@ -25,6 +25,7 @@ impl SpeculativeRow {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpeculativePlan {
+    wide:bool,
     iteration_id: IterationId,
     rows: Vec<SpeculativeRow>,
     eos: Option<u32>,
@@ -57,7 +58,7 @@ impl AuthorizedSpeculative<'_> {
                 progress:Progress{prompt_tokens:record.descriptor.prompt_token_ids.len() as u32,output_limit:record.descriptor.max_new_tokens as u32,context_tokens:owner.context_tokens,committed_tokens:row.start,input_tokens:row.inputs.len() as u32,generated_index:record.generated_token_ids.len() as u32,stage:InputStage::Verification},
                 input_tokens:row.inputs.clone(),physical_ids:row.table.physical_block_ids().to_vec(),valid_tokens:row.table.valid_tokens().to_vec()});
         }
-        let e=Expectation{owner_generation:owner.generation,last_accepted_replay:owner.last_accepted_replay,replay_id:replay,iteration_id:self.plan.iteration_id.get(),catalog_digest:owner.catalog_digest,physical_block_count:owner.physical_block_count,max_active_rows:32,stage:InputStage::Verification,mode:ResultMode::FullLogits,rows,block_ownership:self.scheduler.execution_block_owners().map_err(|_|bad())?.into_iter().map(|(physical_id,id)|BlockOwnership{physical_id,sequence_tag:id.get()}).collect(),packed_prefill:true,mixed_execution:true,shared_prefixes:false};
+        let e=Expectation{owner_generation:owner.generation,last_accepted_replay:owner.last_accepted_replay,replay_id:replay,iteration_id:self.plan.iteration_id.get(),catalog_digest:owner.catalog_digest,physical_block_count:owner.physical_block_count,max_active_rows:32,stage:InputStage::Verification,mode:if self.plan.wide{ResultMode::Greedy}else{ResultMode::FullLogits},rows,block_ownership:self.scheduler.execution_block_owners().map_err(|_|bad())?.into_iter().map(|(physical_id,id)|BlockOwnership{physical_id,sequence_tag:id.get()}).collect(),packed_prefill:true,mixed_execution:true,shared_prefixes:false};
         crate::descriptor::variable_wire::validate(&e)?;Ok(e)
     }
     pub fn physical_block_count(&self) -> usize {
@@ -88,10 +89,12 @@ impl Scheduler {
     /// Try bounded prompt lookup after ordinary admission/prefill. None selects
     /// ordinary scheduling. Shared prefix cache is excluded until append COW is
     /// integrated. Never reinterpret these rows as ordinary prompt prefill.
-    pub fn plan_speculative_iteration(
+    pub fn plan_speculative_iteration(&mut self,now_ns:u64,eos:Option<u32>)->SchedulerResult<Option<SpeculativePlan>>{self.plan_speculative_internal(now_ns,eos,false)}
+    pub fn plan_wide_speculative_iteration(&mut self,now_ns:u64,eos:Option<u32>)->SchedulerResult<Option<SpeculativePlan>>{self.plan_speculative_internal(now_ns,eos,true)}
+    fn plan_speculative_internal(
         &mut self,
         now_ns: u64,
-        eos: Option<u32>,
+        eos: Option<u32>, wide:bool,
     ) -> SchedulerResult<Option<SpeculativePlan>> {
         let started = Instant::now();
         self.ensure_completion_backlog_empty()?;
@@ -117,10 +120,10 @@ impl Scheduler {
         let mut drafts = Vec::new();
         let mut budget = self.config.iteration_token_budget;
         for c in &candidates {
-            if drafts.len()==4 || budget<2 {break;}
+            if drafts.len()==if wide{32}else{4} || budget<1 {break;}
             let record = &self.requests[self.record_index(c.request_id).ok_or_else(invalid)?];
             let remaining = record.descriptor.max_new_tokens - record.generated_token_ids.len();
-            if remaining < 2 {
+            if remaining < if wide{1}else{2} {
                 continue;
             }
             let mut history = Vec::new();
@@ -141,8 +144,8 @@ impl Scheduler {
                 .len()
                 .min(7)
                 .min(remaining - 1)
-                .min(budget - 1);
-            if count == 0 {
+                .min(budget.saturating_sub(if wide{candidates.len()-drafts.len()}else{1}));
+            if count == 0 && !wide {
                 continue;
             }
             let mut input = Vec::new();
@@ -152,7 +155,7 @@ impl Scheduler {
             budget -= input.len();
             drafts.push((c.request_id, input));
         }
-        if drafts.is_empty(){return Ok(None);}
+        if drafts.is_empty() || (wide && drafts.iter().all(|(_,input)|input.len()==1)){return Ok(None);}
         let id = self.peek_iteration_id()?;
         let next = self
             .next_iteration_id
@@ -197,6 +200,7 @@ impl Scheduler {
             });
         }
         let plan = SpeculativePlan {
+            wide,
             iteration_id: id,
             rows,
             eos,
@@ -260,7 +264,7 @@ impl Scheduler {
             );
         }
         let mut updates = IterationUpdates::empty();
-        try_reserve_exact(&mut updates.token_events, 32, "speculative token events")?;
+        try_reserve_exact(&mut updates.token_events, 256, "speculative token events")?;
         try_reserve_exact(
             &mut updates.completions,
             plan.rows.len(),
@@ -392,27 +396,28 @@ impl Scheduler {
 mod tests {
     use super::*;
     use riley_runtime::paged_kv::KvLayout;
-    fn ready(prompt: usize, limit: usize) -> (Scheduler, Vec<RequestId>) {
+    fn ready(prompt:usize,limit:usize)->(Scheduler,Vec<RequestId>){ready_owners(prompt,limit,4)}
+    fn ready_owners(prompt: usize, limit: usize, owners:usize) -> (Scheduler, Vec<RequestId>) {
         let config = SchedulerConfig {
             max_waiting_requests: 8,
             max_waiting_prompt_tokens: 1024,
-            max_active_sequences: 4,
+            max_active_sequences: owners,
             max_sequence_tokens: 128,
             iteration_token_budget: 512,
             max_prefill_chunk_tokens: 128,
             aging_threshold_ns: 1000,
             overload_policy: OverloadPolicy::Wait,
             admission_timeout_ns: None,
-            max_promised_kv_blocks: 64,
+            max_promised_kv_blocks: if owners==4{64}else{256},
             metrics_window_samples: 8,
         };
         let mut s = Scheduler::new_with_execution_shape(
             config,
-            KvLayout::checked(30, 64, 3, 64).unwrap(),
+            KvLayout::checked(30, if owners==4{64}else{256}, 3, 64).unwrap(),
             ExecutionShapePolicy::MixedPrefillDecode32,
         )
         .unwrap();
-        let ids = (0..4)
+        let ids = (0..owners)
             .map(|_| {
                 s.submit(
                     RequestDescriptor::new((0..prompt).map(|i| i as u32 % 3 + 1).collect(), limit),
@@ -422,22 +427,24 @@ mod tests {
                 .request_id()
             })
             .collect();
+        while s.requests.iter().any(|r|r.generated_token_ids.is_empty()){
         let p = s.plan_iteration(1).unwrap().into_parts().0.unwrap();
         let result = IterationResult::new(
             p.iteration_id(),
             p.output_slots()
                 .iter()
-                .map(|&slot| IterationOutput::new(slot, prompt as u32 % 3 + 1, false))
+                .map(|&slot|{let id=p.prefill_items().iter().chain(p.decode_items()).find(|w|w.output_slot()==Some(slot)).unwrap().request_id();let generated=s.requests[s.record_index(id).unwrap()].generated_token_ids.len();IterationOutput::new(slot,(prompt+generated) as u32%3+1,false)})
                 .collect(),
             0,
             0,
         )
         .unwrap();
         assert!(s
-            .complete_iteration(&result, 2)
+            .complete_iteration(&result, 1)
             .unwrap()
             .settlement_failures()
             .is_empty());
+        }
         (s, ids)
     }
     #[test]
@@ -645,6 +652,27 @@ mod tests {
         for id in &ids[..3]{let i=s.record_index(*id).unwrap();s.requests[i].descriptor.prompt_token_ids=(100..132).collect();s.requests[i].generated_token_ids[0]=999;}
         let plan=s.plan_speculative_iteration(3,None).unwrap().unwrap();assert_eq!(plan.rows.len(),1);assert_eq!(plan.rows[0].request_id,ids[3]);
         s.abort_iteration(plan.iteration_id(),ExecutionAbort::NotDispatched,4).unwrap();s.close(5,None).unwrap();
+    }
+
+    #[test]
+    fn wide_verification_preserves_active_batch_and_reserves_budget_for_every_owner(){
+        for owners in [8,16,32]{for budget in [owners,owners+1,256]{
+            let(mut s,ids)=ready_owners(32,32,owners);s.config.iteration_token_budget=budget;
+            let p=s.plan_wide_speculative_iteration(3,None).unwrap();
+            if budget==owners{assert!(p.is_none());s.close(4,None).unwrap();continue;}
+            let p=p.unwrap();assert_eq!(p.rows.len(),owners);assert_eq!(p.rows.iter().map(|r|r.inputs.len()).sum::<usize>(),budget.min(owners*8));
+            let authority=s.authorize_speculative_execution(&p).unwrap();
+            let owner=crate::authority::VariableOwnerGeometry{generation:1,last_accepted_replay:0,catalog_digest:[7;32],max_active_rows:32,physical_block_count:256,context_tokens:128,packed_prefill:true,mixed_execution:true,shared_prefixes:false};
+            let e=authority.verification_expectation(&owner,1,&(1..=owners as u64).collect::<Vec<_>>()).unwrap();
+            assert_eq!(e.mode,crate::descriptor::ResultMode::Greedy);
+            let mut packet=vec![0;crate::descriptor::variable_wire::MIXED_REQUEST_BYTES];crate::descriptor::variable_wire::encode_into(&mut packet,&e).unwrap();
+            if owners==32 && budget==256{if let Ok(path)=std::env::var("RILEY_SPECULATIVE_WIDE_PACKET"){std::fs::write(path,packet).unwrap();}}
+            drop(authority);
+            let targets:Vec<_>=p.rows.iter().map(|r|{let mut t=r.inputs[1..].to_vec();t.push(123);t}).collect();
+            let result=s.complete_speculative_iteration(&p,&targets,4,crate::IterationTiming::new(0,0)).unwrap();
+            assert!(result.settlement_failures().is_empty());assert_eq!(result.token_events().len(),budget.min(owners*8));
+            for id in ids{assert!(result.token_events().iter().any(|e|e.request_id()==id));}s.close(5,None).unwrap();
+        }}
     }
 
 }

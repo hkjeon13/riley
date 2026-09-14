@@ -1,0 +1,21 @@
+   Compiling riley-runtime v0.1.0 (/Users/psyche/PycharmProjects/riley-serving-260913/crates/riley-runtime)
+warning: method `into_unchecked` is never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:134:19
+    |
+128 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- method in this implementation
+...
+134 |     pub(crate) fn into_unchecked(self)->Expectation<ROWS> {self.expectation}
+    |                   ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `riley-runtime` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.27s
+     Running unittests src/lib.rs (target/debug/deps/riley_runtime-278f35c187cd6f05)
+
+running 1 test
+test speculative::wide_verification_record_tests::wide_records_validate_upper_slots_and_inactive_tail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 362 filtered out; finished in 0.01s
+

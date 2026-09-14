@@ -50,7 +50,7 @@ inline bool valid_v5_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physi
 inline bool valid_v6_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {return valid_variable_shape_packet<32,true>(p,bytes,physical,capacity);}
 
 // V7 mixed stages retain the V6 token slab and append1024 canonical tile entries.
-template<bool SharedPrefixes,bool Verification=false>
+template<bool SharedPrefixes,bool Verification=false,bool Wide=false>
 inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t physical,uint32_t capacity) noexcept {
  constexpr uint32_t header=128,stride=1664,tokens=53376,map=57472,extent=61568;
  if(!p||bytes!=extent||!physical||physical>4096||!(capacity==1||capacity==2||capacity==4||capacity==8||capacity==16||capacity==32))return false;
@@ -95,7 +95,7 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
    used[id]=true;
   }
  }
- if(prefills>4||((stage==0||stage==3)&&decodes)||(stage==1&&prefills)||(stage==2&&(!prefills||!decodes))||u32(36)!=input||u32(96)!=tiles||!zero(header+active*stride,tokens))return false;
+ if(prefills>(stage==3&&Wide?32:4)||((stage==0||stage==3)&&decodes)||(stage==1&&prefills)||(stage==2&&(!prefills||!decodes))||u32(36)!=input||u32(96)!=tiles||!zero(header+active*stride,tokens))return false;
  for(uint32_t row=0;row<active;++row){uint32_t b=header+row*stride;if((u32(b+40)<published)!=(u32(b+44)!=UINT32_MAX))return false;}
  for(uint32_t i=0;i<1024;++i){uint32_t t=u32(tokens+i*4);if(i<input){if(t>=49152)return false;}else if(t)return false;if(i>=tiles&&u32(map+i*4))return false;}
  return true;
@@ -104,7 +104,8 @@ inline bool valid_v7_shape_packet_impl(const uint8_t* p,uint64_t bytes,uint32_t 
 // This capability comes from retained owner configuration, never packet bytes.
 // Rust must additionally bind each reader to the complete live ownership ledger.
 inline bool valid_v7_shape_packet(const uint8_t* p,uint64_t bytes,uint32_t physical,
-    uint32_t capacity,bool shared_prefixes=false,bool verification=false) noexcept {
+    uint32_t capacity,bool shared_prefixes=false,bool verification=false,bool wide=false) noexcept {
+ if(verification && wide && !shared_prefixes)return valid_v7_shape_packet_impl<false,true,true>(p,bytes,physical,capacity);
  if(verification && !shared_prefixes)return valid_v7_shape_packet_impl<false,true>(p,bytes,physical,capacity);
  return shared_prefixes?valid_v7_shape_packet_impl<true>(p,bytes,physical,capacity)
                        :valid_v7_shape_packet_impl<false>(p,bytes,physical,capacity);

@@ -28,6 +28,8 @@ struct RileyCudaGraphResources {
     uint32_t bucket=0,physical=0,full=0;
   };
   CatalogEntry catalog[6]{};
+  cudaGraph_t verification_graph=nullptr;
+  cudaGraphExec_t verification_exec=nullptr;
   uint32_t last_catalog=0;
   bool catalog_sealed=false;
   enum class Kind { Counter, Plan };
@@ -296,6 +298,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_close(
       if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->prefill_graph = nullptr;
       else (*resources)->completion_unknown = true;
     }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->verification_graph != nullptr) {
+      status = runtime_error(cudaGraphDestroy((*resources)->verification_graph), error,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+      if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->verification_graph = nullptr;
+      else (*resources)->completion_unknown = true;
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (*resources)->verification_exec != nullptr) {
+      status = runtime_error(cudaGraphExecDestroy((*resources)->verification_exec), error,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
+      if (status == RILEY_CUDA_STATUS_SUCCESS) (*resources)->verification_exec = nullptr;
+      else (*resources)->completion_unknown = true;
+    }
     for(int i=0;i<2;++i){
       if(status==RILEY_CUDA_STATUS_SUCCESS&&(*resources)->compact_exec[i]){
         status=runtime_error(cudaGraphExecDestroy((*resources)->compact_exec[i]),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
@@ -444,7 +458,7 @@ static RileyCudaStatus replay_transfer_impl(
   if(r->multi_bucket && !valid_multisequence_packet(source,bytes,r->multi_bucket,r->multi_physical,r->multi_full))
     return reject(error,"multi decode packet geometry invalid",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
   if(r->v3_prefill_capacity){
-    if(!(r->mixed_execution?valid_v7_shape_packet(source,bytes,r->v3_prefill_physical,32,r->shared_prefixes,r->verification_host!=nullptr):r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+    if(!(r->mixed_execution?valid_v7_shape_packet(source,bytes,r->v3_prefill_physical,32,r->shared_prefixes,r->verification_host!=nullptr,r->verification_host&&r->verification_host->byte_len==4096):r->packed_prefill?valid_v6_shape_packet(source,bytes,r->v3_prefill_physical,32):r->variable_rows==32?valid_v5_shape_packet(source,bytes,r->v3_prefill_physical,32):(r->variable_rows==16?valid_v4_shape_packet(source,bytes,r->v3_prefill_physical,16):valid_prefill_shape_packet(source,bytes,r->v3_prefill_physical,8))))return reject(error,"invalid V3 prefill packet",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
     auto value=[&](size_t at){uint32_t v;std::memcpy(&v,source+at,4);return v;};
     if((!r->v3_shared&&value(20)!=1)||(r->packed_prefill&&value(16)!=1?value(36):value(136))>r->v3_prefill_capacity||value(164)>r->v3_prefill_context)
       return reject(error,"V3 prefill graph shape mismatch",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -455,10 +469,11 @@ static RileyCudaStatus replay_transfer_impl(
   if(r->compact_ready){
     uint32_t mode,stage;std::memcpy(&mode,source+32,4);std::memcpy(&stage,source+16,4);
     if(mode==0){
-      if(stage>(r->mixed_execution?2u:1u)||!r->compact_exec[stage==1?1:0])return reject(error,"compact stage capture missing");
+      if(stage>(r->mixed_execution?(r->verification_exec?3u:2u):1u)||!r->compact_exec[stage==1?1:0])return reject(error,"compact stage capture missing");
       selected_exec=r->compact_exec[stage==1?1:0];r->last_compact=true;
     }
   }
+  if(r->verification_host && r->verification_host->byte_len==4096){uint32_t stage,mode;std::memcpy(&stage,source+16,4);std::memcpy(&mode,source+32,4);if(stage==3){if(mode!=0||!r->verification_exec)return reject(error,"wide verification requires compact graph");selected_exec=r->verification_exec;}}
   if(r->ffn_split){
     // Packet geometry and total packed rows have already passed V7 validation.
     uint32_t stage,total;std::memcpy(&stage,source+16,4);std::memcpy(&total,source+36,4);
@@ -659,7 +674,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_read_transfer(
 extern "C" RileyCudaStatus riley_cuda_graph_resources_read_verification(
  RileyCudaGraphResources* r,uint8_t* destination,uint64_t bytes,RileyCudaErrorInfo* error) noexcept {
  clear_error(error);auto status=transfer_ready(r,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
- if(r->last_catalog!=0 || !r->verification_host || !r->completion_visible || r->last_compact || r->buffered_ready || !destination || bytes!=r->verification_host->byte_len || !riley_speculative_select::eligible(static_cast<const uint32_t*>(r->input->host_data),r->v3_prefill_capacity))return reject(error,"no completed verification output",RILEY_CUDA_STATUS_INVALID_STATE);
+ if(r->verification_host && r->verification_host->byte_len==4096 && static_cast<const uint32_t*>(r->input->host_data)[4]!=3)return reject(error,"wide verification stage required",RILEY_CUDA_STATUS_INVALID_STATE);
+ if(r->last_catalog!=0 || !r->verification_host || !r->completion_visible || (r->last_compact && r->verification_host->byte_len!=4096) || r->buffered_ready || !destination || bytes!=r->verification_host->byte_len || !riley_speculative_select::eligible(static_cast<const uint32_t*>(r->input->host_data),r->v3_prefill_capacity,r->verification_host->byte_len==4096?256:32))return reject(error,"no completed verification output",RILEY_CUDA_STATUS_INVALID_STATE);
  std::memmove(destination,r->verification_host->host_data,static_cast<size_t>(bytes));return RILEY_CUDA_STATUS_SUCCESS;
 }
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_swiglu(
@@ -1409,7 +1425,7 @@ static RileyCudaStatus record_variable_shared(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,RileyCudaErrorInfo* error,RileyCudaDeviceBuffer* attention_workspace=nullptr,RileyCudaDeviceBuffer* split_workspace=nullptr,RileyCudaPinnedHostBuffer* verification_host=nullptr) noexcept {
- static_assert(!Verification || (ProjectionPipeline && !ContextSplit && !Compact && !FfnSplit && !FfnAdaptive),"verification requires independent full projection profile");
+ static_assert(!Verification || (ProjectionPipeline && !ContextSplit && !FfnSplit && !FfnAdaptive),"verification requires independent full projection profile");
  static_assert(!ContextSplit || (ProjectionPipeline && !FfnSplit && !FfnAdaptive),"context split requires independent projection profile");
  static_assert(!FfnAdaptive || ProjectionPipeline,"adaptive FFN requires projection profile");
  static_assert(!FfnSplit || (ProjectionPipeline && !FfnAdaptive),"split FFN requires independent projection profile");
@@ -1464,11 +1480,12 @@ static RileyCudaStatus record_variable_shared(
   for(size_t i=0;i<weight_count;++i)if(w[i]==split_workspace)return reject(error,"context split weight alias",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  } else if(split_workspace)return reject(error,"unexpected context split workspace",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if constexpr(Verification) {
-  if(!verification_host || verification_host==staging || !same_context(verification_host->owner,r->owner) || !holds_counter(r,&verification_host->active_uses) || (verification_host->byte_len!=riley_speculative_select::bytes && verification_host->byte_len!=riley_speculative_select::greedy_bytes))return reject(error,"verification host parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+  if(!verification_host || verification_host==staging || !same_context(verification_host->owner,r->owner) || !holds_counter(r,&verification_host->active_uses) || (verification_host->byte_len!=riley_speculative_select::bytes && verification_host->byte_len!=riley_speculative_select::greedy_bytes && verification_host->byte_len!=4096))return reject(error,"verification host parent/extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  }
+ const bool wide_verification=Verification && verification_host && verification_host->byte_len==4096;
  const uint64_t widths[12]={1152,1152,1152,1152,1152,384,384,384,3072,3072,2304,3072};
  for(size_t i=0;i<12;++i)if(d[i]->byte_len!=(i==7?std::max<uint64_t>(capacity*widths[i],Rows*9*4096*4):capacity*widths[i]))return reject(error,"V3 scratch extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
- if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>8192*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=request_bytes||d[17]->byte_len!=1152||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=98304||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(d[12]->byte_len!=uint64_t(30)*physical*16*384||d[13]->byte_len!=d[12]->byte_len||!d[14]->byte_len||d[14]->byte_len%128||d[14]->byte_len>8192*128||d[15]->byte_len!=d[14]->byte_len||d[16]->byte_len!=request_bytes||d[17]->byte_len!=(wide_verification?256*1152:1152)||d[18]->byte_len!=128||d[19]->byte_len!=4||d[20]->byte_len!=(wide_verification?256*98304:98304)||d[21]->byte_len!=sizeof(RileyCudaBf16ArgmaxResult))return reject(error,"V3 device extent",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  if(w[0]->byte_len!=56623104||w[1]->byte_len!=1152||w[2]->byte_len!=56623104)return reject(error,"V3 global weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
  const uint64_t sizes[9]={1152,663552,221184,221184,663552,1152,1769472,1769472,1769472};
  for(size_t i=3;i<273;++i)if(w[i]->byte_len!=sizes[(i-3)%9])return reject(error,"V3 layer weights",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
@@ -1485,7 +1502,7 @@ static RileyCudaStatus record_variable_shared(
  RileyCudaCanonicalGemmBf16GraphState shared_state{};
  status=bind_reserved_shared_row_gemm_state(shared_head,r->stream,d[23],w[2],d[24],Rows,49152,576,&shared_state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
  RileyCudaCanonicalGemmBf16GraphState state{};
- status=bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
+ status=wide_verification?bind_reserved_shared_row_gemm_state(head,r->stream,d[17],w[2],d[20],256,49152,576,&state,error):bind_reserved_gemm_state(head,r->stream,d[17],w[2],d[20],d[22],&state,error);if(status!=RILEY_CUDA_STATUS_SUCCESS)return status;
  void* scratch[12];const void* weights[ProjectionPipeline?483:363];for(size_t i=0;i<12;++i)scratch[i]=d[i]->device_data;for(size_t i=0;i<weight_count;++i)weights[i]=w[i]->device_data;
  const void* prefill_weights[273];for(size_t i=0;i<273;++i)prefill_weights[i]=weights[i];
  if((weight_count==363 || (ProjectionPipeline && weight_count==483)))for(size_t l=0;l<30;++l)for(size_t j=0;j<3;++j)prefill_weights[3+l*9+6+j]=weights[273+l*3+j];
@@ -1502,7 +1519,7 @@ static RileyCudaStatus record_variable_shared(
  }
  constexpr uint64_t transfer=Rows*98432;
  std::memset(static_cast<uint8_t*>(staging->host_data)+transfer,0,128);
- auto record_shape=[&](uint32_t row_capacity,bool compact=false,bool ffn_large=false) noexcept {
+ auto record_shape=[&](uint32_t row_capacity,bool compact=false,bool ffn_large=false,bool verify_wide=false) noexcept {
   return record_reserved_sequence(r,staging,transfer,[&]() noexcept {
   auto* host=static_cast<uint8_t*>(staging->host_data);
   auto copy=[&](void* a,const void* b,uint64_t n,cudaMemcpyKind kind){return runtime_error(cudaMemcpyAsync(a,b,n,kind,r->stream->stream),error,RILEY_CUDA_ERROR_STAGE_COPY,"V3 transfer");};
@@ -1548,12 +1565,21 @@ static RileyCudaStatus record_variable_shared(
     if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(enqueue_compiled_v7_context_split_mixed_model(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,true,std::min<uint64_t>(4096,d[14]->byte_len/128),split_workspace->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"experimental consistent context split model");
    } else
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error((FfnSplit && ffn_large?enqueue_compiled_v7_ffn_m32_model:FfnAdaptive?enqueue_compiled_v7_ffn_adaptive_model:ProjectionPipeline?enqueue_compiled_v7_projection_pipeline_model:GqaStaging?enqueue_compiled_v7_gqa_staging_model:QueryReuse?enqueue_compiled_v7_query_reuse_model:PrefillFfnPipeline?enqueue_compiled_v7_prefill_ffn_pipeline_model:Mixed?enqueue_compiled_v7_prefill_model:enqueue_compiled_v6_prefill_model)(r->stream->stream,scratch,prefill_weights,d[16]->device_data,d[12]->device_data,d[13]->device_data,d[14]->device_data,d[15]->device_data,d[23]->device_data,static_cast<uint32_t*>(d[18]->device_data),nullptr,row_capacity,physical,(weight_count==363 || (ProjectionPipeline && weight_count==483))),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"V6 packed model");
-   if constexpr(Verification)if(result==RILEY_CUDA_STATUS_SUCCESS){
+   if(verify_wide){
+    if(result==RILEY_CUDA_STATUS_SUCCESS){riley_speculative_select::gather<256><<<256,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[1]->device_data),static_cast<__nv_bfloat16*>(d[17]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"wide verification gather");}
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[20],state,error,"wide verification head");
+    if(result==RILEY_CUDA_STATUS_SUCCESS){riley_speculative_select::greedy<256><<<256,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[20]->device_data),static_cast<riley_speculative_select::GreedyRecord*>(d[7]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"wide verification argmax");}
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(verification_host->host_data,d[7]->device_data,4096,cudaMemcpyDeviceToHost);
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=runtime_error(riley_compact_result::enqueue<Rows,Packed,Mixed>(r->stream->stream,d[16]->device_data,d[20]->device_data,static_cast<uint32_t*>(d[18]->device_data),d[7]->device_data,d[25]->device_data),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"wide verification completion");
+    if(result==RILEY_CUDA_STATUS_SUCCESS)result=copy(host+transfer,d[25]->device_data,Rows*128,cudaMemcpyDeviceToHost);
+    return result;
+   }
+   if constexpr(Verification)if(!wide_verification && result==RILEY_CUDA_STATUS_SUCCESS){
     riley_speculative_select::gather<<<32,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[1]->device_data),static_cast<__nv_bfloat16*>(d[23]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));
     result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"verification gather");
    }
    if(result==RILEY_CUDA_STATUS_SUCCESS)result=enqueue_canonical_gemm_bf16_graph_matmul(r->owner,r->stream,d[24],shared_state,error,"V6 packed head");
-   if constexpr(Verification)if(result==RILEY_CUDA_STATUS_SUCCESS){
+   if constexpr(Verification)if(!wide_verification && result==RILEY_CUDA_STATUS_SUCCESS){
     if(verification_host->byte_len==riley_speculative_select::greedy_bytes){
      riley_speculative_select::greedy<<<32,256,0,r->stream->stream>>>(static_cast<const __nv_bfloat16*>(d[24]->device_data),static_cast<riley_speculative_select::GreedyRecord*>(d[7]->device_data),static_cast<const uint32_t*>(d[16]->device_data),row_capacity,static_cast<const uint32_t*>(d[18]->device_data));
      result=runtime_error(cudaGetLastError(),error,RILEY_CUDA_ERROR_STAGE_LAUNCH,"verification argmax");
@@ -1591,6 +1617,7 @@ static RileyCudaStatus record_variable_shared(
     if(status==RILEY_CUDA_STATUS_SUCCESS){r->compact_graph[stage]=r->graph;r->compact_exec[stage]=r->exec;r->graph=nullptr;r->exec=nullptr;}
    }
   }
+  if(wide_verification && status==RILEY_CUDA_STATUS_SUCCESS){status=record_shape(capacity,true,false,true);if(status==RILEY_CUDA_STATUS_SUCCESS){r->verification_graph=r->graph;r->verification_exec=r->exec;r->graph=nullptr;r->exec=nullptr;}}
   if constexpr(FfnSplit){
    for(int kind=0;kind<(Compact?2:1)&&status==RILEY_CUDA_STATUS_SUCCESS;++kind){
     status=record_shape(capacity,kind==1,true);
@@ -1752,7 +1779,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_verification(
  RileyCudaGraphResources* r,RileyCudaDeviceBuffer*const* d,RileyCudaDeviceBuffer*const* w,
  uint64_t weight_count,RileyCudaGemmPlan* head,RileyCudaGemmPlan* shared_head,RileyCudaPinnedHostBuffer* staging,
  uint32_t capacity,uint32_t physical,uint32_t compact,uint32_t prefill_ffn,RileyCudaPinnedHostBuffer* verification_host,RileyCudaErrorInfo* error) noexcept {
- if(compact!=0||prefill_ffn!=1)return reject(error,"verification requires full projection profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(prefill_ffn!=1 || (compact!=0 && (!verification_host || verification_host->byte_len!=4096)))return reject(error,"verification requires compatible projection profile",RILEY_CUDA_STATUS_INVALID_ARGUMENT);
+ if(compact)return record_variable_shared<32,true,true,true,false,false,true,false,true,false,false,true,false,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,nullptr,nullptr,verification_host);
  return record_variable_shared<32,false,true,true,false,false,true,false,true,false,false,true,false,false,false,true>(r,d,w,weight_count,head,shared_head,staging,capacity,physical,error,nullptr,nullptr,verification_host);
 }
 extern "C" RileyCudaStatus riley_cuda_graph_resources_record_v7_context_split(

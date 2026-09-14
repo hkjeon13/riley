@@ -41,7 +41,7 @@ impl VerificationLogits {
 }
 /// Greedy verification tokens bound to one retained, validated completion.
 /// Reading these tokens does not authorize speculative KV settlement.
-pub struct VerificationTokens {rows:Vec<VerificationPosition>,tokens:[u32;32],iteration_id:u64,replay_id:u64,owner_generation:u64,catalog_digest:[u8;32]}
+pub struct VerificationTokens {rows:Vec<VerificationPosition>,tokens:Vec<u32>,iteration_id:u64,replay_id:u64,owner_generation:u64,catalog_digest:[u8;32]}
 impl VerificationTokens {
     pub fn iteration_id(&self)->u64{self.iteration_id}
     pub fn replay_id(&self)->u64{self.replay_id}
@@ -206,13 +206,14 @@ impl<G: VariableGraph,const ROWS:usize> VariableSession<G,ROWS> {
     /// Read additional positions only after normal completion validation and
     /// before scheduler settlement. Does not commit any speculative KV/output.
     pub fn read_verification_tokens(&mut self)->Result<VerificationTokens> {
-        if self.poisoned || !self.completed || self.buffered || self.compact {return Err(bad("verification requires completed unbuffered full output"));}
+        if self.poisoned || !self.completed || self.buffered {return Err(bad("verification requires completed unbuffered full output"));}
         let e=self.retained.as_ref().ok_or_else(||bad("verification completion is no longer retained"))?;
-        if !e.mixed_execution || e.stage==super::multi_descriptor::shape_progress::InputStage::Decode || e.rows.is_empty() || e.rows.len()>4 || e.rows.iter().any(|r|r.progress.stage!=e.stage || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
-        let mut bytes=[0;512];
+        if !e.mixed_execution || e.stage==super::multi_descriptor::shape_progress::InputStage::Decode || e.rows.is_empty() || e.rows.len()>if self.compact{32}else{4} || e.rows.iter().any(|r|r.progress.stage!=e.stage || !(1..=8).contains(&r.input_tokens.len())) {return Err(bad("verification supports one to four pure-prefill owners with one to eight inputs"));}
+        if self.compact && e.stage!=super::multi_descriptor::shape_progress::InputStage::Verification {return Err(bad("wide tokens require explicit verification stage"));}
+        let mut bytes=vec![0;if self.compact{4096}else{512}];
         self.graph.read_verification(&mut bytes).map_err(|_|bad("no native verification completion"))?;
         let active=e.rows.iter().map(|r|r.input_tokens.len()).sum();
-        let tokens=match crate::speculative::parse_verification_tokens(&bytes,active) {
+        let tokens=match if self.compact{crate::speculative::parse_verification_tokens_capacity::<256>(&bytes,active).map(|x|x.to_vec())}else{crate::speculative::parse_verification_tokens(&bytes,active).map(|x|x.to_vec())} {
             Ok(tokens)=>tokens,
             Err(_)=>{self.poisoned=true;return Err(bad("invalid verification token records"));}
         };
@@ -439,11 +440,20 @@ impl super::PreparedLlamaBatchExecutor {
     pub fn into_owned_variable_verification_greedy_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
         self.into_variable_session_profile::<32>(context,capacity,true,false,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,512)
     }
+    pub fn into_owned_variable_verification_wide_session(self,context:&riley_cuda::CudaContext,capacity:u32)->super::LlamaBatchExecutorResult<OwnedVariableSession<32>> {
+        self.into_variable_session_profile::<32>(context,capacity,true,true,true,true,false,false,false,false,true,false,true,false,false,false,true,false,false,false,4096)
+    }
     fn into_variable_session_profile<const ROWS:usize>(self,context:&riley_cuda::CudaContext,capacity:u32,shared:bool,compact:bool,packed:bool,mixed:bool,buffered:bool,flashinfer:bool,ffn_pipeline:bool,prefill_only:bool,prefill_ffn_pipeline:bool,fa3:bool,adaptive:bool,shared_prefixes:bool,query_reuse:bool,gqa_staging:bool,projection_pipeline:bool,ffn_adaptive:bool,ffn_split:bool,context_split:bool,verification_bytes:u64)->super::LlamaBatchExecutorResult<OwnedVariableSession<ROWS>>{
         let cuda=|e|super::executor::error::cuda_error(super::ExecutionSite::global(super::LlamaOp::IterationCompletion),e);
         if (mixed&&!packed) || (packed && (ROWS!=32||!shared)) || !matches!(ROWS,8|16|32) || (compact && (!shared || !matches!(ROWS,16|32))) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"wire rows",reason:"unsupported execution width"});}
         let mut parents=VariableModelParents{executor:self,stream:context.create_stream().map_err(cuda)?,scratch:if shared {VariableGraphBuffers::prepare_shared_rows::<ROWS>(context,capacity)}else{VariableGraphBuffers::prepare(context,capacity)}.map_err(cuda)?};
-        if verification_bytes!=0 {if !matches!(verification_bytes,512|3145728) || buffered || compact {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"verification",reason:"unbuffered full outputs required"});}parents.scratch.verification_host=Some(context.allocate_pinned_host_buffer(verification_bytes).map_err(cuda)?);}
+        if verification_bytes!=0 {if !matches!(verification_bytes,512|3145728|4096) || buffered || (compact && verification_bytes!=4096) {return Err(super::LlamaBatchExecutorError::InvalidConfiguration{field:"verification",reason:"unbuffered full outputs required"});}parents.scratch.verification_host=Some(context.allocate_pinned_host_buffer(verification_bytes).map_err(cuda)?);}
+        if verification_bytes==4096 {
+            parents.scratch.devices[13]=context.allocate_device_buffer(256*1152).map_err(cuda)?;
+            parents.scratch.devices[16]=context.allocate_device_buffer(256*98304).map_err(cuda)?;
+            let head=context.prepare_gemm(riley_cuda::CudaGemmConfig::new(256,49152,576,0).map_err(cuda)?).map_err(cuda)?;
+            std::mem::replace(&mut parents.scratch.head,head).close().map_err(cuda)?;
+        }
         if context_split {parents.scratch.context_split_workspace=Some(context.allocate_device_buffer(2613252).map_err(cuda)?);}
         parents.scratch.projection_pipeline=projection_pipeline;parents.scratch.ffn_adaptive=ffn_adaptive;parents.scratch.ffn_split=ffn_split;
         if projection_pipeline {for _ in 0..30 {for bytes in [663552,221184,221184,663552] {parents.scratch.projection_tiles.push(context.allocate_device_buffer(bytes).map_err(cuda)?);}}}

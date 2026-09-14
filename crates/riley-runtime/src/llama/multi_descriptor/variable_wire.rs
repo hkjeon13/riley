@@ -56,7 +56,7 @@ pub fn validate<const ROWS:usize>(e:&Expectation<ROWS>)->Result<()> {
     let prefills=e.rows.iter().filter(|r|r.progress.stage==InputStage::Prefill).count();
     let verification=e.rows.iter().filter(|r|r.progress.stage==InputStage::Verification).count();
     if verification>0 {
-        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=4 && e.mixed_execution && !e.shared_prefixes && e.mode==ResultMode::FullLogits,"verification","requires exclusive pure verification batch with full normal completion")?;
+        check(e.stage==InputStage::Verification && verification==e.rows.len() && verification<=32 && e.mixed_execution && !e.shared_prefixes,"verification","requires exclusive pure verification batch with full normal completion")?;
     } else {check(e.stage==if prefills>0{InputStage::Prefill}else{InputStage::Decode},"stage","aggregate stage differs from rows")?;}
     check(prefills<=if e.packed_prefill{4}else{1},"stage","unsupported prefill owner count")?;
     let total=e.rows.iter().try_fold(0usize,|n,r|n.checked_add(r.input_tokens.len()).ok_or_else(||overflow("tokens")))?;

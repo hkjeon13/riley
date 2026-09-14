@@ -121,3 +121,19 @@ The next optimization batch must address the structural constraints together:
 
 Do not use artificial repetition controls as performance evidence, relax the
 strict token gate, or tune draft lengths to compensate for the four-owner cap.
+
+### Wide verification and compact completion — 2026-09-14
+
+Implemented the first two structural changes above: up to 32 owners / 256 query
+positions, whole selected decode batch participation, separate M256 verification
+capture and 8,192-byte total completion transfer. Ordinary M32 decode stays intact.
+The same 12-request gate drops from 63 narrow calls to 33 wide calls (36 serial),
+with 384 exact tokens and 144 accepted drafts. C32 gate: 1,024 exact tokens,
+581 accepted drafts, 33 wide calls versus 44 serial. Both gates pass memcheck.
+Evidence: `benchmarks/results/20260914-speculative-wide/README.md`.
+
+This completes two primitives, not the serving milestone. Repetition controls
+are not performance evidence. Fixed M256 costs, shared-prefix ownership/COW,
+serving selection, fallback and matched vLLM measurements remain to be resolved.
+Do not disable prefix caching to present an unmatched serving comparison as
+qualification. No runtime Python or default policy promotion is introduced.
