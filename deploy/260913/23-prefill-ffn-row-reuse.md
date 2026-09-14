@@ -19,3 +19,7 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## Native 결과
 
 [전체 결과](../../benchmarks/results/20260914-prefill-ffn-row-reuse-native/README.md):32개 bitwise/inactive 조건 및 memcheck/racecheck 통과. M398/512/1024는 약21–26% 빨라졌지만 M8–128은 약26–37% 느려 전면 교체를 거부한다. 실제30-layer weight/crossover 평가 후 검증된 row 범위 선택과 기존 M16 fallback을 연결한다. Serving 비교 전 기본값 승격하지 않는다.
+
+## 실제 모델 weight native 검증
+
+[30-layer 결과](../../benchmarks/results/20260914-prefill-ffn-model-weight-native/README.md):1440개 layer별 출력과48회 graph replay가 일치했다. 측정한192행 이상에서11.5–26.7% 개선,160 이하에서는6.3–23.9% 회귀했다.192행을 선택 조건 후보로 삼고191/193 경계·행 수 전환과 기존 M16 fallback을 검증한다. Activation은 합성이며 full-model/serving 검증은 미완료다.
