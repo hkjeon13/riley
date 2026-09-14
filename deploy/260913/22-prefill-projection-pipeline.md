@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 긴 구간 검증 완료, C8/C64 및 승격 판정 대기. 비교 baseline은 rolling opt-in Riley이며 GQA staging은 비활성이다. 서버 기본값은 변경하지 않는다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 긴 구간 검증 완료, C8 긴 구간 검증 완료, C64 및 승격 판정 대기. 비교 baseline은 rolling opt-in Riley이며 GQA staging은 비활성이다. 서버 기본값은 변경하지 않는다.
 
 ## 근거와 범위
 
@@ -73,3 +73,9 @@ Rust → C ABI → CUDA를 유지한다. SM89 runtime과 SM90a/SM100a compile을
 [전체 비교표·원본](../../benchmarks/results/20260914-projection-gc-controlled-serving/README.md): 16 lane131072 retained 응답과4096 warmup, Riley retained98304 exact 응답, stop/cancel/recovery 각96건을 검증했다. 모든 측정 GC event/counter 증가0, server exit0, Blender3개 복구, tmpfs/디스크 원본 및 archive hash 일치가 확인됐다.
 
 후보 throughput은 prior 대비 shared +3.36%/unique +9.34%, control 대비 +2.48%/+8.85%다. vLLM 대비 shared −13.01%/unique −23.79%로 목표 미달이며 shared TPOT·ITL 및 unique latency 격차가 남는다. 이전 결과를 보정·합산하지 않고 기본값 승격도 보류한다. 동일 source/binary·GC 통제·tmpfs 조건을 C8/C64로 확대하여 적용 범위를 판정한다.
+
+## GC 통제 및 tmpfs C8 비교 완료
+
+[전체 비교표](../../benchmarks/results/20260914-projection-gc-controlled-serving-c8/README.md): 16 lane131072 retained/4096 warmup 응답, Riley98304 retained exact, stop/cancel/recovery 각24건을 검증했다. GC event/counter 증가0, server exit0, Blender 복구 및 모든 원본/압축 해시 일치도 확인했다.
+
+후보 throughput은 prior 대비 shared +1.64%/unique +6.00%, control 대비 +0.98%/+5.95%다. Shared는 vLLM 대비 +13.93% 및 보고 latency 감소로 이 제한된 조건의 최소 지표를 만족하지만 목표폭 +15% throughput/−10% TPOT에는 못 미친다. Unique는 vLLM 대비 throughput −4.36%와 TTFT 증가로 미달이다. Shared ITL P95의 prior 대비 약0.49% 악화도 남는다. C32·unique·전체 qualification 실패를 덮어쓰지 않는다. 남은 C64(client64/active32)를 같은 조건에서 측정하고 기본값은 유지한다.
