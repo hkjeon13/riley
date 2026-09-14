@@ -25,3 +25,17 @@ python3 benchmarks/analysis/verify_dense_wire_serving.py
 ```
 
 The follow-up bounded profile completes four traces / 512 exact responses, no owned processes remaining, and successful wrapper/restoration. Future preparation is 66.144ms / 103 calls (control shared) versus 28.105ms / 83 calls (candidate shared); unique is 48.127ms / 86 versus 9.149ms / 85. Call counts and shape mixes differ, so these are diagnostics, not a same-operation or serving speedup ratio. Candidate shared divides into 10.792ms authority construction and 17.309ms check/encode; unique is 2.594ms and 6.550ms. The separately timed serving screen above establishes the end-to-end improvement. Further unique-workload CPU micro-tuning has less headroom; broader concurrency validation and device work remain necessary. Raw Nsight/SQLite stays remote-private. Do not report the current screen as universal performance or use it to skip malformed-packet and ownership regression gates.
+
+## Corrected GPU stage attribution
+
+The original classifier omitted the `riley_prefill_ffn_row_reuse::down` namespace and assigned its time to `other`. The original hash-bound exports and classifier remain intact. [Reclassified durations](reclassified-areas.json) use the same per-kernel measurements with the corrected `serving_stage_census.py`; no GPU rerun or timing changes are involved.
+
+Candidate unique prefill/mixed spans 604.890ms across 133 selected graphs. Attention accounts for 259.492ms, FFN for 151.564ms (including 70.903ms previously classified as other), and other projections/QKV/RoPE for 131.810ms. These are kernel-duration sums in the middle 80% of graph launches by count, including an imperfectly separated warmup/retained mix. They are not fractions of end-to-end request latency or evidence that all uncovered graph time can be eliminated.
+
+This correction keeps FFN execution in scope alongside attention for subsequent device optimization. Previous GQA staging and short-query serving regressions remain disqualifying evidence for those variants; the attribution correction does not promote them.
+
+```sh
+python3 benchmarks/analysis/verify_serving_stage_reclassification.py
+```
+
+The verifier binds archive/classifier hashes, reconstructs all eight stage summaries from per-kernel durations, and checks unchanged launch counts, graph spans and total kernel times.

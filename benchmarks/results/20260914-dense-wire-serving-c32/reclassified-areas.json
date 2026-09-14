@@ -1,0 +1,119 @@
+{
+  "source_archive_sha256": "274c0557afe5695650babb484547a7dc90d222182acf9100a1f92d61a7af6a77",
+  "classifier_sha256": "55a255ea29e417f095e50a79316b7cf2fec3d9d55296877ec577b603bfefeab9",
+  "scope": "Reclassification of existing public kernel-duration exports only; no timing changes or new GPU run. Row-reuse FFN down kernels move from other to FFN.",
+  "lanes": {
+    "control-shared": {
+      "decode": {
+        "launches": 109,
+        "graph_span_ms": 163.962494,
+        "kernel_ms": 154.795084,
+        "areas_ms": {
+          "attention": 54.482243999999994,
+          "ffn_gate_activation_down": 48.601997,
+          "other_projections_qkv_rope": 30.370877,
+          "residual_norm": 12.456235,
+          "output_head": 7.226302,
+          "other": 1.6574289999999998
+        }
+      },
+      "prefill_or_mixed": {
+        "launches": 27,
+        "graph_span_ms": 94.439495,
+        "kernel_ms": 89.015424,
+        "areas_ms": {
+          "attention": 45.225524,
+          "ffn_gate_activation_down": 15.932327,
+          "other_projections_qkv_rope": 22.846059,
+          "residual_norm": 2.975554,
+          "output_head": 1.789585,
+          "other": 0.24637500000000004
+        }
+      }
+    },
+    "candidate-shared": {
+      "decode": {
+        "launches": 93,
+        "graph_span_ms": 144.802829,
+        "kernel_ms": 137.667891,
+        "areas_ms": {
+          "attention": 49.060432000000006,
+          "ffn_gate_activation_down": 42.939496000000005,
+          "other_projections_qkv_rope": 27.457054,
+          "residual_norm": 10.60204,
+          "output_head": 6.146622,
+          "other": 1.4622469999999999
+        }
+      },
+      "prefill_or_mixed": {
+        "launches": 27,
+        "graph_span_ms": 94.006493,
+        "kernel_ms": 88.925647,
+        "areas_ms": {
+          "attention": 45.144223,
+          "ffn_gate_activation_down": 15.926944,
+          "other_projections_qkv_rope": 22.847464000000002,
+          "residual_norm": 2.97141,
+          "output_head": 1.789586,
+          "other": 0.24602000000000002
+        }
+      }
+    },
+    "candidate-unique": {
+      "decode": {
+        "launches": 81,
+        "graph_span_ms": 135.528643,
+        "kernel_ms": 130.162861,
+        "areas_ms": {
+          "attention": 53.999717000000004,
+          "ffn_gate_activation_down": 36.927273,
+          "other_projections_qkv_rope": 23.544915,
+          "residual_norm": 9.098103,
+          "output_head": 5.325905,
+          "other": 1.266948
+        }
+      },
+      "prefill_or_mixed": {
+        "launches": 133,
+        "graph_span_ms": 604.886325,
+        "kernel_ms": 583.42824,
+        "areas_ms": {
+          "attention": 259.492285,
+          "ffn_gate_activation_down": 151.563673,
+          "other_projections_qkv_rope": 131.809944,
+          "residual_norm": 30.210319,
+          "output_head": 9.255124,
+          "other": 1.096895
+        }
+      }
+    },
+    "control-unique": {
+      "decode": {
+        "launches": 82,
+        "graph_span_ms": 136.527502,
+        "kernel_ms": 131.179391,
+        "areas_ms": {
+          "attention": 54.627265,
+          "ffn_gate_activation_down": 37.14994,
+          "other_projections_qkv_rope": 23.628143,
+          "residual_norm": 9.11399,
+          "output_head": 5.390257,
+          "other": 1.2697960000000001
+        }
+      },
+      "prefill_or_mixed": {
+        "launches": 133,
+        "graph_span_ms": 603.30956,
+        "kernel_ms": 580.96489,
+        "areas_ms": {
+          "attention": 258.592068,
+          "ffn_gate_activation_down": 151.11719800000003,
+          "other_projections_qkv_rope": 130.869688,
+          "residual_norm": 30.03398,
+          "output_head": 9.259823,
+          "other": 1.092133
+        }
+      }
+    }
+  }
+}
