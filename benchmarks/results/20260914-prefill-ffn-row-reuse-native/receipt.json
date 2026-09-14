@@ -1,0 +1,74 @@
+{
+  "scope": "synthetic single weight set native gate; not model or serving qualification",
+  "correctness_cases": 32,
+  "timings": [
+    {
+      "rows": 8,
+      "baseline_us": 17.249281,
+      "candidate_us": 23.306241,
+      "change_percent": 35.11427519790536
+    },
+    {
+      "rows": 16,
+      "baseline_us": 17.4489605,
+      "candidate_us": 23.51104,
+      "change_percent": 34.7417801765326
+    },
+    {
+      "rows": 32,
+      "baseline_us": 17.5616005,
+      "candidate_us": 23.8796805,
+      "change_percent": 35.97667536054017
+    },
+    {
+      "rows": 64,
+      "baseline_us": 17.8022395,
+      "candidate_us": 24.0025585,
+      "change_percent": 34.82887082830226
+    },
+    {
+      "rows": 128,
+      "baseline_us": 19.240959,
+      "candidate_us": 24.25856,
+      "change_percent": 26.077707457305
+    },
+    {
+      "rows": 398,
+      "baseline_us": 48.455681,
+      "candidate_us": 38.072321,
+      "change_percent": -21.4285709863411
+    },
+    {
+      "rows": 512,
+      "baseline_us": 53.9443185,
+      "candidate_us": 41.7484795,
+      "change_percent": -22.608199230471328
+    },
+    {
+      "rows": 1024,
+      "baseline_us": 107.694084,
+      "candidate_us": 79.861759,
+      "change_percent": -25.843875509447667
+    }
+  ],
+  "resources": {
+    "gate_shared": 25600,
+    "down_shared": 13312,
+    "gate_registers": 42,
+    "down_registers": 38,
+    "gate_local": 0,
+    "down_local": 0
+  },
+  "files": {
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/blender-restored.json": "06a0225c0bb4930f638a34e5012d1cc12839deec8baab50805ecc0fdaff017cb",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/sm_100a-build.log": "03dbe81903c97973a6a25ddc381891dfc5f63929ed91f1189764a5326b06ee5b",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/native.log": "fa4032c90739edc33712deab9e3c993706d23dfa5d6f376b07e91afd0055c876",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/memcheck.log": "b4a0ac8f47d08aa4708ebf41d90ed3a40a3891673220b57eaef6c6ab3f59fa26",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/sm_90a-build.log": "9060b4b0e9b8de8e22670ac7bd9d0f4f12030bae98531da951e0e184adde4b20",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/sm_89-build.log": "10f213fda1a670f0387429e80ee481bd2cdabb2c8213cea9a9959decac65ca88",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/racecheck.log": "e4cdcb995b5c77f570bdb2b8d248b9cf42f14de9a799ec4ff01bcab658798d2e",
+    "benchmarks/results/20260914-prefill-ffn-row-reuse-native/evidence/execution.json": "f118a442727a589d426c6be320d32355b0084f1edb07e5c35ce6ebea13de3dbe",
+    "kernels/optional/prefill_ffn_row_reuse.cuh": "b76b68d7aec6e47dc8218a7b263569f1bb12b31c1fcf2682db3bab41dc879073",
+    "benchmarks/analysis/prefill_ffn_row_reuse_probe.cu": "12cbbd8f2d129da9e5bed549aa8478fcc12d7814c4d536fc3fef161550d9cadc"
+  }
+}
