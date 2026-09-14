@@ -9922,6 +9922,12 @@ unsafe extern "C" {
         bytes: u64,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_resources_read_verification(
+        resources: *mut RawGraphResources,
+        destination: *mut u8,
+        bytes: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_resources_read_transfer(
         resources: *mut RawGraphResources,
         destination: *mut u8,
@@ -10038,6 +10044,19 @@ impl GraphResourcesHandle {
             )
         };
         status_result(status, "replay aggregate transfer", &error)
+    }
+    pub(super) fn read_verification(&mut self, destination: &mut [u8]) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: writable slice has the advertised length, native gates on completion.
+        let status = unsafe {
+            riley_cuda_graph_resources_read_verification(
+                self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr),
+                destination.as_mut_ptr(),
+                destination.len() as u64,
+                &mut error,
+            )
+        };
+        status_result(status, "read aggregate transfer", &error)
     }
     pub(super) fn read_transfer(&mut self, destination: &mut [u8]) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
@@ -11480,6 +11499,7 @@ fn riley_cuda_graph_resources_record_v7_query_reuse(owner:*mut RawGraphResources
 fn riley_cuda_graph_resources_record_v7_gqa_staging(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_projection_pipeline(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_ffn_adaptive(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,error:*mut ErrorInfo)->i32;
+fn riley_cuda_graph_resources_record_v7_verification(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,verification_host:*mut RawPinnedHostBuffer,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_context_split(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,split_workspace:*mut RawDeviceBuffer,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_ffn_split(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,error:*mut ErrorInfo)->i32;
 fn riley_cuda_graph_resources_record_v7_adaptive_decode(owner:*mut RawGraphResources,devices:*const *mut RawDeviceBuffer,weights:*const *mut RawDeviceBuffer,weight_count:u64,head:*mut RawGemmPlan,shared_head:*mut RawGemmPlan,staging:*mut RawPinnedHostBuffer,capacity:u32,physical:u32,compact:u32,prefill_ffn:u32,error:*mut ErrorInfo)->i32;
@@ -11600,6 +11620,14 @@ pub(super) fn record_v7_ffn_adaptive(&mut self,devices:&[&DeviceBufferHandle],wo
         let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
         // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
         let status=unsafe{riley_cuda_graph_resources_record_v7_ffn_adaptive(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,u32::from(compact),u32::from(prefill_ffn),&mut error)};
+        status_result(status,"record V7 projection pipeline",&error)
+    }
+pub(super) fn record_v7_verification(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool,verification_host:&PinnedHostBufferHandle)->CudaResult<()> {
+        if devices.len()!=25||weights.len()!=483 {return Err(CudaError::invalid_argument("record V7 projection pipeline","parent count mismatch"));}
+        let mut raw=[ptr::null_mut();26];for (i,d) in devices.iter().enumerate(){raw[if i<22{i}else{i+1}]=d.as_ptr();}raw[22]=workspace.map_or(ptr::null_mut(),DeviceBufferHandle::as_ptr);
+        let weights:Vec<_>=weights.iter().map(|w|w.as_ptr()).collect();let mut error=ErrorInfo::new();
+        // SAFETY: fixed descriptor sizes checked above; retained parent handles outlive capture.
+        let status=unsafe{riley_cuda_graph_resources_record_v7_verification(self.pointer.map_or(ptr::null_mut(),NonNull::as_ptr),raw.as_ptr(),weights.as_ptr(),weights.len() as u64,head.as_ptr(),shared_head.as_ptr(),staging.as_ptr(),capacity,physical,u32::from(compact),u32::from(prefill_ffn),verification_host.as_ptr(),&mut error)};
         status_result(status,"record V7 projection pipeline",&error)
     }
 pub(super) fn record_v7_context_split(&mut self,devices:&[&DeviceBufferHandle],workspace:Option<&DeviceBufferHandle>,weights:&[&DeviceBufferHandle],head:&GemmPlanHandle,shared_head:&GemmPlanHandle,staging:&PinnedHostBufferHandle,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool,split_workspace:&DeviceBufferHandle)->CudaResult<()> {

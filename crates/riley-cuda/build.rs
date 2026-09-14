@@ -228,6 +228,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("optional/prefill_ffn_adaptive.cuh"),
         kernels_dir.join("optional/context_split_fp32.cuh"),
         kernels_dir.join("optional/context_split_mixed.cuh"),
+        kernels_dir.join("optional/speculative_select.cuh"),
         kernels_dir.join("optional/prefill_ffn_row_reuse.cuh"),
         kernels_dir.join("optional/compact_mixed_attention.cuh"),
         kernels_dir.join("optional/pod_mixed_attention.cuh"),

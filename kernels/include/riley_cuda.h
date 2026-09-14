@@ -2690,6 +2690,9 @@ RileyCudaStatus riley_cuda_graph_resources_replay_transfer(
     RileyCudaGraphResources* resources, const uint8_t* source, uint64_t bytes,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Copies completed output to caller storage; rejected before successful replay.
+RileyCudaStatus riley_cuda_graph_resources_read_verification(
+    RileyCudaGraphResources* resources, uint8_t* destination, uint64_t bytes,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_read_transfer(
     RileyCudaGraphResources* resources, uint8_t* destination, uint64_t bytes,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
@@ -2860,6 +2863,10 @@ RileyCudaStatus riley_cuda_graph_resources_record_v7_ffn_adaptive(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
     uint32_t, uint32_t, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_resources_record_v7_verification(
+    RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
+    uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,
+    uint32_t, uint32_t, RileyCudaPinnedHostBuffer*, RileyCudaErrorInfo*) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_graph_resources_record_v7_context_split(
     RileyCudaGraphResources*, RileyCudaDeviceBuffer* const*, RileyCudaDeviceBuffer* const*,
     uint64_t, RileyCudaGemmPlan*, RileyCudaGemmPlan*, RileyCudaPinnedHostBuffer*, uint32_t, uint32_t,

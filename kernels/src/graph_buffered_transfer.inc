@@ -126,7 +126,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_prepare_buffered_transfers
   clear_error(error);
   auto status = transfer_ready(r, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) return status;
-  if (!r->graph || !r->exec || !r->input || !r->output || r->catalog_sealed || r->catalog[0].graph ||
+  if (r->verification_host || !r->graph || !r->exec || !r->input || !r->output || r->catalog_sealed || r->catalog[0].graph ||
       r->bound_attention || !first || !second || first == second ||
       ((first == r->input || first == r->output) && r->input != r->output) || second == r->input || second == r->output ||
       !same_context(first->owner, r->owner) || !same_context(second->owner, r->owner) ||

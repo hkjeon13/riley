@@ -101,6 +101,9 @@ impl<P> OwnedGraphResourceReservation<P> {
     /// Reads only a successfully completed replay.
     /// # Errors
     /// Returns an error for stale, failed, or incorrectly sized output.
+    pub fn read_verification(&mut self, output: &mut [u8]) -> CudaResult<()> {
+        self.native.read_verification(output)
+    }
     pub fn read_transfer(&mut self, output: &mut [u8]) -> CudaResult<()> {
         self.native.read_transfer(output)
     }
@@ -273,6 +276,17 @@ impl BorrowedGraphResourceReservation<'_> {
     /// Copies output only after a successful, completed replay.
     /// # Errors
     /// Rejects missing completion, failed replay or wrong output size.
+    pub fn read_verification(&mut self, output: &mut [u8]) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.read_verification(output)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = output;
+            Err(crate::CudaError::unavailable("read aggregate transfer"))
+        }
+    }
     pub fn read_transfer(&mut self, output: &mut [u8]) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
@@ -1434,6 +1448,20 @@ pub fn record_v7_ffn_adaptive(&mut self,devices:&[usize;25],workspace:Option<usi
             self.native.record_v7_ffn_adaptive(&devices,workspace,&weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn)
         }
         #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn);Err(crate::CudaError::unavailable("record V7 mixed"))}
+    }
+pub fn record_v7_verification(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool,verification_host:usize)->CudaResult<()> {
+        #[cfg(feature="cuda")]{
+            let bad=||crate::CudaError::invalid_argument("record V7 mixed","parent index out of range");
+            let devices:Vec<_>=devices.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let weights:Vec<_>=weights.iter().map(|&i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).collect::<CudaResult<_>>()?;
+            let workspace=workspace.map(|i|self.parents.devices.get(i).map(|p|p.native_handle()).ok_or_else(bad)).transpose()?;
+            let head=self.parents.plans.get(head).ok_or_else(bad)?.graph_resource_handle()?;
+            let shared_head=self.parents.plans.get(shared_head).ok_or_else(bad)?.graph_resource_handle()?;
+            let staging=self.parents.pinned.get(staging).ok_or_else(bad)?.native_handle();
+            let verification_host=self.parents.pinned.get(verification_host).ok_or_else(bad)?.native_handle();
+            self.native.record_v7_verification(&devices,workspace,&weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn,verification_host)
+        }
+        #[cfg(not(feature="cuda"))]{let _=(devices,workspace,weights,head,shared_head,staging,capacity,physical,compact,prefill_ffn,verification_host);Err(crate::CudaError::unavailable("record V7 mixed"))}
     }
 pub fn record_v7_context_split(&mut self,devices:&[usize;25],workspace:Option<usize>,weights:&[usize],head:usize,shared_head:usize,staging:usize,capacity:u32,physical:u32,compact:bool,prefill_ffn:bool,split_workspace:usize)->CudaResult<()> {
         #[cfg(feature="cuda")]{

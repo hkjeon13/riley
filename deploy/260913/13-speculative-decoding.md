@@ -55,3 +55,11 @@ draft 경로를 끄고 target 단독으로 복귀한다.
 CPU5개 테스트는 KV252조합 및 독립 직렬 oracle11,250조합을 포함해 통과했다. 기존 accepted target의 순차9출력과72개 독립 prefix 요청에서 BF16 logits7,077,888 bytes가 일치했고 full-model memcheck0이다. 이것은 기존 경로의 수치 전제 검사이며, 한 번의 fused verification이나 serving 이득이 아니다.
 
 다음 묶음은 K+1 target prediction 반환, private KV append의 GPU 완료와 승인 prefix 정산, scheduler 출력·길이·취소 accounting 연결, 실제 acceptance·draft·verify·rollback 비용 및 vLLM serving 비교다. 검증된 target 수치 계약을 그대로 사용하며, FP32 분할 attention의 strict 실패를 우회하지 않는다. 미지원 sampling/stop-string/processor 경로는 ordinary decode를 유지한다.
+
+## 다중 위치 target head — 2026-09-14
+
+[GPU 검증 결과](../../benchmarks/results/20260914-verification-head/README.md): 한 packed 모델 실행의 여러 hidden 위치를 기존32행 head에 모으고, 별도 pinned 결과와 Rust completion identity로 읽는 실험 경로를 연결했다. 최대4owners×8positions이며 pending input을 포함하므로 첫 GPU 경로의 draft 상한은7이다. 기존 응답·정확한 target 수치 경로를 유지하며 buffered/compact 경로는 지원하지 않는다.
+
+순차 target과72행 BF16 logits7,077,888 bytes가 일치했고 실제 모델 memcheck 및 bounded selector memcheck/racecheck가 오류0이다. 완료 전·정산 후 읽기 거부도 검사했다. 초기 prompt까지8-token chunk로 처리하는 검증 fixture이므로 총 모델 실행 수는 양쪽10회이며 성능 향상을 주장하지 않는다.
+
+다음 구현 묶음은 GPU argmax의 작은 검증 결과, private speculative append와 greedy 승인/rollback, scheduler 다중 토큰 accounting을 연결하는 것이다. 아직 실제 speculative serving이나 vLLM 비교 완료가 아니다.
