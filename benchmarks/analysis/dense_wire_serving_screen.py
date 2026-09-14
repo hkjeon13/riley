@@ -15,7 +15,9 @@ def host_snapshot():
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('root',type=pathlib.Path);parser.add_argument('out',type=pathlib.Path)
     parser.add_argument('--concurrency',type=int,default=32);parser.add_argument('--warmup',type=int,default=64);parser.add_argument('--retained',type=int,default=256)
+    parser.add_argument('--cooldown-timeout-seconds',type=int,default=120)
     args=parser.parse_args();assert args.concurrency in (8,16,32,64) and args.warmup>=32 and args.retained>=128
+    assert 120<=args.cooldown_timeout_seconds<=900
     assert args.out.parent.resolve()==pathlib.Path('/dev/shm'),'controlled artifact spool must be tmpfs'
     fs=os.statvfs(args.out.parent);assert fs.f_bavail*fs.f_frsize>=12*1024**3,'tmpfs capacity guard'
     mem={line.split(':')[0]:int(line.split()[1]) for line in pathlib.Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')}
@@ -54,9 +56,16 @@ def main():
     @contextlib.contextmanager
     def server(lane,name):
         assert not gpu('pid','compute-apps'),'foreign GPU compute process'
-        deadline=time.monotonic()+120
-        while int(gpu('temperature.gpu'))>48:
-            assert time.monotonic()<deadline,'cooldown timeout';time.sleep(1)
+        started=time.monotonic();deadline=started+args.cooldown_timeout_seconds;samples=[]
+        try:
+            while True:
+                temperature=int(gpu('temperature.gpu'))
+                samples.append({'elapsed_s':time.monotonic()-started,'temperature_c':temperature})
+                if temperature<=48:break
+                assert time.monotonic()<deadline,'cooldown timeout'
+                time.sleep(1)
+        finally:
+            write(args.out/(name+'-cooldown.json'),{'threshold_c':48,'timeout_s':args.cooldown_timeout_seconds,'samples':samples})
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         argv=list(spec['vllm_argv' if lane.startswith('vllm') else 'riley_argv']);child=env.copy()
         def option(key,value):argv[argv.index(key)+1]=str(value)

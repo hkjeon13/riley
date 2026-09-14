@@ -24,3 +24,19 @@
 각 상세 검토는 원문 식/조건, 대상 코드, 예상 절약 자원, 추가 비용, 기각 조건, 하드웨어별 실행 가능 여부를 기록한다. 논문의 최대 kernel 배속을 serving 예상 배속으로 옮기지 않는다. 현재 C8/C16/C64 측정 중에는 추가 GPU profiling/build를 실행하지 않는다.
 
 Runtime은 Rust → C ABI → CUDA를 유지한다. FA4의 Python/CuTe-DSL 구현을 런타임에 직접 가져온다고 가정하지 않는다. Native 이식 또는 독립적으로 검증된 사전 컴파일 연결이 가능한지 별도로 확인한다. Hopper/Blackwell 실행 장비가 없으면 해당 실행 테스트만 명시적으로 미검증으로 남긴다.
+
+## FA4 본문과 현재 softmax 대조
+
+[본문 §3.1.2–3.1.4](https://arxiv.org/html/2603.05451v1) 확인 결과, 세 기법을 분리해야 한다.
+
+- **Pipeline:** TMEM을 사용하는 Blackwell 전용 구조이며 현재 SM89 kernel의 단순 치환 대상이 아니다. Correction 작업 분리의 의존성 설계를 향후 native backend에 반영할 후보로 둔다.
+- **Polynomial exponential:** 일부 exponential을 FMA로 옮기지만 근사 오차와 추가 register 비용이 있다. BF16 오차 통계가 비슷하다는 사실은 개별 결과의 bitwise 일치를 뜻하지 않는다. 현재 strict 경로에 바로 적용하지 않는다.
+- **Conditional rescaling:** 최대값이 변하지 않는 경우와, 양의 slack으로 최대값 갱신을 늦추는 경우를 구분한다. 후자는 probability rounding과 FP32 누적 결과가 달라질 수 있다. 전자의 항등 연산 생략도 NaN·무한대·subnormal 및 컴파일러 동작을 확인해야 한다.
+
+현재 `mixed_attention_v49.cuh`는 scalar 경로와 2-row 경로에서 alpha를 계산하고 매 tile accumulator를 곱한다. 따라서 **기존 최대값·tile 순서를 유지하는 조건부 correction**, **동일 순서 안에서 독립 연산을 앞당기는 scheduling**, **중간값 live range 축소**를 하나의 연구 batch 후보로 좁힌다. 이는 아직 구현이나 개선 증거가 아니다. 먼저 실제 shape에서 alpha=1 빈도와 correction instruction 비용을 측정해야 하며, 낮으면 이 batch를 기각한다. 별도 bounded native 계측으로 시작하고 현재 serving matrix에 계측을 섞지 않는다.
+
+## Concurrency 검증의 환경 중단
+
+`dense-wire-matrix-v1`은 C8 unique prior 완료 후 다음 lane 시작 전 48°C cooldown의 120초 제한으로 실패했다. 후보 서버 실행 오류로 해석하지 않는다. Lifecycle은 serving exit 1 및 Blender 세 개의 복구 성공을 기록했다. C16/C64는 시작하지 않았다.
+
+실패 spool과 lifecycle을 보존하고 `dense-wire-matrix-v2`에서 전체 순서를 다시 실행한다. 시작 온도 기준 48°C, workload, binary, warmup 및 retained 수는 유지한다. 대기 한도만 600초로 늘리고 lane별 온도 시계열을 기록한다. 측정 결과가 없는 lane을 성공으로 표시하거나 기존 부분 결과와 새 실행을 합치지 않는다.
