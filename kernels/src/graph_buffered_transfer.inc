@@ -14,7 +14,7 @@ static cudaError_t clone_buffered_graph(RileyCudaGraphResources* r,
     // Model staging already contains disjoint input/output regions. Slot zero
     // can reuse the original DAG and staging without a third pinned buffer.
     slot.borrows_original_graphs = true;
-    cudaGraphExec_t originals[] = {r->exec,r->prefill_exec,r->compact_exec[0],r->compact_exec[1]};
+    cudaGraphExec_t originals[] = {r->exec,r->prefill_exec,r->compact_exec[0],r->compact_exec[1],r->ffn_large_exec[0],r->ffn_large_exec[1]};
     slot.exec[index] = originals[index];
     return cudaSuccess;
   }
@@ -150,10 +150,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_resources_prepare_buffered_transfers
   r->terminal = true;
   r->buffered_output_offset = shared ? r->output_byte_offset : r->input->byte_len;
   r->buffered[0].staging = first; r->buffered[1].staging = second;
-  cudaGraph_t graphs[] = {r->graph, r->prefill_graph, r->compact_graph[0], r->compact_graph[1]};
+  cudaGraph_t graphs[] = {r->graph, r->prefill_graph, r->compact_graph[0], r->compact_graph[1], r->ffn_large_graph[0], r->ffn_large_graph[1]};
   auto result = cudaSuccess;
   for (auto& slot : r->buffered) {
-    for (unsigned i = 0; i < 4 && result == cudaSuccess; ++i)
+    for (unsigned i = 0; i < 6 && result == cudaSuccess; ++i)
       result = clone_buffered_graph(r, slot, i, graphs[i]);
     if (result == cudaSuccess) result = prepare_future_graph(r, slot);
     if (result == cudaSuccess) result = cudaEventCreateWithFlags(&slot.event, cudaEventDisableTiming);
@@ -171,8 +171,8 @@ static RileyCudaStatus launch_buffered_transfer(RileyCudaGraphResources* r,
   if ((r->next_buffered_ticket & UINT32_MAX) == UINT32_MAX) return reject(error, "buffered ticket exhausted");
   auto& slot = r->buffered[(r->next_buffered_ticket - 1) % 2];
   if (slot.ticket) return reject(error, "buffered slot must be consumed before reuse");
-  const unsigned index = selected == r->exec ? 0 : selected == r->prefill_exec ? 1 : selected == r->compact_exec[0] ? 2 : 3;
-  if (!slot.exec[index]) return reject(error, "buffered stage unavailable");
+  const unsigned index = selected == r->exec ? 0 : selected == r->prefill_exec ? 1 : selected == r->compact_exec[0] ? 2 : selected == r->compact_exec[1] ? 3 : selected == r->ffn_large_exec[0] ? 4 : selected == r->ffn_large_exec[1] ? 5 : 6;
+  if (index>=6 || !slot.exec[index]) return reject(error, "buffered stage unavailable");
   if(references) {
     const auto& previous=r->buffered[(predecessor-1)%2];
     if(!predecessor || predecessor!=r->next_buffered_ticket-1 || previous.ticket!=predecessor ||
@@ -276,7 +276,7 @@ static RileyCudaStatus destroy_buffered_transfers(RileyCudaGraphResources* r, Ri
       status=runtime_error(cudaGraphDestroy(slot.future_graph),error,RILEY_CUDA_ERROR_STAGE_CLOSE,kClose);
       if(status==RILEY_CUDA_STATUS_SUCCESS)slot.future_graph=nullptr;
     }
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 6; ++i) {
       if (status == RILEY_CUDA_STATUS_SUCCESS && slot.exec[i] && !slot.borrows_original_graphs) {
         status = runtime_error(cudaGraphExecDestroy(slot.exec[i]), error, RILEY_CUDA_ERROR_STAGE_CLOSE, kClose);
         if (status == RILEY_CUDA_STATUS_SUCCESS) slot.exec[i] = nullptr;

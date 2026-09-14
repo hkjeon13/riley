@@ -1,6 +1,6 @@
 # PR 23 — Prefill FFN weight reuse across row tiles
 
-상태: native 정확성·sanitizer 통과, 큰 M 개선/작은 M 회귀. 모델·serving 미검증. 기본 backend 변경 없음.
+상태: unified adaptive native/model/C32 serving 검증 완료, 전체 성능 목표 미달. Packed-row 계측 후 split graph native/model 통합 검증 완료, serving 비교 대기. 기본 backend 변경 없음.
 
 Projection 적용 후 [진단](../../benchmarks/results/20260914-projection-pipeline-profile/README.md)의 unique prefill/mixed에서 FFN은198.779ms, graph span의30.63%다. 기존 FFN pipeline은 gate/up과 down에서 M16마다 같은 weight를 다시 stage한다. 다음 batch는 새로운 shared staging 방식의 두 연산을 함께 평가한다.
 
@@ -39,3 +39,16 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## Packed-row census 완료 및 다음 batch
 
 [정확한 배치 행 계측](../../benchmarks/results/20260914-ffn-row-census/README.md):1280개 응답 reference 일치, packed histogram과 기존 batch count의 모든16-row bucket 일치/overflow0. Adaptive unique397회 중390회(98.24%)가192행 이상, shared111회 중38회(34.23%)다. FFN 선택값은 요청별 prefill 길이가 아니라 decode 행을 포함한 **전체 packed token rows**다. V1 요청별 계측은 fragmentation 자료로만 보존한다. 다음 batch는 원래 M16 kernel 자원 보존·M32 두 FFN kernel 분리·공유 buffer 기반 graph 선택을 함께 검토한다. Host-known rows를 사용하며 추가 GPU sync/산술순서 변경/threshold 탐색 없이 graph 소유권과 메모리 비용부터 확인한다. 상세 gate와 실패 시 후속 방향은 결과 문서에 기록했다.
+
+## Split graph 구현 및 모델 검증
+
+`RILEY_PREFILL_FFN_SPLIT=1`은 projection pipeline을 요구하고 unified adaptive flag와 동시 선택을 거부한다. Rust session과 catalog identity, C ABI recorder를 분리했다. 작은 packed batch는 기존 projection/M16 graph를 사용하고,192행 이상은 별도 M32 gate/up·down graph를 선택한다. 총 행 수는 V7 검증을 통과한 패킷 offset36에서 읽으므로 추가 device readback이나 synchronization은 없다.
+
+새 graph는 full/compact 두 개이며 기존 ledger·stream·weight483개·device scratch를 공유한다. Buffered 슬롯의 graph 목록을4→6으로 확장하고, 원래 staging을 쓰는 슬롯은 원 graph를 빌리며 다른 슬롯은 기존 방식으로 host memcpy node를 재결합한다. Future decode는 계속 기존 compact decode graph index3만 사용한다. 종료 시 추가 graph도 stream drain 이후 파괴하고 오류 시 parent quarantine 규칙을 유지한다. 모델 buffer 중복 할당은 없지만 추가 CUDA graph/exec 내부 메모리와 capture 비용은 실측해야 한다.
+
+로컬 `cargo check -p riley-server --features server,bench --bin riley` 및 `cargo test -p riley-server --features server,bench --lib` 통과(73 passed/1 ignored). 이 검사는 CUDA 경로를 검증하지 않는다. 원격 release CUDA build는 `ffn-split-build-v1`에서 exit0으로 완료됐다(바이너리 SHA256 `658c00b7b99b57d54a12dd345dd44a3ba705fdffa6749687eed9a8e1a04306cc`). 모델 test에191→192→191→193 및 작은/큰 행 교대, cached128행을 추가했다. Full logits와 memcheck 이후 compact/buffered/rolling serving correctness 및 frozen prior/control/candidate/vLLM 비교를 실행한다. 아직 split 성능이나 GPU correctness 통과를 주장하지 않는다.
+
+
+Split serving 비교 준비: current 바이너리를 `riley-ffn-split-serving-v1`로 고정했으며 prior는 이전 측정의 unified adaptive 바이너리 `riley-ffn-adaptive-serving-v1`(SHA256 `3ae029380abc732a96f65e361548daef92a794ea9a74905dd6e245ccaf4786fc`)다. Prior만 adaptive=1, control은 두 FFN flag=0, split은 split=1/adaptive=0이다. 네 번째 lane은 vLLM이다. 각 lane C32/active32/warm256/ret8192, shared·unique와 역순16 lane 비교를 유지한다. 준비 완료 시간과 준비 직후 RSS/global GPU memory를 추가 수집하지만 이를 isolated graph allocation으로 해석하지 않는다. 모델 gate가 완료되기 전 serving을 시작하지 않는다. Controller/client 원본은 timed phase 전 tmpfs에 저장하고 source hash를 묶는다.
+
+[Split 모델 검증](../../benchmarks/results/20260914-ffn-split-model/README.md):full logits4,128,768 BF16 bytes exact, full-model memcheck0 errors, 두 실행exit0 및 Blender 복구 완료. Compact/buffered/rolling serving parity와 성능은 이어지는16 lane 비교에서 검증하며 현재 미완료다.

@@ -2442,6 +2442,7 @@ cudaError_t enqueue_compiled_v7_query_reuse_model(cudaStream_t,void*const*,const
 cudaError_t enqueue_compiled_v7_gqa_staging_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v7_projection_pipeline_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v7_ffn_adaptive_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
+cudaError_t enqueue_compiled_v7_ffn_m32_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v7_prefill_ffn_pipeline_model(cudaStream_t,void*const*,const void*const*,const void*,void*,void*,const void*,const void*,void*,uint32_t*,uint32_t*,uint32_t,uint32_t,bool) noexcept;
 cudaError_t enqueue_compiled_v5_result_header(cudaStream_t,const void*,void*,const void*,const void*) noexcept;
 }
