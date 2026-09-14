@@ -2474,6 +2474,10 @@ mod cuda_backend {
         fallback_nanos: u128,
         shapes: std::collections::BTreeMap<(usize,usize,usize,usize), (u64,u128,u128,u128)>,
         shape_overflow: u64,
+        prefill_rows: std::collections::BTreeMap<usize,u64>,
+        prefill_row_overflow: u64,
+        packed_ffn_rows: std::collections::BTreeMap<usize,u64>,
+        packed_ffn_row_overflow: u64,
     }
 
     fn host_phase_checkpoint(mark: &mut Option<Instant>) -> u128 {
@@ -2507,7 +2511,21 @@ mod cuda_backend {
             row.2=row.2.min(wall_ns);row.3=row.3.max(wall_ns);
         }
 
+        fn record_prefill_rows(&mut self, rows:usize) {
+            if rows==0 || rows>1024 {self.prefill_row_overflow=self.prefill_row_overflow.saturating_add(1);return;}
+            let count=self.prefill_rows.entry(rows).or_default();*count=count.saturating_add(1);
+        }
+
+        fn record_packed_ffn_rows(&mut self, rows:usize) {
+            if rows==0 || rows>1024 {self.packed_ffn_row_overflow=self.packed_ffn_row_overflow.saturating_add(1);return;}
+            let count=self.packed_ffn_rows.entry(rows).or_default();*count=count.saturating_add(1);
+        }
+
         fn report(&self) {
+            for (rows,count) in &self.packed_ffn_rows {eprintln!("RILEY_PACKED_FFN_ROWS rows={} count={}",rows,count);}
+            eprintln!("RILEY_PACKED_FFN_ROWS_OVERFLOW count={}",self.packed_ffn_row_overflow);
+            for (rows,count) in &self.prefill_rows {eprintln!("RILEY_PREFILL_ROWS rows={} count={}",rows,count);}
+            eprintln!("RILEY_PREFILL_ROWS_OVERFLOW count={}",self.prefill_row_overflow);
             for (kind, name) in ["decode", "prefill_or_mixed", "paired_decode"].iter().enumerate() {
                 let n = self.nanos[kind];
                 eprintln!("RILEY_HOST_PHASE kind={} steps={} scheduled_tokens={} plan_ns={} execute_wall_ns={} sample_ns={} commit_publish_ns={}", name, self.steps[kind], self.scheduled_tokens[kind], n[0], n[1], n[2], n[3]);
@@ -3933,7 +3951,7 @@ mod cuda_backend {
             );
             self.publish_committed_updates(&updates,&mut events)?;
             phase_ns[3] = host_phase_checkpoint(&mut phase_mark);
-            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(phase_kind, expected_active_rows, phase_ns);if let Some(key)=cost_shape {timing.record_shape(key,phase_ns[1]);} }
+            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record(phase_kind, expected_active_rows, phase_ns);if let Some(key)=cost_shape {timing.record_shape(key,phase_ns[1]);}for work in plan.prefill_items(){timing.record_prefill_rows(work.input_tokens().len());}if phase_kind==1 {timing.record_packed_ffn_rows(expected_active_rows);} }
             Ok(events)
         }
 

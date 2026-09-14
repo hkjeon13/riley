@@ -35,3 +35,7 @@ CUDA asynchronous copy와 memory lifetime 근거는 PR05에 보존된 연구를 
 ## Adaptive FFN C32 serving 완료
 
 [전체 표와 원본 검증](../../benchmarks/results/20260914-ffn-adaptive-serving-c32/README.md):131072 retained/4194304 tokens,4096 warmup,98304 Riley reference 일치,stop/cancel/recovery 각96건,16 exit0 및 Blender 복구를 검증했다. 후보 throughput은 prior 대비 shared −2.02%/unique +8.14%, 같은 binary control 대비 −0.80%/+6.46%다. vLLM 대비 −8.79%/−14.91%로 전체 목표 미달이다. Shared 회귀 및 vLLM tail 변동을 보존하고 default 비승격을 유지한다. 다음 판단은 실제 활성 prefill 행 분포와 graph/backend 자원 분리 비용을 근거로 하며 기존 작은 threshold 변형을 반복하지 않는다.
+
+## Packed-row census 완료 및 다음 batch
+
+[정확한 배치 행 계측](../../benchmarks/results/20260914-ffn-row-census/README.md):1280개 응답 reference 일치, packed histogram과 기존 batch count의 모든16-row bucket 일치/overflow0. Adaptive unique397회 중390회(98.24%)가192행 이상, shared111회 중38회(34.23%)다. FFN 선택값은 요청별 prefill 길이가 아니라 decode 행을 포함한 **전체 packed token rows**다. V1 요청별 계측은 fragmentation 자료로만 보존한다. 다음 batch는 원래 M16 kernel 자원 보존·M32 두 FFN kernel 분리·공유 buffer 기반 graph 선택을 함께 검토한다. Host-known rows를 사용하며 추가 GPU sync/산술순서 변경/threshold 탐색 없이 graph 소유권과 메모리 비용부터 확인한다. 상세 gate와 실패 시 후속 방향은 결과 문서에 기록했다.
