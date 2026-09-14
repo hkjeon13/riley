@@ -1,6 +1,6 @@
 # 260913 — 연구 기반 serving 최적화 PR 계획
 
-상태: **구조별 구현·검증 진행 중, 전체 serving 목표 미달**. 현재 작업 브랜치는 `codex/260913-serving-integration`이다. PR02 실행 ticket·staging·KV 부분 commit, PR03 attention 모델 실험, PR05/07/19 실행 후보의 구현 및 측정 이력이 각 카드와 결과 문서에 있다. 후보별 correctness·성능 실패와 승격 보류를 구분한다. 최근 FP16 모델 품질 실패 후 PR02 future-token 연결을 진행한다. 계획 커밋은 `894f0713`이며, 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
+상태: **구조별 구현·검증 진행 중, 전체 serving 목표 미달**. 현재 작업 브랜치는 `codex/260913-serving-integration`이다. PR02 실행 ticket·staging·KV 부분 commit, PR03 attention 모델 실험, PR05/07/19 실행 후보의 구현 및 측정 이력이 각 카드와 결과 문서에 있다. 후보별 correctness·성능 실패와 승격 보류를 구분한다. PR20 rolling decode의 모델·serving 통합을 완료했고, PR21 GQA staging은 serving 개선 미확인으로 승격하지 않았다. 현재 PR22 prefill projection의 비교를 Python 측정 클라이언트 GC와 결과 기록 IO 영향을 통제한 조건에서 진행한다. Rust serving 경로에 Python을 도입하지 않는다. 계획 커밋은 `894f0713`이며, 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
 
 ## 목표와 현재 증거
 
@@ -90,7 +90,11 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 
 ## 추가 통합 PR
 
-[PR20 — Rolling decode pipeline](20-rolling-decode-pipeline.md): 최신 cache-residency serving trace를 근거로 고정 pair 정산 경계를 한 단계 선행 실행으로 확장한다. 현재 구현 미착수이며 PR02의 reservation·ticket·streaming 후속 통합이다.
+- [PR20 — Rolling decode pipeline](20-rolling-decode-pipeline.md): KV·scheduler·runtime·server 통합 및 C8/C32/C64 screen 완료. Opt-in이며 기본값 승격·전체 qualification은 미완료다. C8 shared 결과를 다른 workload/concurrency의 성공으로 확대하지 않는다.
+- [PR21 — GQA shared staging](21-gqa-shared-kv-staging.md): native/full-model gate 및 C8/C32/C64 serving 완료. Native 이득이 serving에서 재현되지 않아 승격하지 않았다.
+- [PR22 — Prefill projection pipeline](22-prefill-projection-pipeline.md): native/full-model 및 긴 C32 비교 완료. 기존 Riley 대비 throughput 개선은 확인됐지만 vLLM/전체 latency 목표에는 미달이다. C8/C64 확대 전에 측정 클라이언트 GC와 결과 기록 IO 영향을 통제한 전체 비교를 실행 중이다.
+
+[Client GC 대조 실험](../../benchmarks/results/20260914-client-gc-intervention/README.md)은 오프라인 Python 부하 생성기의 측정 조건 검사다. Riley 서버의 GC 검사 또는 서버 최적화 이득이 아니다. Riley의 큰 P99 일부는 GC 비활성 시 감소했지만 vLLM의 한 반복에는 GC 없이도 큰 tail과 host IO pressure가 남았다. 전체 run을 보존하고 중앙값만으로 목표 달성을 주장하지 않는다. 다음 비교는 모든 엔진에 같은 `gc-phase-disabled-v1` 및 tmpfs 원본 응답·로그 기록을 적용하며, 완료된 수치와 혼합하지 않는다.
 
 ## Blender 복구 — 2026-09-14
 

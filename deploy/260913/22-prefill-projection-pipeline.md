@@ -1,6 +1,6 @@
 # PR22 — Prefill projection operand pipeline
 
-상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 긴 구간 검증 완료, C8/C64 및 승격 판정 대기. 기본 경로는 기존 rolling Riley이며 GQA staging은 비활성이다.
+상태: 격리 native batch 구현·SM89 GPU gate 완료, retained model/server opt-in 연결 및 full-model gate 완료, C32 긴 구간 검증 완료, C8/C64 및 승격 판정 대기. 비교 baseline은 rolling opt-in Riley이며 GQA staging은 비활성이다. 서버 기본값은 변경하지 않는다.
 
 ## 근거와 범위
 
