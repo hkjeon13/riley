@@ -174,3 +174,28 @@ attention; M256 head GEMM is only approximately 2.5%. Prioritize short multi-que
 attention and KV reuse, including one-input owners, with strict token gates and
 matched serving remeasurement. Do not treat model-call reduction as speedup or
 start head bucketing before addressing the measured attention cost.
+
+### Short-query attention and bounded graph — 2026-09-14
+
+Implemented one CTA per verification owner/head, ordered reuse for 2–8 queries,
+unchanged single-query math, and a 256-input verification-only launch bound.
+The intermediate attention change improves shared serving throughput 8.39%
+versus old speculative; unique is unchanged (−0.05%). Bounded graph follow-up
+adds only 1.04% shared / −0.13% unique. Both screens retain exact Riley outputs,
+stop/cancel/recovery, native and model sanitizer gates.
+
+Stage-1 Nsight mean verification attention time drops 2.531→1.723ms shared and
+2.620→1.885ms unique; graph mixes vary, so these are diagnostic, not serving
+speedup claims. Final throughput is 7,018.8 / 3,835.7 tok/s (shared / unique),
+below prior 10,341.9 / 4,129.2 and vLLM 0.27.1 12,218.5 / 4,947.2.
+Speculative remains disabled by default; performance qualification still fails.
+
+Evidence and full latency tables:
+- `benchmarks/results/20260914-verification-attention-serving-c32/README.md`
+- `benchmarks/results/20260914-verification-capacity-serving-c32/README.md`
+
+Stop micro-tuning this speculative path after the measured small bound benefit.
+Next candidate is ordinary cached-prefix short-query reuse (2–16 inputs), with
+split-FFN and rolling decode retained; test exact arithmetic and real serving
+before promotion. Hopper/Blackwell compile gates pass, execution and multi-GPU
+remain untested. No runtime Python is introduced.

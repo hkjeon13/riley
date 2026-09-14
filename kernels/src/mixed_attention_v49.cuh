@@ -71,7 +71,7 @@ __device__ void single_query(const __nv_bfloat16* q,const __nv_bfloat16* k,const
   out[qb+block*8+2*t+j]=__float2bfloat16_rn(accum[block][j]*inverse);
 }
 
-template<int TileRows>
+template<int TileRows,bool ShortQueries=false>
 __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,int rows,int n,const int* dynamic_n,const uint32_t* blocks,const uint32_t* live_rows,uint32_t query_block){
  static_assert(TileRows==8||TileRows==16,"query tile");
  if(live_rows){uint32_t live=*live_rows;if(!live||live>static_cast<uint32_t>(rows))return;rows=live;}
@@ -80,7 +80,7 @@ __device__ __forceinline__ void attention_body(const __nv_bfloat16* q,const __nv
  float (*exps)[128]=scores;
  __shared__ __nv_bfloat16 probs[TileRows][128];
  // A small prefill has insufficient queries to amortize the larger tile state.
- if(rows<32){
+ if(rows<32 && (!ShortQueries || rows==1)){
   if(query_block<static_cast<uint32_t>(rows))single_query(q,k,v,out,rows,n,blocks,query_block,blockIdx.y,scores,probs,exps);
   return;
  }
@@ -200,4 +200,16 @@ __global__ void mapped_attention(const __nv_bfloat16* q,const __nv_bfloat16* k,c
  attention_body<8>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,local);
 }
 
+}
+
+// Explicit stage-3 capture only: one CTA per owner/head, up to eight queries.
+// Reuse the ordered tile arithmetic; one-input owners retain single-query math.
+namespace riley_verification_attention {
+__global__ void mapped(const __nv_bfloat16* q,const __nv_bfloat16* k,const __nv_bfloat16* v,__nv_bfloat16* out,uint32_t capacity,const uint32_t* meta){
+ const unsigned owner=blockIdx.x,active=meta[5],total=meta[9];
+ if(meta[4]!=3 || !active || active>32 || owner>=active || !total || total>capacity)return;
+ const unsigned* shape=meta+32+owner*416;const unsigned count=shape[2],offset=shape[16];
+ if(shape[18]!=3 || !count || count>8 || offset>total || count>total-offset)return;
+ riley_mixed_attention::attention_body<8,true>(q+offset*576,k,v,out+offset*576,capacity,0,reinterpret_cast<const int*>(shape+1),shape+32,shape+2,0);
+}
 }

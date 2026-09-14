@@ -407,6 +407,9 @@ cudaError_t enqueue_compiled_v7_context_split_mixed_model(cudaStream_t s,void*co
 cudaError_t enqueue_compiled_v7_projection_pipeline_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
  return enqueue_mixed_model_v7<32,true,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
 }
+cudaError_t enqueue_compiled_v7_verification_attention_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
+ return enqueue_mixed_model_v7<32,true,false,false,false,true,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+}
 cudaError_t enqueue_compiled_v7_ffn_adaptive_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
  return enqueue_mixed_model_v7<32,true,false,false,false,true,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
 }
