@@ -1,0 +1,28 @@
+{
+  "goal_achieved": false,
+  "condition": "No stable serving start window on the shared test host in three successive goal turns",
+  "attempts": [
+    {
+      "file": "quiet-start.json",
+      "samples": 29,
+      "max_quiet_streak": 0,
+      "passed": false
+    },
+    {
+      "file": "quiet-start-v2.json",
+      "samples": 29,
+      "max_quiet_streak": 0,
+      "passed": false
+    },
+    {
+      "file": "quiet-start-v3.json",
+      "samples": 29,
+      "max_quiet_streak": 0,
+      "passed": false
+    }
+  ],
+  "remaining": "C8/C16/C64 and repeat unique serving validation; no default promotion; complete throughput and latency goal remains unchanged",
+  "needed_external_change": "A stable test window or another available GPU host; do not terminate unrelated workloads without authorization",
+  "prepared_c8_recipe": "prepared_projection_cta_serving_c8_gate_v1.py",
+  "automatic_gpu_measurements_started": false
+}
