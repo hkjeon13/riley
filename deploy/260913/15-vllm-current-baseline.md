@@ -8,4 +8,11 @@ Use the same model/checkpoint, BF16, tokenizer, prompt corpus, token budgets, KV
 
 Compare frozen best Riley, the selected candidate, and both vLLM versions in reversed orders. First C32 shared and unique screens, then sufficient sustained C8/16/32/64 load with errors, throughput, TTFT, TPOT and P95/P99. Maintain exact Riley reference checks and stop/cancel/recovery. Report vLLM token agreement separately from protocol completion. Version-refresh results do not substitute for multi-model, multi-GPU or Hopper/Blackwell qualification.
 
-Rollback consists of selecting the preserved 0.27.1 environment; no destructive in-place package upgrade is required. Status: official version verified; environment installation and measurements pending.
+Rollback consists of selecting the preserved 0.27.1 environment; no destructive in-place package upgrade is required. Status: isolated 0.29.0 wheel installation completed and `pip check` reports no broken requirements. Comparison controller and independent SSE verifier are prepared; GPU preflight and the C32 matched screen pass. The preserved 0.27.1 environment is unchanged.
+
+
+Completed result: `benchmarks/results/20260914-vllm-version-serving-c32/README.md`.
+Riley throughput is 10,201.6 / 4,114.0 tok/s versus vLLM 0.29.0
+11,882.3 / 4,964.4 (shared / unique), a 14.14% / 17.13% deficit.
+Correctness/protocol checks and Blender restoration pass; performance goal
+remains unmet. C8/16/64 and sustained broader qualification remain pending.
