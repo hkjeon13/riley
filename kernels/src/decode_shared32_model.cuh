@@ -4,6 +4,7 @@
 #include "../optional/ffn_pipeline.cuh"
 #include "../optional/decode_adaptive_rows.cuh"
 #pragma once
+#include "../optional/context_split_fp32.cuh"
 #include "prefill_shape_model.cuh"
 #include "decode_shared32.cuh"
 #include "decode_shared32_attention.cuh"
@@ -60,8 +61,9 @@ __global__ void clear_inactive_hidden(__nv_bfloat16* hidden,const uint32_t* acti
  uint32_t rows=*active,row=blockIdx.x;if(rows<1||rows>32||row<rows)return;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)hidden[row*576+i]=__float2bfloat16_rn(0.F);
 }
-template<bool Fa3=false,bool AdaptiveRows=false>
-inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,void* attention_workspace=nullptr,uint64_t attention_workspace_bytes=0,bool ffn_pipeline=false){
+template<bool Fa3=false,bool AdaptiveRows=false,bool ContextSplit=false>
+inline cudaError_t enqueue(cudaStream_t stream,void*const* scratch,const void*const* weights,const void* metadata,void* keys,void* values,const float* cos,const float* sin,uint32_t* status,uint32_t physical,uint32_t context,bool tiled=false,bool grouped_attention=false,void* attention_workspace=nullptr,uint64_t attention_workspace_bytes=0,bool ffn_pipeline=false,void* split_workspace=nullptr){
+ if constexpr(ContextSplit) {if(!split_workspace || !grouped_attention || !tiled)return cudaErrorInvalidValue;}
 if constexpr(!Fa3) {
 #ifndef RILEY_CUDA_ENABLE_FLASHINFER
  if(attention_workspace||attention_workspace_bytes)return cudaErrorNotSupported;
@@ -116,7 +118,11 @@ if constexpr(Fa3) {
   if(err!=cudaSuccess)return err;
  }else
 #endif
- if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
+ if constexpr(ContextSplit) {
+  riley_gqa50_attention::scores<<<dim3(min((context+7)/8,32u),96),32,0,stream>>>(b(3),lk,static_cast<float*>(scratch[7]),shape,pages,active);
+  err=riley_split_fp32::enqueue(stream,static_cast<float*>(scratch[7]),lv,static_cast<riley_split_fp32::Partial*>(split_workspace),b(4),shape,pages,active,32,context);
+  if(err!=cudaSuccess)return err;
+ } else if(grouped_attention)riley_gqa50_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  else riley_shared32_attention::enqueue(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),shape,pages,active,context);
  }
  if(grouped_attention){

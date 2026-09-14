@@ -357,6 +357,9 @@ cudaError_t enqueue_compiled_v5_shared_model(cudaStream_t s,void*const* d,const 
 cudaError_t enqueue_compiled_v7_gqa_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
  return riley_shared32_model::enqueue(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
 }
+cudaError_t enqueue_compiled_v7_context_split_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled,void* split_workspace) noexcept {
+ return riley_shared32_model::enqueue<false,true,true>(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true,nullptr,0,false,split_workspace);
+}
 cudaError_t enqueue_compiled_v7_adaptive_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
  if(!tiled)return cudaErrorInvalidValue;
  return riley_shared32_model::enqueue<false,true>(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
@@ -397,6 +400,9 @@ cudaError_t enqueue_compiled_v7_query_reuse_model(cudaStream_t s,void*const* d,c
 }
 cudaError_t enqueue_compiled_v7_gqa_staging_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
  return enqueue_mixed_model_v7<32,true,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);
+}
+cudaError_t enqueue_compiled_v7_context_split_mixed_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled,uint32_t context,void* split_workspace) noexcept {
+ return enqueue_mixed_model_v7<32,true,false,false,false,true,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled,nullptr,0,context,false,split_workspace);
 }
 cudaError_t enqueue_compiled_v7_projection_pipeline_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,void* selected,uint32_t* status,uint32_t* publish,uint32_t rows,uint32_t physical,bool tiled) noexcept {
  return enqueue_mixed_model_v7<32,true,false,false,false,true>(s,d,w,m,k,v,c,sn,selected,status,publish,rows,physical,tiled);

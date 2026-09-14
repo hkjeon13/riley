@@ -1,6 +1,6 @@
 # PR06 attention split: implementation and numerical gate
 
-Status: contract fixed before candidate model results; isolated native FP32 control implemented. Model/serving integration remains unimplemented.
+Status: native and experimental model integration implemented; model strict generation gate failed. Serving integration and qualification remain incomplete.
 
 The [compatibility probe](../../benchmarks/results/20260914-attention-split-compatibility/README.md) rejects independent local-max BF16 partial merging under the existing exact profile. It does not reject every context-parallel implementation. Existing QK context splitting and eight output-dimension CTAs are already implemented; neither is a new optimization.
 
@@ -32,3 +32,7 @@ Completion requires model correctness, demonstrated candidate execution, bounded
 ## Native control outcome — 2026-09-14
 
 [Native report](../../benchmarks/results/20260914-attention-split-fp32/README.md): partial/merge FP32 control, bounded scratch, host extent checks and isolated graph probe implemented. 120 native combinations completed; bounded memcheck/racecheck 0, SM90a/SM100a compile passed with runtime skips. Long-context P×V+merge timings are promising, but short-context overhead regresses. Sampled FP64 errors and legacy differences are reported without declaring numerical acceptance. Rust profile/graph owner, full-model gates and matched serving are still pending.
+
+## Model integration outcome — 2026-09-14
+
+[모델 결과](../../benchmarks/results/20260914-attention-split-model/README.md): Rust owner/C ABI/graph identity와 2,613,252-byte retained workspace를 연결했다. 초기 pure-decode-only 연결은 batch invariance에 실패했으며, mixed decode에도 같은 계산을 적용한 v2에서 해당 불변성이 복구됐다. 자연어 NLL/KL은 기존 사전 기준을 통과했지만 strict 독립 생성은 168/1,024 tokens 불일치로 실패했다. 전체 모델 memcheck는 오류 0이며 생성 assertion의 exit 101과 구분한다. 기본값·서버 선택은 추가하지 않았고 serving/vLLM 검증 및 PR06 승격은 미완료다. 기존 정확성 기준을 완화하거나 합성 long-context 시간만으로 도입하지 않는다.

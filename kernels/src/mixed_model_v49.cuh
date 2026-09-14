@@ -9,6 +9,7 @@
 #include "../optional/gqa_staged_mixed_attention.cuh"
 #include "mixed_rope_v49.cuh"
 #pragma once
+#include "../optional/context_split_mixed.cuh"
 #include "prefill_shape_projection.cuh"
 #include "prefill_fused_gate_v51.cuh"
 #include "../optional/prefill_ffn_pipeline.cuh"
@@ -28,10 +29,11 @@ __global__ void mixed_select_hidden_v7(const __nv_bfloat16* rows,__nv_bfloat16* 
  if(publish&&threadIdx.x==0)publish[owner]=ready?1:0;
  for(uint32_t i=threadIdx.x;i<576;i+=blockDim.x)selected[owner*576+i]=ready?rows[at*576+i]:__float2bfloat16_rn(0.F);
 }
-template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false,bool GqaStaging=false,bool ProjectionPipeline=false,bool FfnAdaptive=false,bool FfnM32=false>
+template<uint32_t WireRows=8,bool PrefillFfnPipeline=false,bool Fa3=false,bool QueryReuse=false,bool GqaStaging=false,bool ProjectionPipeline=false,bool FfnAdaptive=false,bool FfnM32=false,bool ContextSplit=false>
 inline cudaError_t enqueue_mixed_model_v7(cudaStream_t stream,void*const* scratch,const void*const* weights,
  const void* metadata,void* keys,void* values,const void* cos,const void* sin,void* selected,
- uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false){
+ uint32_t* status,uint32_t* publish,uint32_t capacity,uint32_t physical,bool tiled=false,void* attention_workspace=nullptr,uint64_t attention_bytes=0,uint32_t context=4096,bool prefill_only=false,void* split_workspace=nullptr){
+ if constexpr(ContextSplit) {if(!split_workspace)return cudaErrorInvalidValue;}
  static_assert(WireRows==8||WireRows==16||WireRows==32,"wire capacity");
  if(!scratch||!weights||!metadata||!keys||!values||!cos||!sin||!selected||!status||!capacity||capacity>1024||!physical||physical>4096)return cudaErrorInvalidValue;
  for(int i=0;i<12;++i)if(!scratch[i])return cudaErrorInvalidValue;
@@ -86,7 +88,11 @@ if constexpr(Fa3) {
   } else {
   if constexpr(GqaStaging)riley_gqa_staging::mapped<true><<<dim3(capacity,3),96,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
   else if constexpr(QueryReuse)riley_query_reuse::mapped<true><<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta);
-  else riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,attention_workspace!=nullptr&&!prefill_only,attention_workspace!=nullptr&&prefill_only);
+  else riley_mixed_attention::mapped_attention<<<dim3(capacity,9),32,0,stream>>>(b(3),lk,lv,b(4),capacity,meta,ContextSplit || (attention_workspace!=nullptr&&!prefill_only),attention_workspace!=nullptr&&prefill_only);
+  if constexpr(ContextSplit) {
+   err=riley_split_fp32::enqueue_mixed(stream,b(3),lk,lv,b(4),static_cast<float*>(scratch[7]),meta,static_cast<riley_split_fp32::MixedWorkspace*>(split_workspace),capacity,context);
+   if(err!=cudaSuccess)return err;
+  }
 #ifdef RILEY_CUDA_ENABLE_FLASHINFER
   if(attention_workspace){
    err=static_cast<cudaError_t>((prefill_only?riley_flashinfer_prefill_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes):riley_flashinfer_mixed_run(stream,b(3),lk,lv,b(4),attention_workspace,attention_bytes)));

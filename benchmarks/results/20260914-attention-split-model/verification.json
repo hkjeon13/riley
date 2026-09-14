@@ -1,0 +1,55 @@
+{
+  "archive_sha256": "a84612c8ab0228cd93b783648dd5ec6fb009606d5413fe658ae3108fa8539b1f",
+  "regular_members": 46,
+  "file_hashes_verified": true,
+  "current_source_hashes_verified": true,
+  "relative_metric_gate": {
+    "schema": "attention-natural-metric-check-v1",
+    "aggregate": {
+      "baseline": {
+        "nll": 2.9592894315719604,
+        "kl_from_fp32": 0.0007591519097331911,
+        "argmax_fp32_matches": 244.0
+      },
+      "candidate": {
+        "nll": 2.9579495936632156,
+        "kl_from_fp32": 0.0007398090820061043,
+        "argmax_fp32_matches": 241.0
+      }
+    },
+    "conditions": {
+      "nll": true,
+      "kl_from_fp32": true
+    },
+    "relative_screen_passed": true,
+    "general_quality_accepted": false,
+    "serving_qualified": false,
+    "raw_logits_verified": false,
+    "resource_cleanup_verified": false
+  },
+  "aggregate": {
+    "baseline": {
+      "nll": 2.9592894315719604,
+      "kl_from_fp32": 0.0007591519097331911,
+      "argmax_fp32_matches": 244.0
+    },
+    "candidate": {
+      "nll": 2.9579495936632156,
+      "kl_from_fp32": 0.0007398090820061043,
+      "argmax_fp32_matches": 241.0
+    }
+  },
+  "generation": {
+    "requests": 32,
+    "tokens": 1024,
+    "differing_sequences": 12,
+    "differing_tokens": 168,
+    "batch_invariance": true,
+    "strict_gate_passed": false,
+    "memcheck_outputs_identical": true
+  },
+  "initial_batch_invariance_failed": true,
+  "blender_restored": true,
+  "general_quality_accepted": false,
+  "serving_measured": false
+}

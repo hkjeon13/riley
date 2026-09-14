@@ -1,0 +1,21 @@
+warning: struct `OwnedCheckedExpectation` is never constructed
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:124:19
+    |
+124 | pub(crate) struct OwnedCheckedExpectation<const ROWS:usize> { expectation:Expectation<ROWS> }
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `new` and `checked` are never used
+   --> crates/riley-runtime/src/llama/multi_descriptor/variable_wire.rs:126:19
+    |
+125 | impl<const ROWS:usize> OwnedCheckedExpectation<ROWS> {
+    | ---------------------------------------------------- associated items in this implementation
+126 |     pub(crate) fn new(expectation:Expectation<ROWS>)->Result<Self> {
+    |                   ^^^
+...
+129 |     pub(crate) fn checked(&self)->CheckedExpectation<'_,ROWS> {CheckedExpectation{expectation:&self.expectation}}
+    |                   ^^^^^^^
+
+warning: `riley-runtime` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
