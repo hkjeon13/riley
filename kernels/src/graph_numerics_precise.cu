@@ -1,4 +1,5 @@
 #include "ffi_internal.hpp"
+#include <cstdlib>
 #include <cuda_bf16.h>
 __global__ void compiled_norm(const __nv_bfloat16* a,const void* b,const __nv_bfloat16* w,void* residual,__nv_bfloat16* out,int mode){
  __shared__ float sums[8];int tid=threadIdx.x,lane=tid%32;float x[4]={};
@@ -362,6 +363,11 @@ cudaError_t enqueue_compiled_v7_context_split_model(cudaStream_t s,void*const* d
 }
 cudaError_t enqueue_compiled_v7_adaptive_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {
  if(!tiled)return cudaErrorInvalidValue;
+ // Read only while constructing the graph, never from the replay hot path.
+ // Explicit research opt-in; existing captures and the default retain baseline.
+ const char* projection_ctas=std::getenv("RILEY_EXPERIMENT_PROJECTION_CTAS");
+ if(projection_ctas && projection_ctas[0]=='1' && projection_ctas[1]=='\0')
+  return riley_shared32_model::enqueue<false,true,false,true>(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
  return riley_shared32_model::enqueue<false,true>(s,d,w,m,k,v,static_cast<const float*>(c),static_cast<const float*>(sn),status,physical,context,tiled,true);
 }
 cudaError_t enqueue_compiled_v7_ffn_pipeline_shared_model(cudaStream_t s,void*const* d,const void*const* w,const void* m,void* k,void* v,const void* c,const void* sn,uint32_t* status,uint32_t physical,uint32_t context,bool tiled) noexcept {

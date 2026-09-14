@@ -16,7 +16,17 @@ fn paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn
 #[test]
 #[ignore = "requires checkpoint and CUDA GPU; adaptive dependent decode and terminal rollback"]
 fn adaptive_paired_decode_matches_serial_model_and_reclaims_pages() -> Result<(), Box<dyn std::error::Error>> { run_paired(true) }
-fn run_paired(adaptive:bool) -> Result<(), Box<dyn std::error::Error>>
+#[test]
+#[ignore = "requires checkpoint, CUDA GPU and explicit projection CTA opt-in"]
+fn projection_ctas_match_serial_model_and_reclaim_pages() -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(std::env::var("RILEY_EXPERIMENT_PROJECTION_CTAS").as_deref(), Ok("1"));
+    for capacity in [16,32] { run_paired_capacity(true,capacity)?; }
+    Ok(())
+}
+fn run_paired(adaptive:bool) -> Result<(), Box<dyn std::error::Error>> {
+    run_paired_capacity(adaptive,if adaptive {16}else{32})
+}
+fn run_paired_capacity(adaptive:bool,capacity:usize) -> Result<(), Box<dyn std::error::Error>>
 {
     let path =
         std::path::PathBuf::from(std::env::var_os("RILEY_REAL_CHECKPOINT").ok_or("model missing")?);
@@ -39,7 +49,7 @@ fn run_paired(adaptive:bool) -> Result<(), Box<dyn std::error::Error>>
             SchedulerConfig {
                 max_waiting_requests: 32,
                 max_waiting_prompt_tokens: 4096,
-                max_active_sequences: if adaptive {16}else{32},
+                max_active_sequences: capacity,
                 max_sequence_tokens: 128,
                 iteration_token_budget: 128,
                 max_prefill_chunk_tokens: 32,

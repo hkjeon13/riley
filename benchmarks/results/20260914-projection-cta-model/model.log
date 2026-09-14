@@ -1,0 +1,12 @@
+
+running 1 test
+test projection_ctas_match_serial_model_and_reclaim_pages ... DECODE_WINDOW mode=false terminal=false requests=32 windows=0 allocation_zero=true
+DECODE_WINDOW mode=true terminal=false requests=32 windows=27 allocation_zero=true
+DECODE_WINDOW mode=true terminal=true requests=32 windows=26 allocation_zero=true
+DECODE_WINDOW mode=false terminal=false requests=32 windows=0 allocation_zero=true
+DECODE_WINDOW mode=true terminal=false requests=32 windows=12 allocation_zero=true
+DECODE_WINDOW mode=true terminal=true requests=32 windows=12 allocation_zero=true
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 6.56s
+

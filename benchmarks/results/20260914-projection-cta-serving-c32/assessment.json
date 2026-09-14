@@ -1,0 +1,146 @@
+{
+  "qualification": false,
+  "reason": "shared improvement repeated; unique throughput improvement reverses sign across order and TPOT regresses; large vLLM variation; C8/C16/C64 not measured for this candidate",
+  "metrics": {
+    "shared": {
+      "throughput_vs_prior_pct": 5.068354738273162,
+      "throughput_vs_vllm_pct": 10.349589455467555,
+      "tpot_vs_prior_pct": -4.878985017463499,
+      "throughput_vs_prior_per_pair_pct": [
+        4.62889321409794,
+        5.528423514531089
+      ]
+    },
+    "unique": {
+      "throughput_vs_prior_pct": 1.1820961305340605,
+      "throughput_vs_vllm_pct": 3.1535012200514023,
+      "tpot_vs_prior_pct": 6.401883341118331,
+      "throughput_vs_prior_per_pair_pct": [
+        6.041834509055799,
+        -4.087951402318868
+      ]
+    }
+  },
+  "retained_host_pressure": [
+    {
+      "name": "shared-p0-prior",
+      "wall_us": 1583018.068,
+      "cpu_some_pct": 1.7685205599308422,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 8.499523961213562,
+      "io_full_pct": 7.759671382348366,
+      "memory_some_pct": 0.17637196039887526,
+      "memory_full_pct": 0.17624561945303077
+    },
+    {
+      "name": "shared-p0-candidate",
+      "wall_us": 1513114.403,
+      "cpu_some_pct": 1.8664153843230584,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 10.484997015787444,
+      "io_full_pct": 9.4826273357468,
+      "memory_some_pct": 0.24274436835163746,
+      "memory_full_pct": 0.2247021106440423
+    },
+    {
+      "name": "shared-p0-vllm029",
+      "wall_us": 1807249.089,
+      "cpu_some_pct": 0.8929040328873006,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 38.44151889347003,
+      "io_full_pct": 30.868351429557702,
+      "memory_some_pct": 0.2449579323041507,
+      "memory_full_pct": 0.24490259958847324
+    },
+    {
+      "name": "shared-p1-vllm029",
+      "wall_us": 1609856.72,
+      "cpu_some_pct": 0.9697136276823444,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 8.569147694087956,
+      "io_full_pct": 7.173184952757784,
+      "memory_some_pct": 0.22666613461103546,
+      "memory_full_pct": 0.22616919597664567
+    },
+    {
+      "name": "shared-p1-candidate",
+      "wall_us": 1578532.235,
+      "cpu_some_pct": 2.9149230519198106,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 7.13669303053542,
+      "io_full_pct": 5.374486381648075,
+      "memory_some_pct": 0.12980412782004416,
+      "memory_full_pct": 0.12891722797159094
+    },
+    {
+      "name": "shared-p1-prior",
+      "wall_us": 1683752.44,
+      "cpu_some_pct": 2.822980318888209,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 6.132671142558226,
+      "io_full_pct": 3.9322288970224153,
+      "memory_some_pct": 0.17455060079972326,
+      "memory_full_pct": 0.1734221688789357
+    },
+    {
+      "name": "unique-p0-prior",
+      "wall_us": 4116086.697,
+      "cpu_some_pct": 2.9783629214941194,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 7.5257647081577,
+      "io_full_pct": 4.839912632190118,
+      "memory_some_pct": 0.09871026290484376,
+      "memory_full_pct": 0.09834583909397183
+    },
+    {
+      "name": "unique-p0-candidate",
+      "wall_us": 3861352.736,
+      "cpu_some_pct": 2.228312352761962,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 10.806368351425329,
+      "io_full_pct": 8.39345747873162,
+      "memory_some_pct": 0.19008882383544046,
+      "memory_full_pct": 0.18894932679882473
+    },
+    {
+      "name": "unique-p0-vllm029",
+      "wall_us": 3348585.261,
+      "cpu_some_pct": 1.006544476933359,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 51.83765276090427,
+      "io_full_pct": 39.37770423101674,
+      "memory_some_pct": 0.24496912458935893,
+      "memory_full_pct": 0.23893672630006837
+    },
+    {
+      "name": "unique-p1-vllm029",
+      "wall_us": 6197439.114,
+      "cpu_some_pct": 5.376882190697711,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 10.997155235626249,
+      "io_full_pct": 5.634294965660876,
+      "memory_some_pct": 0.17834785944135054,
+      "memory_full_pct": 0.1702800109187164
+    },
+    {
+      "name": "unique-p1-candidate",
+      "wall_us": 4645952.937,
+      "cpu_some_pct": 24.228140389360988,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 15.101121546294303,
+      "io_full_pct": 1.4252619623555176,
+      "memory_some_pct": 0.17974783888776186,
+      "memory_full_pct": 0.17539996875779804
+    },
+    {
+      "name": "unique-p1-prior",
+      "wall_us": 4464121.668,
+      "cpu_some_pct": 14.768481888070262,
+      "cpu_full_pct": 0.0,
+      "io_some_pct": 18.883692307106717,
+      "io_full_pct": 5.406505869454274,
+      "memory_some_pct": 0.2278611730705186,
+      "memory_full_pct": 0.2114861713486793
+    }
+  ]
+}

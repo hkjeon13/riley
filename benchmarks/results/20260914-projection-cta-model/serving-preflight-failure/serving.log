@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/projection_cta_serving_screen.py", line 187, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/projection_cta_serving_screen.py", line 24, in main
+    assert mem['MemAvailable']>=16*1024**2,'host available memory guard'
+AssertionError: host available memory guard

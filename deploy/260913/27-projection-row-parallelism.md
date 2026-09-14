@@ -30,3 +30,11 @@ C32 dense-wire profile의 pure decode에서 QKV·attention output projection·FF
 동일 CTA의 두 warp 변형은 큰 행 수에서 6–8% 개선됐지만 작은 행 수에서 9–23% 회귀했다. 별도 CTA 변형은 16/17/24/32행에서 각각 13.31/25.71/18.85/18.38% 단축됐고 8행은 거의 동일, 1행은 5.65% 회귀했다. 두 변형 모두 102회 bitwise 검사 및 bounded memcheck를 통과했다. Raw logs·요약·binary/source 해시는 `benchmarks/results/20260914-decode-projection-split-native/`에 보존한다.
 
 다음 단계는 별도 CTA 변형의 실제 모델 검증과 저부하 fallback 필요성 판단이다. 18.38%는 세 projection의 native 시간 감소이며 serving throughput 개선율이 아니다. production dispatch는 아직 변경하지 않았다.
+
+## 실제 모델 및 serving 검증
+
+실험 opt-in `RILEY_EXPERIMENT_PROJECTION_CTAS=1`을 graph capture에 연결했다. 기본값은 기존 adaptive projection이다. 실제 모델은 활성 용량 16·32에서 직렬 기준 생성 토큰과 일치했고, terminal/cancel 및 모든 실행 후 allocation 회수 검증을 통과했다.
+
+C32 serving 12개 lane 및 warmup 포함 6,912개 응답을 재검산했다. Shared throughput은 기존 대비 +5.07%, TPOT는 -4.88%였다. Unique는 aggregate throughput +1.18%지만 순서별 +6.04%/-4.09%로 방향이 바뀌고 TPOT가 +6.40% 악화됐다. vLLM unique 실행 편차 및 host I/O pressure도 컸다. vLLM보다 모든 latency가 동등 이하인 목표는 미달이며 기본 경로로 승격하지 않는다.
+
+다음 검증은 host 부하가 안정적인 조건에서 C8/C16/C64와 unique 재현성 확인이다. 작은 batch의 native 회귀가 실제 serving에도 나타나는지 확인하고, fallback은 비용까지 측정한 뒤 결정한다. 결과 표·source/binary 해시·요청별 검증은 `benchmarks/results/20260914-projection-cta-serving-c32/`에 보존한다. 메모리 사전 조건 실패는 이전 FFN tmpfs spool을 영구 보존한 후 재시도하여 해결했고, 종료 시 Blender 세 개를 복구했다.
