@@ -1,6 +1,6 @@
 """Verify all materialized response archive bytes before the semantic exporter."""
 import pathlib,json,hashlib,tarfile,re,sys
-r=pathlib.Path(sys.argv[1]);concurrency=8 if r.name.endswith('-c8') else 64 if r.name.endswith('-c64') else 32;base=f'ffn-split-serving-c{concurrency}-v1/'
+r=pathlib.Path(sys.argv[1]);concurrency=8 if r.name.endswith('-c8') else 64 if r.name.endswith('-c64') else 32;base=f'ffn-split-serving-c{concurrency}-v2/'
 manifest=json.loads((r/'evidence/manifest.json').read_text());assert len(manifest)==17
 with tarfile.open(r/'evidence/common.tar.gz') as tar:
  material=json.load(tar.extractfile(base+'materialization.json'));assert material['all_files_equal']

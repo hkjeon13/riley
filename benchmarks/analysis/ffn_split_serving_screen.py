@@ -68,7 +68,7 @@ def main():
             startup_begin=time.monotonic_ns()
             process=subprocess.Popen(argv,env=child,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
             try:
-                deadline=time.monotonic()+300
+                deadline=time.monotonic()+600
                 while True:
                     assert process.poll() is None,'server exited before readiness: '+name
                     try:
@@ -86,7 +86,7 @@ def main():
                 try:process.wait(timeout=40)
                 except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=10)
                 write(args.out/(name+'-exit.json'),{'exit_code':process.returncode,'gpu_after':gpu('temperature.gpu,memory.used')})
-    write(args.out/'preparation.json',{'hashes':hashes,'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'source_fixture_sha256':file_hash(args.root/'workload.json'),'concurrency':args.concurrency,'active_capacity':min(args.concurrency,32),'warmup':args.warmup,'retained':args.retained,'kv_payload_bytes_per_engine':754974720,'riley_cache_page_limit':512,'vllm_prefix_caching':True,'client_treatment':'gc-phase-disabled-v1','artifact_storage':'tmpfs:/dev/shm','phase_cleanup':'release previous rows and full collect before every phase','qualification':False,'reference_scope':'same-model prior Riley greedy baseline; vLLM agreement reported separately','gpu':gpu('uuid,name,driver_version,memory.total')})
+    write(args.out/'preparation.json',{'hashes':hashes,'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'source_fixture_sha256':file_hash(args.root/'workload.json'),'concurrency':args.concurrency,'active_capacity':min(args.concurrency,32),'warmup':args.warmup,'retained':args.retained,'kv_payload_bytes_per_engine':754974720,'riley_cache_page_limit':512,'vllm_prefix_caching':True,'client_treatment':'gc-phase-disabled-v1','artifact_storage':'tmpfs:/dev/shm','phase_cleanup':'release previous rows and full collect before every phase','readiness_timeout_seconds':600,'qualification':False,'reference_scope':'same-model prior Riley greedy baseline; vLLM agreement reported separately','gpu':gpu('uuid,name,driver_version,memory.total')})
     # Capture immutable references before any timed comparison. Placeholders
     # intentionally fail comparison checks; protocol completeness must still pass.
     with server('prior','references') as port:

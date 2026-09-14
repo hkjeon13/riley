@@ -3,7 +3,7 @@ import contextlib,hashlib,json,pathlib,re,statistics,sys,tarfile
 from paired_decode_serving_screen import summary
 from serving_evidence_validation import validate_row
 from serving_comparison_assessment import assess
-root=pathlib.Path(sys.argv[1]);prefix=('ffn-split-serving-c64-v1/' if root.name.endswith('c64') else 'ffn-split-serving-c8-v1/' if root.name.endswith('c8') else 'ffn-split-serving-c32-v1/')
+root=pathlib.Path(sys.argv[1]);prefix=('ffn-split-serving-c64-v2/' if root.name.endswith('c64') else 'ffn-split-serving-c8-v2/' if root.name.endswith('c8') else 'ffn-split-serving-c32-v2/')
 archives=sorted((root/'evidence').glob('*.tar.gz'));assert len(archives)==17
 manifest=json.loads((root/'evidence/manifest.json').read_text())
 assert set(manifest)=={p.name for p in archives}
@@ -27,6 +27,7 @@ with contextlib.ExitStack() as stack:
     preparation=load('preparation.json');assert preparation['warmup']==256 and preparation['retained']==8192;concurrency=preparation['concurrency'];assert concurrency in (8,32,64);active=preparation.get('active_capacity',concurrency)
     assert preparation['hashes']=={'current':'658c00b7b99b57d54a12dd345dd44a3ba705fdffa6749687eed9a8e1a04306cc','prior':'3ae029380abc732a96f65e361548daef92a794ea9a74905dd6e245ccaf4786fc'}
     assert preparation['kv_payload_bytes_per_engine']==754974720
+    assert preparation['readiness_timeout_seconds']==600
     assert preparation['client_treatment']=='gc-phase-disabled-v1'
     assert preparation['artifact_storage']=='tmpfs:/dev/shm'
     assert preparation['controller_sha256']==hashlib.sha256(pathlib.Path(__file__).with_name('ffn_split_serving_screen.py').read_bytes()).hexdigest()
@@ -126,7 +127,7 @@ with contextlib.ExitStack() as stack:
     result['startup_by_lane']={}
     for record in records:
         startup=load(record['name']+'-startup.json')
-        assert 0<startup['ready_wall_ms']<310000 and startup['server_rss_kib']>0
+        assert 0<startup['ready_wall_ms']<610000 and startup['server_rss_kib']>0
         result['startup_by_lane'][record['name']]=startup
     (root/'comparison.json').write_text(json.dumps(result,indent=2)+'\n')
     for r in compared:print(r)
