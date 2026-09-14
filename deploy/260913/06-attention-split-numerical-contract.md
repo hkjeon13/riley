@@ -1,6 +1,6 @@
 # PR06 attention split: implementation and numerical gate
 
-Status: contract fixed before candidate model results; backend unimplemented.
+Status: contract fixed before candidate model results; isolated native FP32 control implemented. Model/serving integration remains unimplemented.
 
 The [compatibility probe](../../benchmarks/results/20260914-attention-split-compatibility/README.md) rejects independent local-max BF16 partial merging under the existing exact profile. It does not reject every context-parallel implementation. Existing QK context splitting and eight output-dimension CTAs are already implemented; neither is a new optimization.
 
@@ -28,3 +28,7 @@ For numerical isolation, compare partials against an independent higher-precisio
 Run supported native/model/serving paths on SM89. Compile SM90a and SM100a paths where available; runtime tests for absent Hopper/Blackwell/multi-GPU hardware remain explicit skips. Do not skip observed failures. Keep raw profiler databases private and avoid concurrent GPU workloads during measurement; restore the recorded Blender instances afterward and keep all three viewer services available.
 
 Completion requires model correctness, demonstrated candidate execution, bounded scratch/lifecycle behavior, long-context serving improvement and no short-context regression. Report throughput, TTFT, TPOT and P95/P99 versus both Riley and vLLM. Default promotion additionally requires the broader serving goal; a passing numerical screen does not confer promotion. Rollback selects the existing exact profile and releases candidate graph/scratch through the normal owner lifecycle.
+
+## Native control outcome — 2026-09-14
+
+[Native report](../../benchmarks/results/20260914-attention-split-fp32/README.md): partial/merge FP32 control, bounded scratch, host extent checks and isolated graph probe implemented. 120 native combinations completed; bounded memcheck/racecheck 0, SM90a/SM100a compile passed with runtime skips. Long-context P×V+merge timings are promising, but short-context overhead regresses. Sampled FP64 errors and legacy differences are reported without declaring numerical acceptance. Rust profile/graph owner, full-model gates and matched serving are still pending.
