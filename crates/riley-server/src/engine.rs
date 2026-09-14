@@ -2470,6 +2470,8 @@ mod cuda_backend {
         steps: [u64; 3],
         scheduled_tokens: [u64; 3],
         nanos: [[u128; 4]; 3],
+        rolling_steps_by_kind: [u64; 2],
+        rolling_nanos: [[u128; 6]; 2],
         fallback_count: u64,
         fallback_nanos: u128,
         shapes: std::collections::BTreeMap<(usize,usize,usize,usize), (u64,u128,u128,u128)>,
@@ -2497,6 +2499,14 @@ mod cuda_backend {
             self.steps[kind] = self.steps[kind].saturating_add(1);
             self.scheduled_tokens[kind] = self.scheduled_tokens[kind].saturating_add(tokens as u64);
             for (total, value) in self.nanos[kind].iter_mut().zip(nanos) {
+                *total = total.saturating_add(value);
+            }
+        }
+
+        fn record_rolling(&mut self, drain: bool, nanos: [u128; 6]) {
+            let kind = usize::from(drain);
+            self.rolling_steps_by_kind[kind] = self.rolling_steps_by_kind[kind].saturating_add(1);
+            for (total, value) in self.rolling_nanos[kind].iter_mut().zip(nanos) {
                 *total = total.saturating_add(value);
             }
         }
@@ -2529,6 +2539,10 @@ mod cuda_backend {
             for (kind, name) in ["decode", "prefill_or_mixed", "paired_decode"].iter().enumerate() {
                 let n = self.nanos[kind];
                 eprintln!("RILEY_HOST_PHASE kind={} steps={} scheduled_tokens={} plan_ns={} execute_wall_ns={} sample_ns={} commit_publish_ns={}", name, self.steps[kind], self.scheduled_tokens[kind], n[0], n[1], n[2], n[3]);
+            }
+            for (kind, name) in ["prefix", "drain"].iter().enumerate() {
+                let n = self.rolling_nanos[kind];
+                eprintln!("RILEY_ROLLING_HOST kind={} steps={} setup_submit_ns={} prepare_read_wall_ns={} sample_result_ns={} settle_confirm_ns={} publish_ns={} continuation_ns={}", name, self.rolling_steps_by_kind[kind], n[0], n[1], n[2], n[3], n[4], n[5]);
             }
             eprintln!("RILEY_HOST_PHASE_FALLBACK count={} wall_ns={}", self.fallback_count, self.fallback_nanos);
             for ((rows,decode,prefill,context),(count,sum,min,max)) in &self.shapes {
@@ -3148,6 +3162,8 @@ mod cuda_backend {
         }
 
         fn try_rolling_decode(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
+            let mut mark = self.host_phase_timing.as_ref().map(|_| Instant::now());
+            let mut timing_ns = [0u128; 6];
             let mut state=if let Some(state)=self.rolling_state.take(){state}else{
                 let now=self.now_ns();
                 let Some(window)=self.scheduler_mut()?.plan_decode_window(now).map_err(|e|internal(format!("rolling planning failed: {e}")))? else{return Ok(None)};
@@ -3166,20 +3182,25 @@ mod cuda_backend {
                 self.widest_decode_window=self.widest_decode_window.max(window.first().batch_size());
                 RollingDecodeState{window,first_result:None,prefix_published:false,suppressed:Vec::new()}
             };
+            timing_ns[0] = host_phase_checkpoint(&mut mark);
             let mut events=Vec::new();
             if state.first_result.is_none() {
                 self.snapshot_cancel_deltas(state.window.first())?;
                 let selection=self.sampling_selection_for_plan(state.window.first())?;
                 let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
                 let first=riley_scheduler::execution::read_llama_decode_window_step(state.window.first(),graph,true).map_err(|e|internal(format!("rolling first read failed: {}",e.error())))?;
+                timing_ns[1] = host_phase_checkpoint(&mut mark);
                 self.sample_iteration(state.window.first(),&first,selection)?;
                 state.suppressed=state.window.first().decode_items().iter().filter_map(|i|i.output_slot().filter(|slot|self.samples[slot.get() as usize].stop()).map(|_|i.request_id())).collect();
                 let result=first.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("rolling first result failed: {e}")))?;
+                timing_ns[2] = host_phase_checkpoint(&mut mark);
                 let now=self.now_ns();
                 let prefix=self.scheduler_mut()?.complete_decode_window_prefix(&result,now).map_err(|e|internal(format!("rolling prefix settlement failed: {e}")))?;
+                timing_ns[3] = host_phase_checkpoint(&mut mark);
                 state.first_result=Some(result);
                 if let Some(updates)=prefix {
                     state.prefix_published=true;self.publish_committed_updates(&updates,&mut events)?;
+                    timing_ns[4] = host_phase_checkpoint(&mut mark);
                     let now=self.now_ns();
                     if let Some(next)=self.scheduler_mut()?.roll_decode_window(now).map_err(|e|internal(format!("rolling extension failed: {e}")))? {
                         let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
@@ -3195,20 +3216,28 @@ mod cuda_backend {
                 }
                 // Return each prefix event on this worker tick, even when the next
                 // GPU step is still running. Never accumulate a whole decode run.
+                timing_ns[5] = host_phase_checkpoint(&mut mark);
+                if let Some(timing) = self.host_phase_timing.as_mut() { timing.record_rolling(false, timing_ns); }
                 self.rolling_state=Some(state);return Ok(Some(events));
             }
             let selection=self.sampling_selection_for_plan(state.window.second())?;
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
             let second=riley_scheduler::execution::read_llama_decode_window_step(state.window.second(),graph,false).map_err(|e|internal(format!("rolling second read failed: {}",e.error())))?;
+            timing_ns[1] = host_phase_checkpoint(&mut mark);
             self.sample_iteration_with_suppression(state.window.second(),&second,selection,&state.suppressed)?;
             let result=second.into_result(&self.samples,riley_scheduler::IterationTiming::default()).map_err(|e|internal(format!("rolling second result failed: {e}")))?;
+            timing_ns[2] = host_phase_checkpoint(&mut mark);
             if !state.prefix_published {self.window_pending_tokens.append(&mut self.pending_tokens);std::mem::swap(&mut self.window_pending_tokens,&mut self.pending_tokens);}
             let now=self.now_ns();let updates=self.scheduler_mut()?.complete_decode_window_after_drain(state.first_result.as_ref().unwrap(),&result,now).map_err(|e|internal(format!("rolling drain settlement failed: {e}")))?;
             if !updates.settlement_failures().is_empty(){return Err(internal("rolling drain contained settlement failures"));}
             let Some(VariableServingSession::ThirtyTwo(graph))=self.variable_graph.as_mut() else{return Err(internal("rolling graph missing"))};
             graph.confirm_decode_window_commit(state.window.first().iteration_id().get(),state.window.second().iteration_id().get()).map_err(|e|internal(format!("rolling commit failed: {e}")))?;
+            timing_ns[3] = host_phase_checkpoint(&mut mark);
             self.completed_decode_windows=self.completed_decode_windows.saturating_add(1);
-            self.publish_committed_updates(&updates,&mut events)?;Ok(Some(events))
+            self.publish_committed_updates(&updates,&mut events)?;
+            timing_ns[4] = host_phase_checkpoint(&mut mark);
+            if let Some(timing) = self.host_phase_timing.as_mut() { timing.record_rolling(true, timing_ns); }
+            Ok(Some(events))
         }
 
         fn try_decode_window(&mut self)->Result<Option<Vec<BackendEvent>>,BackendError> {
