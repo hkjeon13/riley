@@ -6,10 +6,17 @@
   },
   "data_sha256": {
     "pressure.json": "5eabc8188fe4005b2a1d988e7f34d9634cbd1129bd22d34df1686431977a2c8f",
-    "quiet-start.json": "09c6494289603726bb4c088072cf315a6524cc42190539e287f81700bc837ad9"
+    "quiet-start.json": "09c6494289603726bb4c088072cf315a6524cc42190539e287f81700bc837ad9",
+    "quiet-start-v2.json": "08369c6f2568b5b61d45f6291dcc6d052c51ce174f9d5c58a206d843f7ba8da5"
   },
   "quiet_probe_exit_code": 1,
   "quiet_probe_passed": false,
   "gpu_measurement_started": false,
-  "sample_count": 29
+  "sample_count": 29,
+  "second_probe": {
+    "exit_code": 1,
+    "passed": false,
+    "sample_count": 29,
+    "c8_serving_started": false
+  }
 }

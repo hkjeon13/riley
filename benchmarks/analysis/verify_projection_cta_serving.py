@@ -1,10 +1,11 @@
 """Reconstruct projection-CTA serving evidence; no profiling data is mixed in."""
-import hashlib,json,statistics,tarfile
+import argparse,hashlib,json,statistics,tarfile
 from pathlib import Path
 from paired_decode_serving_screen import summary
 from serving_evidence_validation import validate_row
 root=Path(__file__).resolve().parents[2]
-d=root/'benchmarks/results/20260914-projection-cta-serving-c32'
+parser=argparse.ArgumentParser();parser.add_argument('directory',nargs='?',type=Path,default=root/'benchmarks/results/20260914-projection-cta-serving-c32');args=parser.parse_args()
+d=args.directory
 m=json.loads((d/'manifest.json').read_text())
 assert hashlib.sha256((d/'vllm029-packages.txt').read_bytes()).hexdigest()==m['vllm029_packages_sha256']
 assert 'vllm==0.29.0' in (d/'vllm029-packages.txt').read_text().splitlines()
@@ -20,7 +21,8 @@ load=lambda n:json.loads(files[n])
 b='serving/'
 assert load(b+'complete.json')=={'lanes':12,'all_complete':True}
 preparation=load(b+'preparation.json')
-assert preparation['concurrency']==32 and preparation['warmup']==64 and preparation['retained']==512
+assert preparation['concurrency'] in (8,16,32,64) and preparation['warmup']>=32 and preparation['retained']>=128
+assert preparation['active_capacity']==min(preparation['concurrency'],32)
 assert preparation['hashes']['prior']=='a525729d037b519e9c796b7574f960820fb6cbeb1e0d60e4a8a504c4cd616403'
 assert preparation['controller_sha256']==hashlib.sha256(sources['benchmarks/analysis/projection_cta_serving_screen.py']).hexdigest()
 assert preparation['client_sha256']==hashlib.sha256(sources['benchmarks/analysis/paired_decode_serving_screen.py']).hexdigest()
@@ -32,12 +34,19 @@ for kind in ['shared','unique']:
         stats=[]
         for pair in [0,1]:
             name=f'{kind}-p{pair}-{lane}'
-            for phase,count in [('warmup',64),('retained',512)]:
+            for phase,count in [('warmup',preparation['warmup']),('retained',preparation['retained'])]:
                 rows=load(b+name+'-'+phase+'.json');assert len(rows)==count
                 for row in rows:
                     checks=validate_row(row,byid[row['id']]);assert len(row['token_ids'])==32
                     if not lane.startswith('vllm'):assert all(checks.values())
                 total+=count
+                if preparation.get('host_quiet_timeout_seconds',0):
+                    quiet=load(b+name+'-'+phase+'-quiet-start.json')
+                    assert quiet['passed'] and quiet['samples'][-1]['quiet_streak']==3
+                    assert quiet['policy']=={'version':'psi-start-v1','interval_seconds':2,'consecutive_samples':3,'max_cpu_some_pct':5,'max_io_full_pct':5,'max_memory_full_pct':0.5}
+                    assert len(quiet['samples'])>=3
+                    for sample in quiet['samples'][-3:]:
+                        assert 0<=sample['cpu_some_pct']<=5 and 0<=sample['io_full_pct']<=5 and 0<=sample['memory_full_pct']<=0.5
                 if phase=='retained':
                     value=summary(rows);assert value=={k:v for k,v in reported[name].items() if k!='name'};stats.append(value)
             assert load(b+name+'-exit.json')['exit_code']==0
@@ -73,8 +82,10 @@ for kind in ['shared','unique']:
             if lane in ['prior','candidate']:
                 assert env['RILEY_EXPERIMENT_PROJECTION_CTAS']==('1' if lane=='candidate' else '0')
                 assert env['RILEY_ROLLING_DECODE']=='1' and env['RILEY_PREFILL_FFN_SPLIT']=='1'
+                assert argv[argv.index('--max-active-sequences')+1]==str(preparation['active_capacity'])
                 assert argv[argv.index('--kv-blocks')+1]=='2048'
             else:
+                assert argv[argv.index('--max-num-seqs')+1]==str(preparation['active_capacity'])
                 assert '--enable-prefix-caching' in argv
                 assert argv[argv.index('--kv-cache-memory-bytes')+1]=='754974720'
                 assert argv[argv.index('--dtype')+1]=='bfloat16'
