@@ -460,7 +460,8 @@ def collect_source_provenance(repo_root: Path) -> dict[str, object]:
         ).stdout
     except (OSError, subprocess.CalledProcessError) as error:
         raise Qwen3BStageTraceError("cannot collect Git provenance") from error
-    _require_sha256(revision, "Git revision")
+    if oracle.GIT_REVISION_RE.fullmatch(revision) is None:
+        raise Qwen3BStageTraceError("Git revision has an unexpected format")
     return {
         "git_revision": revision,
         "source_dirty": bool(status),
@@ -752,7 +753,9 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         {"git_revision", "source_dirty", "source_status_sha256", "sources"},
         "trace source provenance",
     )
-    _require_sha256(source["git_revision"], "trace Git revision")
+    revision = _require_string(source["git_revision"], "trace Git revision")
+    if oracle.GIT_REVISION_RE.fullmatch(revision) is None:
+        raise Qwen3BStageTraceError("trace Git revision is malformed")
     if not isinstance(source["source_dirty"], bool):
         raise Qwen3BStageTraceError("trace source dirty must be a boolean")
     _require_sha256(source["source_status_sha256"], "trace source status SHA-256")

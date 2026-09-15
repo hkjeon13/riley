@@ -18,7 +18,7 @@ def _sha(character: str) -> str:
 
 def _source_provenance() -> dict[str, object]:
     return {
-        "git_revision": _sha("a"),
+        "git_revision": "a" * 40,
         "source_dirty": False,
         "source_status_sha256": _sha("b"),
         "sources": {
@@ -112,6 +112,11 @@ class Qwen3BStageTraceTests(unittest.TestCase):
     def test_manifest_accepts_fixed_stage0_contract(self) -> None:
         document = _manifest()
         trace.validate_manifest(document)
+
+    def test_collect_source_provenance_accepts_git_sha1_revision(self) -> None:
+        repository = Path(__file__).resolve().parents[4]
+        provenance = trace.collect_source_provenance(repository)
+        self.assertRegex(provenance["git_revision"], r"^[0-9a-f]{40,64}$")
 
     def test_manifest_rejects_rotary_shape_tampering(self) -> None:
         document = _manifest()
