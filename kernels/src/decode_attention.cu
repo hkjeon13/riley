@@ -27,6 +27,11 @@ constexpr uint32_t kWarpSize = 32;
 constexpr uint32_t kFullWarpMask = 0xffffffffU;
 constexpr uint64_t kOptimizedHeadSize = 64;
 constexpr uint64_t kOptimizedStateStride = kOptimizedHeadSize + 2;
+constexpr uint64_t kNativeBf16PagedSplitGqaD128HeadSize = 128;
+constexpr uint64_t kNativeBf16PagedSplitGqaD128StateStride =
+    kNativeBf16PagedSplitGqaD128HeadSize + 2;
+constexpr uint64_t kNativeBf16PagedSplitGqaD128QueryHeadCount = 16;
+constexpr uint64_t kNativeBf16PagedSplitGqaD128KeyValueHeadCount = 2;
 constexpr uint64_t kFixed37TwoPassHeadSize = 64;
 constexpr uint64_t kFixed37TwoPassDepthPartialCount =
     riley_cuda_fixed37::chunk_count(kFixed37TwoPassHeadSize);
@@ -54,6 +59,25 @@ static_assert(sizeof(RileyCudaPagedDecodeAttentionReferenceParams) == 480,
               "paged reference decode ABI size changed");
 static_assert(sizeof(RileyCudaPagedDecodeAttentionParams) == 488,
               "paged online decode ABI size changed");
+static_assert(sizeof(RileyCudaNativeBf16PagedSplitGqaParamsV1) == 488,
+              "native BF16 paged split-GQA ABI size changed");
+static_assert(offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1,
+                       format_version) == 4,
+              "native BF16 paged split-GQA format-version offset changed");
+static_assert(offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1,
+                       block_table) == 248,
+              "native BF16 paged split-GQA block-table offset changed");
+static_assert(offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1,
+                       query_head_count) == 416,
+              "native BF16 paged split-GQA dimensions offset changed");
+static_assert(offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, scale) ==
+                  448,
+              "native BF16 paged split-GQA scale offset changed");
+static_assert(offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, reserved) ==
+                  456,
+              "native BF16 paged split-GQA reserved offset changed");
+static_assert(kNativeBf16PagedSplitGqaD128HeadSize == 4 * kWarpSize,
+              "native BF16 D128 lane ownership changed");
 static_assert(kOptimizedHeadSize == 2 * kWarpSize,
               "optimized decode lane ownership changed");
 
@@ -1795,6 +1819,111 @@ paged_decode_partial_state_kernel(
   partial_states[state_base + 2 + lane + kWarpSize] = numerator_high;
 }
 
+// Additive eager-only native-BF16 control for the Qwen2.5-3B paged decode
+// geometry. One warp owns one `(logical_page, query_head)` state. Each lane
+// owns four D128 elements, so the state layout remains exactly
+// `[m, l, n[128]]` and the existing ordered F32 reducer can remain unchanged.
+// This intentionally does not share code or dispatch with the reviewed D64
+// optimized path: its launch, numerical acceptance, and graph policy remain
+// independently versioned.
+__global__ __launch_bounds__(kWarpSize) void
+native_bf16_paged_split_gqa_d128_partial_state_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, const uint32_t* block_ids,
+    const uint16_t* valid_tokens, float* partial_states,
+    uint64_t physical_block_count, float scale) {
+  const uint32_t lane = threadIdx.x;
+  const uint64_t logical_block = blockIdx.x;
+  const uint64_t query_head = blockIdx.y;
+  const uint64_t group_size =
+      kNativeBf16PagedSplitGqaD128QueryHeadCount /
+      kNativeBf16PagedSplitGqaD128KeyValueHeadCount;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t query_base =
+      query_head * kNativeBf16PagedSplitGqaD128HeadSize;
+  const uint64_t physical_block = block_ids[logical_block];
+  const uint64_t token_count = valid_tokens[logical_block];
+  const bool valid_block =
+      physical_block < physical_block_count && token_count != 0 &&
+      token_count <= RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+  const uint64_t block_head_base =
+      (physical_block * kNativeBf16PagedSplitGqaD128KeyValueHeadCount +
+       key_value_head) *
+      RILEY_CUDA_PAGED_KV_BLOCK_SIZE *
+      kNativeBf16PagedSplitGqaD128HeadSize;
+
+  const float query0 = __bfloat162float(query[query_base + lane]);
+  const float query1 =
+      __bfloat162float(query[query_base + lane + kWarpSize]);
+  const float query2 =
+      __bfloat162float(query[query_base + lane + 2 * kWarpSize]);
+  const float query3 =
+      __bfloat162float(query[query_base + lane + 3 * kWarpSize]);
+  float maximum = valid_block ? -CUDART_INF_F : CUDART_NAN_F;
+  float denominator = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator0 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator1 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator2 = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator3 = valid_block ? 0.0F : CUDART_NAN_F;
+  if (valid_block) {
+    for (uint64_t token_in_block = 0; token_in_block < token_count;
+         ++token_in_block) {
+      const uint64_t cache_base =
+          block_head_base + token_in_block *
+                                kNativeBf16PagedSplitGqaD128HeadSize;
+      const float key0 = __bfloat162float(key_pool[cache_base + lane]);
+      const float key1 =
+          __bfloat162float(key_pool[cache_base + lane + kWarpSize]);
+      const float key2 =
+          __bfloat162float(key_pool[cache_base + lane + 2 * kWarpSize]);
+      const float key3 =
+          __bfloat162float(key_pool[cache_base + lane + 3 * kWarpSize]);
+      float score = fmaf(query0, key0, query1 * key1);
+      score = fmaf(query2, key2, score);
+      score = fmaf(query3, key3, score);
+      score = warp_sum(score);
+      score = staged_decode_score(
+          __shfl_sync(kFullWarpMask, score, 0), scale);
+
+      float alpha = 0.0F;
+      float beta = 0.0F;
+      if (lane == 0) {
+        update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      }
+      alpha = __shfl_sync(kFullWarpMask, alpha, 0);
+      beta = __shfl_sync(kFullWarpMask, beta, 0);
+      numerator0 = update_numerator(
+          numerator0, __bfloat162float(value_pool[cache_base + lane]), alpha,
+          beta);
+      numerator1 = update_numerator(
+          numerator1,
+          __bfloat162float(value_pool[cache_base + lane + kWarpSize]), alpha,
+          beta);
+      numerator2 = update_numerator(
+          numerator2,
+          __bfloat162float(value_pool[cache_base + lane + 2 * kWarpSize]),
+          alpha, beta);
+      numerator3 = update_numerator(
+          numerator3,
+          __bfloat162float(value_pool[cache_base + lane + 3 * kWarpSize]),
+          alpha, beta);
+    }
+  }
+
+  const uint64_t state_base =
+      (logical_block * kNativeBf16PagedSplitGqaD128QueryHeadCount +
+       query_head) *
+      kNativeBf16PagedSplitGqaD128StateStride;
+  if (lane == 0) {
+    partial_states[state_base] = maximum;
+    partial_states[state_base + 1] = denominator;
+  }
+  partial_states[state_base + 2 + lane] = numerator0;
+  partial_states[state_base + 2 + lane + kWarpSize] = numerator1;
+  partial_states[state_base + 2 + lane + 2 * kWarpSize] = numerator2;
+  partial_states[state_base + 2 + lane + 3 * kWarpSize] = numerator3;
+}
+
 __device__ __forceinline__ void merge_partial_component(
     float other_maximum, float other_denominator, float other_numerator,
     float* maximum, float* denominator, float* numerator) {
@@ -2070,6 +2199,191 @@ extern "C" RileyCudaStatus riley_cuda_kv_cache_write_execute(
             reinterpret_cast<__nv_bfloat16*>(value_cache.data),
             params->destination_token_start, params->maximum_token_count,
             params->key_value_head_count, params->head_size, element_count);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_native_bf16_paged_split_gqa_d128_execute(
+    const RileyCudaNativeBf16PagedSplitGqaParamsV1* params,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute native BF16 paged split-GQA D128";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RileyCudaNativeBf16PagedSplitGqaParamsV1 stable_params = *params;
+  params = &stable_params;
+  if (params->format_version !=
+          RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V1_VERSION ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "native BF16 paged split-GQA requires format_version=1 and zero reserved fields");
+  }
+  RileyCudaStatus status =
+      validate_paged_block_table(params->block_table, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = validate_decode_dimensions(
+        params->block_table.logical_token_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, params->scale, error,
+        kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      (params->query_head_count !=
+           kNativeBf16PagedSplitGqaD128QueryHeadCount ||
+       params->key_value_head_count !=
+           kNativeBf16PagedSplitGqaD128KeyValueHeadCount ||
+       params->head_size != kNativeBf16PagedSplitGqaD128HeadSize)) {
+    status = validation_error(
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "native BF16 paged split-GQA supports QH=16, KVH=2, head_size=128 only");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      params->partial_state_capacity == 0) {
+    status = validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "partial_state_capacity must be greater than zero");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      params->block_table.block_count > params->partial_state_capacity) {
+    status = validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "partial-state capacity is smaller than block_count");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      (params->block_table.block_count > kMaximumGridX ||
+       params->query_head_count > kMaximumGridYOrZ)) {
+    status = validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "native BF16 paged split-GQA launch dimensions exceed the CUDA grid contract");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = validate_reduction_order(params->reduction_order, error,
+                                      kOperation);
+  }
+
+  PagedByteCounts bytes{};
+  uint64_t states_bytes = 0;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = paged_byte_counts(
+        params->block_table, params->query_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = partial_state_bytes(
+        params->partial_state_capacity, params->query_head_count,
+        params->head_size, &states_bytes, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan partial_states{};
+  ResolvedSpan output{};
+  ResolvedSpan block_ids{};
+  ResolvedSpan valid_tokens{};
+  status = resolve_span(params->query, RILEY_CUDA_DTYPE_BF16, 2,
+                        bytes.query_output, &query, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &key_pool, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &value_pool, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->partial_states, RILEY_CUDA_DTYPE_F32, 4,
+                          states_bytes, &partial_states, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->output, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.query_output, &output, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_paged_block_table(params->block_table, bytes, &block_ids,
+                                       &valid_tokens, error, kOperation);
+  }
+  const ResolvedSpan* const inputs[] = {
+      &query, &key_pool, &value_pool, &block_ids, &valid_tokens};
+  for (size_t index = 0;
+       status == RILEY_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(partial_states, *inputs[index], error,
+                            kOperation);
+  }
+  for (size_t index = 0;
+       status == RILEY_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(output, *inputs[index], error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, partial_states, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query,          key_pool,  value_pool,
+                                partial_states, output,    block_ids,
+                                valid_tokens};
+  status = validate_contexts(stream, spans, 7, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_pool.buffer) ||
+      !uses.add(value_pool.buffer) || !uses.add(partial_states.buffer) ||
+      !uses.add(output.buffer) || !uses.add(block_ids.buffer) ||
+      !uses.add(valid_tokens.buffer)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    const dim3 grid(static_cast<uint32_t>(params->block_table.block_count),
+                    static_cast<uint32_t>(params->query_head_count));
+    native_bf16_paged_split_gqa_d128_partial_state_kernel<<<
+        grid, kWarpSize, 0, stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(query.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+        reinterpret_cast<const uint32_t*>(block_ids.data),
+        reinterpret_cast<const uint16_t*>(valid_tokens.data),
+        reinterpret_cast<float*>(partial_states.data),
+        params->block_table.physical_block_count, params->scale);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_partial_state_reducer(
+        reinterpret_cast<const float*>(partial_states.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        params->block_table.block_count, params->query_head_count,
+        params->head_size, params->reduction_order, stream->stream);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,

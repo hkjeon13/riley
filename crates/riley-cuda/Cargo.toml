@@ -142,3 +142,8 @@ required-features = ["cuda"]
 name = "graph_h2d_borrowed_gpu"
 path = "tests/graph_h2d_borrowed_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "native_bf16_paged_split_gqa_gpu"
+path = "tests/native_bf16_paged_split_gqa_gpu.rs"
+required-features = ["cuda"]

@@ -20,6 +20,9 @@ use crate::ffi;
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const ONLINE_HEAD_SIZE: u64 = 64;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE: u64 = 128;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT: u64 = 16;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT: u64 = 2;
 const HUGGING_FACE_SHORT_DECODE_MAX_TOKENS: u64 = 32;
 const REVIEWED_HF_QUERY_HEAD_COUNT: u64 = 9;
 const REVIEWED_HF_KEY_VALUE_HEAD_COUNT: u64 = 3;
@@ -36,6 +39,8 @@ const PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
     "riley.cuda.paged-materialized-gqa-decode.bf16.block16";
 const PAGED_ONLINE_IMPLEMENTATION_ID: &str =
     "riley.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_IMPLEMENTATION_ID: &str =
+    "riley.cuda.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16";
 const REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID: &str = "riley.cuda.reviewed-9qh-3kvh-paged-hf-short-materialized-then-block-online.bf16.d64.t32.block16";
 const FIXED37_REFERENCE_IMPLEMENTATION_ID: &str = "riley.cuda.fixed37.materialized-gqa-decode.bf16";
 const FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
@@ -577,6 +582,12 @@ pub enum DecodeAttentionBackend {
     /// reuses the aligned workspace prefix for HF-eager materialized scores,
     /// while `T>=33` remains the ordinary online path.
     ChunkedOnline,
+    /// Explicit eager-only native-BF16 paged split-GQA control for the
+    /// Qwen2.5-3B `QH=16,KVH=2,D=128` geometry. It writes F32
+    /// `[logical_block,QH,D+2]` partial states and merges them in logical
+    /// block order. This is intentionally separate from the established D64
+    /// optimized backend and is not graph-capture compatible.
+    NativeBf16PagedSplitGqaD128,
     /// Materializes staged BF16 scores and uses fixed-contiguous-37-balanced-v1
     /// for every D/T reduction.
     Fixed37Materialized,
@@ -598,6 +609,16 @@ pub enum DecodeAttentionSelectionReason {
     ReviewedHuggingFaceShortExactHybrid,
     /// The optimized implementation was not linked.
     OptimizedUnavailableFallback,
+    /// The caller explicitly selected the native-BF16 D128 paged split-GQA
+    /// control and its fixed Qwen2.5-3B geometry was available.
+    NativeBf16PagedSplitGqaD128CapabilityMatch,
+    /// The explicit native-BF16 D128 paged split-GQA control was not linked,
+    /// so cold selection retained the materialized reference.
+    NativeBf16PagedSplitGqaD128UnavailableFallback,
+    /// The explicit native-BF16 D128 paged split-GQA control does not cover
+    /// this request geometry, so cold selection retained the materialized
+    /// reference.
+    NativeBf16PagedSplitGqaD128UnsupportedGeometryFallback,
     /// The optimized kernel supports D64 only.
     UnsupportedHeadSizeFallback,
     /// The fixed partition/grid contract cannot represent the request.
@@ -629,6 +650,7 @@ const fn reduction_order_code(order: DecodePartialReductionOrder) -> u32 {
 pub struct DecodeAttentionBackendAvailability {
     reference: bool,
     chunked_online: bool,
+    native_bf16_paged_split_gqa_d128: bool,
     fixed37_materialized: bool,
     fixed37_two_pass: bool,
 }
@@ -640,6 +662,7 @@ impl DecodeAttentionBackendAvailability {
         Self {
             reference,
             chunked_online,
+            native_bf16_paged_split_gqa_d128: false,
             fixed37_materialized: false,
             fixed37_two_pass: false,
         }
@@ -649,6 +672,16 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn with_fixed37_materialized(mut self, available: bool) -> Self {
         self.fixed37_materialized = available;
+        self
+    }
+
+    /// Adds the explicit eager-only native-BF16 paged split-GQA D128 control.
+    /// Callers must still use
+    /// [`PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128`]
+    /// to opt in; this flag never changes ordinary `Optimized` selection.
+    #[must_use]
+    pub const fn with_native_bf16_paged_split_gqa_d128(mut self, available: bool) -> Self {
+        self.native_bf16_paged_split_gqa_d128 = available;
         self
     }
 
@@ -664,6 +697,7 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn linked() -> Self {
         Self::new(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
+            .with_native_bf16_paged_split_gqa_d128(cfg!(feature = "cuda"))
             .with_fixed37(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
     }
 
@@ -677,6 +711,12 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn chunked_online(self) -> bool {
         self.chunked_online
+    }
+
+    /// Whether the additive eager-only native-BF16 D128 control is linked.
+    #[must_use]
+    pub const fn native_bf16_paged_split_gqa_d128(self) -> bool {
+        self.native_bf16_paged_split_gqa_d128
     }
 
     /// Whether the fixed37 materialized contiguous/paged sibling is linked.
@@ -837,6 +877,7 @@ pub struct DecodeAttentionCapability {
     accumulator_dtype: CudaDType,
     materializes_scores: bool,
     partial_state_merge: bool,
+    graph_capture_supported: bool,
     short_materialized_token_limit: Option<u64>,
     reduction_profile: AttentionReductionProfile,
     reduction_version: Option<u32>,
@@ -873,6 +914,15 @@ impl DecodeAttentionCapability {
     #[must_use]
     pub const fn supports_partial_state_merge(self) -> bool {
         self.partial_state_merge
+    }
+
+    /// Whether this prepared operator may enter CUDA graph capture.
+    ///
+    /// The explicit D128 paged split-GQA control is eager-only. Existing graph
+    /// owners retain their independent D64 contracts.
+    #[must_use]
+    pub const fn supports_graph_capture(self) -> bool {
+        self.graph_capture_supported
     }
 
     /// Logical-token boundary for a versioned materialized-score prefix
@@ -913,6 +963,7 @@ const REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabilit
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -926,6 +977,7 @@ const ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -939,6 +991,7 @@ const REVIEWED_HF_HYBRID_CAPABILITY: DecodeAttentionCapability = DecodeAttention
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: true,
+    graph_capture_supported: false,
     short_materialized_token_limit: Some(HUGGING_FACE_SHORT_DECODE_MAX_TOKENS),
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -952,6 +1005,7 @@ const PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCap
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -965,6 +1019,7 @@ const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabi
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -972,12 +1027,28 @@ const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabi
     maximum_reduction_elements: None,
 };
 
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_CAPABILITY: DecodeAttentionCapability =
+    DecodeAttentionCapability {
+        implementation_id: NATIVE_BF16_PAGED_SPLIT_GQA_D128_IMPLEMENTATION_ID,
+        head_size: Some(NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE),
+        accumulator_dtype: CudaDType::F32,
+        materializes_scores: false,
+        partial_state_merge: true,
+        graph_capture_supported: false,
+        short_materialized_token_limit: None,
+        reduction_profile: AttentionReductionProfile::CanonicalV1,
+        reduction_version: None,
+        reduction_chunk_elements: None,
+        maximum_reduction_elements: None,
+    };
+
 const REVIEWED_HF_PAGED_HYBRID_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     implementation_id: REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID,
     head_size: Some(ONLINE_HEAD_SIZE),
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: true,
+    graph_capture_supported: false,
     short_materialized_token_limit: Some(HUGGING_FACE_SHORT_DECODE_MAX_TOKENS),
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
@@ -991,6 +1062,7 @@ const FIXED37_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionC
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
@@ -1004,6 +1076,7 @@ const FIXED37_PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAtte
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
@@ -1017,6 +1090,7 @@ const FIXED37_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCa
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
@@ -1030,6 +1104,7 @@ const FIXED37_PAGED_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAtten
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: false,
+    graph_capture_supported: false,
     short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
@@ -1055,6 +1130,7 @@ pub struct DecodeAttentionSelectionTrace {
     tokens_per_partition: u64,
     short_materialized_token_limit: Option<u64>,
     reduction_profile: AttentionReductionProfile,
+    graph_capture_supported: bool,
     dynamic_shared_memory_bytes: u64,
 }
 
@@ -1119,6 +1195,12 @@ impl DecodeAttentionSelectionTrace {
     #[must_use]
     pub const fn reduction_profile(self) -> AttentionReductionProfile {
         self.reduction_profile
+    }
+
+    /// Whether this selected low-level operator may enter graph capture.
+    #[must_use]
+    pub const fn supports_graph_capture(self) -> bool {
+        self.graph_capture_supported
     }
 
     /// Maximum dynamic shared-memory bytes launched by this prepared backend.
@@ -1630,6 +1712,12 @@ impl PreparedDecodeAttention {
                 reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
                 &mut stream.native,
             ),
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+                Err(CudaError::invalid_argument(
+                    OPERATION,
+                    "native BF16 paged split-GQA D128 requires the paged decode facade",
+                ))
+            }
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -1772,6 +1860,65 @@ impl PreparedPagedDecodeAttention {
             preference,
             AttentionReductionProfile::CanonicalV1,
             availability,
+        )
+    }
+
+    /// Explicitly selects the eager native-BF16 paged split-GQA D128 control
+    /// for the pinned Qwen2.5-3B decode geometry (`QH=16`, `KVH=2`,
+    /// `D=128`).
+    ///
+    /// It is intentionally separate from [`Self::select`] with
+    /// [`DecodeAttentionPreference::Optimized`]: ordinary optimized selection
+    /// remains the reviewed D64 route. The control reads BF16 Q/K/V, writes
+    /// F32 `(m,l,n[D])` partial states per logical page, reduces them in
+    /// logical-page order, and writes BF16 output. It is eager-only and is
+    /// not admitted to graph capture.
+    ///
+    /// If the additive native operator is unavailable or the request does not
+    /// match its fixed geometry, selection returns the materialized paged
+    /// reference when that reference is available. The immutable trace records
+    /// the fallback reason so a caller cannot mistake it for native execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns for invalid request axes, an unsupported compiled GPU
+    /// architecture, or when neither the requested native control nor the
+    /// materialized reference is available.
+    pub fn select_native_bf16_paged_split_gqa_d128(
+        context: &CudaContext,
+        request: PagedDecodeAttentionRequest,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        const OPERATION: &str = "select_native_bf16_paged_split_gqa_d128";
+        validate_paged_request(request)?;
+        require_architecture_support(context.compute_capability())?;
+        let fallback_reason = if !availability.native_bf16_paged_split_gqa_d128() {
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnavailableFallback
+        } else if !native_bf16_paged_split_gqa_d128_geometry_supported(request)? {
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnsupportedGeometryFallback
+        } else {
+            return prepare_paged_selection(
+                context,
+                context.compute_capability(),
+                request,
+                DecodeAttentionBackend::NativeBf16PagedSplitGqaD128,
+                DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128CapabilityMatch,
+            );
+        };
+        if !availability.reference() {
+            return Err(not_supported(
+                OPERATION,
+                format!(
+                    "native BF16 paged split-GQA D128 was rejected ({fallback_reason:?}) and the materialized reference is unavailable"
+                ),
+            ));
+        }
+        prepare_paged_selection(
+            context,
+            context.compute_capability(),
+            request,
+            DecodeAttentionBackend::MaterializedReference,
+            fallback_reason,
         )
     }
 
@@ -2137,6 +2284,29 @@ impl PreparedPagedDecodeAttention {
                 reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
                 &mut stream.native,
             ),
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+                ffi::native_bf16_paged_split_gqa_d128_execute(
+                    params.query.raw(),
+                    params.key_pool.raw(),
+                    params.value_pool.raw(),
+                    params.workspace.raw(),
+                    params.output.raw(),
+                    params.block_table.device_block_ids.raw(),
+                    params.block_table.device_valid_tokens.raw(),
+                    host.format_version(),
+                    host.logical_token_count(),
+                    host.block_count(),
+                    host.physical_block_count(),
+                    PAGED_KV_BLOCK_SIZE_ABI,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.trace.partial_state_capacity,
+                    self.request.scale,
+                    reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
+                    &mut stream.native,
+                )
+            }
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -2653,18 +2823,20 @@ fn prepare_paged_selection(
             0,
             0,
         ),
-        DecodeAttentionBackend::ChunkedOnline => {
+        DecodeAttentionBackend::ChunkedOnline
+        | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
             let capacity = paged_block_count(request.maximum_sequence_length)?;
             let layout = DecodePartialStateLayout::new(
                 capacity,
                 request.query_head_count,
                 request.head_size,
             )?;
-            let hybrid = is_reviewed_hugging_face_short_decode_shape(
-                request.query_head_count,
-                request.key_value_head_count,
-                request.head_size,
-            );
+            let hybrid = backend == DecodeAttentionBackend::ChunkedOnline
+                && is_reviewed_hugging_face_short_decode_shape(
+                    request.query_head_count,
+                    request.key_value_head_count,
+                    request.head_size,
+                );
             let materialized_score_bytes = if hybrid {
                 hugging_face_short_score_prefix_bytes(
                     "select_paged_decode_attention",
@@ -2675,7 +2847,9 @@ fn prepare_paged_selection(
                 0
             };
             (
-                if hybrid {
+                if backend == DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 {
+                    NATIVE_BF16_PAGED_SPLIT_GQA_D128_CAPABILITY
+                } else if hybrid {
                     REVIEWED_HF_PAGED_HYBRID_CAPABILITY
                 } else {
                     PAGED_ONLINE_CAPABILITY
@@ -2712,12 +2886,14 @@ fn prepare_paged_selection(
             partial_state_capacity,
             tokens_per_partition: match backend {
                 DecodeAttentionBackend::MaterializedReference
-                | DecodeAttentionBackend::ChunkedOnline => PAGED_KV_BLOCK_SIZE,
+                | DecodeAttentionBackend::ChunkedOnline
+                | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => PAGED_KV_BLOCK_SIZE,
                 DecodeAttentionBackend::Fixed37Materialized
                 | DecodeAttentionBackend::Fixed37TwoPass => 0,
             },
             short_materialized_token_limit: capability.short_materialized_token_limit,
             reduction_profile: capability.reduction_profile,
+            graph_capture_supported: capability.graph_capture_supported,
             dynamic_shared_memory_bytes: match backend {
                 DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
                     "select_paged_decode_attention",
@@ -2775,6 +2951,18 @@ fn paged_optimized_geometry_supported(request: PagedDecodeAttentionRequest) -> C
     Ok(
         paged_block_count(request.maximum_sequence_length)? <= MAXIMUM_GRID_X
             && request.query_head_count <= MAXIMUM_GRID_Y,
+    )
+}
+
+fn native_bf16_paged_split_gqa_d128_geometry_supported(
+    request: PagedDecodeAttentionRequest,
+) -> CudaResult<bool> {
+    Ok(
+        request.query_head_count == NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
+            && request.key_value_head_count
+                == NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
+            && request.head_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+            && paged_optimized_geometry_supported(request)?,
     )
 }
 
@@ -3177,6 +3365,12 @@ fn prepare_selection(
                 request.tokens_per_partition,
             )
         }
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+            return Err(CudaError::invalid_argument(
+                "select_decode_attention",
+                "native BF16 paged split-GQA D128 requires the paged decode facade",
+            ));
+        }
     };
     Ok(PreparedDecodeAttention {
         context: Arc::clone(&context.inner),
@@ -3203,6 +3397,7 @@ fn prepare_selection(
             tokens_per_partition,
             short_materialized_token_limit: capability.short_materialized_token_limit,
             reduction_profile: capability.reduction_profile,
+            graph_capture_supported: capability.graph_capture_supported,
             dynamic_shared_memory_bytes: match backend {
                 DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
                     "select_decode_attention",
@@ -4356,6 +4551,91 @@ mod tests {
             DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
         );
         assert_eq!(fallback.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn native_bf16_paged_split_gqa_d128_is_explicit_eager_only_and_falls_back_cold() {
+        let context = test_context();
+        let qwen3b =
+            PagedDecodeAttentionRequest::new(16_384, 1_024, 16, 2, 128, 1.0 / 128.0_f32.sqrt());
+        let availability = DecodeAttentionBackendAvailability::new(true, true)
+            .with_native_bf16_paged_split_gqa_d128(true);
+
+        let strict = PreparedPagedDecodeAttention::select_for_compute_capability(
+            &context,
+            context.compute_capability(),
+            qwen3b,
+            DecodeAttentionPreference::Optimized,
+            availability,
+        )
+        .expect("ordinary optimized selection must retain its D64-only contract");
+        assert_eq!(
+            strict.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            strict.selection_trace().reason(),
+            DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
+        );
+
+        let native = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
+            &context,
+            qwen3b,
+            availability,
+        )
+        .expect("the explicit Qwen3B D128 control must cold-select natively");
+        assert_eq!(
+            native.backend(),
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128
+        );
+        assert_eq!(
+            native.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128CapabilityMatch
+        );
+        assert_eq!(
+            native.capability().implementation_id(),
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_IMPLEMENTATION_ID
+        );
+        assert_eq!(native.capability().head_size(), Some(128));
+        assert!(native.capability().supports_partial_state_merge());
+        assert!(!native.capability().materializes_scores());
+        assert!(!native.capability().supports_graph_capture());
+        assert!(!native.selection_trace().supports_graph_capture());
+        assert_eq!(native.workspace_dtype(), CudaDType::F32);
+        assert_eq!(native.partial_state_capacity(), 1_024);
+        assert_eq!(native.workspace_bytes(), 1_024 * 16 * 130 * F32_BYTES);
+        assert_eq!(native.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
+
+        let unsupported = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
+            &context,
+            PagedDecodeAttentionRequest::new(64, 4, 16, 2, 64, 0.125),
+            availability,
+        )
+        .expect("non-D128 native profile requests must use the reference fallback");
+        assert_eq!(
+            unsupported.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            unsupported.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnsupportedGeometryFallback
+        );
+
+        let unavailable = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
+            &context,
+            qwen3b,
+            DecodeAttentionBackendAvailability::new(true, true),
+        )
+        .expect("unlinked explicit control must retain the reference fallback");
+        assert_eq!(
+            unavailable.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            unavailable.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnavailableFallback
+        );
     }
 
     #[test]

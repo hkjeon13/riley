@@ -910,6 +910,34 @@ typedef struct RileyCudaPagedDecodeAttentionParams {
   uint64_t reserved[4];
 } RileyCudaPagedDecodeAttentionParams;
 
+// Additive eager-only native-BF16 paged split-GQA control for the pinned
+// Qwen2.5-3B decode geometry: QH=16, KVH=2, head_size=128 and page size 16.
+// It keeps the versioned F32 partial-state layout
+// [logical_block,QH,head_size+2] where each row is (m,l,n[head_size]), and
+// merges logical blocks in the requested stable order before writing BF16
+// [QH,head_size] output. It does not alter the D64
+// RileyCudaPagedDecodeAttentionParams contract and is not graph-capture
+// compatible. Every span and block table follows the same ownership and
+// overlap rules as the D64 paged online descriptor.
+#define RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V1_VERSION 1u
+typedef struct RileyCudaNativeBf16PagedSplitGqaParamsV1 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RileyCudaBufferSpan query;
+  RileyCudaBufferSpan key_pool;
+  RileyCudaBufferSpan value_pool;
+  RileyCudaBufferSpan partial_states;
+  RileyCudaBufferSpan output;
+  RileyCudaPagedKvBlockTableV1 block_table;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t partial_state_capacity;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RileyCudaNativeBf16PagedSplitGqaParamsV1;
+
 #define RILEY_CUDA_PACKED_BATCH_VERSION 1u
 
 // Packed multi-sequence address-translation descriptor. The device arrays are
@@ -2411,6 +2439,10 @@ riley_cuda_fixed37_paged_decode_attention_two_pass_execute(
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_paged_decode_attention_execute(
     const RileyCudaPagedDecodeAttentionParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_native_bf16_paged_split_gqa_d128_execute(
+    const RileyCudaNativeBf16PagedSplitGqaParamsV1* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 

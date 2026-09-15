@@ -404,6 +404,26 @@ _Static_assert(
 _Static_assert(offsetof(RileyCudaPagedDecodeAttentionParams, reserved) ==
                    456,
                "paged online reserved tail changed");
+_Static_assert(RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V1_VERSION == 1,
+               "native BF16 paged split-GQA ABI version changed");
+_Static_assert(sizeof(RileyCudaNativeBf16PagedSplitGqaParamsV1) == 488,
+               "native BF16 paged split-GQA ABI size changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, format_version) == 4,
+    "native BF16 paged split-GQA format-version offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, block_table) == 248,
+    "native BF16 paged split-GQA block-table offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, query_head_count) ==
+        416,
+    "native BF16 paged split-GQA dimensions offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, scale) == 448,
+    "native BF16 paged split-GQA scale offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, reserved) == 456,
+    "native BF16 paged split-GQA reserved offset changed");
 _Static_assert(RILEY_CUDA_PACKED_BATCH_VERSION == 1,
                "packed batch ABI version changed");
 _Static_assert(sizeof(RileyCudaPackedBatchV1) == 320,
@@ -952,6 +972,9 @@ static RileyCudaStatus (*const
 static RileyCudaStatus (*const paged_decode_attention_symbol)(
     const RileyCudaPagedDecodeAttentionParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_paged_decode_attention_execute;
+static RileyCudaStatus (*const native_bf16_paged_split_gqa_d128_symbol)(
+    const RileyCudaNativeBf16PagedSplitGqaParamsV1*, RileyCudaStream*,
+    RileyCudaErrorInfo*) = riley_cuda_native_bf16_paged_split_gqa_d128_execute;
 static RileyCudaStatus (*const ragged_paged_kv_cache_write_symbol)(
     const RileyCudaRaggedPagedKvCacheWriteParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) =
@@ -1105,6 +1128,7 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&fixed37_paged_decode_attention_reference_symbol,
     (const void*)&fixed37_paged_decode_attention_two_pass_symbol,
     (const void*)&paged_decode_attention_symbol,
+    (const void*)&native_bf16_paged_split_gqa_d128_symbol,
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
     (const void*)&ragged_paged_attention_grouped_heads_symbol,
