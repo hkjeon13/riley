@@ -1,0 +1,514 @@
+{
+  "schema_version": "n01-model-descriptors-v1",
+  "global_memory_contract": {
+    "peak_limit_bytes": 20000000000,
+    "minimum_uncertainty_reserve_bytes": 1000000000,
+    "dtype": {
+      "weights": "bf16",
+      "kv_cache": "bf16",
+      "bytes_per_element": 2
+    },
+    "kv_formula": "2 * layers * kv_heads * head_dim * bytes_per_element * resident_tokens",
+    "required_peak_components": [
+      "weights",
+      "resident_kv",
+      "activations_and_scratch",
+      "cuda_graph_pool",
+      "cuda_and_library_context",
+      "weight_packing_and_loading_duplicates",
+      "external_gpu_usage"
+    ],
+    "measurement_policy": "whole-gpu-byte-peak across asset preparation, initialization, warmup, timed serving, and shutdown"
+  },
+  "models": [
+    {
+      "id": "smollm2-135m-strict-regression",
+      "role": "strict-regression",
+      "source": {
+        "model_id": "HuggingFaceTB/SmolLM2-135M",
+        "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+      },
+      "asset": {
+        "status": "locked",
+        "locked_hashes": {
+          "config_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+          "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+          "tokenizer_aggregate_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
+          "tokenizer_json_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+        }
+      },
+      "architecture": {
+        "family": "llama",
+        "source_architecture": "LlamaForCausalLM",
+        "model_type": "llama",
+        "activation": "silu",
+        "hidden_size": 576,
+        "intermediate_size": 1536,
+        "layer_count": 30,
+        "query_heads": 9,
+        "kv_heads": 3,
+        "head_dim": 64,
+        "max_context_tokens": 8192,
+        "rope": {
+          "theta": 100000,
+          "scaling": "none",
+          "interleaved": false
+        },
+        "rms_norm_epsilon": 0.00001,
+        "attention_bias": {
+          "q": false,
+          "k": false,
+          "v": false,
+          "o": false
+        },
+        "attention_window": {
+          "use_sliding_window": false,
+          "sliding_window_tokens": null,
+          "max_window_layers": null
+        },
+        "mlp_bias": false,
+        "tied_embeddings": true,
+        "vocab_size": 49152,
+        "special_tokens": {
+          "bos": 0,
+          "eos": [
+            0
+          ],
+          "pad": null
+        }
+      },
+      "tensor_shapes": {
+        "embedding": [
+          49152,
+          576
+        ],
+        "attention": {
+          "q_proj": [
+            576,
+            576
+          ],
+          "k_proj": [
+            192,
+            576
+          ],
+          "v_proj": [
+            192,
+            576
+          ],
+          "o_proj": [
+            576,
+            576
+          ]
+        },
+        "mlp": {
+          "gate_proj": [
+            1536,
+            576
+          ],
+          "up_proj": [
+            1536,
+            576
+          ],
+          "down_proj": [
+            576,
+            1536
+          ]
+        },
+        "final_norm": [
+          576
+        ],
+        "lm_head": {
+          "shape": [
+            49152,
+            576
+          ],
+          "storage": "logical-tied-to-embedding"
+        }
+      },
+      "tokenizer": {
+        "profile_id": "smollm2-135m-locked-v1",
+        "status": "locked",
+        "source": "locked-tokenizer-artifact"
+      },
+      "weight_accounting": {
+        "parameter_count_estimate": 135000000,
+        "bf16_parameter_payload_estimate_bytes": 270000000,
+        "estimate_status": "planning-estimate-not-measured-device-residency",
+        "observed_resident_bytes": null,
+        "planning_resident_ceiling_bytes": 400000000,
+        "materialization_gate": "whole-gpu lifecycle receipt is required before any peak claim"
+      },
+      "memory_scenarios": [
+        {
+          "id": "c32-1024-plus-32",
+          "prompt_tokens": 1024,
+          "max_new_tokens": 32,
+          "active_capacity_candidates": [
+            1,
+            8,
+            32
+          ],
+          "max_active_sequences": 32,
+          "resident_tokens_per_sequence": 1056,
+          "resident_tokens_total": 33792,
+          "kv_payload_bytes": 778567680,
+          "remaining_non_model_budget_bytes": 17821432320,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        }
+      ],
+      "numerical_profiles": [
+        "strict-smollm2-135m-e0-v3",
+        "native-bf16-r0-v1"
+      ],
+      "serving_support": {
+        "status": "supported-existing-strict-path",
+        "reason": "locked regression model for the existing strict execution path",
+        "required_capability": "none"
+      },
+      "acceptance_status": "strict-regression-only"
+    },
+    {
+      "id": "smollm2-1.7b-instruct-connection",
+      "role": "connection-validation",
+      "source": {
+        "model_id": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+        "revision": "57aa3c6599c53705406c648e7acca7e11dc45ea3"
+      },
+      "asset": {
+        "status": "materialization-required",
+        "materialization_gate": "download the pinned checkpoint and tokenizer, then record hashes and tensor inventory in a local checkpoint receipt"
+      },
+      "architecture": {
+        "family": "llama",
+        "source_architecture": "LlamaForCausalLM",
+        "model_type": "llama",
+        "activation": "silu",
+        "hidden_size": 2048,
+        "intermediate_size": 8192,
+        "layer_count": 24,
+        "query_heads": 32,
+        "kv_heads": 32,
+        "head_dim": 64,
+        "max_context_tokens": 8192,
+        "rope": {
+          "theta": 130000,
+          "scaling": "none",
+          "interleaved": false
+        },
+        "rms_norm_epsilon": 0.00001,
+        "attention_bias": {
+          "q": false,
+          "k": false,
+          "v": false,
+          "o": false
+        },
+        "attention_window": {
+          "use_sliding_window": false,
+          "sliding_window_tokens": null,
+          "max_window_layers": null
+        },
+        "mlp_bias": false,
+        "tied_embeddings": true,
+        "vocab_size": 49152,
+        "special_tokens": {
+          "bos": 1,
+          "eos": [
+            2
+          ],
+          "pad": 2
+        }
+      },
+      "tensor_shapes": {
+        "embedding": [
+          49152,
+          2048
+        ],
+        "attention": {
+          "q_proj": [
+            2048,
+            2048
+          ],
+          "k_proj": [
+            2048,
+            2048
+          ],
+          "v_proj": [
+            2048,
+            2048
+          ],
+          "o_proj": [
+            2048,
+            2048
+          ]
+        },
+        "mlp": {
+          "gate_proj": [
+            8192,
+            2048
+          ],
+          "up_proj": [
+            8192,
+            2048
+          ],
+          "down_proj": [
+            2048,
+            8192
+          ]
+        },
+        "final_norm": [
+          2048
+        ],
+        "lm_head": {
+          "shape": [
+            49152,
+            2048
+          ],
+          "storage": "logical-tied-to-embedding"
+        }
+      },
+      "tokenizer": {
+        "profile_id": "smollm2-1.7b-source-pinned-v1",
+        "status": "materialization-required",
+        "source": "pinned-source-revision"
+      },
+      "weight_accounting": {
+        "parameter_count_estimate": 1700000000,
+        "bf16_parameter_payload_estimate_bytes": 3400000000,
+        "estimate_status": "planning-estimate-not-measured-device-residency",
+        "observed_resident_bytes": null,
+        "planning_resident_ceiling_bytes": 4000000000,
+        "materialization_gate": "local checkpoint inventory and whole-gpu lifecycle receipt are both required"
+      },
+      "memory_scenarios": [
+        {
+          "id": "connection-c8-512-plus-128",
+          "prompt_tokens": 512,
+          "max_new_tokens": 128,
+          "active_capacity_candidates": [
+            1,
+            8
+          ],
+          "max_active_sequences": 8,
+          "resident_tokens_per_sequence": 640,
+          "resident_tokens_total": 5120,
+          "kv_payload_bytes": 1006632960,
+          "remaining_non_model_budget_bytes": 13993367040,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        },
+        {
+          "id": "connection-c4-7168-plus-1024",
+          "prompt_tokens": 7168,
+          "max_new_tokens": 1024,
+          "active_capacity_candidates": [
+            1,
+            4
+          ],
+          "max_active_sequences": 4,
+          "resident_tokens_per_sequence": 8192,
+          "resident_tokens_total": 32768,
+          "kv_payload_bytes": 6442450944,
+          "remaining_non_model_budget_bytes": 8557549056,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        }
+      ],
+      "numerical_profiles": [
+        "native-bf16-r0-v1"
+      ],
+      "serving_support": {
+        "status": "not-yet-qualified",
+        "reason": "source configuration is pinned, but checkpoint, tokenizer, and generalized full-model execution remain unverified",
+        "required_capability": "full-model-loader-and-d64-session-shape"
+      },
+      "acceptance_status": "not-qualified"
+    },
+    {
+      "id": "qwen2.5-3b-instruct-primary",
+      "role": "primary-serving-evaluation",
+      "source": {
+        "model_id": "Qwen/Qwen2.5-3B-Instruct",
+        "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1"
+      },
+      "asset": {
+        "status": "checkpoint-required",
+        "materialization_gate": "do not execute until the pinned checkpoint, tokenizer, chat template, tensor inventory, and hashes are recorded in a local checkpoint receipt"
+      },
+      "architecture": {
+        "family": "qwen2",
+        "source_architecture": "Qwen2ForCausalLM",
+        "model_type": "qwen2",
+        "activation": "silu",
+        "hidden_size": 2048,
+        "intermediate_size": 11008,
+        "layer_count": 36,
+        "query_heads": 16,
+        "kv_heads": 2,
+        "head_dim": 128,
+        "max_context_tokens": 32768,
+        "rope": {
+          "theta": 1000000,
+          "scaling": "none",
+          "interleaved": false
+        },
+        "rms_norm_epsilon": 0.000001,
+        "attention_bias": {
+          "q": true,
+          "k": true,
+          "v": true,
+          "o": false
+        },
+        "attention_window": {
+          "use_sliding_window": false,
+          "sliding_window_tokens": 32768,
+          "max_window_layers": 70
+        },
+        "mlp_bias": false,
+        "tied_embeddings": true,
+        "vocab_size": 151936,
+        "special_tokens": {
+          "bos": 151643,
+          "eos": [
+            151645
+          ],
+          "pad": null
+        }
+      },
+      "tensor_shapes": {
+        "embedding": [
+          151936,
+          2048
+        ],
+        "attention": {
+          "q_proj": [
+            2048,
+            2048
+          ],
+          "k_proj": [
+            256,
+            2048
+          ],
+          "v_proj": [
+            256,
+            2048
+          ],
+          "o_proj": [
+            2048,
+            2048
+          ]
+        },
+        "mlp": {
+          "gate_proj": [
+            11008,
+            2048
+          ],
+          "up_proj": [
+            11008,
+            2048
+          ],
+          "down_proj": [
+            2048,
+            11008
+          ]
+        },
+        "final_norm": [
+          2048
+        ],
+        "lm_head": {
+          "shape": [
+            151936,
+            2048
+          ],
+          "storage": "logical-tied-to-embedding"
+        }
+      },
+      "tokenizer": {
+        "profile_id": "qwen2.5-3b-checkpoint-required-v1",
+        "status": "checkpoint-required",
+        "source": "pinned-source-revision",
+        "must_not_reuse": "qwen2.5-0.5b-instruct-bf16"
+      },
+      "weight_accounting": {
+        "parameter_count_estimate": 3090000000,
+        "bf16_parameter_payload_estimate_bytes": 6180000000,
+        "estimate_status": "planning-estimate-not-measured-device-residency",
+        "observed_resident_bytes": null,
+        "planning_resident_ceiling_bytes": 7000000000,
+        "materialization_gate": "the declared ceiling is not a measured resident byte count; a local checkpoint inventory and whole-gpu lifecycle receipt are required"
+      },
+      "memory_scenarios": [
+        {
+          "id": "short-c32-512-plus-128",
+          "prompt_tokens": 512,
+          "max_new_tokens": 128,
+          "active_capacity_candidates": [
+            1,
+            8,
+            32
+          ],
+          "max_active_sequences": 32,
+          "resident_tokens_per_sequence": 640,
+          "resident_tokens_total": 20480,
+          "kv_payload_bytes": 754974720,
+          "remaining_non_model_budget_bytes": 11245025280,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        },
+        {
+          "id": "general-c32-2048-plus-256",
+          "prompt_tokens": 2048,
+          "max_new_tokens": 256,
+          "active_capacity_candidates": [
+            1,
+            8,
+            32
+          ],
+          "max_active_sequences": 32,
+          "resident_tokens_per_sequence": 2304,
+          "resident_tokens_total": 73728,
+          "kv_payload_bytes": 2717908992,
+          "remaining_non_model_budget_bytes": 9282091008,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        },
+        {
+          "id": "long-context-c8-8192-plus-512",
+          "prompt_tokens": 8192,
+          "max_new_tokens": 512,
+          "active_capacity_candidates": [
+            1,
+            4,
+            8
+          ],
+          "max_active_sequences": 8,
+          "resident_tokens_per_sequence": 8704,
+          "resident_tokens_total": 69632,
+          "kv_payload_bytes": 2566914048,
+          "remaining_non_model_budget_bytes": 9433085952,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        },
+        {
+          "id": "long-generation-c4-16384-plus-1024",
+          "prompt_tokens": 16384,
+          "max_new_tokens": 1024,
+          "active_capacity_candidates": [
+            1,
+            2,
+            4
+          ],
+          "max_active_sequences": 4,
+          "resident_tokens_per_sequence": 17408,
+          "resident_tokens_total": 69632,
+          "kv_payload_bytes": 2566914048,
+          "remaining_non_model_budget_bytes": 9433085952,
+          "accounting_status": "planning-only-requires-whole-gpu-lifecycle-receipt"
+        }
+      ],
+      "numerical_profiles": [
+        "native-bf16-r0-v1"
+      ],
+      "serving_support": {
+        "status": "unsupported",
+        "reason": "the current owner/session execution contract is head-dimension-64 only; this D128 descriptor is configuration and memory planning only",
+        "required_capability": "head-dimension-128-execution"
+      },
+      "acceptance_status": "not-qualified"
+    }
+  ]
+}

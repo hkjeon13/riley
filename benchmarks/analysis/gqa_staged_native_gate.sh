@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Caller retains exclusive test-GPU ownership and restores paused Blender sessions
-# in a finally handler. Do not stop the three static public web viewers.
+# Caller retains exclusive test-GPU ownership. Blender remains stopped under
+# the leave_stopped_no_restore lifecycle policy. Do not stop the static public web viewers.
 set -euo pipefail
 root=${1:?prepared root}; evidence=${2:?new evidence directory}
 mkdir "$evidence"
@@ -9,7 +9,7 @@ export LD_LIBRARY_PATH="$root/toolchain130/nvidia/cu13/lib"
 nvcc="$root/toolchain130/nvidia/cu13/bin/nvcc"
 args=(-std=c++17 -O3 -lineinfo -Xptxas=-v)
 timeout 180 "$nvcc" "${args[@]}" -arch=sm_89 benchmarks/analysis/gqa_staged_mixed_probe.cu -o "$evidence/probe" > "$evidence/build.log" 2>&1
-if pgrep -x blender >/dev/null; then echo "Blender must be paused by the lifecycle owner" >&2; exit 1; fi
+if pgrep -x blender >/dev/null; then echo "Blender must remain stopped for this lifecycle" >&2; exit 1; fi
 for mode in check-only serving-shapes; do
  name=$mode; [[ $mode != check-only ]] || name=check
  timeout 180 "$evidence/probe" "--$mode" > "$evidence/$name.log" 2>&1

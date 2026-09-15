@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.dev/schemas/n01-lifecycle-receipt-v1.schema.json",
+  "title": "Riley N01 terminal lifecycle receipt v1",
+  "description": "Raw lifecycle evidence only. A passed receipt records bounded execution and sampled GPU observations; it is not a continuous GPU high-water, serving-performance, or correctness qualification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "terminal",
+    "status",
+    "experiment_id",
+    "manifest",
+    "contract_bindings",
+    "contract_binding_verification",
+    "lifecycle_policy",
+    "phase_order",
+    "memory_budget",
+    "baseline",
+    "phases",
+    "samples",
+    "overall",
+    "failure_reasons",
+    "finished_at_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.n01-lifecycle-receipt.v1"},
+    "terminal": {"const": true},
+    "status": {"enum": ["passed", "failed", "invalid-manifest"]},
+    "experiment_id": {"type": ["string", "null"]},
+    "manifest": {"$ref": "#/$defs/manifest"},
+    "contract_bindings": {"oneOf": [{"$ref": "#/$defs/contractBindings"}, {"type": "null"}]},
+    "contract_binding_verification": {"oneOf": [{"$ref": "#/$defs/contractBindingVerification"}, {"type": "null"}]},
+    "lifecycle_policy": {"const": "leave_stopped_no_restore"},
+    "phase_order": {
+      "const": ["asset-preparation", "gpu-initialization", "warmup", "timed-serving", "shutdown"]
+    },
+    "memory_budget": {"$ref": "#/$defs/memoryBudget"},
+    "baseline": {"oneOf": [{"$ref": "#/$defs/sample"}, {"type": "null"}]},
+    "phases": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {"$ref": "#/$defs/assetPreparationRecord"},
+        {"$ref": "#/$defs/gpuInitializationRecord"},
+        {"$ref": "#/$defs/warmupRecord"},
+        {"$ref": "#/$defs/timedServingRecord"},
+        {"$ref": "#/$defs/shutdownRecord"}
+      ],
+      "items": false
+    },
+    "samples": {"type": "array", "items": {"$ref": "#/$defs/sample"}},
+    "overall": {"$ref": "#/$defs/overall"},
+    "failure_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "finished_at_utc": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableInteger": {"type": ["integer", "null"]},
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "validation_error"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "validation_error": {"type": ["string", "null"]}
+      }
+    },
+    "sourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "numericalProfileBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "sha256"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "checkpointProvenance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "path", "sha256"],
+          "properties": {
+            "status": {"const": "materialized"},
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "materialization-pending"}}
+        }
+      ]
+    },
+    "contractBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_descriptor", "numerical_profile", "checkpoint_provenance"],
+      "properties": {
+        "model_descriptor": {"$ref": "#/$defs/sourceBinding"},
+        "numerical_profile": {"$ref": "#/$defs/numericalProfileBinding"},
+        "checkpoint_provenance": {"$ref": "#/$defs/checkpointProvenance"}
+      }
+    },
+    "fileBindingVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolved_path", "verified_sha256"],
+      "properties": {
+        "resolved_path": {"type": "string", "minLength": 1},
+        "verified_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "numericalProfileBindingVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "resolved_path", "verified_sha256"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "resolved_path": {"type": "string", "minLength": 1},
+        "verified_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "checkpointVerification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "resolved_path", "verified_sha256"],
+          "properties": {
+            "status": {"const": "materialized"},
+            "resolved_path": {"type": "string", "minLength": 1},
+            "verified_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "materialization-pending"}}
+        }
+      ]
+    },
+    "contractBindingVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_descriptor", "numerical_profile", "checkpoint_provenance", "target"],
+      "properties": {
+        "model_descriptor": {"$ref": "#/$defs/fileBindingVerification"},
+        "numerical_profile": {"$ref": "#/$defs/numericalProfileBindingVerification"},
+        "checkpoint_provenance": {"$ref": "#/$defs/checkpointVerification"},
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_id", "numerical_profile_id", "evidence_scope", "semantic_contract"],
+          "properties": {
+            "model_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+            "numerical_profile_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+            "evidence_scope": {"enum": ["operator-control", "full-model-serving"]},
+            "semantic_contract": {"const": "validated-n01-v1"}
+          }
+        }
+      }
+    },
+    "memoryBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global_peak_ceiling_bytes", "uncertainty_reserve_bytes", "reserve_adjusted_limit_bytes"],
+      "properties": {
+        "global_peak_ceiling_bytes": {"const": 20000000000},
+        "uncertainty_reserve_bytes": {"const": 1000000000},
+        "reserve_adjusted_limit_bytes": {"const": 19000000000}
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "uuid", "name", "used_bytes", "total_bytes"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "uuid": {"type": "string"},
+        "name": {"type": "string"},
+        "used_bytes": {"type": "integer", "minimum": 0},
+        "total_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_index",
+        "at_utc",
+        "monotonic_ns",
+        "phase",
+        "event",
+        "ok",
+        "devices",
+        "global_gpu_used_bytes",
+        "global_gpu_total_bytes",
+        "controller_rss_bytes",
+        "host_memory_total_bytes",
+        "host_memory_available_bytes",
+        "error"
+      ],
+      "properties": {
+        "sample_index": {"type": "integer", "minimum": 0},
+        "at_utc": {"type": "string", "format": "date-time"},
+        "monotonic_ns": {"type": "integer", "minimum": 0},
+        "phase": {"type": ["string", "null"]},
+        "event": {"type": "string", "minLength": 1},
+        "ok": {"type": "boolean"},
+        "devices": {"type": "array", "items": {"$ref": "#/$defs/device"}},
+        "global_gpu_used_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "global_gpu_total_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "controller_rss_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_total_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_available_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "error": {"type": ["string", "null"]}
+      }
+    },
+    "phaseMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_count",
+        "successful_sample_count",
+        "live_poll_sample_count",
+        "baseline_global_gpu_used_bytes",
+        "peak_global_gpu_used_bytes",
+        "peak_over_phase_baseline_bytes",
+        "within_global_peak_ceiling",
+        "reserve_satisfied",
+        "controller_rss_peak_bytes",
+        "host_memory_available_min_bytes",
+        "host_memory_total_bytes"
+      ],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 0},
+        "successful_sample_count": {"type": "integer", "minimum": 0},
+        "live_poll_sample_count": {"type": "integer", "minimum": 0},
+        "baseline_global_gpu_used_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "peak_global_gpu_used_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "peak_over_phase_baseline_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "within_global_peak_ceiling": {"type": "boolean"},
+        "reserve_satisfied": {"type": "boolean"},
+        "controller_rss_peak_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_available_min_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_total_bytes": {"$ref": "#/$defs/nullableInteger"}
+      }
+    },
+    "phaseRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "state",
+        "argv",
+        "argv_sha256",
+        "cwd",
+        "timeout_seconds",
+        "started_at_utc",
+        "finished_at_utc",
+        "elapsed_ms",
+        "exit_code",
+        "error",
+        "stdout_log",
+        "stderr_log",
+        "sample_indices",
+        "memory"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "state": {"enum": ["completed", "failed", "timed-out", "interrupted", "skipped"]},
+        "argv": {"type": "array", "items": {"type": "string"}},
+        "argv_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "cwd": {"type": ["string", "null"]},
+        "timeout_seconds": {"type": ["integer", "null"], "minimum": 1},
+        "started_at_utc": {"type": "string", "format": "date-time"},
+        "finished_at_utc": {"type": "string", "format": "date-time"},
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "exit_code": {"type": ["integer", "null"]},
+        "error": {"type": ["string", "null"]},
+        "stdout_log": {"type": ["string", "null"]},
+        "stderr_log": {"type": ["string", "null"]},
+        "sample_indices": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "memory": {"$ref": "#/$defs/phaseMemory"}
+      }
+    },
+    "assetPreparationRecord": {"allOf": [{"$ref": "#/$defs/phaseRecord"}, {"properties": {"name": {"const": "asset-preparation"}}}]},
+    "gpuInitializationRecord": {"allOf": [{"$ref": "#/$defs/phaseRecord"}, {"properties": {"name": {"const": "gpu-initialization"}}}]},
+    "warmupRecord": {"allOf": [{"$ref": "#/$defs/phaseRecord"}, {"properties": {"name": {"const": "warmup"}}}]},
+    "timedServingRecord": {"allOf": [{"$ref": "#/$defs/phaseRecord"}, {"properties": {"name": {"const": "timed-serving"}}}]},
+    "shutdownRecord": {"allOf": [{"$ref": "#/$defs/phaseRecord"}, {"properties": {"name": {"const": "shutdown"}}}]},
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "successful_sample_count",
+        "failed_sample_count",
+        "overall_global_gpu_peak_bytes",
+        "peak_over_lifecycle_baseline_bytes",
+        "headroom_to_global_peak_ceiling_bytes",
+        "within_global_peak_ceiling",
+        "reserve_satisfied",
+        "required_in_process_phase_count",
+        "phases_with_in_process_samples",
+        "missing_in_process_sample_phases",
+        "sampled_peak_evidence_status",
+        "controller_rss_peak_bytes",
+        "host_memory_available_min_bytes",
+        "host_memory_total_bytes"
+      ],
+      "properties": {
+        "successful_sample_count": {"type": "integer", "minimum": 0},
+        "failed_sample_count": {"type": "integer", "minimum": 0},
+        "overall_global_gpu_peak_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "peak_over_lifecycle_baseline_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "headroom_to_global_peak_ceiling_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "within_global_peak_ceiling": {"type": "boolean"},
+        "reserve_satisfied": {"type": "boolean"},
+        "required_in_process_phase_count": {"const": 2},
+        "phases_with_in_process_samples": {"type": "integer", "minimum": 0, "maximum": 2},
+        "missing_in_process_sample_phases": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["warmup", "timed-serving"]}
+        },
+        "sampled_peak_evidence_status": {
+          "enum": ["sampled-observed-not-continuous", "insufficient-in-process-sampling"]
+        },
+        "controller_rss_peak_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_available_min_bytes": {"$ref": "#/$defs/nullableInteger"},
+        "host_memory_total_bytes": {"$ref": "#/$defs/nullableInteger"}
+      }
+    }
+  }
+}

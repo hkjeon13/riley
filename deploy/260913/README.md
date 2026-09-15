@@ -102,7 +102,7 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 
 사용자 로그인 없이 별도 Xvfb 가상 디스플레이에서 기존 세 `.blend` 파일과 시작 스크립트로 복구했다. 기존 MCP 애드온은 `blender -b`를 거부하므로 가상 화면에서 기존 이벤트 루프를 유지한다. 포트9876/9911/9887 모두 `get_scene_info` 성공 응답을 확인했다. 시스템 패키지를 변경하지 않고 Ubuntu 패키지를 별도 폴더에 추출했다.
 
-원격 `/data/riley-serving-260913-recovery/blender-restoration-260914`의 `launch.json`, `xvfb-launch.json`, `verified.json`에 실행 및 검증 기록이 있다. 인증 cookie는 이 원격 폴더의 private 파일로만 보관하며 저장소에 복사하지 않는다. 다음 측정은 해당 receipt의 프로세스 identity와 현재 상태를 재확인한 뒤 기존 세 작업만 종료하고, GPU 작업 종료 시 복구한다. 가상 디스플레이를 사용하는 현재 세션은 이전 실제 화면의 GUI 세션이나 미저장 상태 복구를 의미하지 않는다.
+원격 `/data/riley-serving-260913-recovery/blender-restoration-260914`의 `launch.json`, `xvfb-launch.json`, `verified.json`에 당시 실행 및 검증 기록이 있다. 인증 cookie는 이 원격 폴더의 private 파일로만 보관하며 저장소에 복사하지 않는다. 사용자 지시에 따라 이후에는 Blender를 다시 복구하지 않는다. 가상 디스플레이를 사용했던 세션은 이전 실제 화면의 GUI 세션이나 미저장 상태 복구를 의미하지 않는다.
 
 `3d.fin-ally.net`은 별도 정적 웹 뷰어다. Cloudflare origin은 localhost:31840이며 기존 `/home/psyche/lotte-tower/output/scripts/serve_local.py --directory /home/psyche/lotte-tower/output/web/site --port 31840`로 복구했다. 공개 HTTP200, GLB Range206, 실제 브라우저의 타워 렌더·탐색 가능 상태를 확인했다. 해당 웹 서버는 Blender MCP나 서버 GPU에 의존하지 않으므로 이후 GPU 측정 중에도 유지한다. 실행 기록은 위 원격 폴더의 `viewer-launch.json`이다.
 
@@ -115,3 +115,9 @@ Serving 실행 경로에 Rust ↔ Python 호출을 도입하지 않는다. Sched
 ## Adaptive FFN C32 serving 완료
 
 [전체 표와 원본 검증](../../benchmarks/results/20260914-ffn-adaptive-serving-c32/README.md):131072 retained/4194304 tokens,4096 warmup,98304 Riley reference 일치,stop/cancel/recovery 각96건,16 exit0 및 Blender 복구를 검증했다. 후보 throughput은 prior 대비 shared −2.02%/unique +8.14%, 같은 binary control 대비 −0.80%/+6.46%다. vLLM 대비 −8.79%/−14.91%로 전체 목표 미달이다. Shared 회귀 및 vLLM tail 변동을 보존하고 default 비승격을 유지한다. 다음 판단은 실제 활성 prefill 행 분포와 graph/backend 자원 분리 비용을 근거로 하며 기존 작은 threshold 변형을 반복하지 않는다.
+
+## 새 연구 기반 계획 및 Blender 종료 — 2026-09-15
+
+[새 PR 단위 계획](next-stage/README.md)을 향후 실행 기준으로 사용한다. N01의 로컬 계약·lifecycle 기반과 N02의 Qwen2.5-3B synthetic projection control을 추가했고, 각각의 GPU receipt·native-BF16 품질 기준·full-model/serving benchmark는 아직 없다. N01 receipt의 `nvidia-smi` peak는 sampled observation이며 연속 high-water로 해석하지 않는다. native BF16 대조군과 작은 가능성 검증을 먼저 진행하고, 선정된 후보만 1.7B/3B 모델·serving으로 확장한다.
+
+사용자 후속 지시에 따라 기존 Blender 세 프로세스를 종료했고 모두 종료를 확인했다. **이후 복구하지 않는다.** 위 2026-09-14의 복구 기록은 당시 사실이며 향후 복구 지시는 이 정책으로 대체한다. 원격 `user-stop-no-restore-260915.json`에 process identity·종료 확인을 기록했다. 기존 정적 웹 뷰어 및 다른 서비스는 유지했다.
