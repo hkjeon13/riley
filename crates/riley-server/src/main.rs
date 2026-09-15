@@ -65,6 +65,7 @@ serve options:
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+  --projection-bias-backend MODE strict-staged-v1 or cublaslt-bias-epilogue-experimental-v1 (default: strict-staged-v1)
   --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
@@ -104,6 +105,7 @@ struct ServeOptions {
     metadata_transport: MetadataTransportMode,
     sampling_backend: SamplingBackendMode,
     execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
+    projection_bias_backend: ProjectionBiasBackendMode,
     decode_attention_backend: DecodeAttentionBackendMode,
     reduction_profile: ReductionProfileMode,
     vllm_smol_p128_graph: bool,
@@ -148,6 +150,27 @@ enum MetadataTransportMode {
 enum ReductionProfileMode {
     CanonicalV1,
     FixedContiguous37BalancedV1,
+}
+
+/// Explicit server-level Q/K/V projection-bias selection.
+///
+/// The cuBLASLt path is a separately qualified, eager-only numerical
+/// candidate. It stays opt-in so normal service starts retain the staged
+/// compatibility contract.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ProjectionBiasBackendMode {
+    #[default]
+    StrictStagedV1,
+    CublasLtBiasEpilogueExperimentalV1,
+}
+
+impl ProjectionBiasBackendMode {
+    const fn cli_id(self) -> &'static str {
+        match self {
+            Self::StrictStagedV1 => "strict-staged-v1",
+            Self::CublasLtBiasEpilogueExperimentalV1 => "cublaslt-bias-epilogue-experimental-v1",
+        }
+    }
 }
 
 /// Explicit server-level choice for the continuous-batch decode attention path.
@@ -289,6 +312,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut sampling_backend = None;
     let mut execution_graph_policy = None;
     let mut graph_numerics = None;
+    let mut projection_bias_backend = None;
     let mut decode_attention_backend = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
@@ -438,6 +462,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--execution-graph-policy",
                 )?;
             }
+            "--projection-bias-backend" => set_once(
+                &mut projection_bias_backend,
+                parse_projection_bias_backend(next_value(
+                    &mut arguments,
+                    "--projection-bias-backend",
+                )?)?,
+                "--projection-bias-backend",
+            )?,
             "--decode-attention-backend" => set_once(
                 &mut decode_attention_backend,
                 parse_decode_attention_backend(next_value(
@@ -556,6 +588,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let vllm_smol_p128_graph = graph_numerics.unwrap_or(false);
     let execution_graph_policy =
         execution_graph_policy.unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled);
+    let projection_bias_backend = projection_bias_backend.unwrap_or_default();
     let decode_attention_backend = decode_attention_backend.unwrap_or_default();
     let reduction_profile = reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1);
     let max_active_sequences = max_active_sequences.unwrap_or(8);
@@ -584,6 +617,30 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     }
     if vllm_smol_p128_graph && c02_runtime_config.is_some() {
         return Err("vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts".to_owned());
+    }
+    if projection_bias_backend == ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1
+        && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
+    {
+        return Err(
+            "cublaslt-bias-epilogue-experimental-v1 is eager-only and requires --execution-graph-policy disabled"
+                .to_owned(),
+        );
+    }
+    if projection_bias_backend == ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1
+        && reduction_profile != ReductionProfileMode::CanonicalV1
+    {
+        return Err(
+            "cublaslt-bias-epilogue-experimental-v1 requires --reduction-profile canonical-v1"
+                .to_owned(),
+        );
+    }
+    if projection_bias_backend == ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1
+        && c02_runtime_config.is_some()
+    {
+        return Err(
+            "cublaslt-bias-epilogue-experimental-v1 uses separate numerical qualification, not C02 exact-change artifacts"
+                .to_owned(),
+        );
     }
     if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
         && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
@@ -643,6 +700,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         metadata_transport,
         sampling_backend: sampling_backend.unwrap_or(SamplingBackendMode::Cpu),
         execution_graph_policy,
+        projection_bias_backend,
         decode_attention_backend,
         reduction_profile,
         vllm_smol_p128_graph,
@@ -726,6 +784,19 @@ fn parse_sampling_backend(value: OsString) -> Result<SamplingBackendMode, String
         "cpu" => Ok(SamplingBackendMode::Cpu),
         "gpu-greedy" => Ok(SamplingBackendMode::GpuGreedy),
         _ => Err("--sampling-backend requires cpu or gpu-greedy".to_owned()),
+    }
+}
+
+fn parse_projection_bias_backend(value: OsString) -> Result<ProjectionBiasBackendMode, String> {
+    match parse_utf8(value, "--projection-bias-backend")?.as_str() {
+        "strict-staged-v1" => Ok(ProjectionBiasBackendMode::StrictStagedV1),
+        "cublaslt-bias-epilogue-experimental-v1" => {
+            Ok(ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1)
+        }
+        _ => Err(
+            "--projection-bias-backend requires strict-staged-v1 or cublaslt-bias-epilogue-experimental-v1"
+                .to_owned(),
+        ),
     }
 }
 
@@ -1094,6 +1165,7 @@ fn run_serve(
         options.metadata_transport,
         options.sampling_backend,
         options.execution_graph_policy,
+        options.projection_bias_backend,
         options.decode_attention_backend,
         options.reduction_profile,
         options.max_weight_bytes,
@@ -1248,10 +1320,13 @@ fn run_serve(
         physical_kv_blocks,
     )
     .map_err(|error| format!("invalid batch configuration: {error}"))?;
-    let executor = PreparedLlamaBatchExecutorConfig::new(
-        batch_metadata,
-        PreparedLlamaForwardConfig::default(),
-    );
+    let forward = match options.projection_bias_backend {
+        ProjectionBiasBackendMode::StrictStagedV1 => PreparedLlamaForwardConfig::default(),
+        ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1 => {
+            PreparedLlamaForwardConfig::default().with_cublaslt_bias_epilogue_projection_bias()
+        }
+    };
+    let executor = PreparedLlamaBatchExecutorConfig::new(batch_metadata, forward);
     let executor = match options.residual_rmsnorm {
         ResidualRmsNormMode::Fused => executor.with_fused_residual_norm(),
         ResidualRmsNormMode::Separate => executor.with_separate_residual_norm(),
@@ -3147,11 +3222,11 @@ mod tests {
         C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES,
         DecodeAttentionBackendMode, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
         MetadataTransportMode, NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID,
-        ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE,
-        c02_canonical_json_bytes, c02_endpoint_receipt, c02_generation_audit_completion_basename,
-        c02_generation_audit_completion_marker_bytes, c02_generation_audit_record_basename,
-        c02_native_fallback_event_basename, c02_native_fallback_event_bytes,
-        c02_native_fallback_event_completion_basename,
+        ProjectionBiasBackendMode, ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode,
+        ServeOptions, USAGE, c02_canonical_json_bytes, c02_endpoint_receipt,
+        c02_generation_audit_completion_basename, c02_generation_audit_completion_marker_bytes,
+        c02_generation_audit_record_basename, c02_native_fallback_event_basename,
+        c02_native_fallback_event_bytes, c02_native_fallback_event_completion_basename,
         c02_native_fallback_event_completion_marker_bytes, c02_native_fallback_projection,
         c02_process_identity_from_linux_proc_stat, c02_runtime_identity, c02_sha256_hex,
         c02_shutdown_artifact_bytes, c02_shutdown_completion_basename,
@@ -4060,6 +4135,8 @@ mod tests {
         assert_eq!(parse_arguments(args(&["-h"])), Ok(CliCommand::Help));
         assert!(USAGE.contains("--execution-completion MODE"));
         assert!(USAGE.contains("(default: iteration-batch)"));
+        assert!(USAGE.contains("--projection-bias-backend MODE"));
+        assert!(USAGE.contains("cublaslt-bias-epilogue-experimental-v1"));
         assert!(USAGE.contains("--decode-attention-backend MODE"));
         assert!(USAGE.contains("native-bf16-paged-split-gqa-d128-two-stage"));
         assert!(USAGE.contains("--reduction-profile ID"));
@@ -4102,6 +4179,7 @@ mod tests {
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                projection_bias_backend: ProjectionBiasBackendMode::StrictStagedV1,
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
@@ -4490,6 +4568,7 @@ mod tests {
                 batch_shape_buckets: Some(vec![1, 2, 4, 8, 16, 32, 64]),
                 metadata_transport: MetadataTransportMode::PackedAsync,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                projection_bias_backend: ProjectionBiasBackendMode::StrictStagedV1,
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
@@ -4645,6 +4724,7 @@ mod tests {
                 batch_shape_buckets: Some(vec![1, 3, 7]),
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                projection_bias_backend: ProjectionBiasBackendMode::StrictStagedV1,
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
@@ -4725,6 +4805,102 @@ mod tests {
             ]))
             .is_err()
         );
+    }
+
+    #[test]
+    fn projection_bias_backend_cli_is_explicit_eager_and_fail_closed() {
+        let CliCommand::Serve(default) =
+            parse_arguments(args(&["serve", "--model", "/qwen25-3b"])).expect("default serve")
+        else {
+            panic!("serve")
+        };
+        assert_eq!(
+            default.projection_bias_backend,
+            ProjectionBiasBackendMode::StrictStagedV1
+        );
+        assert_eq!(default.projection_bias_backend.cli_id(), "strict-staged-v1");
+
+        let CliCommand::Serve(candidate) = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/qwen25-3b",
+            "--projection-bias-backend",
+            "cublaslt-bias-epilogue-experimental-v1",
+        ]))
+        .expect("explicit fused candidate") else {
+            panic!("serve")
+        };
+        assert_eq!(
+            candidate.projection_bias_backend,
+            ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1
+        );
+        assert_eq!(
+            candidate.projection_bias_backend.cli_id(),
+            "cublaslt-bias-epilogue-experimental-v1"
+        );
+        assert_eq!(
+            candidate.execution_graph_policy,
+            riley_runtime::llama::ExecutionGraphPolicy::Disabled
+        );
+        assert_eq!(
+            candidate.reduction_profile,
+            ReductionProfileMode::CanonicalV1
+        );
+
+        for arguments in [
+            vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--projection-bias-backend",
+                "unknown",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--projection-bias-backend",
+                "strict-staged-v1",
+                "--projection-bias-backend",
+                "cublaslt-bias-epilogue-experimental-v1",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--projection-bias-backend",
+                "cublaslt-bias-epilogue-experimental-v1",
+                "--execution-graph-policy",
+                "auto",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--projection-bias-backend",
+                "cublaslt-bias-epilogue-experimental-v1",
+                "--reduction-profile",
+                "fixed-contiguous-37-balanced-v1",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--projection-bias-backend",
+                "cublaslt-bias-epilogue-experimental-v1",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+            ],
+        ] {
+            assert!(
+                parse_arguments(arguments.into_iter().map(OsString::from)).is_err(),
+                "candidate combination must fail closed"
+            );
+        }
     }
 
     #[test]
@@ -4918,6 +5094,7 @@ mod tests {
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                projection_bias_backend: ProjectionBiasBackendMode::StrictStagedV1,
                 decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
