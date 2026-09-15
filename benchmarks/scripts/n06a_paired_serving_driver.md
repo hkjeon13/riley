@@ -250,6 +250,21 @@ argv, cleanup, lifecycle timestamps, and snapshots. The vLLM marker separately
 binds the frozen stdout and stderr startup snapshot paths/hashes; the summary
 replays the source-verified auto-selector regex from those snapshots.
 
+The driver also records CPU, I/O, and memory pressure in a dedicated,
+create-only `<lane>.lane-psi.json` for each launched lane. Its `pre` snapshot
+is captured immediately before sampler start/server launch; its `post` snapshot
+is captured after owned process/container cleanup and sampler termination,
+before the next lane's GPU idle census. The provenance receipt names that file
+and its SHA-256, and the existing marker binds the provenance receipt. The
+snapshot source is `/proc/pressure/{cpu,io,memory}`. High pressure is retained;
+unavailable and malformed sources are also retained with their observation
+status. None of these values is a quietness gate, changes marker eligibility,
+filters a pair, reweights/adjusts a performance metric, or changes promotion.
+The offline N03b output exposes the validated lane records as
+`lane_pressure_covariates` and an `order_by_lane_pressure_sensitivity` view by
+AB/BA order and lane position. That view is descriptive only: it has no PSI
+bootstrap, pressure-adjusted effect, or causal interpretation.
+
 Before starting the next lane, the driver also records a separate GPU-0 idle
 census. It must show no compute-process PID and `memory.used <= 512 MiB` after
 the owned lane cleanup. The census is evidence only: it never terminates an

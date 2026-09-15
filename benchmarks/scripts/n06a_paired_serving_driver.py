@@ -123,6 +123,11 @@ MAX_DOCKER_CLEANUP_OUTPUT_BYTES = 64 * 1024
 MAX_DOCKER_CLEANUP_COMMAND_SECONDS = 30.0
 DOCKER_CONTAINER_CLEANUP_SCHEMA_VERSION = "riley.n06a-docker-container-cleanup.v1"
 GPU_IDLE_CENSUS_SCHEMA_VERSION = "riley.n06a-post-lane-gpu-idle-census.v1"
+LANE_PSI_SCHEMA_VERSION = "riley.n06a-lane-psi.v1"
+LANE_PSI_POLICY = "observed-only; never used for lane eligibility, sample selection, or performance adjustment"
+PSI_RESOURCES = ("cpu", "io", "memory")
+MAX_LANE_PSI_FILE_BYTES = 64 * 1024
+LANE_PSI_PROC_ROOT = Path("/proc")
 CASE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 DOCKER_CONTAINER_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -631,6 +636,14 @@ class LaneProvenanceArtifact:
     sha256: str
 
 
+@dataclass(frozen=True)
+class LanePressureArtifact:
+    """Immutable CPU/I/O/memory PSI snapshots taken immediately around one lane."""
+
+    path: Path
+    sha256: str
+
+
 @dataclass
 class DriverDependencies:
     """Injectable seams keep unit tests independent of CUDA, HTTP, and vLLM."""
@@ -642,6 +655,7 @@ class DriverDependencies:
     cleanup_vllm_container: Callable[[str, str, float], Mapping[str, Any]] | None = None
     gpu_memory_sampler_factory: Callable[..., GpuMemorySamplerLike] | None = None
     gpu_idle_census: Callable[..., Mapping[str, Any]] | None = None
+    lane_psi_snapshot: Callable[..., Mapping[str, Any]] | None = None
     model_identity_validator: Callable[..., Mapping[str, Any]] | None = None
     monotonic_ns: Callable[[], int] = time.perf_counter_ns
     sleep: Callable[[float], None] = time.sleep
@@ -713,6 +727,127 @@ def _require_finite(value: object, label: str, *, minimum: float | None = None) 
         comparator = "finite" if minimum is None else f"finite and >= {minimum:g}"
         raise DriverError(f"{label} must be {comparator}")
     return parsed
+
+
+def _parse_lane_psi_line(line: str, resource: str) -> tuple[str, dict[str, float | int]]:
+    fields = line.split()
+    if not fields or fields[0] not in {"some", "full"}:
+        raise ValueError(f"{resource} PSI line must start with some or full")
+    values: dict[str, str] = {}
+    for field in fields[1:]:
+        if "=" not in field:
+            raise ValueError(f"{resource} PSI metric is malformed: {field!r}")
+        key, value = field.split("=", 1)
+        if key in values:
+            raise ValueError(f"{resource} PSI metric is duplicated: {key}")
+        values[key] = value
+    required = {"avg10", "avg60", "avg300", "total"}
+    missing = sorted(required - set(values))
+    if missing:
+        raise ValueError(f"{resource} PSI line lacks " + ", ".join(missing))
+    parsed: dict[str, float | int] = {}
+    for key in ("avg10", "avg60", "avg300"):
+        value = float(values[key])
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(f"{resource} PSI {key} must be finite and nonnegative")
+        parsed[key] = value
+    total = int(values["total"], 10)
+    if total < 0:
+        raise ValueError(f"{resource} PSI total must be nonnegative")
+    parsed["total"] = total
+    return fields[0], parsed
+
+
+def _parse_lane_psi_payload(payload: bytes, resource: str) -> tuple[
+    dict[str, float | int], dict[str, float | int] | None
+]:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{resource} PSI is not UTF-8") from error
+    parsed: dict[str, dict[str, float | int] | None] = {"some": None, "full": None}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        category, metrics = _parse_lane_psi_line(line, resource)
+        if parsed[category] is not None:
+            raise ValueError(f"{resource} PSI has duplicate {category} lines")
+        parsed[category] = metrics
+    if parsed["some"] is None:
+        raise ValueError(f"{resource} PSI lacks a some line")
+    return parsed["some"], parsed["full"]
+
+
+def capture_lane_psi_snapshot(
+    *,
+    proc_root: Path = LANE_PSI_PROC_ROOT,
+    monotonic_ns: Callable[[], int] = time.perf_counter_ns,
+) -> dict[str, Any]:
+    """Retain a bounded host PSI observation without making pressure a gate.
+
+    The reader deliberately tolerates unavailable or malformed procfs files.
+    Those outcomes are evidence about the observation itself, not a reason to
+    reject a lane or to exclude it from performance statistics.
+    """
+    started_ns = monotonic_ns()
+    observations: dict[str, dict[str, Any]] = {}
+    for resource in PSI_RESOURCES:
+        source = proc_root / "pressure" / resource
+        try:
+            with source.open("rb") as stream:
+                payload = stream.read(MAX_LANE_PSI_FILE_BYTES + 1)
+            if len(payload) > MAX_LANE_PSI_FILE_BYTES:
+                raise ValueError(
+                    f"{resource} PSI exceeds {MAX_LANE_PSI_FILE_BYTES} bytes"
+                )
+            some, full = _parse_lane_psi_payload(payload, resource)
+            observations[resource] = {
+                "status": "ok",
+                "source": str(source),
+                "some": some,
+                "full": full,
+                "error": None,
+            }
+        except FileNotFoundError:
+            observations[resource] = {
+                "status": "unavailable",
+                "source": str(source),
+                "some": None,
+                "full": None,
+                "error": "PSI file is unavailable",
+            }
+        except ValueError as error:
+            observations[resource] = {
+                "status": "malformed",
+                "source": str(source),
+                "some": None,
+                "full": None,
+                "error": str(error),
+            }
+        except OSError as error:
+            observations[resource] = {
+                "status": "unavailable",
+                "source": str(source),
+                "some": None,
+                "full": None,
+                "error": f"{type(error).__name__}: {error}",
+            }
+    finished_ns = monotonic_ns()
+    if (
+        isinstance(started_ns, bool)
+        or not isinstance(started_ns, int)
+        or isinstance(finished_ns, bool)
+        or not isinstance(finished_ns, int)
+        or finished_ns < started_ns
+    ):
+        raise DriverError("lane PSI monotonic clock returned an invalid interval")
+    return {
+        "schema_version": LANE_PSI_SCHEMA_VERSION,
+        "policy": LANE_PSI_POLICY,
+        "snapshot_started_ns": started_ns,
+        "snapshot_finished_ns": finished_ns,
+        "psi": observations,
+    }
 
 
 def _json_object_no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -1604,6 +1739,40 @@ def _write_jsonl_create_only(path: Path, rows: Sequence[Mapping[str, Any]]) -> N
     except (TypeError, ValueError) as error:
         raise DriverError(f"cannot encode raw rows {path}: {error}") from error
     _write_bytes_create_only(path, payload)
+
+
+def _write_lane_pressure_artifact(
+    *,
+    attempt_dir: Path,
+    lane: str,
+    context: AttemptContext,
+    pre: Mapping[str, Any],
+    post: Mapping[str, Any],
+) -> LanePressureArtifact:
+    """Freeze both lane-boundary PSI observations before marker construction."""
+    path = attempt_dir / f"{lane}.lane-psi.json"
+    _write_json_create_only(
+        path,
+        {
+            "schema_version": LANE_PSI_SCHEMA_VERSION,
+            "policy": LANE_PSI_POLICY,
+            "lane": lane,
+            "attempt": {
+                "phase": context.phase,
+                "index": context.index,
+                "pair_order": context.pair_order if context.phase == "timed" else None,
+            },
+            "proc_root": str(LANE_PSI_PROC_ROOT),
+            "pre": dict(pre),
+            "post": dict(post),
+        },
+    )
+    resolved, _, sha256 = _sha256_file(
+        path,
+        maximum_bytes=MAX_WORKLOAD_BYTES,
+        label=f"{lane} lane PSI artifact",
+    )
+    return LanePressureArtifact(path=resolved, sha256=sha256)
 
 
 def _retained_artifacts(attempt_dir: Path, lane: str) -> RetainedArtifacts:
@@ -2947,6 +3116,7 @@ def _lane_provenance(
     cleanup: Mapping[str, Any],
     whole_gpu_memory: Mapping[str, Any],
     cleanup_completed_ns: int,
+    lane_pressure: LanePressureArtifact,
 ) -> dict[str, Any]:
     return {
         "argv": list(managed.command),
@@ -2958,6 +3128,11 @@ def _lane_provenance(
         "cleanup": dict(cleanup),
         "cleanup_completed_ns": cleanup_completed_ns,
         "whole_gpu_memory": dict(whole_gpu_memory),
+        "lane_pressure": {
+            "path": str(lane_pressure.path),
+            "sha256": lane_pressure.sha256,
+            "policy": LANE_PSI_POLICY,
+        },
     }
 
 
@@ -2995,6 +3170,9 @@ def _run_lane(
     provenance_artifact: LaneProvenanceArtifact | None = None
     cleanup_completed_ns: int | None = None
     post_lane_gpu_idle: Mapping[str, Any] = {}
+    lane_pressure_pre: Mapping[str, Any] | None = None
+    lane_pressure_post: Mapping[str, Any] | None = None
+    lane_pressure_artifact: LanePressureArtifact | None = None
     sampler_factory = dependencies.gpu_memory_sampler_factory or WholeGpuMemorySampler
     sampler = sampler_factory(
         nvidia_smi=config.nvidia_smi,
@@ -3003,6 +3181,13 @@ def _run_lane(
     )
     sampler_started = False
     try:
+        pressure_snapshot = dependencies.lane_psi_snapshot or capture_lane_psi_snapshot
+        # PSI is observed immediately before the lane begins.  It is not a
+        # readiness, quiet-window, or admission condition.
+        lane_pressure_pre = pressure_snapshot(
+            proc_root=LANE_PSI_PROC_ROOT,
+            monotonic_ns=dependencies.monotonic_ns,
+        )
         # The initial physical-GPU sample must precede Popen so an allocation
         # spike during server construction cannot fall in an unobserved gap.
         sampler.start()
@@ -3152,6 +3337,24 @@ def _run_lane(
                     gpu_error = DriverError(f"{lane} whole-GPU sampling failed: {type(error).__name__}: {error}")
                 gpu_evidence["sampling_error"] = f"{type(error).__name__}: {error}"
         if process is not None:
+            pressure_snapshot = dependencies.lane_psi_snapshot or capture_lane_psi_snapshot
+            # The post observation follows owned process/container cleanup and
+            # GPU sampling, but precedes the next lane's idle census.  It is
+            # retained even when procfs reports pressure or is unavailable.
+            lane_pressure_post = pressure_snapshot(
+                proc_root=LANE_PSI_PROC_ROOT,
+                monotonic_ns=dependencies.monotonic_ns,
+            )
+            if lane_pressure_pre is None:
+                raise DriverError(f"{lane} lane PSI pre-observation is unavailable")
+            lane_pressure_artifact = _write_lane_pressure_artifact(
+                attempt_dir=attempt_dir,
+                lane=lane,
+                context=context,
+                pre=lane_pressure_pre,
+                post=lane_pressure_post,
+            )
+        if process is not None:
             idle_error: DriverError | None = None
             census = dependencies.gpu_idle_census or _default_gpu_idle_census
             try:
@@ -3177,12 +3380,15 @@ def _run_lane(
             if idle_error is not None and gpu_error is None:
                 gpu_error = idle_error
         if process is not None:
+            if lane_pressure_artifact is None:
+                raise DriverError(f"{lane} did not retain a lane PSI artifact")
             provenance = _lane_provenance(
                 process,
                 ready,
                 cleanup,
                 gpu_evidence,
                 cleanup_completed_ns if cleanup_completed_ns is not None else process.started_ns,
+                lane_pressure_artifact,
             )
             provenance["post_lane_gpu_idle"] = dict(post_lane_gpu_idle)
             if snapshot is not None:
@@ -3282,6 +3488,12 @@ def execute_pair(
                         + GPU_MEMORY_SAMPLE_SCHEDULING_SLACK_SECONDS
                     ),
                     "peak_limit_bytes": config.whole_gpu_sampled_peak_limit_bytes,
+                },
+                "lane_psi": {
+                    "schema_version": LANE_PSI_SCHEMA_VERSION,
+                    "proc_root": str(LANE_PSI_PROC_ROOT),
+                    "resources": list(PSI_RESOURCES),
+                    "policy": LANE_PSI_POLICY,
                 },
                 "startup_timeout_seconds": config.startup_timeout_seconds,
                 "request_timeout_seconds": config.request_timeout_seconds,

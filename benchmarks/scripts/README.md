@@ -101,6 +101,18 @@ planned timed pair가 실패하면 `promotion_status`는 `incomplete`이고 `0/N
 shared host의 CPU를 과도하게 쓰지 않도록 reader는 100,000 resamples 및 metric당
 250,000 bootstrap draw를 넘는 receipt를 거부한다.
 
+N06-A는 각 Riley/vLLM lane에 대해 `<lane>.lane-psi.json`을 create-only로 남긴다.
+`pre`는 sampler/server launch 직전, `post`는 owned process/container cleanup과
+sampler 종료 뒤 및 다음 lane의 GPU idle census 전에 CPU/I/O/memory
+`/proc/pressure/*`를 관찰한 값이다. artifact의 path/SHA-256은 lane provenance에
+들어가고, 그 provenance는 기존 marker hash로 binding된다. 높은 PSI, unavailable,
+malformed 관찰은 모두 보존하며 lane marker, pair eligibility, 성능 표본 선택,
+weighting, 보정, promotion에는 사용하지 않는다. Summary의
+`lane_pressure_covariates`와 `order_by_lane_pressure_sensitivity`는 lane별 pre/post
+covariate와 AB/BA order·first/second position별 descriptive pressure view만
+제공한다. 이 view에는 PSI bootstrap, pressure-adjusted effect, correlation 또는
+인과 해석이 없다.
+
 ```bash
 python3 benchmarks/scripts/n03b_n06a_d128_repeat_summary.py \
   --operator-receipt /var/tmp/riley-n03b-operator/<id>/n01-repeat-control-receipt.json \

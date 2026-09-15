@@ -268,6 +268,12 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                             "max_start_gap_seconds": 0.75,
                             "peak_limit_bytes": summary.WHOLE_GPU_SAMPLED_PEAK_LIMIT_BYTES,
                         },
+                        "lane_psi": {
+                            "schema_version": summary.LANE_PSI_SCHEMA_VERSION,
+                            "proc_root": "/proc",
+                            "resources": ["cpu", "io", "memory"],
+                            "policy": summary.LANE_PSI_POLICY,
+                        },
                     },
                     "launch_provenance": {
                         "model_identity": {
@@ -672,6 +678,62 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                 "sample_finished_after_server_cleanup": True,
             },
         }
+        def lane_psi_snapshot(*, started_ns: int, finished_ns: int, base: int) -> dict[str, object]:
+            def resource(name: str, offset: int, *, full: bool) -> dict[str, object]:
+                value = float(base + offset)
+                return {
+                    "status": "ok",
+                    "source": f"/proc/pressure/{name}",
+                    "some": {
+                        "avg10": value,
+                        "avg60": value + 0.1,
+                        "avg300": value + 0.2,
+                        "total": base + offset,
+                    },
+                    "full": None
+                    if not full
+                    else {
+                        "avg10": value / 2.0,
+                        "avg60": value / 2.0 + 0.1,
+                        "avg300": value / 2.0 + 0.2,
+                        "total": base + offset,
+                    },
+                    "error": None,
+                }
+
+            return {
+                "schema_version": summary.LANE_PSI_SCHEMA_VERSION,
+                "policy": summary.LANE_PSI_POLICY,
+                "snapshot_started_ns": started_ns,
+                "snapshot_finished_ns": finished_ns,
+                "psi": {
+                    "cpu": resource("cpu", 0, full=False),
+                    "io": resource("io", 100, full=True),
+                    "memory": resource("memory", 200, full=True),
+                },
+            }
+
+        lane_pressure_path = attempt / f"{lane}.lane-psi.json"
+        lane_pressure = {
+            "schema_version": summary.LANE_PSI_SCHEMA_VERSION,
+            "policy": summary.LANE_PSI_POLICY,
+            "lane": lane,
+            "attempt": {
+                "phase": config["phase"],
+                "index": config["index"],
+                "pair_order": config["pair_order"],
+            },
+            "proc_root": "/proc",
+            "pre": lane_psi_snapshot(started_ns=0, finished_ns=0, base=1_000 if lane == "riley" else 2_000),
+            "post": lane_psi_snapshot(
+                started_ns=2_000_001_000,
+                finished_ns=2_000_001_001,
+                base=1_500 if lane == "riley" else 2_500,
+            ),
+        }
+        lane_pressure_path.write_text(
+            json.dumps(lane_pressure, sort_keys=True) + "\n", encoding="utf-8"
+        )
         provenance: dict[str, object] = {
             "argv": config[f"{lane}_argv"],
             "pid": 10_000 if lane == "riley" else 10_001,
@@ -692,6 +754,11 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             },
             "cleanup_completed_ns": 2_000_000_000,
             "whole_gpu_memory": gpu,
+            "lane_pressure": {
+                "path": str(lane_pressure_path.resolve()),
+                "sha256": hashlib.sha256(lane_pressure_path.read_bytes()).hexdigest(),
+                "policy": summary.LANE_PSI_POLICY,
+            },
             "post_lane_gpu_idle": {
                 "schema_version": "riley.n06a-post-lane-gpu-idle-census.v1",
                 "gpu_index": 0,
@@ -723,12 +790,12 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             idle_command(
                 ["/usr/bin/nvidia-smi", "--id=0", "--query-compute-apps=pid", "--format=csv,noheader,nounits"],
                 "",
-                started_ns=2_000_000_010,
+                started_ns=2_000_001_010,
             ),
             idle_command(
                 ["/usr/bin/nvidia-smi", "--id=0", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
                 "64 MiB\n",
-                started_ns=2_000_000_012,
+                started_ns=2_000_001_012,
             ),
         ]
         if lane == "riley":
@@ -1156,6 +1223,23 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         self.assertEqual(serving["promotion_status"]["pair_completion"]["completed_over_planned"], "2/3")
         self.assertEqual(serving["paired_tail_effect_status"]["status"], "incomplete")
         self.assertEqual(len(serving["timed_run_pressure_covariates"]), 3)
+        self.assertEqual(len(serving["lane_pressure_covariates"]), 4)
+        first_lane_pressure = serving["lane_pressure_covariates"][0]
+        self.assertEqual(first_lane_pressure["timed_index"], 1)
+        self.assertEqual(first_lane_pressure["pair_order"], "riley-vllm")
+        self.assertEqual(first_lane_pressure["lane"], "riley")
+        self.assertEqual(first_lane_pressure["lane_position"], "first")
+        self.assertGreater(first_lane_pressure["derived"]["io"]["some"]["total_delta_us"], 0)
+        pressure_view = serving["order_by_lane_pressure_sensitivity"]
+        self.assertEqual(pressure_view["status"], "descriptive")
+        self.assertEqual(
+            pressure_view["by_pair_order"]["riley-vllm"]["lanes"]["riley"]["lane_position"],
+            "first",
+        )
+        self.assertEqual(
+            pressure_view["by_pair_order"]["vllm-riley"]["lanes"]["riley"]["lane_position"],
+            "second",
+        )
         failed = serving["timed_run_pressure_covariates"][1]
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["psi"]["pre"]["cpu"]["some"]["avg10"], 22.0)
@@ -1179,6 +1263,166 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             serving["successful_outer_pair_observations"][0]["riley"]["startup_snapshot"]["marker_prefix"],
             summary.STARTUP_RECEIPT_PREFIX,
         )
+
+    def test_lane_psi_unavailable_and_malformed_are_exposed_without_excluding_a_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(
+                Path(temporary), statuses=("succeeded", "succeeded")
+            )
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            riley_line = next(
+                line for line in stdout_path.read_text(encoding="utf-8").splitlines() if "lane=riley" in line
+            )
+            provenance_path = Path(
+                next(token.split("=", 1)[1] for token in riley_line.split() if token.startswith("lane_provenance_path="))
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            pressure_path = Path(provenance["lane_pressure"]["path"])
+            pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+            for phase, status in (("pre", "unavailable"), ("post", "malformed")):
+                pressure[phase]["psi"]["io"] = {
+                    "status": status,
+                    "source": "/proc/pressure/io",
+                    "some": None,
+                    "full": None,
+                    "error": f"fixture {status}",
+                }
+            pressure_path.write_text(json.dumps(pressure, sort_keys=True) + "\n", encoding="utf-8")
+            provenance["lane_pressure"]["sha256"] = hashlib.sha256(pressure_path.read_bytes()).hexdigest()
+            provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="lane_provenance_sha256",
+                value=hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            )
+            serving = summary.summarize(serving_receipt=receipt_path)["serving"]
+        assert serving is not None
+        self.assertEqual(serving["receipt"]["successful_timed_runs"], 2)
+        riley_covariate = next(
+            item
+            for item in serving["lane_pressure_covariates"]
+            if item["timed_index"] == 1 and item["lane"] == "riley"
+        )
+        self.assertEqual(riley_covariate["pre"]["psi"]["io"]["status"], "unavailable")
+        self.assertEqual(riley_covariate["post"]["psi"]["io"]["status"], "malformed")
+        self.assertEqual(
+            serving["order_by_lane_pressure_sensitivity"]["by_pair_order"]["riley-vllm"]
+            ["lanes"]["riley"]["resources"]["io"]["categories"]["some"]["available_pair_count"],
+            0,
+        )
+
+    def test_rejects_lane_psi_path_and_cumulative_total_tampering(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(Path(temporary), statuses=("succeeded",))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            riley_line = next(
+                line for line in stdout_path.read_text(encoding="utf-8").splitlines() if "lane=riley" in line
+            )
+            provenance_path = Path(
+                next(token.split("=", 1)[1] for token in riley_line.split() if token.startswith("lane_provenance_path="))
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            vllm_pressure_path = provenance_path.parent / "vllm.lane-psi.json"
+            provenance["lane_pressure"]["path"] = str(vllm_pressure_path)
+            provenance["lane_pressure"]["sha256"] = hashlib.sha256(
+                vllm_pressure_path.read_bytes()
+            ).hexdigest()
+            provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="lane_provenance_sha256",
+                value=hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            )
+            with self.assertRaisesRegex(summary.SummaryError, "dedicated lane file"):
+                summary.summarize(serving_receipt=receipt_path)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(Path(temporary), statuses=("succeeded",))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            riley_line = next(
+                line for line in stdout_path.read_text(encoding="utf-8").splitlines() if "lane=riley" in line
+            )
+            provenance_path = Path(
+                next(token.split("=", 1)[1] for token in riley_line.split() if token.startswith("lane_provenance_path="))
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            pressure_path = Path(provenance["lane_pressure"]["path"])
+            pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+            pre_total = pressure["pre"]["psi"]["io"]["some"]["total"]
+            pressure["post"]["psi"]["io"]["some"]["total"] = pre_total - 1
+            pressure_path.write_text(json.dumps(pressure, sort_keys=True) + "\n", encoding="utf-8")
+            provenance["lane_pressure"]["sha256"] = hashlib.sha256(pressure_path.read_bytes()).hexdigest()
+            provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="lane_provenance_sha256",
+                value=hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            )
+            with self.assertRaisesRegex(summary.SummaryError, "total moves backwards"):
+                summary.summarize(serving_receipt=receipt_path)
+
+    def test_rejects_lane_psi_sampler_and_idle_census_lifecycle_tampering(self) -> None:
+        def riley_artifacts(receipt_path: Path) -> tuple[Path, Path, dict[str, object], dict[str, object]]:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            riley_line = next(
+                line for line in stdout_path.read_text(encoding="utf-8").splitlines() if "lane=riley" in line
+            )
+            provenance_path = Path(
+                next(token.split("=", 1)[1] for token in riley_line.split() if token.startswith("lane_provenance_path="))
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            pressure_path = Path(provenance["lane_pressure"]["path"])
+            pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+            return stdout_path, provenance_path, provenance, pressure
+
+        def rebind_lane_pressure(
+            *, stdout_path: Path, provenance_path: Path, provenance: dict[str, object], pressure: dict[str, object]
+        ) -> None:
+            pressure_path = Path(provenance["lane_pressure"]["path"])
+            pressure_path.write_text(json.dumps(pressure, sort_keys=True) + "\n", encoding="utf-8")
+            provenance["lane_pressure"]["sha256"] = hashlib.sha256(pressure_path.read_bytes()).hexdigest()
+            provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="lane_provenance_sha256",
+                value=hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(Path(temporary), statuses=("succeeded",))
+            stdout_path, provenance_path, provenance, pressure = riley_artifacts(receipt_path)
+            pressure["post"]["snapshot_started_ns"] = 2_000_000_009
+            pressure["post"]["snapshot_finished_ns"] = 2_000_000_009
+            rebind_lane_pressure(
+                stdout_path=stdout_path,
+                provenance_path=provenance_path,
+                provenance=provenance,
+                pressure=pressure,
+            )
+            with self.assertRaisesRegex(summary.SummaryError, "before final whole-GPU sampler completion"):
+                summary.summarize(serving_receipt=receipt_path)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(Path(temporary), statuses=("succeeded",))
+            stdout_path, provenance_path, provenance, pressure = riley_artifacts(receipt_path)
+            pressure["post"]["snapshot_started_ns"] = 2_000_001_011
+            pressure["post"]["snapshot_finished_ns"] = 2_000_001_011
+            rebind_lane_pressure(
+                stdout_path=stdout_path,
+                provenance_path=provenance_path,
+                provenance=provenance,
+                pressure=pressure,
+            )
+            with self.assertRaisesRegex(summary.SummaryError, "extends past post-lane GPU idle census"):
+                summary.summarize(serving_receipt=receipt_path)
 
     def test_operator_and_serving_evidence_remain_separate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

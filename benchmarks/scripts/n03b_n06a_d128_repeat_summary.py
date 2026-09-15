@@ -76,6 +76,7 @@ MAX_RETAINED_PHASE_BYTES = 4 * 1024 * 1024
 MAX_ATTEMPT_CONFIG_BYTES = 4 * 1024 * 1024
 MAX_GPU_MEMORY_SAMPLES_BYTES = 4 * 1024 * 1024
 MAX_LANE_PROVENANCE_BYTES = 4 * 1024 * 1024
+MAX_LANE_PSI_ARTIFACT_BYTES = 1 * 1024 * 1024
 MAX_WORKLOAD_BYTES = 4 * 1024 * 1024
 MAX_MODEL_IDENTITY_MANIFEST_BYTES = 1 * 1024 * 1024
 MAX_MODEL_IDENTITY_METADATA_BYTES = 4 * 1024 * 1024
@@ -101,6 +102,8 @@ VLLM_BACKEND_RECEIPT_REGEX = re.compile(
 MAX_BOOTSTRAP_RESAMPLES = 100_000
 MAX_BOOTSTRAP_DRAWS_PER_METRIC = 250_000
 PSI_RESOURCES = ("cpu", "io", "memory")
+LANE_PSI_SCHEMA_VERSION = "riley.n06a-lane-psi.v1"
+LANE_PSI_POLICY = "observed-only; never used for lane eligibility, sample selection, or performance adjustment"
 
 QWEN_MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 QWEN_MODEL_REVISION = "aa8e72537993ba99e69dfaafa59ed015b17504d1"
@@ -360,27 +363,45 @@ def _parse_psi_metrics(value: object, label: str) -> dict[str, float | int] | No
     return result
 
 
+def _validate_psi_resource(
+    value: object, *, label: str, expected_source: str | None = None
+) -> dict[str, Any]:
+    item = _require_mapping(value, label)
+    status = _require_string(item.get("status"), f"{label}.status")
+    if status not in {"ok", "unavailable", "malformed"}:
+        raise SummaryError(f"{label}.status is unsupported: {status!r}")
+    if expected_source is not None:
+        if set(item) != {"status", "source", "some", "full", "error"}:
+            raise SummaryError(f"{label} fields differ from the lane PSI contract")
+        source = _require_string(item.get("source"), f"{label}.source")
+        if source != expected_source:
+            raise SummaryError(f"{label}.source differs from its configured procfs source")
+    some = _parse_psi_metrics(item.get("some"), f"{label}.some")
+    full = _parse_psi_metrics(item.get("full"), f"{label}.full")
+    if status == "ok" and some is None:
+        raise SummaryError(f"{label}.some is required when status is ok")
+    if status != "ok" and (some is not None or full is not None):
+        raise SummaryError(
+            f"{label} must not contain numbers when status is {status!r}"
+        )
+    error = item.get("error")
+    if error is not None and not isinstance(error, str):
+        raise SummaryError(f"{label}.error must be a string or null")
+    result = {"status": status, "some": some, "full": full, "error": error}
+    if expected_source is not None:
+        result["source"] = expected_source
+    return result
+
+
 def _extract_psi_resource(
     run: Mapping[str, Any], *, phase: str, resource: str, run_label: str
 ) -> dict[str, Any]:
     observation = _require_mapping(run.get(phase), f"{run_label}.{phase}")
     psi = _require_mapping(observation.get("psi"), f"{run_label}.{phase}.psi")
-    item = _require_mapping(psi.get(resource), f"{run_label}.{phase}.psi.{resource}")
-    status = _require_string(item.get("status"), f"{run_label}.{phase}.psi.{resource}.status")
-    if status not in {"ok", "unavailable", "malformed"}:
-        raise SummaryError(f"{run_label}.{phase}.psi.{resource}.status is unsupported: {status!r}")
-    some = _parse_psi_metrics(item.get("some"), f"{run_label}.{phase}.psi.{resource}.some")
-    full = _parse_psi_metrics(item.get("full"), f"{run_label}.{phase}.psi.{resource}.full")
-    if status == "ok" and some is None:
-        raise SummaryError(f"{run_label}.{phase}.psi.{resource}.some is required when status is ok")
-    if status != "ok" and (some is not None or full is not None):
-        raise SummaryError(
-            f"{run_label}.{phase}.psi.{resource} must not contain numbers when status is {status!r}"
-        )
-    error = item.get("error")
-    if error is not None and not isinstance(error, str):
-        raise SummaryError(f"{run_label}.{phase}.psi.{resource}.error must be a string or null")
-    return {"status": status, "some": some, "full": full, "error": error}
+    return _validate_psi_resource(
+        psi.get(resource),
+        label=f"{run_label}.{phase}.psi.{resource}",
+    )
 
 
 def _timed_run_covariate(run: Mapping[str, Any]) -> dict[str, Any]:
@@ -2266,6 +2287,7 @@ def _validate_whole_gpu_peak_receipt(
         "sample_path": str(sample_path),
         "sample_sha256": sample_sha256,
         "sample_count": len(samples),
+        "final_sample_finished_ns": samples[-1]["finished_ns"],
         "peak_path": str(peak_path),
         "peak_sha256": peak_sha256,
         "peak_used_bytes": observed_peak,
@@ -2400,6 +2422,170 @@ def _validate_post_lane_gpu_idle_census(
         "memory_used_bytes": memory_used_bytes,
         "commands": command_summaries,
     }
+
+def _validate_lane_psi_configuration(
+    configuration: Mapping[str, Any], *, label: str
+) -> str:
+    value = _require_mapping(configuration.get("lane_psi"), f"{label}.lane_psi")
+    expected_keys = {"schema_version", "proc_root", "resources", "policy"}
+    if set(value) != expected_keys:
+        raise SummaryError(f"{label}.lane_psi fields differ from the N06-A contract")
+    if value.get("schema_version") != LANE_PSI_SCHEMA_VERSION:
+        raise SummaryError(f"{label}.lane_psi schema version differs")
+    if value.get("policy") != LANE_PSI_POLICY:
+        raise SummaryError(f"{label}.lane_psi policy differs")
+    proc_root = _require_string(value.get("proc_root"), f"{label}.lane_psi.proc_root")
+    if proc_root != "/proc":
+        raise SummaryError(f"{label}.lane_psi.proc_root must be /proc")
+    resources = value.get("resources")
+    if resources != list(PSI_RESOURCES):
+        raise SummaryError(f"{label}.lane_psi.resources must be CPU/I/O/memory in contract order")
+    return proc_root
+
+
+def _validate_lane_psi_snapshot(
+    value: object,
+    *,
+    phase: str,
+    proc_root: str,
+    label: str,
+) -> dict[str, Any]:
+    snapshot = _require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "policy",
+            "snapshot_started_ns",
+            "snapshot_finished_ns",
+            "psi",
+        },
+        label,
+    )
+    if snapshot.get("schema_version") != LANE_PSI_SCHEMA_VERSION:
+        raise SummaryError(f"{label}.schema_version differs")
+    if snapshot.get("policy") != LANE_PSI_POLICY:
+        raise SummaryError(f"{label}.policy differs")
+    started_ns = _require_integer(snapshot.get("snapshot_started_ns"), f"{label}.snapshot_started_ns", minimum=0)
+    finished_ns = _require_integer(
+        snapshot.get("snapshot_finished_ns"),
+        f"{label}.snapshot_finished_ns",
+        minimum=started_ns,
+    )
+    psi = _require_mapping(snapshot.get("psi"), f"{label}.psi")
+    if set(psi) != set(PSI_RESOURCES):
+        raise SummaryError(f"{label}.psi must contain CPU/I/O/memory exactly once")
+    return {
+        "snapshot_started_ns": started_ns,
+        "snapshot_finished_ns": finished_ns,
+        "psi": {
+            resource: _validate_psi_resource(
+                psi.get(resource),
+                label=f"{label}.psi.{resource}",
+                expected_source=str(Path(proc_root) / "pressure" / resource),
+            )
+            for resource in PSI_RESOURCES
+        },
+        "phase": phase,
+    }
+
+
+def _validate_lane_pressure_artifact(
+    *,
+    lane: str,
+    provenance: Mapping[str, Any],
+    attempt_dir: Path,
+    attempt_config: Mapping[str, Any],
+    configuration: Mapping[str, Any],
+    server_started_ns: int,
+    cleanup_completed_ns: int,
+    final_whole_gpu_sample_finished_ns: int,
+    first_post_lane_gpu_idle_started_ns: int,
+    label: str,
+) -> dict[str, Any]:
+    """Replay the marker-bound PSI artifact without treating pressure as a gate."""
+    proc_root = _validate_lane_psi_configuration(configuration, label=label)
+    reference = _require_exact_keys(
+        provenance.get("lane_pressure"),
+        {"path", "sha256", "policy"},
+        f"{label} lane provenance.lane_pressure",
+    )
+    if reference.get("policy") != LANE_PSI_POLICY:
+        raise SummaryError(f"{label} lane provenance PSI policy differs")
+    artifact_path, artifact_payload, artifact_sha256 = _read_marked_artifact(
+        path_text=_require_string(reference.get("path"), f"{label} lane pressure path"),
+        expected_sha256=_require_string(reference.get("sha256"), f"{label} lane pressure SHA-256"),
+        label=f"{label} lane PSI artifact",
+        maximum_bytes=MAX_LANE_PSI_ARTIFACT_BYTES,
+    )
+    if artifact_path.parent != attempt_dir or artifact_path.name != f"{lane}.lane-psi.json":
+        raise SummaryError(f"{label} lane PSI artifact must be the dedicated lane file in its attempt directory")
+    artifact = _require_exact_keys(
+        _decode_json(artifact_payload, label=f"{label} lane PSI artifact"),
+        {"schema_version", "policy", "lane", "attempt", "proc_root", "pre", "post"},
+        f"{label} lane PSI artifact",
+    )
+    if (
+        artifact.get("schema_version") != LANE_PSI_SCHEMA_VERSION
+        or artifact.get("policy") != LANE_PSI_POLICY
+        or artifact.get("lane") != lane
+    ):
+        raise SummaryError(f"{label} lane PSI artifact identity differs")
+    if artifact.get("proc_root") != proc_root:
+        raise SummaryError(f"{label} lane PSI artifact proc_root differs from its attempt configuration")
+    expected_attempt = {
+        "phase": attempt_config.get("phase"),
+        "index": attempt_config.get("index"),
+        "pair_order": attempt_config.get("pair_order"),
+    }
+    if artifact.get("attempt") != expected_attempt:
+        raise SummaryError(f"{label} lane PSI artifact attempt identity differs from its attempt config")
+    pre = _validate_lane_psi_snapshot(
+        artifact.get("pre"), phase="pre", proc_root=proc_root, label=f"{label} lane PSI pre"
+    )
+    post = _validate_lane_psi_snapshot(
+        artifact.get("post"), phase="post", proc_root=proc_root, label=f"{label} lane PSI post"
+    )
+    if pre["snapshot_finished_ns"] > server_started_ns:
+        raise SummaryError(f"{label} lane PSI pre snapshot falls after server launch")
+    if post["snapshot_started_ns"] < cleanup_completed_ns:
+        raise SummaryError(f"{label} lane PSI post snapshot falls before owned cleanup")
+    if post["snapshot_started_ns"] < final_whole_gpu_sample_finished_ns:
+        raise SummaryError(f"{label} lane PSI post snapshot falls before final whole-GPU sampler completion")
+    if post["snapshot_finished_ns"] > first_post_lane_gpu_idle_started_ns:
+        raise SummaryError(f"{label} lane PSI post snapshot extends past post-lane GPU idle census")
+    if post["snapshot_started_ns"] < pre["snapshot_finished_ns"]:
+        raise SummaryError(f"{label} lane PSI snapshots move backwards")
+    snapshot_window_us = (post["snapshot_started_ns"] - pre["snapshot_finished_ns"]) / 1_000.0
+    if snapshot_window_us <= 0.0:
+        raise SummaryError(f"{label} lane PSI snapshot window must be positive")
+    derived: dict[str, dict[str, Any]] = {}
+    for resource in PSI_RESOURCES:
+        resource_derived: dict[str, Any] = {}
+        for category in ("some", "full"):
+            pre_metrics = pre["psi"][resource][category]
+            post_metrics = post["psi"][resource][category]
+            if pre_metrics is None or post_metrics is None:
+                resource_derived[category] = None
+                continue
+            total_delta_us = int(post_metrics["total"]) - int(pre_metrics["total"])
+            if total_delta_us < 0:
+                raise SummaryError(f"{label} lane PSI {resource}.{category}.total moves backwards")
+            resource_derived[category] = {
+                "pre_avg10_percent": float(pre_metrics["avg10"]),
+                "post_avg10_percent": float(post_metrics["avg10"]),
+                "total_delta_us": total_delta_us,
+                "snapshot_window_us": snapshot_window_us,
+                "stall_percent": total_delta_us * 100.0 / snapshot_window_us,
+            }
+        derived[resource] = resource_derived
+    return {
+        "path": str(artifact_path),
+        "sha256": artifact_sha256,
+        "pre": pre,
+        "post": post,
+        "derived": derived,
+    }
+
 
 def _validate_lane_provenance(
     *, lane: str, fields: Mapping[str, str], record: Mapping[str, Any], label: str
@@ -2649,8 +2835,11 @@ def _validate_lane_provenance(
         if gpu.get(key) != expected:
             raise SummaryError(f"{label} lane provenance whole-GPU receipt differs at {key!r}")
     gpu_lifecycle = _require_mapping(gpu.get("lifecycle"), f"{label} lane provenance whole-GPU lifecycle")
+    verified_whole_gpu_memory = _require_mapping(
+        record.get("whole_gpu_memory"), f"{label} whole-GPU memory"
+    )
     verified_lifecycle = _require_mapping(
-        _require_mapping(record.get("whole_gpu_memory"), f"{label} whole-GPU memory").get("lifecycle"),
+        verified_whole_gpu_memory.get("lifecycle"),
         f"{label} verified whole-GPU lifecycle",
     )
     if gpu_lifecycle != verified_lifecycle:
@@ -2665,6 +2854,33 @@ def _validate_lane_provenance(
         provenance=provenance,
         configuration=configuration,
         cleanup_completed_ns=cleanup_completed_ns,
+        label=label,
+    )
+    final_whole_gpu_sample_finished_ns = _require_integer(
+        verified_whole_gpu_memory.get("final_sample_finished_ns"),
+        f"{label} final whole-GPU sample finished_ns",
+        minimum=cleanup_completed_ns,
+    )
+    idle_commands = post_lane_gpu_idle.get("commands")
+    if not isinstance(idle_commands, list) or not idle_commands:
+        raise SummaryError(f"{label} post-lane GPU idle census lacks its first command")
+    first_post_lane_gpu_idle_started_ns = _require_integer(
+        _require_mapping(
+            idle_commands[0], f"{label} post-lane GPU idle first command"
+        ).get("started_ns"),
+        f"{label} post-lane GPU idle first command.started_ns",
+        minimum=final_whole_gpu_sample_finished_ns,
+    )
+    lane_pressure = _validate_lane_pressure_artifact(
+        lane=lane,
+        provenance=provenance,
+        attempt_dir=attempt_dir,
+        attempt_config=config,
+        configuration=configuration,
+        server_started_ns=started_ns,
+        cleanup_completed_ns=cleanup_completed_ns,
+        final_whole_gpu_sample_finished_ns=final_whole_gpu_sample_finished_ns,
+        first_post_lane_gpu_idle_started_ns=first_post_lane_gpu_idle_started_ns,
         label=label,
     )
     retained_phase = _require_mapping(retained.get("phase"), f"{label} retained phase lifecycle")
@@ -2767,6 +2983,7 @@ def _validate_lane_provenance(
         "ready_ns": ready_ns,
         "cleanup_completed_ns": cleanup_completed_ns,
         "post_lane_gpu_idle": post_lane_gpu_idle,
+        "lane_pressure": lane_pressure,
     }
     if vllm_snapshot_paths is not None:
         result["vllm_startup_snapshot"] = vllm_snapshot_paths
@@ -3271,9 +3488,124 @@ def _order_stratum(
     }
 
 
+def _descriptive_pressure_values(values: Sequence[float]) -> dict[str, Any]:
+    """Summarize an observed PSI series without inference or reweighting."""
+    observations = [float(value) for value in values]
+    if not observations:
+        return {
+            "count": 0,
+            "median": None,
+            "mean": None,
+            "sample_stddev": None,
+            "min": None,
+            "max": None,
+        }
+    return {
+        "count": len(observations),
+        "median": statistics.median(observations),
+        "mean": statistics.fmean(observations),
+        "sample_stddev": statistics.stdev(observations) if len(observations) > 1 else 0.0,
+        "min": min(observations),
+        "max": max(observations),
+    }
+
+
+def _lane_pressure_covariate(
+    *, timed_index: int, pair_order: str, lane: str, pressure: Mapping[str, Any]
+) -> dict[str, Any]:
+    if pair_order not in {"riley-vllm", "vllm-riley"}:
+        raise SummaryError("lane pressure covariate has an unsupported pair order")
+    if lane not in {"riley", "vllm"}:
+        raise SummaryError("lane pressure covariate has an unsupported lane")
+    return {
+        "timed_index": timed_index,
+        "pair_order": pair_order,
+        "lane": lane,
+        "lane_position": "first" if pair_order.split("-", 1)[0] == lane else "second",
+        "artifact": {"path": pressure["path"], "sha256": pressure["sha256"]},
+        "pre": pressure["pre"],
+        "post": pressure["post"],
+        "derived": pressure["derived"],
+    }
+
+
+def _order_by_lane_pressure_sensitivity(
+    covariates: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Expose order/position pressure differences without altering any metric."""
+    by_order: dict[str, list[Mapping[str, Any]]] = {
+        order: [item for item in covariates if item["pair_order"] == order]
+        for order in ("riley-vllm", "vllm-riley")
+    }
+    order_summaries: dict[str, Any] = {}
+    for order, records in by_order.items():
+        lanes: dict[str, Any] = {}
+        for lane in ("riley", "vllm"):
+            lane_records = [item for item in records if item["lane"] == lane]
+            resource_summaries: dict[str, Any] = {}
+            for resource in PSI_RESOURCES:
+                pre_statuses = [item["pre"]["psi"][resource]["status"] for item in lane_records]
+                post_statuses = [item["post"]["psi"][resource]["status"] for item in lane_records]
+                categories: dict[str, Any] = {}
+                for category in ("some", "full"):
+                    available = [
+                        item
+                        for item in lane_records
+                        if item["pre"]["psi"][resource][category] is not None
+                        and item["post"]["psi"][resource][category] is not None
+                        and item["derived"][resource][category] is not None
+                    ]
+                    categories[category] = {
+                        "available_pair_count": len(available),
+                        "pre_avg10_percent": _descriptive_pressure_values(
+                            [item["pre"]["psi"][resource][category]["avg10"] for item in available]
+                        ),
+                        "post_avg10_percent": _descriptive_pressure_values(
+                            [item["post"]["psi"][resource][category]["avg10"] for item in available]
+                        ),
+                        "total_delta_us": _descriptive_pressure_values(
+                            [item["derived"][resource][category]["total_delta_us"] for item in available]
+                        ),
+                        "stall_percent": _descriptive_pressure_values(
+                            [item["derived"][resource][category]["stall_percent"] for item in available]
+                        ),
+                    }
+                resource_summaries[resource] = {
+                    "pre_status_counts": {
+                        status: pre_statuses.count(status)
+                        for status in ("ok", "unavailable", "malformed")
+                    },
+                    "post_status_counts": {
+                        status: post_statuses.count(status)
+                        for status in ("ok", "unavailable", "malformed")
+                    },
+                    "categories": categories,
+                }
+            lanes[lane] = {
+                "lane_position": "first" if order.split("-", 1)[0] == lane else "second",
+                "completed_lane_observations": len(lane_records),
+                "resources": resource_summaries,
+            }
+        order_summaries[order] = {
+            "completed_outer_pairs": len(records) // 2,
+            "status": "descriptive",
+            "lanes": lanes,
+        }
+    return {
+        "status": "descriptive",
+        "policy": (
+            "Lane PSI is shown by AB/BA order and lane position only; it is never used "
+            "to select, filter, pair, weight, adjust, or promote a performance result."
+        ),
+        "total_delta_unit": "microseconds from Linux PSI cumulative total",
+        "by_pair_order": order_summaries,
+    }
+
+
 def _serving_summary(receipt_path: Path) -> dict[str, Any]:
     receipt = _load_repeat_receipt(receipt_path)
     covariates: list[dict[str, Any]] = []
+    lane_pressure_covariates: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
     startup_snapshot_paths: set[str] = set()
     vllm_startup_snapshot_paths: set[str] = set()
@@ -3408,8 +3740,26 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
                 "paired_metrics": _paired_metrics(riley, vllm),
             }
             observations.append(observation)
+            lane_pressure = {
+                lane: _lane_pressure_covariate(
+                    timed_index=int(run["index"]),
+                    pair_order=riley["pair_order"],
+                    lane=lane,
+                    pressure=_require_mapping(
+                        _require_mapping(
+                            (riley if lane == "riley" else vllm).get("lane_provenance"),
+                            f"validated {lane} lane provenance",
+                        ).get("lane_pressure"),
+                        f"validated {lane} lane PSI provenance",
+                    ),
+                )
+                for lane in ("riley", "vllm")
+            }
+            covariate["lane_pressure"] = lane_pressure
+            lane_pressure_covariates.extend(lane_pressure[lane] for lane in ("riley", "vllm"))
             covariate["stdout"] = stdout
         else:
+            covariate["lane_pressure"] = None
             if run_status == N01_NOT_STARTED_AFTER_FAILED_CLEANUP_STATUS:
                 failed_pairs.append(
                     {
@@ -3557,6 +3907,10 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
         "pair_order_balance": order_balance,
         "paired_tail_effect_status": tail_effect_status,
         "timed_run_pressure_covariates": covariates,
+        "lane_pressure_covariates": lane_pressure_covariates,
+        "order_by_lane_pressure_sensitivity": _order_by_lane_pressure_sensitivity(
+            lane_pressure_covariates
+        ),
         "successful_outer_pair_observations": observations,
         "per_lane": per_lane,
         "paired_outer_process_metrics": paired,
@@ -3567,7 +3921,8 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
         },
         "limitations": [
             "Only completed zero-failure outer attempts contribute numerical serving statistics; any missing planned pair makes promotion_status incomplete and remains in pair_completion and timed_run_pressure_covariates.",
-            "CPU, I/O, and memory PSI are pre/post covariates only and are never used as a selection, filtering, pairing, or adjustment rule.",
+            "Outer and lane CPU/I/O/memory PSI are observed covariates only and are never used as a selection, filtering, pairing, weighting, adjustment, or promotion rule.",
+            "Lane PSI artifacts are captured around each owned lane; order-by-pressure summaries are descriptive context, not causal or adjusted performance effects.",
             "Client token timestamps are delivery observations, not CUDA or scheduler-commit timestamps.",
             "P95/P99 paired ratios and deltas are reported with outer-pair bootstrap intervals; tail_effect_status remains descriptive unless every planned pair completes and each lane records at least 1000 retained requests.",
             "The paired result is a Qwen2.5-3B D128 Riley graph-disabled serving comparison for its exact workload, not a general vLLM superiority claim.",

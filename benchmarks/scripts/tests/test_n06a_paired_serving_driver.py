@@ -423,6 +423,7 @@ class N06aPairedServingDriverTests(unittest.TestCase):
         *,
         gpu_sampler_factory: object = FakeGpuMemorySampler,
         events: list[str] | None = None,
+        lane_psi_snapshot: object | None = None,
     ) -> driver.DriverDependencies:
         stopped: list[int] = []
 
@@ -556,6 +557,52 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             }
 
         values = iter(range(2_000_000_000, 3_000_000_000, 10_000))
+        psi_snapshot_index = 0
+
+        def default_lane_psi_snapshot(**kwargs: object) -> dict[str, object]:
+            nonlocal psi_snapshot_index
+            proc_root = kwargs["proc_root"]
+            monotonic_ns = kwargs["monotonic_ns"]
+            assert isinstance(proc_root, Path) and callable(monotonic_ns)
+            psi_snapshot_index += 1
+            base = psi_snapshot_index * 1_000
+
+            def resource(offset: int, *, full: bool = True) -> dict[str, object]:
+                value = float(base + offset)
+                return {
+                    "status": "ok",
+                    "source": str(proc_root / "pressure" / ("cpu" if offset == 0 else "io" if offset == 100 else "memory")),
+                    "some": {
+                        "avg10": value,
+                        "avg60": value + 0.1,
+                        "avg300": value + 0.2,
+                        "total": base + offset,
+                    },
+                    "full": None
+                    if not full
+                    else {
+                        "avg10": value / 2.0,
+                        "avg60": value / 2.0 + 0.1,
+                        "avg300": value / 2.0 + 0.2,
+                        "total": base + offset,
+                    },
+                    "error": None,
+                }
+
+            started_ns = monotonic_ns()
+            finished_ns = monotonic_ns()
+            return {
+                "schema_version": driver.LANE_PSI_SCHEMA_VERSION,
+                "policy": driver.LANE_PSI_POLICY,
+                "snapshot_started_ns": started_ns,
+                "snapshot_finished_ns": finished_ns,
+                "psi": {
+                    "cpu": resource(0, full=False),
+                    "io": resource(100),
+                    "memory": resource(200),
+                },
+            }
+
         return driver.DriverDependencies(
             popen=popen,
             wait_ready=fake_wait,
@@ -564,6 +611,11 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             cleanup_vllm_container=fake_container_cleanup,
             gpu_memory_sampler_factory=gpu_sampler_factory,
             gpu_idle_census=fake_gpu_idle_census,
+            lane_psi_snapshot=(
+                lane_psi_snapshot
+                if callable(lane_psi_snapshot)
+                else default_lane_psi_snapshot
+            ),
             model_identity_validator=fake_model_identity_validator,
             monotonic_ns=lambda: next(values),
         )
@@ -618,6 +670,112 @@ class N06aPairedServingDriverTests(unittest.TestCase):
                 attempt["vllm_argv"][attempt["vllm_argv"].index("--name") + 1],
                 attempt["launch_provenance"]["vllm_docker_container"]["name"],
             )
+
+    def test_lane_psi_artifacts_are_marker_bound_and_high_pressure_is_not_a_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            attempt_dir, markers = driver.execute_pair(
+                self.make_config(directory),
+                driver.AttemptContext(phase="timed", index=1),
+                dependencies=self.dependencies(FakePopen(), SyntheticRunner()),
+            )
+            marker_by_lane = {
+                summary._parse_marker_tokens(marker, prefix=driver.MARKER_PREFIX, label="fixture marker")["lane"]: marker
+                for marker in markers
+            }
+            self.assertEqual(set(marker_by_lane), {"riley", "vllm"})
+            for lane in ("riley", "vllm"):
+                provenance_path = attempt_dir / f"{lane}.provenance.json"
+                pressure_path = attempt_dir / f"{lane}.lane-psi.json"
+                provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+                pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+                marker_fields = summary._parse_marker_tokens(
+                    marker_by_lane[lane], prefix=driver.MARKER_PREFIX, label=f"fixture {lane} marker"
+                )
+                self.assertEqual(marker_fields["lane_provenance_path"], str(provenance_path.resolve()))
+                self.assertEqual(
+                    marker_fields["lane_provenance_sha256"],
+                    hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+                )
+                self.assertEqual(provenance["lane_pressure"]["path"], str(pressure_path.resolve()))
+                self.assertEqual(
+                    provenance["lane_pressure"]["sha256"],
+                    hashlib.sha256(pressure_path.read_bytes()).hexdigest(),
+                )
+                self.assertEqual(pressure["policy"], driver.LANE_PSI_POLICY)
+                self.assertGreaterEqual(pressure["pre"]["psi"]["io"]["some"]["avg10"], 1_000.0)
+                self.assertLessEqual(
+                    pressure["pre"]["snapshot_finished_ns"], provenance["started_ns"]
+                )
+                self.assertGreaterEqual(
+                    pressure["post"]["snapshot_started_ns"], provenance["cleanup_completed_ns"]
+                )
+
+    def test_lane_psi_capture_retains_high_unavailable_and_malformed_observations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            proc_root = Path(temporary)
+            pressure_root = proc_root / "pressure"
+            pressure_root.mkdir()
+            (pressure_root / "cpu").write_text(
+                "some avg10=999.25 avg60=17.50 avg300=4.25 total=12345\n",
+                encoding="utf-8",
+            )
+            (pressure_root / "io").write_text("some broken-record\n", encoding="utf-8")
+            ticks = iter((100, 200))
+            snapshot = driver.capture_lane_psi_snapshot(
+                proc_root=proc_root,
+                monotonic_ns=lambda: next(ticks),
+            )
+
+        self.assertEqual(snapshot["snapshot_started_ns"], 100)
+        self.assertEqual(snapshot["snapshot_finished_ns"], 200)
+        self.assertEqual(snapshot["psi"]["cpu"]["status"], "ok")
+        self.assertEqual(snapshot["psi"]["cpu"]["some"]["avg10"], 999.25)
+        self.assertEqual(snapshot["psi"]["io"]["status"], "malformed")
+        self.assertEqual(snapshot["psi"]["memory"]["status"], "unavailable")
+
+    def test_unavailable_or_malformed_lane_psi_is_retained_without_blocking_markers(self) -> None:
+        snapshots = iter(("unavailable", "malformed", "unavailable", "malformed"))
+
+        def pressure_snapshot(**kwargs: object) -> dict[str, object]:
+            status = next(snapshots)
+            proc_root = kwargs["proc_root"]
+            monotonic_ns = kwargs["monotonic_ns"]
+            assert isinstance(proc_root, Path) and callable(monotonic_ns)
+            started_ns = monotonic_ns()
+            finished_ns = monotonic_ns()
+            return {
+                "schema_version": driver.LANE_PSI_SCHEMA_VERSION,
+                "policy": driver.LANE_PSI_POLICY,
+                "snapshot_started_ns": started_ns,
+                "snapshot_finished_ns": finished_ns,
+                "psi": {
+                    resource: {
+                        "status": status,
+                        "source": str(proc_root / "pressure" / resource),
+                        "some": None,
+                        "full": None,
+                        "error": f"fixture {status}",
+                    }
+                    for resource in driver.PSI_RESOURCES
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            attempt_dir, markers = driver.execute_pair(
+                self.make_config(directory),
+                driver.AttemptContext(phase="timed", index=1),
+                dependencies=self.dependencies(
+                    FakePopen(), SyntheticRunner(), lane_psi_snapshot=pressure_snapshot
+                ),
+            )
+            self.assertEqual(len(markers), 2)
+            riley_pressure = json.loads(
+                (attempt_dir / "riley.lane-psi.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(riley_pressure["pre"]["psi"]["io"]["status"], "unavailable")
+            self.assertEqual(riley_pressure["post"]["psi"]["io"]["status"], "malformed")
 
     def test_warmup_outer_attempt_retains_per_server_warmup_but_emits_no_markers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
