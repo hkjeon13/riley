@@ -1,0 +1,34 @@
+[workspace]
+members = ["."]
+resolver = "3"
+
+[package]
+name = "riley-candle-qwen3b-oracle"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+license = "MIT"
+description = "Offline-only Candle Qwen2.5-3B numerical triangulation diagnostic"
+
+[features]
+default = []
+cuda = [
+    "candle-core/cuda",
+    "candle-nn/cuda",
+    "candle-transformers/cuda",
+]
+
+[dependencies]
+candle-core = { version = "=0.9.1", default-features = false }
+candle-nn = { version = "=0.9.1", default-features = false }
+candle-transformers = { version = "=0.9.1", default-features = false }
+half = "=2.5.0"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+sha2 = { version = "=0.11.0", default-features = false }
+
+[[bin]]
+name = "riley-candle-qwen3b-oracle"
+path = "src/main.rs"
+required-features = ["cuda"]

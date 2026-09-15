@@ -17,6 +17,12 @@ Candle을 Riley serving engine 전체의 대체물로 사용하지 않는다. Ca
 
 반면 이번 대조에서 Riley의 cache-free reference와 paged-KV reference는 같은 BF16 행을 만들었지만, HF eager와 addressable vocabulary 영역부터 달랐다. 독립 Rust implementation은 이 차이가 Riley 공통 forward인지 HF eager의 연산 계약인지 분리하는 데 직접 도움이 된다.
 
+### Candle compatibility boundary
+
+현재 Riley workspace의 MSRV는 Rust 1.85다. 최신 Candle 0.11은 transitive `zip`의 Rust 1.88 요구 때문에 이 기준에서 빌드되지 않았고, 0.10도 Rust 1.85에서 사용할 수 없는 API를 사용한다. Qwen2가 포함된 Candle **0.9.1**은 Rust 1.85 CPU build와 CUDA 12.8 compile probe를 통과했다. 따라서 HF-R0은 `=0.9.1`을 독립 nested workspace에 pin한다. 이는 최신 Candle을 production에 고정한다는 뜻이 아니다. CUDA 13/Hopper/Blackwell qualification은 MSRV를 다시 판정한 최신 Candle lane에서 별도로 수행한다.
+
+Candle 0.9.1 Qwen2는 BF16 RoPE table, BF16 softmax, Candle CUDA RMSNorm을 사용하고, 첫 forward에 internal KV cache를 기록한다. pinned HF eager의 F32 RoPE/softmax/RMSNorm 및 `use_cache=False`와 같은 수치 계약이 아니다. 그러므로 Candle row hash는 **수치 삼각측량 관측치**이며 byte-equality gate가 아니다. Candle/HF/Riley가 같거나 다르다는 사실만으로 어느 구현의 오류를 단정하지 않고, 후보 ordering·tolerance·layer trace를 다음 판정에 사용한다.
+
 ## 현재 수치 근거
 
 동일 Qwen2.5-3B-Instruct revision, 2,048개의 token ID `3409`, BF16, RTX 4090 조건이다. HF는 eager/cached-off, Riley는 cache-free reference와 reference-paged KV를 사용했다. 이 표는 serving 성능 비교가 아니라 raw-logit correctness 대조다.
@@ -32,22 +38,21 @@ Candle을 Riley serving engine 전체의 대체물로 사용하지 않는다. Ca
 
 ## PR HF-R0 — Candle Qwen raw-logit diagnostic
 
-대상: 새 optional diagnostics crate/binary와 Cargo lock. Riley server, scheduler, CUDA ABI, serving API에는 의존성을 연결하지 않는다.
+대상: [`tools/candle-qwen3b-oracle`](../../tools/candle-qwen3b-oracle)의 독립 nested diagnostics workspace와 Cargo lock. Riley server, scheduler, CUDA ABI, serving API에는 의존성을 연결하지 않는다.
 
 묶음:
 
-1. `candle-core`, `candle-nn`, `candle-transformers`를 정확한 버전으로 pin하고, 기본 workspace build에는 Candle CUDA dependency가 들어오지 않도록 `candle-oracle` feature 또는 별도 crate로 격리한다. Rust 1.85 compile을 우선 확인한다.
+1. `candle-core`, `candle-nn`, `candle-transformers`를 `=0.9.1`로 pin하고, 기본 workspace build에는 Candle CUDA dependency가 들어오지 않도록 별도 nested crate로 격리한다. Rust 1.85 compile과 CUDA 12.8 compile을 별도로 확인한다.
 2. local-only Qwen2.5-3B checkpoint, pinned config/receipt, P2048 workload만 받는 create-only CLI를 만든다. token ID는 직접 Tensor로 만들며 tokenizer·Hub 네트워크·sampling·serving socket을 호출하지 않는다.
-3. Candle CUDA가 가능한 환경에서는 BF16 eager single forward를 실행해 full/addressable/tail BF16 hash, top-32, 304/374/3409 probes, source/dependency/GPU provenance를 JSON artifact로 기록한다. CUDA가 없는 환경은 compile/schema/unit test만 수행하고 GPU result를 주장하지 않는다.
+3. Candle CUDA가 가능한 환경에서는 BF16 first forward를 실행해 full/addressable/tail BF16 hash, top-32, 304/374/3409 probes, source/dependency/GPU provenance를 JSON artifact로 기록한다. Candle의 internal KV write와 BF16 numerical contract를 artifact에 명시한다. CUDA가 없는 환경은 compile/schema/unit test만 수행하고 GPU result를 주장하지 않는다.
 4. artifact schema, local-only binding, checkpoint regular-file/receipt contract, output create-only, CPU-only validator를 테스트한다. Candle 결과를 Riley serving quality gate나 performance result로 승격하지 않는다.
 
 판정:
 
-- Candle≈HF, Riley≠Candle: Riley common forward의 norm, RoPE, projection, attention 또는 BF16 reduction trace를 layer 단위로 좁힌다.
-- Candle≈Riley, HF≠Candle: Candle의 kernel/dtype/rope/attention contract을 먼저 확인하고 HF와의 차이를 기존 Riley bug로 단정하지 않는다.
-- 세 결과가 모두 다름: full-row hash만으로 원인을 단정하지 않고 layer trace artifact를 별도 PR로 만든다.
+- Candle이 HF 또는 Riley의 candidate ordering/tolerance window에 가까워도, BF16 intermediate 차이를 먼저 고려한 layer trace를 만든다.
+- Candle이 어느 쪽과도 다르거나 세 결과가 모두 다르면, full-row hash만으로 원인을 단정하지 않고 norm, RoPE, projection, attention, reduction의 layer trace artifact를 별도 PR로 만든다.
 
-완료: Rust-only third oracle가 raw output과 provenance를 남기고, 4090에서 지원되면 HF/Riley와 한 표에 비교된다. Candle의 single-request 결과가 serving throughput 개선으로 표시되지 않는다.
+완료: Rust-only numerical triangulation diagnostic이 raw output과 provenance를 남기고, 4090에서 지원되면 HF/Riley와 한 표에 비교된다. Candle의 single-request 결과가 serving throughput 개선이나 exact-HF correctness pass로 표시되지 않는다.
 
 롤백: diagnostics crate/feature만 제거한다. Riley server와 model loader에는 runtime dependency가 없으므로 serving rollback이 필요하지 않다.
 
