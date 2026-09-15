@@ -57,6 +57,47 @@ Q/K/V projection의 `GEMM → row_bias_add` 두 GPU launch와 BF16 output read/w
 
 이 operator evidence는 fused candidate를 selector-integration **검토 단계**로 올린다. 그러나 full-model quality, current graph interaction, scheduler/HTTP behavior, throughput, TTFT/TPOT, P95/P99, failure rate와 vLLM 대비는 전혀 측정하지 않았다.
 
+## P1 server generation discriminator — 2026-09-16
+
+`43981337`의 실제 server selector를 같은 Qwen2.5-3B P2048/O128 조건에서
+`strict-staged-v1`과 `cublaslt-bias-epilogue-experimental-v1`로 각각 실행했다.
+두 run 모두 graph disabled, canonical reduction, native D128 paged attention,
+GPU greedy, one request, fixed 128-token output을 사용했다. 시작 receipt는 각
+모드가 fallback 없이 실제 선택됐음을 확인했고 HTTP/SSE, token count, usage 및
+graceful shutdown도 정상이다.
+
+서버의 기존 vLLM token reference는 첫 token이 `374`인 반면, 같은 immutable
+checkpoint를 local-only HF eager BF16 container에서 직접 token ID로 실행한
+cache-on/cache-off reference는 모두 `304`로 시작했다. HF reference는 padded
+vocabulary tail을 selection 전에 mask하고, eager cache-on와 full-prefix
+cache-off 128 token ID hash와 text가 동일한 경우만 qualified로
+기록했다. 이는 serving 경로에 Python을 넣은 것이 아니라 checkout 밖
+create-only numerical artifact다.
+
+| 비교 대상 | HF cache-on과 첫 불일치 | 같은 위치 token 일치 / 128 | 판정 |
+|---|---:|---:|---|
+| HF eager cache-off | 없음 | 128 | HF internal cache parity 통과 |
+| Riley fused Q/K/V bias epilogue | 8 | 108 | HF보다 가까우나 full generation exact 불통과 |
+| Riley strict staged bias | 3 | 19 | 현 strict arithmetic profile의 별도 수치 계약 |
+| existing vLLM workload token reference | 0 | 해당 없음 | Riley/HF correctness golden으로 사용 불가; 별도 원인 판정 필요 |
+
+HF artifact는 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-generation-oracle-r2-20260915T213902Z/`에 create-only로 남겼다.
+`generation-oracle.json` SHA-256은
+`2129428106fca8e34a2f3883e58291c317a9a1fb14510998bfde4be9b4434df4`이고,
+`SHA256SUMS` 전체 재검증을 통과했다. strict serving artifact는
+`qwen3b-strict-qkv-serving-smoke-r4-20260915T212000Z`, fused artifact는
+`qwen3b-fused-qkv-serving-smoke-r3-20260915T211041Z`에 보존했다. 이 실행은
+shared-host I/O pressure 중 model materialization을 포함하므로 throughput,
+TTFT, TPOT, latency 또는 vLLM 성능 비교가 아니다.
+
+판정: fused selector는 default로 승격하지 않고, N06-A performance campaign도
+실행하지 않는다. 다음 correctness batch는 HF per-step logit/top-k artifact와
+Riley prefill/decode logits를 step 8에서 대조해 최초 차이가 Q/K/V projection
+뒤 attention/KV/decode 중 어디에서 생기는지 분리한다. strict와 fused는
+각각 독립 numerical profile로 유지하며, exact generation gate 또는 사전
+선언한 profile-specific quality gate를 통과한 경우에만 동일 profile 내부의
+serving ABBA 및 vLLM 비교로 진행한다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
