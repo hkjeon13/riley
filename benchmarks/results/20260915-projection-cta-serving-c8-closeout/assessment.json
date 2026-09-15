@@ -1,0 +1,87 @@
+{
+  "qualification": false,
+  "default_promoted": false,
+  "work_stopped_by_user": true,
+  "C8_shared_order_candidate_vs_prior_throughput_pct": [
+    0.580545199151894,
+    0.99648567716486
+  ],
+  "candidate_vs_vllm_pct": {
+    "C8 shared": {
+      "tokens_s": 13.983934155582102,
+      "ttft50_ms": -14.94478612921264,
+      "tpot50_ms": -7.71384867645436
+    },
+    "C32 shared": {
+      "tokens_s": 10.349589455467555,
+      "ttft50_ms": -61.90498274970285,
+      "tpot50_ms": 48.25943531097714
+    },
+    "C32 unique": {
+      "tokens_s": 3.1535012200514023,
+      "ttft50_ms": 27.44670207967179,
+      "tpot50_ms": -20.216629900468142
+    }
+  },
+  "C8_retained_host_pressure": {
+    "shared-p0-prior": {
+      "cpu_some_pct": 1.1508313096550524,
+      "io_full_pct": 13.528338767736741,
+      "memory_full_pct": 0.16832696171448083
+    },
+    "shared-p0-candidate": {
+      "cpu_some_pct": 1.2107627865009938,
+      "io_full_pct": 14.350092738072822,
+      "memory_full_pct": 0.16508245384707296
+    },
+    "shared-p0-vllm029": {
+      "cpu_some_pct": 1.3201652390494731,
+      "io_full_pct": 14.804687905648128,
+      "memory_full_pct": 0.2007839803410012
+    },
+    "shared-p1-vllm029": {
+      "cpu_some_pct": 1.3562018568684886,
+      "io_full_pct": 14.081613535843601,
+      "memory_full_pct": 0.21818191114997243
+    },
+    "shared-p1-candidate": {
+      "cpu_some_pct": 1.0765851990709192,
+      "io_full_pct": 15.606161655606943,
+      "memory_full_pct": 0.1736077133076073
+    },
+    "shared-p1-prior": {
+      "cpu_some_pct": 1.0743584497143837,
+      "io_full_pct": 15.69926621184337,
+      "memory_full_pct": 0.20882905703203003
+    },
+    "unique-p0-prior": {
+      "cpu_some_pct": 1.1458375350504557,
+      "io_full_pct": 17.33129048184103,
+      "memory_full_pct": 0.24109684559651456
+    },
+    "unique-p0-candidate": {
+      "cpu_some_pct": 0.9723199653360348,
+      "io_full_pct": 19.25119925097918,
+      "memory_full_pct": 0.17167473957360918
+    },
+    "unique-p0-vllm029": {
+      "cpu_some_pct": 1.1294982778464167,
+      "io_full_pct": 20.863079374912598,
+      "memory_full_pct": 0.2263364436334809
+    }
+  },
+  "C8_unique": "one order only; excluded from final crossed-order comparison table",
+  "restoration": {
+    "blender_rpc_ports": {
+      "9876": "success",
+      "9911": "success",
+      "9887": "success"
+    },
+    "viewer_loopback_ports": {
+      "31840": 200,
+      "31970": 200,
+      "32010": 200
+    },
+    "public_http_probes": "403 for all three domains; public UI not verified"
+  }
+}
