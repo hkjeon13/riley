@@ -972,7 +972,7 @@ fn qwen3b_p2048_fused_bias_epilogue_matches_hf_module_output() -> TestResult {
     }
     println!(
         "QWEN3B_BIAS_EPILOGUE trace_id={} first_non_exact_projection=none exact_projections={} candidate_selector_eligible=true performance_claim_eligible=false",
-        exact_count,
+        TRACE_ID, exact_count,
     );
     Ok(())
 }
