@@ -41,6 +41,7 @@ const BF16_BYTES: u64 = 2;
 // logits + embedding-error scratch. Attention and GEMM workspaces are optional.
 const NON_ATTENTION_GRAPH_ALLOCATION_COUNT: u64 = 17;
 const TRACE_POINT_COUNT: usize = 18;
+const TRACE_STORAGE_POINT_COUNT: usize = 20;
 
 /// Result type for preparing, executing, downloading, and closing PR07 forward state.
 pub type LlamaForwardResult<T> = Result<T, LlamaForwardError>;
@@ -106,6 +107,10 @@ pub enum LlamaTracePoint {
     FinalNormInput,
     FinalNormOutput,
     LastLogits,
+    /// Layer-zero query after rotary positional embedding.
+    Layer0QueryRotary,
+    /// Layer-zero key after rotary positional embedding.
+    Layer0KeyRotary,
 }
 
 impl LlamaTracePoint {
@@ -131,6 +136,33 @@ impl LlamaTracePoint {
         Self::LastLogits,
     ];
 
+    /// Every diagnostic checkpoint supported by the trace owner.
+    ///
+    /// The two rotary checkpoints are deliberately outside of ALL because ALL
+    /// remains the immutable PR07 Hugging Face artifact contract.
+    const STORAGE: [Self; TRACE_STORAGE_POINT_COUNT] = [
+        Self::Embedding,
+        Self::Layer0InputNorm,
+        Self::Layer0QueryProjection,
+        Self::Layer0KeyProjection,
+        Self::Layer0ValueProjection,
+        Self::Layer0AttentionProbabilities,
+        Self::Layer0AttentionContext,
+        Self::Layer0AfterAttentionResidual,
+        Self::Layer0PostAttentionNorm,
+        Self::Layer0GateProjection,
+        Self::Layer0UpProjection,
+        Self::Layer0Gated,
+        Self::Layer0DownProjection,
+        Self::Layer0Output,
+        Self::Layer14Output,
+        Self::FinalNormInput,
+        Self::FinalNormOutput,
+        Self::LastLogits,
+        Self::Layer0QueryRotary,
+        Self::Layer0KeyRotary,
+    ];
+
     /// Canonical tensor name in the pinned PR07 trace manifest.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -153,6 +185,8 @@ impl LlamaTracePoint {
             Self::FinalNormInput => "final_norm.input",
             Self::FinalNormOutput => "final_norm.output",
             Self::LastLogits => "last_logits",
+            Self::Layer0QueryRotary => "layer0.q_rope",
+            Self::Layer0KeyRotary => "layer0.k_rope",
         }
     }
 
@@ -205,13 +239,13 @@ impl PreparedLlamaTrace {
         let contract = trace_contract(plan);
         let requested_bytes = trace_total_bytes(plan, requested)?;
         let mut tensors = Vec::new();
-        tensors.try_reserve_exact(TRACE_POINT_COUNT).map_err(|_| {
-            LlamaForwardError::HostAllocation {
+        tensors
+            .try_reserve_exact(TRACE_STORAGE_POINT_COUNT)
+            .map_err(|_| LlamaForwardError::HostAllocation {
                 resource: LlamaForwardResource::TraceCapture,
                 requested_bytes,
-            }
-        })?;
-        for point in LlamaTracePoint::ALL {
+            })?;
+        for point in LlamaTracePoint::STORAGE {
             tensors.push(if requested & trace_bit(point) == 0 {
                 Box::default()
             } else {
@@ -229,10 +263,10 @@ impl PreparedLlamaTrace {
         })
     }
 
-    /// Number of canonical checkpoints in this trace contract.
+    /// Number of checkpoints requested by this trace owner.
     #[must_use]
     pub fn tensor_count(&self) -> usize {
-        usize::try_from(self.requested.count_ones()).unwrap_or(TRACE_POINT_COUNT)
+        usize::try_from(self.requested.count_ones()).unwrap_or(TRACE_STORAGE_POINT_COUNT)
     }
 
     /// Number of checkpoints confirmed during the latest traced execution.
@@ -684,9 +718,9 @@ fn trace_contract(plan: &LlamaExecutionPlan) -> LlamaTraceContract {
 fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaForwardResult<u64> {
     let workspace = plan.workspace_spec();
     let bytes = match point {
-        LlamaTracePoint::Layer0KeyProjection | LlamaTracePoint::Layer0ValueProjection => {
-            workspace.key_value_buffer_bytes()
-        }
+        LlamaTracePoint::Layer0KeyProjection
+        | LlamaTracePoint::Layer0ValueProjection
+        | LlamaTracePoint::Layer0KeyRotary => workspace.key_value_buffer_bytes(),
         LlamaTracePoint::Layer0AttentionProbabilities => workspace.attention_buffer_bytes(),
         LlamaTracePoint::Layer0GateProjection
         | LlamaTracePoint::Layer0UpProjection
@@ -706,6 +740,7 @@ fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaFor
         LlamaTracePoint::Embedding
         | LlamaTracePoint::Layer0InputNorm
         | LlamaTracePoint::Layer0QueryProjection
+        | LlamaTracePoint::Layer0QueryRotary
         | LlamaTracePoint::Layer0AttentionContext
         | LlamaTracePoint::Layer0AfterAttentionResidual
         | LlamaTracePoint::Layer0PostAttentionNorm
@@ -719,7 +754,7 @@ fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaFor
 }
 
 fn trace_total_bytes(plan: &LlamaExecutionPlan, requested: u32) -> LlamaForwardResult<u64> {
-    LlamaTracePoint::ALL
+    LlamaTracePoint::STORAGE
         .into_iter()
         .filter(|&point| requested & trace_bit(point) != 0)
         .try_fold(0_u64, |total, point| {
@@ -2172,6 +2207,17 @@ impl PreparedLlamaForward {
                 rope(&mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(query_rope_site, source))?;
             }
+            if layer_index == 0 {
+                capture_trace(
+                    &mut trace,
+                    LlamaTracePoint::Layer0QueryRotary,
+                    &mut buffers.hidden_rotary,
+                    0,
+                    io_staging,
+                    stream,
+                    query_rope_site,
+                )?;
+            }
             let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
             {
                 let mut params = RopeParams {
@@ -2208,6 +2254,17 @@ impl PreparedLlamaForward {
                 };
                 rope(&mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(key_rope_site, source))?;
+            }
+            if layer_index == 0 {
+                capture_trace(
+                    &mut trace,
+                    LlamaTracePoint::Layer0KeyRotary,
+                    &mut buffers.key_rotary,
+                    0,
+                    io_staging,
+                    stream,
+                    key_rope_site,
+                )?;
             }
 
             if let Some(cache) = cache.as_mut() {

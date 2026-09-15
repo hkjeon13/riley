@@ -582,6 +582,14 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn qwen_rotary_trace_points_do_not_change_the_pinned_pr07_contract() {
+        assert!(!LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0QueryRotary));
+        assert!(!LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0KeyRotary));
+        assert_eq!(LlamaTracePoint::Layer0QueryRotary.name(), "layer0.q_rope");
+        assert_eq!(LlamaTracePoint::Layer0KeyRotary.name(), "layer0.k_rope");
+    }
+
+    #[test]
     fn continuous_batch_dispatch_source_is_allocation_free_and_not_serial_dispatch() {
         let facade = include_str!("batch_executor.rs");
         let begin = facade

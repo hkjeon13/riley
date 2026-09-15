@@ -89,7 +89,9 @@ fn expected_shape(point: LlamaTracePoint) -> &'static [u64] {
     const CONTEXT: &[u64] = &[SEQUENCE_LENGTH_U64, QUERY_HEADS, HEAD_SIZE];
     const LAST_LOGITS: &[u64] = &[49_152];
     match point {
-        LlamaTracePoint::Layer0KeyProjection | LlamaTracePoint::Layer0ValueProjection => KEY_VALUE,
+        LlamaTracePoint::Layer0KeyProjection
+        | LlamaTracePoint::Layer0ValueProjection
+        | LlamaTracePoint::Layer0KeyRotary => KEY_VALUE,
         LlamaTracePoint::Layer0AttentionProbabilities => PROBABILITIES,
         LlamaTracePoint::Layer0AttentionContext => CONTEXT,
         LlamaTracePoint::Layer0GateProjection
@@ -99,6 +101,7 @@ fn expected_shape(point: LlamaTracePoint) -> &'static [u64] {
         LlamaTracePoint::Embedding
         | LlamaTracePoint::Layer0InputNorm
         | LlamaTracePoint::Layer0QueryProjection
+        | LlamaTracePoint::Layer0QueryRotary
         | LlamaTracePoint::Layer0AfterAttentionResidual
         | LlamaTracePoint::Layer0PostAttentionNorm
         | LlamaTracePoint::Layer0DownProjection
