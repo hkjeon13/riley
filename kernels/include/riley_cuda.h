@@ -152,6 +152,7 @@ typedef struct RileyCudaDeviceBuffer RileyCudaDeviceBuffer;
 typedef struct RileyCudaPinnedHostBuffer RileyCudaPinnedHostBuffer;
 typedef struct RileyCudaCopy RileyCudaCopy;
 typedef struct RileyCudaGemmPlan RileyCudaGemmPlan;
+typedef struct RileyCudaBiasGemmPlan RileyCudaBiasGemmPlan;
 typedef struct RileyCudaFixed37GemmPlan RileyCudaFixed37GemmPlan;
 typedef struct RileyCudaHfPrefillAttentionPlan
     RileyCudaHfPrefillAttentionPlan;
@@ -1147,6 +1148,7 @@ typedef struct RileyCudaFixed37RaggedPagedAttentionParams {
 #define RILEY_CUDA_GEMM_TRANSPOSE_T 1u
 #define RILEY_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
 #define RILEY_CUDA_GEMM_EPILOGUE_NONE 0u
+#define RILEY_CUDA_GEMM_EPILOGUE_BIAS 1u
 #define RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED 1u
 #define RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K 1u
 #define RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K 2u
@@ -1157,18 +1159,21 @@ typedef struct RileyCudaFixed37RaggedPagedAttentionParams {
 #define RILEY_CUDA_FIXED37_CHUNK_ELEMENTS 37u
 #define RILEY_CUDA_FIXED37_MAX_CHUNK_COUNT 4096u
 
-// PR 06 deliberately exposes one exact dense GEMM contract. The logical
-// operation is row-major Y[M,N] = X[M,K] * W[N,K]^T with BF16 X/W/Y and F32
-// accumulation. input_transpose must be N, weight_transpose must be T, all
-// layouts must be ROW_MAJOR, epilogue must be NONE, and deterministic must be
-// DETERMINISTIC_REQUIRED. max_workspace_bytes is a preparation-time cap; the
-// selected exact requirement is returned by gemm_plan_info. flags is either
-// zero for strict split-K=1/NONE selection, or a bitwise combination of
-// GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K and GEMM_FLAG_ALLOW_INPLACE_SPLIT_K for
-// the reviewed deterministic split-K extensions. OUTPUT_TYPE stores partials
-// in output type for a separate reduction; INPLACE uses output-type storage
-// plus workspace counters that guarantee sequentiality. Unknown flags,
-// reserved0, and every reserved element must be zero.
+// The logical operation is row-major Y[M,N] = X[M,K] * W[N,K]^T with BF16
+// X/W/Y and F32 accumulation. input_transpose must be N, weight_transpose
+// must be T, all layouts must be ROW_MAJOR, and deterministic must be
+// DETERMINISTIC_REQUIRED. riley_cuda_gemm_plan_create accepts only
+// EPILOGUE_NONE; riley_cuda_bias_gemm_plan_create accepts only EPILOGUE_BIAS
+// with zero flags and has its own numerical contract. max_workspace_bytes is
+// a preparation-time cap; the selected exact requirement is returned by
+// gemm_plan_info.
+// flags is either zero for strict split-K=1/NONE selection, or a bitwise
+// combination of GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K and
+// GEMM_FLAG_ALLOW_INPLACE_SPLIT_K for the reviewed deterministic split-K
+// extensions. OUTPUT_TYPE stores partials in output type for a separate
+// reduction; INPLACE uses output-type storage plus workspace counters that
+// guarantee sequentiality. Unknown flags, reserved0, and every reserved
+// element must be zero.
 typedef struct RileyCudaGemmConfig {
   uint32_t struct_size;
   uint32_t flags;
@@ -2644,6 +2649,51 @@ RileyCudaStatus riley_cuda_gemm_plan_close(
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_gemm_plan_defer_to_active_capture(
     RileyCudaGemmPlan** plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Creates an experimental cuBLASLt BIAS-epilogue plan for the same logical
+// row-major operation. config must use EPILOGUE_BIAS and the other BF16/F32
+// deterministic fields documented by RileyCudaGemmConfig, with zero flags.
+// preparation_bias is a whole packed BF16 [N] device span with a 256-byte
+// aligned offset; it is used only during cold descriptor/heuristic selection.
+// Native clears its descriptor pointer before this call returns and retains no
+// allocation lease. The selected plan is separate from RileyCudaGemmPlan: it
+// applies bias before the final BF16 store and is therefore not the strict
+// staged GEMM-plus-row-bias numerical contract.
+RileyCudaStatus riley_cuda_bias_gemm_plan_create(
+    RileyCudaContext* context,
+    const RileyCudaGemmConfig* config,
+    const RileyCudaBufferSpan* preparation_bias,
+    RileyCudaBiasGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_bias_gemm_plan_info(
+    RileyCudaBiasGemmPlan* plan,
+    RileyCudaGemmAlgorithmInfo* out_info,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Executes the prepared logical row-major operation without byte reordering:
+// cuBLASLt sees column-major TN(W, X, Y). input, weight, bias, output, and
+// workspace must each have exactly the prepared byte length, a 256-byte
+// aligned byte_offset, and the plan's context owner. bias is a packed BF16
+// [N] vector. All five spans must be pairwise non-overlapping. No allocation,
+// heuristic query, or descriptor creation occurs during execution; the bias
+// descriptor pointer is updated only while the plan and all five allocations
+// are exclusively held.
+RileyCudaStatus riley_cuda_bias_gemm_plan_execute(
+    RileyCudaBiasGemmPlan* plan,
+    const RileyCudaBufferSpan* input,
+    const RileyCudaBufferSpan* weight,
+    const RileyCudaBufferSpan* bias,
+    const RileyCudaBufferSpan* output,
+    const RileyCudaBufferSpan* workspace,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Bias-epilogue plans are deliberately not CUDA-graph resources in this ABI.
+// Active plans cannot close; descriptor destruction and context restoration
+// must both complete before *plan is consumed and its child lease is released.
+RileyCudaStatus riley_cuda_bias_gemm_plan_close(
+    RileyCudaBiasGemmPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
 // Prepares the custom fixed-contiguous-37-balanced-v1 implementation for the

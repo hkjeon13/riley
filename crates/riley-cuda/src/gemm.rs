@@ -12,7 +12,6 @@ use crate::runtime::{
     execution_stream_mut,
 };
 
-#[cfg(feature = "cuda")]
 use crate::error::{CudaErrorDomain, CudaErrorKind, CudaErrorStage};
 #[cfg(feature = "cuda")]
 use crate::ffi;
@@ -119,13 +118,15 @@ impl CudaGemmReductionPolicy {
     }
 }
 
-/// Exact dense GEMM contract accepted by the PR 06 CUDA adapter.
+/// Exact dense GEMM contract accepted by the CUDA adapter.
 ///
 /// The logical operation is row-major `Y[M, N] = X[M, K] * W[N, K]^T`.
-/// Inputs, weights, and output are BF16, accumulation is F32, the epilogue is
-/// disabled, and deterministic algorithm selection is mandatory. The only
-/// selectable detail is the reviewed reduction policy; strict no-split is the
-/// fail-closed default.
+/// Inputs, weights, and output are BF16, accumulation is F32, and deterministic
+/// algorithm selection is mandatory. [`CudaPreparedGemm`] fixes the epilogue to
+/// none. [`CudaPreparedBiasEpilogueGemm`] uses the same matrix contract with a
+/// separate BF16 row-bias input and a cuBLASLt bias epilogue. The only selectable
+/// detail is the reviewed reduction policy; strict no-split is the fail-closed
+/// default.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CudaGemmConfig {
     m: u64,
@@ -239,6 +240,15 @@ impl CudaGemmConfig {
     #[must_use]
     pub const fn output_bytes(self) -> u64 {
         self.output_bytes
+    }
+
+    /// Exact required bytes for one BF16 row-bias vector `B[N]`.
+    ///
+    /// `CudaGemmConfig::new` has already bounded `N` to the native signed
+    /// 32-bit range, so this multiplication cannot overflow `u64`.
+    #[must_use]
+    pub const fn bias_bytes(self) -> u64 {
+        self.n * BF16_BYTES
     }
 
     /// Input storage type fixed by this adapter.
@@ -423,6 +433,29 @@ pub struct GemmParams<'a> {
     pub workspace: Option<CudaBufferSpanMut<'a>>,
 }
 
+/// Borrowed buffers for one synchronous cuBLASLt BF16 bias-epilogue GEMM.
+///
+/// This is an opt-in numerical contract for qualification only. cuBLASLt adds
+/// `bias[N]` as part of its epilogue, which can round differently from the
+/// strict standalone GEMM followed by [`crate::row_bias_add_in_place`]. Every
+/// span length must exactly match the prepared shape. All byte offsets must be
+/// 256-byte aligned, all provided buffers must be distinct and owned by the
+/// plan's context, and workspace must be U8. `workspace` may be `None` only
+/// when the selected workspace requirement is zero.
+#[derive(Debug)]
+pub struct BiasGemmParams<'a> {
+    /// Row-major BF16 `X[M, K]`.
+    pub input: CudaBufferSpan<'a>,
+    /// Row-major BF16 `W[N, K]` consumed logically transposed.
+    pub weight: CudaBufferSpan<'a>,
+    /// BF16 row-bias `B[N]` broadcast into every output row by cuBLASLt.
+    pub bias: CudaBufferSpan<'a>,
+    /// Row-major BF16 `Y[M, N]`.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Exact selected U8 workspace, or none when zero bytes were selected.
+    pub workspace: Option<CudaBufferSpanMut<'a>>,
+}
+
 /// Owning immutable cuBLASLt execution plan.
 ///
 /// A plan retains its CUDA context and can move between host threads, but is
@@ -440,10 +473,40 @@ pub struct CudaPreparedGemm {
     _not_sync: PhantomData<Cell<()>>,
 }
 
+/// Owning opt-in cuBLASLt bias-epilogue execution plan.
+///
+/// The native plan is deliberately separate from [`CudaPreparedGemm`]. It
+/// preserves the strict GEMM API and graph contracts while qualifying the
+/// external fused-bias rounding contract. A plan retains its CUDA context and
+/// can move between host threads, but is deliberately `!Sync`. Execution
+/// requires `&mut self` and synchronizes the explicit stream before returning.
+pub struct CudaPreparedBiasEpilogueGemm {
+    #[cfg(feature = "cuda")]
+    native: ffi::BiasGemmPlanHandle,
+    // Native must close before releasing the context lease.
+    context: Arc<ContextInner>,
+    config: CudaGemmConfig,
+    algorithm: CudaGemmAlgorithmMetadata,
+    poisoned: bool,
+    _not_sync: PhantomData<Cell<()>>,
+}
+
 impl fmt::Debug for CudaPreparedGemm {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CudaPreparedGemm")
+            .field("device_ordinal", &self.context.ordinal)
+            .field("config", &self.config)
+            .field("algorithm", &self.algorithm)
+            .field("poisoned", &self.poisoned)
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for CudaPreparedBiasEpilogueGemm {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CudaPreparedBiasEpilogueGemm")
             .field("device_ordinal", &self.context.ordinal)
             .field("config", &self.config)
             .field("algorithm", &self.algorithm)
@@ -486,6 +549,79 @@ impl CudaContext {
         {
             let _ = config;
             Err(CudaError::unavailable("CudaContext::prepare_gemm"))
+        }
+    }
+
+    /// Prepares a separate deterministic cuBLASLt BF16 bias-epilogue plan.
+    ///
+    /// `preparation_bias` is verified during cold-path descriptor and
+    /// algorithm qualification. Each [`CudaPreparedBiasEpilogueGemm::execute`]
+    /// call supplies its own BF16 bias span; native code does not retain this
+    /// preparation span after this method returns. The current qualification
+    /// surface accepts only the strict no-split reduction policy and supplies
+    /// no CUDA-graph integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns invalid-argument for a foreign, misaligned, mistyped, or
+    /// incorrectly sized bias span; not-supported for a non-strict reduction
+    /// policy; or an actionable CUDA preparation error.
+    pub fn prepare_bias_epilogue_gemm(
+        &self,
+        config: CudaGemmConfig,
+        preparation_bias: CudaBufferSpan<'_>,
+    ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
+        const OPERATION: &str = "CudaContext::prepare_bias_epilogue_gemm";
+        if config.reduction_policy != CudaGemmReductionPolicy::StrictNoSplitV1 {
+            return Err(CudaError::new(
+                CudaErrorKind::NotSupported,
+                CudaErrorDomain::Rust,
+                CudaErrorStage::Validation,
+                0,
+                OPERATION,
+                "bias-epilogue qualification accepts only the strict-no-split-v1 reduction policy",
+            ));
+        }
+        ensure_same_context(
+            &self.inner,
+            preparation_bias.buffer().context_owner(),
+            OPERATION,
+        )?;
+        validate_span(
+            OPERATION,
+            preparation_bias.buffer(),
+            preparation_bias.dtype(),
+            preparation_bias.byte_offset(),
+            preparation_bias.byte_len(),
+            CudaDType::BF16,
+            config.bias_bytes(),
+            "preparation_bias",
+        )?;
+
+        #[cfg(feature = "cuda")]
+        {
+            let native = ffi::BiasGemmPlanHandle::create(
+                &self.inner.native,
+                config.m,
+                config.n,
+                config.k,
+                config.max_workspace_bytes,
+                preparation_bias.raw(),
+            )?;
+            let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
+            Ok(CudaPreparedBiasEpilogueGemm {
+                native,
+                context: Arc::clone(&self.inner),
+                config,
+                algorithm,
+                poisoned: false,
+                _not_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (config, preparation_bias);
+            Err(CudaError::unavailable(OPERATION))
         }
     }
 
@@ -1003,6 +1139,232 @@ impl CudaPreparedGemm {
     }
 }
 
+impl CudaPreparedBiasEpilogueGemm {
+    /// Exact logical and storage contract used to prepare this plan.
+    #[must_use]
+    pub const fn config(&self) -> CudaGemmConfig {
+        self.config
+    }
+
+    /// Immutable selected algorithm and environment provenance.
+    #[must_use]
+    pub const fn algorithm_metadata(&self) -> CudaGemmAlgorithmMetadata {
+        self.algorithm
+    }
+
+    /// Device ordinal retained by this plan.
+    #[must_use]
+    pub fn device_ordinal(&self) -> u32 {
+        self.context.ordinal
+    }
+
+    /// Whether a prior native execution failed and permanently disabled reuse
+    /// of this safe plan wrapper.
+    #[must_use]
+    pub const fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+
+    /// Executes the prepared cuBLASLt BF16 bias-epilogue GEMM and synchronizes
+    /// the same explicit stream.
+    ///
+    /// This qualification-only plan has no CUDA-graph resource interface. A
+    /// successful repeated path performs no host or device allocation. A
+    /// native execution error poisons this wrapper conservatively.
+    ///
+    /// # Errors
+    ///
+    /// Returns before entering native code for dtype, exact-size, alignment,
+    /// context, alias, workspace, busy-buffer, or poisoned-plan violations.
+    /// Native launch, cuBLASLt, synchronization, and restoration failures are
+    /// translated with their status domain and lifecycle stage.
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut BiasGemmParams<'_>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedBiasEpilogueGemm::execute";
+        let stream = execution_stream_mut(stream);
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the bias-epilogue GEMM plan was poisoned by a prior native execution failure",
+            ));
+        }
+        self.validate_execution(params, stream)?;
+
+        #[cfg(feature = "cuda")]
+        {
+            let workspace = match params.workspace.as_ref() {
+                Some(workspace) => workspace.raw(),
+                None => params.output.buffer().native_handle().span(
+                    ffi::DTYPE_U8,
+                    params.output.byte_offset(),
+                    0,
+                ),
+            };
+            let result = self.native.execute(
+                params.input.raw(),
+                params.weight.raw(),
+                params.bias.raw(),
+                params.output.raw(),
+                workspace,
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (params, stream);
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Explicitly closes the qualification-only prepared plan.
+    ///
+    /// A poisoned wrapper refuses to report a successful explicit close. The
+    /// fused-bias plan is deliberately not graph-capture capable, so callers
+    /// must close it outside an active graph capture.
+    pub fn close(self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let mut this = self;
+            if this.poisoned {
+                return Err(CudaError::invalid_state(
+                    "CudaPreparedBiasEpilogueGemm::close",
+                    "a poisoned bias-epilogue GEMM plan cannot be explicitly reused or reported as cleanly closed",
+                ));
+            }
+            if crate::graph::has_active_graph_capture() {
+                return Err(CudaError::invalid_state(
+                    "CudaPreparedBiasEpilogueGemm::close",
+                    "bias-epilogue GEMM plans must close outside an active CUDA graph capture",
+                ));
+            }
+            this.native.close()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(
+                "CudaPreparedBiasEpilogueGemm::close",
+            ))
+        }
+    }
+
+    fn validate_execution(
+        &self,
+        params: &BiasGemmParams<'_>,
+        stream: &CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedBiasEpilogueGemm::execute";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+
+        validate_span(
+            OPERATION,
+            params.input.buffer(),
+            params.input.dtype(),
+            params.input.byte_offset(),
+            params.input.byte_len(),
+            CudaDType::BF16,
+            self.config.input_bytes,
+            "input",
+        )?;
+        validate_span(
+            OPERATION,
+            params.weight.buffer(),
+            params.weight.dtype(),
+            params.weight.byte_offset(),
+            params.weight.byte_len(),
+            CudaDType::BF16,
+            self.config.weight_bytes,
+            "weight",
+        )?;
+        validate_span(
+            OPERATION,
+            params.bias.buffer(),
+            params.bias.dtype(),
+            params.bias.byte_offset(),
+            params.bias.byte_len(),
+            CudaDType::BF16,
+            self.config.bias_bytes(),
+            "bias",
+        )?;
+        validate_span(
+            OPERATION,
+            params.output.buffer(),
+            params.output.dtype(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+            CudaDType::BF16,
+            self.config.output_bytes,
+            "output",
+        )?;
+
+        let workspace_bytes = self.algorithm.workspace_bytes;
+        match params.workspace.as_ref() {
+            Some(workspace) => validate_span(
+                OPERATION,
+                workspace.buffer(),
+                workspace.dtype(),
+                workspace.byte_offset(),
+                workspace.byte_len(),
+                CudaDType::U8,
+                workspace_bytes,
+                "workspace",
+            )?,
+            None if workspace_bytes == 0 => {}
+            None => {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    format!(
+                        "the selected algorithm requires an exact {workspace_bytes}-byte U8 workspace"
+                    ),
+                ));
+            }
+        }
+
+        let required_buffers = [
+            ("input", params.input.buffer()),
+            ("weight", params.weight.buffer()),
+            ("bias", params.bias.buffer()),
+            ("output", params.output.buffer()),
+        ];
+        for (_, buffer) in required_buffers {
+            ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
+        }
+        ensure_distinct_buffers(&required_buffers, OPERATION)?;
+
+        if let Some(workspace) = params.workspace.as_ref() {
+            let workspace_buffer = workspace.buffer();
+            ensure_same_context(&self.context, workspace_buffer.context_owner(), OPERATION)?;
+            for (name, buffer) in required_buffers {
+                if ptr::eq(buffer, workspace_buffer) {
+                    return Err(CudaError::invalid_argument(
+                        OPERATION,
+                        format!("workspace aliases the {name} device-buffer handle"),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Drop for CudaPreparedBiasEpilogueGemm {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            // This plan deliberately has no graph-resource API. Retaining the
+            // context still makes a dropped owner fail closed if a caller
+            // attempts teardown while an unrelated capture is active.
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+        }
+    }
+}
+
 impl Drop for CudaPreparedGemm {
     fn drop(&mut self) {
         #[cfg(feature = "cuda")]
@@ -1496,8 +1858,8 @@ fn validate_span(
     buffer.ensure_idle_for_operation(operation)
 }
 
-fn ensure_distinct_buffers(
-    buffers: &[(&'static str, &CudaDeviceBuffer); 3],
+fn ensure_distinct_buffers<const BUFFER_COUNT: usize>(
+    buffers: &[(&'static str, &CudaDeviceBuffer); BUFFER_COUNT],
     operation: &'static str,
 ) -> CudaResult<()> {
     for left_index in 0..buffers.len() {
@@ -1531,6 +1893,7 @@ mod tests {
         assert_eq!(config.input_bytes(), 42);
         assert_eq!(config.weight_bytes(), 70);
         assert_eq!(config.output_bytes(), 30);
+        assert_eq!(config.bias_bytes(), 10);
         assert_eq!(config.max_workspace_bytes(), 4096);
         assert_eq!(
             config.reduction_policy(),

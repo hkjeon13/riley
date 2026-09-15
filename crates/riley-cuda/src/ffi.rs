@@ -117,6 +117,7 @@ const GEMM_TRANSPOSE_N: u32 = 0;
 const GEMM_TRANSPOSE_T: u32 = 1;
 const GEMM_LAYOUT_ROW_MAJOR: u32 = 1;
 const GEMM_EPILOGUE_NONE: u32 = 0;
+const GEMM_EPILOGUE_BIAS: u32 = 1;
 const GEMM_DETERMINISTIC_REQUIRED: u32 = 1;
 const GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K: u32 = 1;
 const GEMM_FLAG_ALLOW_INPLACE_SPLIT_K: u32 = 2;
@@ -416,6 +417,17 @@ struct RawCopy {
 
 #[repr(C)]
 struct RawGemmPlan {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+/// Opaque native owner for the experimental cuBLASLt BIAS-epilogue contract.
+///
+/// This is deliberately distinct from [`RawGemmPlan`]: the strict plan
+/// accepts only the no-epilogue arithmetic contract, while this owner has a
+/// different rounding boundary and must never be substituted for it.
+#[repr(C)]
+struct RawBiasGemmPlan {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
 }
@@ -1216,6 +1228,15 @@ impl RawGemmConfig {
             max_workspace_bytes,
             reserved: [0; 3],
         }
+    }
+
+    /// Constructs the only configuration accepted by the separate N02B
+    /// native owner. Its zero flags retain strict no-split selection; the
+    /// distinct epilogue is the sole intentional arithmetic difference.
+    const fn new_bias_epilogue(m: u64, n: u64, k: u64, max_workspace_bytes: u64) -> Self {
+        let mut config = Self::new(0, m, n, k, max_workspace_bytes);
+        config.epilogue = GEMM_EPILOGUE_BIAS;
+        config
     }
 }
 
@@ -2347,6 +2368,32 @@ unsafe extern "C" {
     fn riley_cuda_gemm_plan_close(plan: *mut *mut RawGemmPlan, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_gemm_plan_defer_to_active_capture(
         plan: *mut *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_bias_gemm_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        preparation_bias: *const RawBufferSpan,
+        out_plan: *mut *mut RawBiasGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_bias_gemm_plan_info(
+        plan: *mut RawBiasGemmPlan,
+        out_info: *mut RawGemmAlgorithmInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_bias_gemm_plan_execute(
+        plan: *mut RawBiasGemmPlan,
+        input: *const RawBufferSpan,
+        weight: *const RawBufferSpan,
+        bias: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        workspace: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_bias_gemm_plan_close(
+        plan: *mut *mut RawBiasGemmPlan,
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_fixed37_gemm_plan_create(
@@ -8870,6 +8917,157 @@ impl GemmPlanHandle {
 }
 
 impl Drop for GemmPlanHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+/// Owned bridge to the native experimental BF16 BIAS-epilogue plan.
+///
+/// Its separate lifecycle keeps the strict [`GemmPlanHandle`] ABI from
+/// accidentally admitting the fused rounding contract. The higher-level
+/// Rust admission layer owns its numerical qualification.
+pub(super) struct BiasGemmPlanHandle {
+    pointer: Option<NonNull<RawBiasGemmPlan>>,
+}
+
+// SAFETY: native restores the retained CUDA context for every operation.  The
+// handle is deliberately !Sync and requires exclusive mutable access for
+// execute and close, matching the strict plan's ownership contract.
+unsafe impl Send for BiasGemmPlanHandle {}
+
+impl BiasGemmPlanHandle {
+    pub(super) fn create(
+        context: &ContextHandle,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+        preparation_bias: RawBufferSpan,
+    ) -> CudaResult<Self> {
+        let config = RawGemmConfig::new_bias_epilogue(m, n, k, max_workspace_bytes);
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the context is live; config and the immutable cold-phase
+        // bias span remain valid for this synchronous prepare call.  Native
+        // validates the BF16 [N] span and does not retain its allocation lease.
+        let status = unsafe {
+            riley_cuda_bias_gemm_plan_create(
+                context.as_ptr(),
+                &config,
+                &preparation_bias,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare CUDA bias-epilogue GEMM plan", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "prepare CUDA bias-epilogue GEMM plan",
+                "native bias-epilogue GEMM plan handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawBiasGemmPlan {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn info(&self) -> CudaResult<NativeGemmAlgorithmInfo> {
+        let mut info = RawGemmAlgorithmInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the opaque owner and fixed-layout output metadata remain
+        // live for the full native snapshot call.
+        let status =
+            unsafe { riley_cuda_bias_gemm_plan_info(self.as_ptr(), &mut info, &mut error) };
+        status_result(
+            status,
+            "query CUDA bias-epilogue GEMM plan metadata",
+            &error,
+        )?;
+        // This bridge only understands the exact current metadata record.
+        // A larger/future record or non-zero reserved tail is denied rather
+        // than being silently treated as a compatible experimental plan.
+        if info.struct_size != GEMM_ALGORITHM_INFO_SIZE || info.reserved != [0; 2] {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "query CUDA bias-epilogue GEMM plan metadata",
+                "native bias-epilogue GEMM metadata has an incompatible struct_size or non-zero reserved field",
+            ));
+        }
+        Ok(NativeGemmAlgorithmInfo {
+            backend: info.backend,
+            algorithm_id: info.algorithm_id,
+            tile_id: info.tile_id,
+            stages_id: info.stages_id,
+            split_k: info.split_k,
+            reduction_scheme: info.reduction_scheme,
+            cta_swizzling: info.cta_swizzling,
+            custom_option: info.custom_option,
+            deterministic: info.deterministic,
+            workspace_bytes: info.workspace_bytes,
+            numerical_implementation_flags: info.numerical_implementation_flags,
+            compute_capability_major: info.compute_capability_major,
+            compute_capability_minor: info.compute_capability_minor,
+            runtime_version: info.runtime_version,
+            cublaslt_version: info.cublaslt_version,
+            m: info.m,
+            n: info.n,
+            k: info.k,
+        })
+    }
+
+    pub(super) fn execute(
+        &mut self,
+        input: RawBufferSpan,
+        weight: RawBufferSpan,
+        bias: RawBufferSpan,
+        output: RawBufferSpan,
+        workspace: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe admission layer uniquely borrows this plan, stream,
+        // output, workspace, and the three immutable input spans. Native
+        // validates exact BF16 geometry, context ownership, alignment, and
+        // pairwise non-overlap before launch.
+        let status = unsafe {
+            riley_cuda_bias_gemm_plan_execute(
+                self.as_ptr(),
+                &input,
+                &weight,
+                &bias,
+                &output,
+                &workspace,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "execute CUDA bias-epilogue GEMM plan", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: this raw owner is unique.  N02B intentionally has no graph
+        // capture transfer ABI, so an active native plan close fails closed
+        // through its ordinary lifecycle status instead of deferring it.
+        let status = unsafe { riley_cuda_bias_gemm_plan_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA bias-epilogue GEMM plan", &error)
+    }
+}
+
+impl Drop for BiasGemmPlanHandle {
     fn drop(&mut self) {
         let _ = self.close();
     }
