@@ -41,6 +41,8 @@ const PAGED_ONLINE_IMPLEMENTATION_ID: &str =
     "riley.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_IMPLEMENTATION_ID: &str =
     "riley.cuda.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16";
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_IMPLEMENTATION_ID: &str =
+    "riley.cuda.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
 const REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID: &str = "riley.cuda.reviewed-9qh-3kvh-paged-hf-short-materialized-then-block-online.bf16.d64.t32.block16";
 const FIXED37_REFERENCE_IMPLEMENTATION_ID: &str = "riley.cuda.fixed37.materialized-gqa-decode.bf16";
 const FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
@@ -51,6 +53,7 @@ const FIXED37_PAGED_TWO_PASS_IMPLEMENTATION_ID: &str =
     "riley.cuda.fixed37.paged-two-pass-gqa-decode.bf16.d64.t8192.block16";
 const IMPLEMENTATION_VERSION: &str = "1";
 const REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION: &str = "2";
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_IMPLEMENTATION_VERSION: &str = "2";
 const NATIVE_DEPENDENCY: &str = concat!(
     "riley_cuda_native@abi1+cuda-architectures=",
     env!("RILEY_CUDA_COMPILED_ARCHITECTURES"),
@@ -588,6 +591,10 @@ pub enum DecodeAttentionBackend {
     /// block order. This is intentionally separate from the established D64
     /// optimized backend and is not graph-capture compatible.
     NativeBf16PagedSplitGqaD128,
+    /// Explicit eager-only native-BF16 D128 control with a second native
+    /// transition stage. It preserves the V1 packed-state merge order while
+    /// factoring shared softmax metadata out of the per-depth reducer.
+    NativeBf16PagedSplitGqaD128TwoStage,
     /// Materializes staged BF16 scores and uses fixed-contiguous-37-balanced-v1
     /// for every D/T reduction.
     Fixed37Materialized,
@@ -619,6 +626,16 @@ pub enum DecodeAttentionSelectionReason {
     /// this request geometry, so cold selection retained the materialized
     /// reference.
     NativeBf16PagedSplitGqaD128UnsupportedGeometryFallback,
+    /// The caller explicitly selected the native-BF16 D128 two-stage control
+    /// and its fixed Qwen2.5-3B geometry was available.
+    NativeBf16PagedSplitGqaD128TwoStageCapabilityMatch,
+    /// The explicit native-BF16 D128 two-stage control was not linked, so
+    /// cold selection retained the materialized reference.
+    NativeBf16PagedSplitGqaD128TwoStageUnavailableFallback,
+    /// The explicit native-BF16 D128 two-stage control does not cover this
+    /// request geometry, so cold selection retained the materialized
+    /// reference.
+    NativeBf16PagedSplitGqaD128TwoStageUnsupportedGeometryFallback,
     /// The optimized kernel supports D64 only.
     UnsupportedHeadSizeFallback,
     /// The fixed partition/grid contract cannot represent the request.
@@ -651,6 +668,7 @@ pub struct DecodeAttentionBackendAvailability {
     reference: bool,
     chunked_online: bool,
     native_bf16_paged_split_gqa_d128: bool,
+    native_bf16_paged_split_gqa_d128_two_stage: bool,
     fixed37_materialized: bool,
     fixed37_two_pass: bool,
 }
@@ -663,6 +681,7 @@ impl DecodeAttentionBackendAvailability {
             reference,
             chunked_online,
             native_bf16_paged_split_gqa_d128: false,
+            native_bf16_paged_split_gqa_d128_two_stage: false,
             fixed37_materialized: false,
             fixed37_two_pass: false,
         }
@@ -685,6 +704,20 @@ impl DecodeAttentionBackendAvailability {
         self
     }
 
+    /// Adds the explicit eager-only native-BF16 D128 two-stage control.
+    /// Callers must opt in with
+    /// [`PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage`];
+    /// this flag never changes ordinary `Optimized` selection or the V1
+    /// control.
+    #[must_use]
+    pub const fn with_native_bf16_paged_split_gqa_d128_two_stage(
+        mut self,
+        available: bool,
+    ) -> Self {
+        self.native_bf16_paged_split_gqa_d128_two_stage = available;
+        self
+    }
+
     /// Adds both independently linked fixed37 decode siblings.
     #[must_use]
     pub const fn with_fixed37(mut self, materialized: bool, two_pass: bool) -> Self {
@@ -698,6 +731,7 @@ impl DecodeAttentionBackendAvailability {
     pub const fn linked() -> Self {
         Self::new(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
             .with_native_bf16_paged_split_gqa_d128(cfg!(feature = "cuda"))
+            .with_native_bf16_paged_split_gqa_d128_two_stage(cfg!(feature = "cuda"))
             .with_fixed37(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
     }
 
@@ -717,6 +751,13 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn native_bf16_paged_split_gqa_d128(self) -> bool {
         self.native_bf16_paged_split_gqa_d128
+    }
+
+    /// Whether the additive eager-only native-BF16 D128 two-stage control is
+    /// linked.
+    #[must_use]
+    pub const fn native_bf16_paged_split_gqa_d128_two_stage(self) -> bool {
+        self.native_bf16_paged_split_gqa_d128_two_stage
     }
 
     /// Whether the fixed37 materialized contiguous/paged sibling is linked.
@@ -1042,6 +1083,24 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_D128_CAPABILITY: DecodeAttentionCapability =
         maximum_reduction_elements: None,
     };
 
+// V2 keeps the producer's F32 `[logical_block,QH,D+2]` state prefix intact
+// and records exact per-step transition scales in separately addressed F32
+// scratch. It is explicit so the V1 generic reducer remains a live control.
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_CAPABILITY: DecodeAttentionCapability =
+    DecodeAttentionCapability {
+        implementation_id: NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_IMPLEMENTATION_ID,
+        head_size: Some(NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE),
+        accumulator_dtype: CudaDType::F32,
+        materializes_scores: false,
+        partial_state_merge: true,
+        graph_capture_supported: false,
+        short_materialized_token_limit: None,
+        reduction_profile: AttentionReductionProfile::CanonicalV1,
+        reduction_version: None,
+        reduction_chunk_elements: None,
+        maximum_reduction_elements: None,
+    };
+
 const REVIEWED_HF_PAGED_HYBRID_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     implementation_id: REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID,
     head_size: Some(ONLINE_HEAD_SIZE),
@@ -1297,6 +1356,63 @@ impl DecodePartialStateLayout {
             .and_then(|value| value.checked_add(query_head))
             .and_then(|value| value.checked_mul(self.state_stride_elements))
             .ok_or_else(|| CudaError::out_of_range(OPERATION, "state offset overflows u64"))
+    }
+}
+
+/// Private fixed-layout workspace for the explicit native D128 two-stage
+/// operator. The prefix is deliberately the V1 `[P,QH,D+2]` packed-state
+/// contract so it remains independently reducible by the generic control.
+/// The two following regions are native-only scratch:
+/// `[P,QH,2]` transition pairs and `[QH]` final normalizers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NativeBf16PagedSplitGqaD128TwoStageWorkspaceLayout {
+    partial_state_bytes: u64,
+    reduction_step_bytes: u64,
+    reduction_normalizer_bytes: u64,
+    byte_len: u64,
+}
+
+impl NativeBf16PagedSplitGqaD128TwoStageWorkspaceLayout {
+    fn new(partition_capacity: u64, query_head_count: u64, head_size: u64) -> CudaResult<Self> {
+        const OPERATION: &str = "NativeBf16PagedSplitGqaD128TwoStageWorkspaceLayout::new";
+        let partial_state_bytes =
+            DecodePartialStateLayout::new(partition_capacity, query_head_count, head_size)?
+                .byte_len();
+        let reduction_step_bytes = checked_bytes(
+            OPERATION,
+            &[partition_capacity, query_head_count, 2, F32_BYTES],
+        )?;
+        let reduction_normalizer_bytes = checked_bytes(OPERATION, &[query_head_count, F32_BYTES])?;
+        let byte_len = partial_state_bytes
+            .checked_add(reduction_step_bytes)
+            .and_then(|value| value.checked_add(reduction_normalizer_bytes))
+            .ok_or_else(|| {
+                CudaError::out_of_range(OPERATION, "two-stage workspace overflows u64")
+            })?;
+        Ok(Self {
+            partial_state_bytes,
+            reduction_step_bytes,
+            reduction_normalizer_bytes,
+            byte_len,
+        })
+    }
+
+    const fn partial_state_bytes(self) -> u64 {
+        self.partial_state_bytes
+    }
+
+    #[cfg(feature = "cuda")]
+    const fn reduction_step_bytes(self) -> u64 {
+        self.reduction_step_bytes
+    }
+
+    #[cfg(feature = "cuda")]
+    const fn reduction_normalizer_bytes(self) -> u64 {
+        self.reduction_normalizer_bytes
+    }
+
+    const fn byte_len(self) -> u64 {
+        self.byte_len
     }
 }
 
@@ -1712,10 +1828,11 @@ impl PreparedDecodeAttention {
                 reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
                 &mut stream.native,
             ),
-            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128
+            | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage => {
                 Err(CudaError::invalid_argument(
                     OPERATION,
-                    "native BF16 paged split-GQA D128 requires the paged decode facade",
+                    "native BF16 paged split-GQA D128 controls require the paged decode facade",
                 ))
             }
         }
@@ -1910,6 +2027,63 @@ impl PreparedPagedDecodeAttention {
                 OPERATION,
                 format!(
                     "native BF16 paged split-GQA D128 was rejected ({fallback_reason:?}) and the materialized reference is unavailable"
+                ),
+            ));
+        }
+        prepare_paged_selection(
+            context,
+            context.compute_capability(),
+            request,
+            DecodeAttentionBackend::MaterializedReference,
+            fallback_reason,
+        )
+    }
+
+    /// Explicitly selects the native-BF16 D128 two-stage paged split-GQA
+    /// control for Qwen2.5-3B (`QH=16`, `KVH=2`, `D=128`).
+    ///
+    /// V2 preserves the producer's packed-state prefix and the requested
+    /// logical merge order. It records the scalar transition for each page
+    /// once, then applies those transitions independently to all 128 output
+    /// depths. The V1 producer plus generic reducer remains separately
+    /// selectable as an operator control. This route is eager-only and does
+    /// not enter graph capture.
+    ///
+    /// If V2 is unavailable or the fixed geometry does not match, selection
+    /// retains the materialized paged reference when available and records
+    /// the exact fallback reason in its immutable trace.
+    ///
+    /// # Errors
+    ///
+    /// Returns for invalid request axes, an unsupported compiled GPU
+    /// architecture, or when neither V2 nor the materialized reference is
+    /// available.
+    pub fn select_native_bf16_paged_split_gqa_d128_two_stage(
+        context: &CudaContext,
+        request: PagedDecodeAttentionRequest,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        const OPERATION: &str = "select_native_bf16_paged_split_gqa_d128_two_stage";
+        validate_paged_request(request)?;
+        require_architecture_support(context.compute_capability())?;
+        let fallback_reason = if !availability.native_bf16_paged_split_gqa_d128_two_stage() {
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageUnavailableFallback
+        } else if !native_bf16_paged_split_gqa_d128_geometry_supported(request)? {
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageUnsupportedGeometryFallback
+        } else {
+            return prepare_paged_selection(
+                context,
+                context.compute_capability(),
+                request,
+                DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage,
+                DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageCapabilityMatch,
+            );
+        };
+        if !availability.reference() {
+            return Err(not_supported(
+                OPERATION,
+                format!(
+                    "native BF16 paged split-GQA D128 two-stage was rejected ({fallback_reason:?}) and the materialized reference is unavailable"
                 ),
             ));
         }
@@ -2290,6 +2464,71 @@ impl PreparedPagedDecodeAttention {
                     params.key_pool.raw(),
                     params.value_pool.raw(),
                     params.workspace.raw(),
+                    params.output.raw(),
+                    params.block_table.device_block_ids.raw(),
+                    params.block_table.device_valid_tokens.raw(),
+                    host.format_version(),
+                    host.logical_token_count(),
+                    host.block_count(),
+                    host.physical_block_count(),
+                    PAGED_KV_BLOCK_SIZE_ABI,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.trace.partial_state_capacity,
+                    self.request.scale,
+                    reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
+                    &mut stream.native,
+                )
+            }
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage => {
+                let layout = NativeBf16PagedSplitGqaD128TwoStageWorkspaceLayout::new(
+                    self.trace.partial_state_capacity,
+                    self.request.query_head_count,
+                    self.request.head_size,
+                )?;
+                let workspace_base = params.workspace.byte_offset();
+                let partial_states = CudaBufferSpan::new(
+                    params.workspace.buffer(),
+                    CudaDType::F32,
+                    workspace_base,
+                    layout.partial_state_bytes(),
+                )?;
+                let reduction_steps_offset = workspace_base
+                    .checked_add(layout.partial_state_bytes())
+                    .ok_or_else(|| {
+                        CudaError::out_of_range(
+                            OPERATION,
+                            "two-stage reduction-step workspace offset overflows u64",
+                        )
+                    })?;
+                let reduction_steps = CudaBufferSpan::new(
+                    params.workspace.buffer(),
+                    CudaDType::F32,
+                    reduction_steps_offset,
+                    layout.reduction_step_bytes(),
+                )?;
+                let reduction_normalizers_offset = reduction_steps_offset
+                    .checked_add(layout.reduction_step_bytes())
+                    .ok_or_else(|| {
+                        CudaError::out_of_range(
+                            OPERATION,
+                            "two-stage normalizer workspace offset overflows u64",
+                        )
+                    })?;
+                let reduction_normalizers = CudaBufferSpan::new(
+                    params.workspace.buffer(),
+                    CudaDType::F32,
+                    reduction_normalizers_offset,
+                    layout.reduction_normalizer_bytes(),
+                )?;
+                ffi::native_bf16_paged_split_gqa_d128_two_stage_execute(
+                    params.query.raw(),
+                    params.key_pool.raw(),
+                    params.value_pool.raw(),
+                    partial_states.raw(),
+                    reduction_steps.raw(),
+                    reduction_normalizers.raw(),
                     params.output.raw(),
                     params.block_table.device_block_ids.raw(),
                     params.block_table.device_valid_tokens.raw(),
@@ -2823,20 +3062,18 @@ fn prepare_paged_selection(
             0,
             0,
         ),
-        DecodeAttentionBackend::ChunkedOnline
-        | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+        DecodeAttentionBackend::ChunkedOnline => {
             let capacity = paged_block_count(request.maximum_sequence_length)?;
             let layout = DecodePartialStateLayout::new(
                 capacity,
                 request.query_head_count,
                 request.head_size,
             )?;
-            let hybrid = backend == DecodeAttentionBackend::ChunkedOnline
-                && is_reviewed_hugging_face_short_decode_shape(
-                    request.query_head_count,
-                    request.key_value_head_count,
-                    request.head_size,
-                );
+            let hybrid = is_reviewed_hugging_face_short_decode_shape(
+                request.query_head_count,
+                request.key_value_head_count,
+                request.head_size,
+            );
             let materialized_score_bytes = if hybrid {
                 hugging_face_short_score_prefix_bytes(
                     "select_paged_decode_attention",
@@ -2847,9 +3084,7 @@ fn prepare_paged_selection(
                 0
             };
             (
-                if backend == DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 {
-                    NATIVE_BF16_PAGED_SPLIT_GQA_D128_CAPABILITY
-                } else if hybrid {
+                if hybrid {
                     REVIEWED_HF_PAGED_HYBRID_CAPABILITY
                 } else {
                     PAGED_ONLINE_CAPABILITY
@@ -2858,6 +3093,38 @@ fn prepare_paged_selection(
                 layout.byte_len(),
                 materialized_score_bytes,
                 layout.byte_len(),
+                capacity,
+            )
+        }
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+            let capacity = paged_block_count(request.maximum_sequence_length)?;
+            let layout = DecodePartialStateLayout::new(
+                capacity,
+                request.query_head_count,
+                request.head_size,
+            )?;
+            (
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_CAPABILITY,
+                CudaDType::F32,
+                layout.byte_len(),
+                0,
+                layout.byte_len(),
+                capacity,
+            )
+        }
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage => {
+            let capacity = paged_block_count(request.maximum_sequence_length)?;
+            let layout = NativeBf16PagedSplitGqaD128TwoStageWorkspaceLayout::new(
+                capacity,
+                request.query_head_count,
+                request.head_size,
+            )?;
+            (
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_CAPABILITY,
+                CudaDType::F32,
+                layout.byte_len(),
+                0,
+                layout.partial_state_bytes(),
                 capacity,
             )
         }
@@ -2870,7 +3137,11 @@ fn prepare_paged_selection(
         trace: DecodeAttentionSelectionTrace {
             reason,
             implementation_id: capability.implementation_id,
-            implementation_version: if capability.short_materialized_token_limit.is_some() {
+            implementation_version: if backend
+                == DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage
+            {
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_IMPLEMENTATION_VERSION
+            } else if capability.short_materialized_token_limit.is_some() {
                 REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION
             } else {
                 IMPLEMENTATION_VERSION
@@ -2887,7 +3158,10 @@ fn prepare_paged_selection(
             tokens_per_partition: match backend {
                 DecodeAttentionBackend::MaterializedReference
                 | DecodeAttentionBackend::ChunkedOnline
-                | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => PAGED_KV_BLOCK_SIZE,
+                | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128
+                | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage => {
+                    PAGED_KV_BLOCK_SIZE
+                }
                 DecodeAttentionBackend::Fixed37Materialized
                 | DecodeAttentionBackend::Fixed37TwoPass => 0,
             },
@@ -3365,10 +3639,11 @@ fn prepare_selection(
                 request.tokens_per_partition,
             )
         }
-        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128 => {
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128
+        | DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage => {
             return Err(CudaError::invalid_argument(
                 "select_decode_attention",
-                "native BF16 paged split-GQA D128 requires the paged decode facade",
+                "native BF16 paged split-GQA D128 controls require the paged decode facade",
             ));
         }
     };
@@ -4560,7 +4835,8 @@ mod tests {
         let qwen3b =
             PagedDecodeAttentionRequest::new(16_384, 1_024, 16, 2, 128, 1.0 / 128.0_f32.sqrt());
         let availability = DecodeAttentionBackendAvailability::new(true, true)
-            .with_native_bf16_paged_split_gqa_d128(true);
+            .with_native_bf16_paged_split_gqa_d128(true)
+            .with_native_bf16_paged_split_gqa_d128_two_stage(true);
 
         let strict = PreparedPagedDecodeAttention::select_for_compute_capability(
             &context,
@@ -4607,6 +4883,38 @@ mod tests {
         assert_eq!(native.workspace_bytes(), 1_024 * 16 * 130 * F32_BYTES);
         assert_eq!(native.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
 
+        let two_stage =
+            PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage(
+                &context,
+                qwen3b,
+                availability,
+            )
+            .expect("the explicit Qwen3B D128 two-stage control must cold-select natively");
+        assert_eq!(
+            two_stage.backend(),
+            DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage
+        );
+        assert_eq!(
+            two_stage.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageCapabilityMatch
+        );
+        assert_eq!(
+            two_stage.capability().implementation_id(),
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_IMPLEMENTATION_ID
+        );
+        assert_eq!(two_stage.selection_trace().implementation_version(), "2");
+        assert_eq!(two_stage.workspace_dtype(), CudaDType::F32);
+        assert_eq!(
+            two_stage.selection_trace().partial_state_bytes(),
+            1_024 * 16 * 130 * F32_BYTES
+        );
+        assert_eq!(
+            two_stage.workspace_bytes(),
+            1_024 * 16 * (130 + 2) * F32_BYTES + 16 * F32_BYTES
+        );
+        assert_eq!(two_stage.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
+        assert!(!two_stage.selection_trace().supports_graph_capture());
+
         let unsupported = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
             &context,
             PagedDecodeAttentionRequest::new(64, 4, 16, 2, 64, 0.125),
@@ -4622,6 +4930,22 @@ mod tests {
             DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnsupportedGeometryFallback
         );
 
+        let two_stage_unsupported =
+            PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage(
+                &context,
+                PagedDecodeAttentionRequest::new(64, 4, 16, 2, 64, 0.125),
+                availability,
+            )
+            .expect("non-D128 native V2 requests must use the reference fallback");
+        assert_eq!(
+            two_stage_unsupported.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            two_stage_unsupported.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageUnsupportedGeometryFallback
+        );
+
         let unavailable = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
             &context,
             qwen3b,
@@ -4635,6 +4959,22 @@ mod tests {
         assert_eq!(
             unavailable.selection_trace().reason(),
             DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128UnavailableFallback
+        );
+
+        let two_stage_unavailable =
+            PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage(
+                &context,
+                qwen3b,
+                DecodeAttentionBackendAvailability::new(true, true),
+            )
+            .expect("unlinked explicit V2 control must retain the reference fallback");
+        assert_eq!(
+            two_stage_unavailable.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            two_stage_unavailable.selection_trace().reason(),
+            DecodeAttentionSelectionReason::NativeBf16PagedSplitGqaD128TwoStageUnavailableFallback
         );
     }
 

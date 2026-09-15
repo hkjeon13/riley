@@ -480,6 +480,45 @@ fn timed_execute(
     Ok(elapsed)
 }
 
+#[derive(Clone, Copy, Debug)]
+struct NativeV2WorkspaceLayout {
+    state_prefix_bytes: u64,
+    transition_step_bytes: u64,
+    normalizer_bytes: u64,
+}
+
+impl NativeV2WorkspaceLayout {
+    fn for_prepared(native_v2: &PreparedPagedDecodeAttention) -> TestResult<Self> {
+        let state_prefix_bytes = native_v2.selection_trace().partial_state_bytes();
+        let transition_step_bytes = native_v2
+            .partial_state_capacity()
+            .checked_mul(u64::try_from(QUERY_HEADS)?)
+            .and_then(|elements| elements.checked_mul(2))
+            .and_then(|elements| elements.checked_mul(4))
+            .ok_or("V2 transition-step workspace size overflowed")?;
+        let normalizer_bytes = u64::try_from(QUERY_HEADS)?
+            .checked_mul(4)
+            .ok_or("V2 normalizer workspace size overflowed")?;
+        let total = state_prefix_bytes
+            .checked_add(transition_step_bytes)
+            .and_then(|bytes| bytes.checked_add(normalizer_bytes))
+            .ok_or("V2 workspace size overflowed")?;
+        assert_eq!(
+            native_v2.workspace_bytes(),
+            total,
+            "V2 workspace must be state prefix + transition steps + normalizers"
+        );
+        assert_eq!(state_prefix_bytes % 4, 0);
+        assert_eq!(transition_step_bytes % 4, 0);
+        assert_eq!(normalizer_bytes % 4, 0);
+        Ok(Self {
+            state_prefix_bytes,
+            transition_step_bytes,
+            normalizer_bytes,
+        })
+    }
+}
+
 #[test]
 #[ignore = "requires the remote CUDA GPU on server-4096"]
 fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> TestResult {
@@ -501,23 +540,45 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         DecodeAttentionPreference::Reference,
         availability,
     )?;
-    let native = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
+    let native_v1 = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
         &context,
         request,
         availability,
     )?;
     assert_eq!(
-        native.backend(),
+        native_v1.backend(),
         DecodeAttentionBackend::NativeBf16PagedSplitGqaD128
     );
-    assert_eq!(native.workspace_dtype(), CudaDType::F32);
+    let native_v2 =
+        PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage(
+            &context,
+            request,
+            availability,
+        )?;
     assert_eq!(
-        native.partial_state_capacity(),
+        native_v2.backend(),
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage
+    );
+    assert_eq!(native_v2.workspace_dtype(), CudaDType::F32);
+    assert_eq!(
+        native_v2.partial_state_capacity(),
         u64::try_from(MAX_CONTEXT / PAGE_SIZE)?
     );
-    assert!(native.capability().supports_partial_state_merge());
-    assert!(!native.capability().materializes_scores());
-    assert!(!native.selection_trace().supports_graph_capture());
+    assert_eq!(
+        native_v1.partial_state_capacity(),
+        native_v2.partial_state_capacity(),
+        "V1 and V2 must share the fixed partial-state capacity"
+    );
+    let native_v2_layout = NativeV2WorkspaceLayout::for_prepared(&native_v2)?;
+    assert_eq!(
+        native_v1.workspace_bytes(),
+        native_v2_layout.state_prefix_bytes,
+        "the V2 state prefix must remain independently reducible by V1"
+    );
+    assert!(native_v2.capability().supports_partial_state_merge());
+    assert!(!native_v2.capability().materializes_scores());
+    assert!(!native_v2.selection_trace().supports_graph_capture());
+    assert_eq!(native_v2.selection_trace().implementation_version(), "2");
 
     for (logical, style) in [
         (1_usize, FixtureStyle::Patterned),
@@ -541,17 +602,32 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         let output_bytes = u64::try_from(QUERY_HEADS * HEAD_SIZE * 2)?;
         let mut reference_workspace =
             context.allocate_device_buffer(reference.workspace_bytes())?;
-        let mut native_workspace = upload(
+        let mut native_v1_workspace = upload(
             &context,
             &mut stream,
             &mut staging,
             &encode_f32(&vec![
                 STATE_SENTINEL;
-                usize::try_from(native.workspace_bytes() / 4)?
+                usize::try_from(native_v1.workspace_bytes() / 4)?
+            ]),
+        )?;
+        let mut native_v2_workspace = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_f32(&vec![
+                STATE_SENTINEL;
+                usize::try_from(native_v2.workspace_bytes() / 4)?
             ]),
         )?;
         let mut reference_output = context.allocate_device_buffer(output_bytes)?;
-        let mut native_output = upload(
+        let mut native_v1_output = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_bf16(&vec![OUTPUT_SENTINEL; QUERY_HEADS * HEAD_SIZE]),
+        )?;
+        let mut native_v2_output = upload(
             &context,
             &mut stream,
             &mut staging,
@@ -559,7 +635,7 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         )?;
         let mut descending_output = context.allocate_device_buffer(output_bytes)?;
         let before_repeated_execution = context.allocation_stats()?;
-        let mut first_native_output = None;
+        let mut first_native_v2_output = None;
         for attempt in 0..3 {
             execute_prepared(
                 &reference,
@@ -570,27 +646,35 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
                 &mut stream,
             )?;
             execute_prepared(
-                &native,
+                &native_v1,
                 &fixture,
-                &mut native_workspace,
-                native.workspace_bytes(),
-                &mut native_output,
+                &mut native_v1_workspace,
+                native_v1.workspace_bytes(),
+                &mut native_v1_output,
+                &mut stream,
+            )?;
+            execute_prepared(
+                &native_v2,
+                &fixture,
+                &mut native_v2_workspace,
+                native_v2.workspace_bytes(),
+                &mut native_v2_output,
                 &mut stream,
             )?;
             stream.synchronize()?;
-            let observed = download(&context, &mut stream, &mut native_output)?;
-            if let Some(first) = &first_native_output {
+            let observed = download(&context, &mut stream, &mut native_v2_output)?;
+            if let Some(first) = &first_native_v2_output {
                 assert_eq!(
                     &observed, first,
-                    "native output changed on deterministic repetition {attempt} at T={logical}"
+                    "V2 output changed on deterministic repetition {attempt} at T={logical}"
                 );
             } else {
-                first_native_output = Some(observed);
+                first_native_v2_output = Some(observed);
             }
             assert_eq!(
                 before_repeated_execution,
                 context.allocation_stats()?,
-                "prepared native execution allocated at T={logical}"
+                "prepared V2 execution allocated at T={logical}"
             );
         }
 
@@ -599,10 +683,10 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         decode_partial_states_reduce(
             &mut DecodePartialStateReduceParams {
                 partial_states: CudaBufferSpan::new(
-                    &native_workspace,
+                    &native_v2_workspace,
                     CudaDType::F32,
                     0,
-                    native.workspace_bytes(),
+                    native_v2_layout.state_prefix_bytes,
                 )?,
                 output: CudaBufferSpanMut::new(
                     &mut descending_output,
@@ -611,7 +695,7 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
                     descending_output_len,
                 )?,
                 partial_state_count: u64::try_from(logical_blocks)?,
-                partial_state_capacity: native.partial_state_capacity(),
+                partial_state_capacity: native_v2.partial_state_capacity(),
                 query_head_count: u64::try_from(QUERY_HEADS)?,
                 head_size: u64::try_from(HEAD_SIZE)?,
                 order: DecodePartialReductionOrder::LogicalDescending,
@@ -622,12 +706,21 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         assert_eq!(
             before_repeated_execution,
             context.allocation_stats()?,
-            "descending D128 partial-state reduction allocated at T={logical}"
+            "V1 generic descending D128 partial-state reduction allocated at T={logical}"
         );
 
         let reference_actual =
             decode_bf16(&download(&context, &mut stream, &mut reference_output)?);
-        let native_actual = decode_bf16(&download(&context, &mut stream, &mut native_output)?);
+        let native_v1_output_bytes = download(&context, &mut stream, &mut native_v1_output)?;
+        let native_v2_output_bytes = first_native_v2_output
+            .take()
+            .ok_or("V2 deterministic output was not captured")?;
+        assert_eq!(
+            native_v2_output_bytes, native_v1_output_bytes,
+            "V2 must replay the V1 generic ascending reducer exactly at T={logical}"
+        );
+        let native_v1_actual = decode_bf16(&native_v1_output_bytes);
+        let native_v2_actual = decode_bf16(&native_v2_output_bytes);
         let descending_actual =
             decode_bf16(&download(&context, &mut stream, &mut descending_output)?);
         assert_close(
@@ -637,19 +730,40 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
             &format!("materialized reference ({}) T={logical}", style.label()),
         );
         assert_close(
-            &native_actual,
+            &native_v1_actual,
             &reference_actual,
             NATIVE_REFERENCE_ABS_TOLERANCE,
-            &format!("native D128 ({}) T={logical}", style.label()),
+            &format!("V1 generic D128 control ({}) T={logical}", style.label()),
+        );
+        assert_close(
+            &native_v2_actual,
+            &reference_actual,
+            NATIVE_REFERENCE_ABS_TOLERANCE,
+            &format!("V2 two-stage D128 ({}) T={logical}", style.label()),
         );
         assert_close(
             &descending_actual,
             &reference_actual,
             NATIVE_REFERENCE_ABS_TOLERANCE,
-            &format!("descending reducer ({}) T={logical}", style.label()),
+            &format!(
+                "V1 generic descending reducer ({}) T={logical}",
+                style.label()
+            ),
         );
 
-        let state_values = decode_f32(&download(&context, &mut stream, &mut native_workspace)?);
+        let workspace_values =
+            decode_f32(&download(&context, &mut stream, &mut native_v2_workspace)?);
+        let state_prefix_elements = usize::try_from(native_v2_layout.state_prefix_bytes / 4)?;
+        let transition_step_elements = usize::try_from(native_v2_layout.transition_step_bytes / 4)?;
+        let normalizer_elements = usize::try_from(native_v2_layout.normalizer_bytes / 4)?;
+        assert_eq!(
+            workspace_values.len(),
+            state_prefix_elements + transition_step_elements + normalizer_elements,
+            "V2 workspace must have no unaccounted regions"
+        );
+        let (state_values, native_v2_scratch) = workspace_values.split_at(state_prefix_elements);
+        let (transition_steps, normalizers) = native_v2_scratch.split_at(transition_step_elements);
+        assert_eq!(normalizers.len(), normalizer_elements);
         let state_stride = HEAD_SIZE + 2;
         for logical_block in 0..logical_blocks {
             for query_head in 0..QUERY_HEADS {
@@ -664,12 +778,33 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
                 );
             }
         }
-        let active_elements = logical_blocks * QUERY_HEADS * state_stride;
+        let active_state_elements = logical_blocks * QUERY_HEADS * state_stride;
         assert!(
-            state_values[active_elements..]
+            state_values[active_state_elements..]
                 .iter()
                 .all(|value| value.to_bits() == STATE_SENTINEL.to_bits()),
-            "native D128 modified the preallocated partial-state tail at T={logical}"
+            "V2 modified the preallocated partial-state tail at T={logical}"
+        );
+        let active_transition_elements = logical_blocks * QUERY_HEADS * 2;
+        assert!(
+            transition_steps[..active_transition_elements]
+                .iter()
+                .all(|value| value.is_finite()
+                    && *value >= 0.0
+                    && value.to_bits() != STATE_SENTINEL.to_bits()),
+            "V2 transition scratch was not populated with finite scales at T={logical}"
+        );
+        assert!(
+            transition_steps[active_transition_elements..]
+                .iter()
+                .all(|value| value.to_bits() == STATE_SENTINEL.to_bits()),
+            "V2 modified the preallocated transition-scratch tail at T={logical}"
+        );
+        assert!(
+            normalizers.iter().all(|value| {
+                value.is_finite() && *value > 0.0 && value.to_bits() != STATE_SENTINEL.to_bits()
+            }),
+            "V2 normalizer scratch was not populated at T={logical}"
         );
 
         if logical == 33 {
@@ -680,14 +815,14 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
                 &encode_bf16(&vec![OUTPUT_SENTINEL; QUERY_HEADS * HEAD_SIZE]),
             )?;
             let error = execute_prepared(
-                &native,
+                &native_v2,
                 &fixture,
-                &mut native_workspace,
-                native.workspace_bytes() - 4,
+                &mut native_v2_workspace,
+                native_v2.workspace_bytes() - 4,
                 &mut failed_output,
                 &mut stream,
             )
-            .expect_err("undersized D128 partial-state workspace must fail before launch");
+            .expect_err("undersized full V2 D128 workspace must fail before launch");
             let error = error
                 .downcast_ref::<CudaError>()
                 .ok_or("undersized workspace error did not preserve CudaError")?;
@@ -695,25 +830,32 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
             assert_eq!(
                 download(&context, &mut stream, &mut failed_output)?,
                 encode_bf16(&vec![OUTPUT_SENTINEL; QUERY_HEADS * HEAD_SIZE]),
-                "failed D128 execution modified the output"
+                "failed V2 D128 execution modified the output"
             );
             failed_output.close()?;
         }
 
         println!(
-            "n03a-paged-d128-correctness schema_version=1 logical_tokens={logical} fixture={} shuffled_page_ids=true partial_last_page={} native_backend=true reference_cpu=true descending_reduce=true repeats=3 zero_allocations=true status=passed",
+            "n03a-paged-d128-correctness schema_version=2 logical_tokens={logical} fixture={} shuffled_page_ids=true partial_last_page={} native_v2_backend=true v1_generic_control=true reference_cpu=true descending_reduce=true repeats=3 state_prefix_bytes={} transition_step_bytes={} normalizer_bytes={} native_v2_workspace_bytes={} zero_allocations=true python_free=true status=passed",
             style.label(),
             logical % PAGE_SIZE != 0,
+            native_v2_layout.state_prefix_bytes,
+            native_v2_layout.transition_step_bytes,
+            native_v2_layout.normalizer_bytes,
+            native_v2.workspace_bytes(),
         );
         descending_output.close()?;
-        native_output.close()?;
+        native_v2_output.close()?;
+        native_v1_output.close()?;
         reference_output.close()?;
-        native_workspace.close()?;
+        native_v2_workspace.close()?;
+        native_v1_workspace.close()?;
         reference_workspace.close()?;
         fixture.close()?;
     }
 
-    drop(native);
+    drop(native_v2);
+    drop(native_v1);
     drop(reference);
     staging.close()?;
     stream.close()?;
@@ -742,11 +884,17 @@ fn run_paired_operator_control_case(
         DecodeAttentionPreference::Reference,
         availability,
     )?;
-    let native = PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128(
-        context,
-        request,
-        availability,
-    )?;
+    let native_v2 =
+        PreparedPagedDecodeAttention::select_native_bf16_paged_split_gqa_d128_two_stage(
+            context,
+            request,
+            availability,
+        )?;
+    assert_eq!(
+        native_v2.backend(),
+        DecodeAttentionBackend::NativeBf16PagedSplitGqaD128TwoStage
+    );
+    let native_v2_layout = NativeV2WorkspaceLayout::for_prepared(&native_v2)?;
     let (fixture, _) = setup_fixture(
         context,
         stream,
@@ -757,9 +905,17 @@ fn run_paired_operator_control_case(
     )?;
     let output_bytes = u64::try_from(QUERY_HEADS * HEAD_SIZE * 2)?;
     let mut reference_workspace = context.allocate_device_buffer(reference.workspace_bytes())?;
-    let mut native_workspace = context.allocate_device_buffer(native.workspace_bytes())?;
+    let mut native_v2_workspace = upload(
+        context,
+        stream,
+        staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(native_v2.workspace_bytes() / 4)?
+        ]),
+    )?;
     let mut reference_output = context.allocate_device_buffer(output_bytes)?;
-    let mut native_output = context.allocate_device_buffer(output_bytes)?;
+    let mut native_v2_output = context.allocate_device_buffer(output_bytes)?;
     for _ in 0..INTERNAL_WARMUPS {
         execute_prepared(
             &reference,
@@ -770,11 +926,11 @@ fn run_paired_operator_control_case(
             stream,
         )?;
         execute_prepared(
-            &native,
+            &native_v2,
             &fixture,
-            &mut native_workspace,
-            native.workspace_bytes(),
-            &mut native_output,
+            &mut native_v2_workspace,
+            native_v2.workspace_bytes(),
+            &mut native_v2_output,
             stream,
         )?;
     }
@@ -795,19 +951,19 @@ fn run_paired_operator_control_case(
             &mut end,
         )?;
         let native_first = timed_execute(
-            &native,
+            &native_v2,
             &fixture,
-            &mut native_workspace,
-            &mut native_output,
+            &mut native_v2_workspace,
+            &mut native_v2_output,
             stream,
             &mut start,
             &mut end,
         )?;
         let native_second = timed_execute(
-            &native,
+            &native_v2,
             &fixture,
-            &mut native_workspace,
-            &mut native_output,
+            &mut native_v2_workspace,
+            &mut native_v2_output,
             stream,
             &mut start,
             &mut end,
@@ -827,10 +983,10 @@ fn run_paired_operator_control_case(
     assert_eq!(
         allocation_baseline,
         context.allocation_stats()?,
-        "ABBA paired native control allocated at T={logical}"
+        "ABBA paired V2 native control allocated at T={logical}"
     );
     let reference_actual = decode_bf16(&download(context, stream, &mut reference_output)?);
-    let native_actual = decode_bf16(&download(context, stream, &mut native_output)?);
+    let native_actual = decode_bf16(&download(context, stream, &mut native_v2_output)?);
     assert_close(
         &native_actual,
         &reference_actual,
@@ -850,16 +1006,20 @@ fn run_paired_operator_control_case(
         "paired operator metrics must be finite"
     );
     println!(
-        "riley-cuda-n03a-paged-gqa schema_version=1 case=b1-c{logical}-qh16-kvh2-d128 logical_tokens={logical} batch=1 query_heads=16 key_value_heads=2 head_size=128 page_size=16 fixture=patterned shuffled_page_ids=true partial_last_page=false timing_scope=prepared_paged_decode_execute_cuda_event internal_warmups_per_backend={INTERNAL_WARMUPS} paired_rounds={PAIRED_ROUNDS} paired_order=ABBA native_median_ms={native_median_ms:.6} native_p95_ms={native_p95_ms:.6} reference_median_ms={reference_median_ms:.6} reference_p95_ms={reference_p95_ms:.6} paired_speedup_ratio={paired_speedup_ratio:.6} paired_delta_ms={paired_delta_ms:.6} native_workspace_bytes={} reference_workspace_bytes={} implementation_id={} graph_capture_supported=false operator_parity=passed allocation_delta=0 python_free=true full_model_serving=false vllm_comparison=false status=passed",
-        native.workspace_bytes(),
+        "riley-cuda-n03a-paged-gqa schema_version=2 case=b1-c{logical}-qh16-kvh2-d128 logical_tokens={logical} batch=1 query_heads=16 key_value_heads=2 head_size=128 page_size=16 fixture=patterned shuffled_page_ids=true partial_last_page=false timing_scope=prepared_paged_decode_execute_cuda_event internal_warmups_per_backend={INTERNAL_WARMUPS} paired_rounds={PAIRED_ROUNDS} paired_order=ABBA native_median_ms={native_median_ms:.6} native_p95_ms={native_p95_ms:.6} reference_median_ms={reference_median_ms:.6} reference_p95_ms={reference_p95_ms:.6} paired_speedup_ratio={paired_speedup_ratio:.6} paired_delta_ms={paired_delta_ms:.6} native_workspace_bytes={} native_v2_state_prefix_bytes={} native_v2_transition_step_bytes={} native_v2_normalizer_bytes={} reference_workspace_bytes={} implementation_id={} implementation_version={} graph_capture_supported=false operator_parity=passed allocation_delta=0 python_free=true full_model_serving=false vllm_comparison=false status=passed",
+        native_v2.workspace_bytes(),
+        native_v2_layout.state_prefix_bytes,
+        native_v2_layout.transition_step_bytes,
+        native_v2_layout.normalizer_bytes,
         reference.workspace_bytes(),
-        native.capability().implementation_id(),
+        native_v2.capability().implementation_id(),
+        native_v2.selection_trace().implementation_version(),
     );
     start.close()?;
     end.close()?;
-    native_output.close()?;
+    native_v2_output.close()?;
     reference_output.close()?;
-    native_workspace.close()?;
+    native_v2_workspace.close()?;
     reference_workspace.close()?;
     fixture.close()?;
     Ok(())

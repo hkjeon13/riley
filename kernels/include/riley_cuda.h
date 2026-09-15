@@ -938,6 +938,36 @@ typedef struct RileyCudaNativeBf16PagedSplitGqaParamsV1 {
   uint64_t reserved[4];
 } RileyCudaNativeBf16PagedSplitGqaParamsV1;
 
+// Additive two-stage native-BF16 paged split-GQA descriptor for the same
+// pinned D128 geometry as V1. The producer writes versioned F32 partial
+// states `[capacity,QH,D+2]`, then the two explicitly supplied F32 workspaces
+// hold transition pairs `[capacity,QH,2]` and final normalizers `[QH]` before
+// the output stage writes BF16. All three F32 spans must cover their complete
+// prepared capacity even when the current table contains fewer blocks. These
+// workspaces are independent spans so callers can retain the V1 partial-state
+// prefix and make temporary-resource ownership explicit. This is an eager-only
+// descriptor and remains incompatible with graph capture.
+#define RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V2_VERSION 2u
+typedef struct RileyCudaNativeBf16PagedSplitGqaParamsV2 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RileyCudaBufferSpan query;
+  RileyCudaBufferSpan key_pool;
+  RileyCudaBufferSpan value_pool;
+  RileyCudaBufferSpan partial_states;
+  RileyCudaBufferSpan reduction_steps;
+  RileyCudaBufferSpan reduction_normalizers;
+  RileyCudaBufferSpan output;
+  RileyCudaPagedKvBlockTableV1 block_table;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t partial_state_capacity;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RileyCudaNativeBf16PagedSplitGqaParamsV2;
+
 #define RILEY_CUDA_PACKED_BATCH_VERSION 1u
 
 // Packed multi-sequence address-translation descriptor. The device arrays are
@@ -2443,6 +2473,10 @@ RileyCudaStatus riley_cuda_paged_decode_attention_execute(
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_native_bf16_paged_split_gqa_d128_execute(
     const RileyCudaNativeBf16PagedSplitGqaParamsV1* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute(
+    const RileyCudaNativeBf16PagedSplitGqaParamsV2* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 

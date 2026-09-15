@@ -90,6 +90,7 @@ const PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 432;
 const PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 480;
 const PAGED_DECODE_ATTENTION_PARAMS_SIZE: u32 = 488;
 const NATIVE_BF16_PAGED_SPLIT_GQA_PARAMS_V1_SIZE: u32 = 488;
+const NATIVE_BF16_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 584;
 const PACKED_BATCH_V1_SIZE: u32 = 320;
 const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
 const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
@@ -1020,6 +1021,27 @@ struct RawNativeBf16PagedSplitGqaParamsV1 {
     key_pool: RawBufferSpan,
     value_pool: RawBufferSpan,
     partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    block_table: RawPagedKvBlockTableV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawNativeBf16PagedSplitGqaParamsV2 {
+    struct_size: u32,
+    format_version: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    reduction_steps: RawBufferSpan,
+    reduction_normalizers: RawBufferSpan,
     output: RawBufferSpan,
     block_table: RawPagedKvBlockTableV1,
     query_head_count: u64,
@@ -2186,6 +2208,11 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_native_bf16_paged_split_gqa_d128_execute(
         params: *const RawNativeBf16PagedSplitGqaParamsV1,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute(
+        params: *const RawNativeBf16PagedSplitGqaParamsV2,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -7938,6 +7965,72 @@ pub(super) fn native_bf16_paged_split_gqa_d128_execute(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn native_bf16_paged_split_gqa_d128_two_stage_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    reduction_steps: RawBufferSpan,
+    reduction_normalizers: RawBufferSpan,
+    output: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawNativeBf16PagedSplitGqaParamsV2 {
+        struct_size: NATIVE_BF16_PAGED_SPLIT_GQA_PARAMS_V2_SIZE,
+        format_version: 2,
+        query,
+        key_pool,
+        value_pool,
+        partial_states,
+        reduction_steps,
+        reduction_normalizers,
+        output,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        partial_state_capacity,
+        scale,
+        reduction_order,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA native BF16 paged split-GQA D128 two-stage",
+        stream,
+        |stream, error| {
+            // SAFETY: the additive fixed-layout descriptor and every borrowed
+            // resource remain live through synchronous native completion.
+            unsafe {
+                riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute(
+                    &params, stream, error,
+                )
+            }
+        },
+    )
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct PackedBatchRawV1 {
     pub(super) sequence_block_offsets: RawBufferSpan,
@@ -9299,6 +9392,16 @@ const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV1, block_table
 const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV1, query_head_count) == 416);
 const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV1, scale) == 448);
 const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV1, reserved) == 456);
+const _: () = assert!(size_of::<RawNativeBf16PagedSplitGqaParamsV2>() == 584);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, format_version) == 4);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, partial_states) == 152);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, reduction_steps) == 200);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, reduction_normalizers) == 248);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, output) == 296);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, block_table) == 344);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, query_head_count) == 512);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, scale) == 544);
+const _: () = assert!(offset_of!(RawNativeBf16PagedSplitGqaParamsV2, reserved) == 552);
 const _: () = assert!(size_of::<RawPackedBatchV1>() == 320);
 const _: () = assert!(offset_of!(RawPackedBatchV1, sequence_block_offsets) == 8);
 const _: () = assert!(offset_of!(RawPackedBatchV1, sequence_count) == 248);

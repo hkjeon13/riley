@@ -424,6 +424,41 @@ _Static_assert(
 _Static_assert(
     offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV1, reserved) == 456,
     "native BF16 paged split-GQA reserved offset changed");
+_Static_assert(RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V2_VERSION == 2,
+               "native BF16 paged split-GQA V2 ABI version changed");
+_Static_assert(sizeof(RileyCudaNativeBf16PagedSplitGqaParamsV2) == 584,
+               "native BF16 paged split-GQA V2 ABI size changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, format_version) == 4,
+    "native BF16 paged split-GQA V2 format-version offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, partial_states) ==
+        152,
+    "native BF16 paged split-GQA V2 partial-state offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, reduction_steps) ==
+        200,
+    "native BF16 paged split-GQA V2 reduction-step offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2,
+             reduction_normalizers) == 248,
+    "native BF16 paged split-GQA V2 reduction-normalizer offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, output) == 296,
+    "native BF16 paged split-GQA V2 output offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, block_table) == 344,
+    "native BF16 paged split-GQA V2 block-table offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, query_head_count) ==
+        512,
+    "native BF16 paged split-GQA V2 dimensions offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, scale) == 544,
+    "native BF16 paged split-GQA V2 scale offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16PagedSplitGqaParamsV2, reserved) == 552,
+    "native BF16 paged split-GQA V2 reserved offset changed");
 _Static_assert(RILEY_CUDA_PACKED_BATCH_VERSION == 1,
                "packed batch ABI version changed");
 _Static_assert(sizeof(RileyCudaPackedBatchV1) == 320,
@@ -975,6 +1010,10 @@ static RileyCudaStatus (*const paged_decode_attention_symbol)(
 static RileyCudaStatus (*const native_bf16_paged_split_gqa_d128_symbol)(
     const RileyCudaNativeBf16PagedSplitGqaParamsV1*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_native_bf16_paged_split_gqa_d128_execute;
+static RileyCudaStatus (*const native_bf16_paged_split_gqa_d128_two_stage_symbol)(
+    const RileyCudaNativeBf16PagedSplitGqaParamsV2*, RileyCudaStream*,
+    RileyCudaErrorInfo*) =
+    riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute;
 static RileyCudaStatus (*const ragged_paged_kv_cache_write_symbol)(
     const RileyCudaRaggedPagedKvCacheWriteParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) =
@@ -1129,6 +1168,7 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&fixed37_paged_decode_attention_two_pass_symbol,
     (const void*)&paged_decode_attention_symbol,
     (const void*)&native_bf16_paged_split_gqa_d128_symbol,
+    (const void*)&native_bf16_paged_split_gqa_d128_two_stage_symbol,
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
     (const void*)&ragged_paged_attention_grouped_heads_symbol,

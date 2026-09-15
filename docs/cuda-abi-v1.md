@@ -430,6 +430,89 @@ safe Rust wrapper의 thread/lifetime 계약은 다음과 같다.
   `synchronize`가 오류 보고 경로이고 Drop은 best-effort다. Drop completion을
   확정하지 못하거나 값을 forget하면 busy/accounting을 해제하지 않는다.
 
+## Native BF16 paged split-GQA D128 descriptor V1/V2
+
+이 control은 일반 paged D64 descriptor의 의미를 넓히지 않는다. V1과 V2 모두
+page size 16, `QH=16`, `KVH=2`, `head_size=128`인 명시적 BF16 paged split-GQA
+decode만 지원한다. `RileyCudaPagedKvBlockTableV1`의 block-ID, valid-token,
+logical-order 규칙과 query/K/V pool layout은 PR 10의 규칙을 그대로 따른다.
+각 호출은 명시적 non-default stream 및 같은 context에 속한 span을 사용하며,
+모든 writable span은 input span 및 다른 writable span과 겹치면 안 된다.
+
+### V1은 strict control로 유지된다
+
+`RileyCudaNativeBf16PagedSplitGqaParamsV1`의 format macro는
+`RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V1_VERSION == 1`이고 64-bit ABI에서
+크기는 488 bytes다. 기존 symbol
+`riley_cuda_native_bf16_paged_split_gqa_d128_execute`와 V1 field 순서, offset,
+span 요구사항, requested reduction order 및 F32 partial-state numerical contract는
+변경하지 않는다. V1은 F32 partial state
+`[partial_state_capacity, 16, 130]`과 BF16 output `[16, 128]`을 받는 독립된
+public descriptor다.
+
+V2는 V1 struct를 확장하거나 기존 symbol의 동작을 바꾸는 방식이 아니다. ABI의
+전역 version은 `1`로 유지되고, 새 descriptor/macro/symbol을 additive하게
+추가한다. 따라서 V1 caller는 V2 buffer를 준비하거나 V2를 선택할 필요가 없고,
+V2 caller는 별도 symbol을 명시적으로 호출해야 한다. Rust의 ordinary optimized
+selection과 V1 explicit control도 V2로 자동 교체되지 않는다. 이 분리는 V1을
+strict regression control로 남기고 V2의 성능 또는 numerical qualification을
+독립적으로 판정할 수 있게 한다.
+
+### `RileyCudaNativeBf16PagedSplitGqaParamsV2`
+
+V2의 format macro는
+`RILEY_CUDA_NATIVE_BF16_PAGED_SPLIT_GQA_V2_VERSION == 2`이며,
+`riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute`가 받는다.
+caller는 `struct_size`를 `sizeof(RileyCudaNativeBf16PagedSplitGqaParamsV2)`로,
+`format_version`을 `2`로 설정하고 `reserved[4]`를 모두 0으로 설정해야 한다.
+64-bit host C ABI에서 구조체의 전체 크기는 584 bytes다. C11, CUDA C++와 Rust의
+독립 static assertion이 다음 layout을 고정한다.
+
+| offset | C type | field | 요구사항 |
+| ---: | --- | --- | --- |
+| 0 | `uint32_t` | `struct_size` | 최소 584; caller가 제공한 descriptor 크기 |
+| 4 | `uint32_t` | `format_version` | 반드시 `2` |
+| 8 | `RileyCudaBufferSpan` | `query` | BF16 `[16, 128]` |
+| 56 | `RileyCudaBufferSpan` | `key_pool` | BF16 PR 10 physical paged K pool |
+| 104 | `RileyCudaBufferSpan` | `value_pool` | BF16 PR 10 physical paged V pool |
+| 152 | `RileyCudaBufferSpan` | `partial_states` | writable F32 `[C, 16, 130]` |
+| 200 | `RileyCudaBufferSpan` | `reduction_steps` | writable F32 `[C, 16, 2]` |
+| 248 | `RileyCudaBufferSpan` | `reduction_normalizers` | writable F32 `[16]` |
+| 296 | `RileyCudaBufferSpan` | `output` | writable BF16 `[16, 128]` |
+| 344 | `RileyCudaPagedKvBlockTableV1` | `block_table` | PR 10 version-1 page table |
+| 512 | `uint64_t` | `query_head_count` | 반드시 `16` |
+| 520 | `uint64_t` | `key_value_head_count` | 반드시 `2` |
+| 528 | `uint64_t` | `head_size` | 반드시 `128` |
+| 536 | `uint64_t` | `partial_state_capacity` (`C`) | 0보다 크고 `block_count` 이상 |
+| 544 | `float` | `scale` | decode dimension validation을 통과한 scale |
+| 548 | `uint32_t` | `reduction_order` | 지원하는 ascending 또는 descending order |
+| 552 | `uint64_t[4]` | `reserved` | 모두 0 |
+
+`partial_states`, `reduction_steps`, `reduction_normalizers`는 각각 독립된 F32
+span이다. V2가 logical block의 metadata merge를 한 번 계산한 뒤 모든 D128 output
+depth에서 replay할 수 있도록, 세 span은 active block 수만이 아니라 complete
+prepared capacity를 모두 덮어야 한다.
+
+```text
+partial_states bytes       = C * 16 * (128 + 2) * sizeof(float)
+reduction_steps bytes      = C * 16 * 2 * sizeof(float)
+reduction_normalizers bytes = 16 * sizeof(float)
+```
+
+`block_count`가 `C`보다 작더라도 tail은 더 작은 span으로 줄일 수 없다. V2는
+producer가 `partial_states`에 V1과 같은 `(m, l, n[128])` F32 state를 쓰고,
+요청된 stable reduction order로 transition pair와 final normalizer를 만든다.
+마지막 stage는 같은 order로 pair를 replay한 뒤 한 번만 normalize하여 BF16 output을
+쓴다. V2가 V1의 partial-state prefix를 공유할 수 있는 것은 storage 형식이 같기
+때문이지 V1/V2 descriptor 또는 workspace ownership이 상호 대체 가능하다는 뜻은
+아니다.
+
+V2는 eager-only이며 graph capture와 호환되지 않는다. `struct_size`, format,
+reserved field, block table, geometry, capacity, span dtype/byte length,
+context ownership 또는 overlap 검증에 실패하면 launch 전에 stable validation
+status를 반환한다. 실행 lifecycle, exclusive-use, stream completion 및 failure
+처리는 다른 paged decode ABI와 같은 규칙을 따른다.
+
 ## stream, event와 비동기 완료
 
 - 모든 stream은 `cudaStreamNonBlocking`으로 명시 생성한다. null/default stream을
