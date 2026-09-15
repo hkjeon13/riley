@@ -29,6 +29,8 @@ const QWEN3B_MODEL_ID: &str = "Qwen/Qwen2.5-3B-Instruct";
 const QWEN3B_REVISION: &str = "aa8e72537993ba99e69dfaafa59ed015b17504d1";
 const QWEN3B_WORKLOAD_SHA256: &str =
     "7a0a8fec31d45e397e1ec57335fa1c9de2d3da7daa9a32e9002a62763c05261e";
+const QWEN3B_WORKLOAD_SCHEMA_VERSION: &str = "riley.n06a-d128-serving-workload.v1";
+const QWEN3B_WORKLOAD_CASE: &str = "qwen3b-c8-p2048-o128";
 const QWEN3B_PROMPT_TOKEN_SHA256: &str =
     "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9";
 const QWEN3B_PROMPT_TOKEN_ID: u32 = 3_409;
@@ -158,8 +160,8 @@ fn load_prompt_ids(path: &Path) -> TestResult<Vec<u32>> {
         return Err("Qwen workload SHA-256 differs from the immutable P2048 case".into());
     }
     let document: Value = serde_json::from_slice(&raw)?;
-    if document["schema_version"] != "riley-qwen3b-serving-workload-v1"
-        || document["case"] != "c8-p2048-closed-loop"
+    if document["schema_version"] != QWEN3B_WORKLOAD_SCHEMA_VERSION
+        || document["case"] != QWEN3B_WORKLOAD_CASE
         || document["model_id"] != QWEN3B_MODEL_ID
         || document["model_revision"] != QWEN3B_REVISION
     {
