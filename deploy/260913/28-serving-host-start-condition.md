@@ -2,6 +2,10 @@
 
 상태: 측정 절차 보강. 모델·GPU kernel·성능 성공 기준을 변경하지 않는다.
 
+## 2026-09-15 운영 수정
+
+아래의 quiet gate는 당시 시도한 실험 절차의 기록이다. 호스트 전체 PSI 임계값은 serving 실행의 필수 조건으로 검증되지 않았으므로, 이후 비교에서는 `--host-quiet-timeout-seconds 0`으로 실행한다. PSI는 phase 전후 관측값과 실행 순서별 편차로 공개하고 성능 보정에는 사용하지 않는다. GPU 경합, 메모리 여유, 모델 correctness 및 동일 workload 조건은 계속 확인한다. quiet gate 실패만으로 최적화 작업 전체를 중단하지 않는다. 기존 실패 기록과 C32의 non-qualified 판정은 유지한다.
+
 ## 근거
 
 이전 C32 projection CTA 비교에서 unique 역순의 CPU PSI some 비중은 candidate 24.23%, prior 14.77%였다. VLLM unique 첫 실행은 I/O 대기가 더 높으면서도 더 빨랐다. 따라서 I/O 대기 하나를 원인으로 단정하거나 성능을 보정하는 데 쓰지 않는다. 기존 결과는 버리지 않고 non-qualified 증거로 유지한다.
