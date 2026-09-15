@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import subprocess
 import sys
@@ -111,6 +112,10 @@ class Qwen3BStageTraceTests(unittest.TestCase):
 
     def test_manifest_accepts_fixed_stage0_contract(self) -> None:
         document = _manifest()
+        trace.validate_manifest(document)
+
+    def test_manifest_accepts_canonical_json_object_order(self) -> None:
+        document = json.loads(json.dumps(_manifest(), sort_keys=True))
         trace.validate_manifest(document)
 
     def test_collect_source_provenance_accepts_git_sha1_revision(self) -> None:

@@ -200,8 +200,8 @@ def _tensor_shape(tensor: object) -> tuple[int, ...]:
 
 def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
     expected = _expected_shapes()
-    if tuple(tensors) != TRACE_TENSORS:
-        raise Qwen3BStageTraceError("trace tensor names/order differ")
+    if set(tensors) != set(TRACE_TENSORS):
+        raise Qwen3BStageTraceError("trace tensor names differ")
     identities: set[int] = set()
     for name in TRACE_TENSORS:
         tensor = tensors[name]
@@ -776,8 +776,8 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         raise Qwen3BStageTraceError("trace sidecar metadata differs")
     _require_sha256(sidecar["sha256"], "trace sidecar SHA-256")
     tensors = _require_mapping(document["tensors"], "trace tensors")
-    if tuple(tensors) != TRACE_TENSORS:
-        raise Qwen3BStageTraceError("trace tensor names/order differ")
+    if set(tensors) != set(TRACE_TENSORS):
+        raise Qwen3BStageTraceError("trace tensor names differ")
     shapes = _expected_shapes()
     for name in TRACE_TENSORS:
         tensor = _require_mapping(tensors[name], f"trace tensor {name}")
