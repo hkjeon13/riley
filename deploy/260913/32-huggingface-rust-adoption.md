@@ -36,6 +36,16 @@ Candle 0.9.1 Qwen2는 BF16 RoPE table, BF16 softmax, Candle CUDA RMSNorm을 사�
 
 따라서 KV paging은 현 차이의 원인이 아니다. Riley와 HF의 후보 토큰 순서는 대체로 겹치지만, 실제 생성 가능한 vocabulary 영역에서도 값과 hash가 다르다. vLLM의 `374`는 별도로 설명해야 한다. HF Python artifact와 Rust test artifact의 pre/post I/O PSI는 외부 evidence에 보존했으며, 높은 I/O PSI를 결과 필터·가중치·보정에 사용하지 않는다.
 
+### HF-R0 execution receipt — 2026-09-15
+
+`13fe4fd7`에서 Candle 0.9.1 CUDA diagnostic을 RTX 4090에서 한 번 실행했다. artifact는 checkout 밖의 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-candle-oracle-20260915T171457Z/qwen3b-candle-raw-logits.json`에 create-only로 저장했고 SHA-256은 `1eb8e8b8…c193f73ba`다. Rust 1.85의 CPU test/clippy와 원격 CUDA 12.8 compile은 통과했다. 원격 first run의 296초에는 debug binary build와 checkpoint GPU materialization이 포함되어 있으므로 forward latency나 throughput으로 사용하지 않는다.
+
+| 실행 | 전체 BF16 행 SHA-256 | addressable 151,665 tokens SHA-256 | top-1 | logit(304) | logit(374) |
+|---|---|---|---:|---:|---:|
+| Candle 0.9.1 Qwen2 CUDA first forward | `3b3facf2…18bd78d5` | `bec504d4…44196f72` | 11 (`304`와 14.1875 동률) | 14.1875 | 14.125 |
+
+Candle과 HF top-32의 교집합은 30개다. `304`, `11`, `374`는 모두 두 결과의 가장 높은 후보군에 남았지만 raw hash는 다르다. Candle의 BF16 RoPE/softmax/RMSNorm과 internal KV write 때문에 이 row를 HF/Riley byte-equality 판정에 사용하지 않는다. run 전후 GPU idle memory는 모두 335 MiB였고 I/O PSI는 artifact 옆에 보존했다. I/O PSI는 이 numerical observation을 제외·가중·보정하는 데 사용하지 않는다.
+
 ## PR HF-R0 — Candle Qwen raw-logit diagnostic
 
 대상: [`tools/candle-qwen3b-oracle`](../../tools/candle-qwen3b-oracle)의 독립 nested diagnostics workspace와 Cargo lock. Riley server, scheduler, CUDA ABI, serving API에는 의존성을 연결하지 않는다.
