@@ -47,6 +47,7 @@ const QWEN3B_WORKLOAD_CASE: &str = "qwen3b-c8-p2048-o128";
 const QWEN3B_SERVING_WORKLOAD_SHA256: &str =
     "7a0a8fec31d45e397e1ec57335fa1c9de2d3da7daa9a32e9002a62763c05261e";
 const HF_GENERATION_ORACLE_SCHEMA: &str = "riley.qwen3b-hf-eager-generation.v1";
+const HF_CACHE_OFF_MODE: &str = "cache-off";
 const EXPECTED_SOURCE_ARCHITECTURE: &str = "Qwen2ForCausalLM";
 const EXPECTED_LAYER_COUNT: usize = 36;
 const EXPECTED_HIDDEN_SIZE: usize = 2_048;
@@ -338,7 +339,7 @@ fn load_hf_cache_off_oracle() -> TestResult<HfCacheOffOracle> {
         ],
         "HF cache-off generation",
     )?;
-    assert_eq!(cache_off["mode"].as_str(), Some("cache_off"));
+    assert_eq!(cache_off["mode"].as_str(), Some(HF_CACHE_OFF_MODE));
     assert_eq!(cache_off["fixed_output_token_count"].as_u64(), Some(128));
     let selected_token_ids = json_u32_array(
         &cache_off["selected_token_ids"],
@@ -955,7 +956,7 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
         "hf_generation_oracle": {
             "schema_version": HF_GENERATION_ORACLE_SCHEMA,
             "artifact_sha256": hf.artifact_sha256,
-            "mode": "cache_off",
+            "mode": HF_CACHE_OFF_MODE,
         },
         "modes": [trace_json(&strict), trace_json(&fused)],
     });

@@ -484,7 +484,7 @@ def validate_trace(document: Any) -> dict[str, Any]:
     _sha256(oracle["artifact_sha256"], "trace.hf_generation_oracle.artifact_sha256")
     _equal(
         _string(oracle["mode"], "trace.hf_generation_oracle.mode"),
-        "cache_off",
+        "cache-off",
         "trace.hf_generation_oracle.mode",
     )
     modes = trace["modes"]

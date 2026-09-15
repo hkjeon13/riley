@@ -144,7 +144,7 @@ def valid_trace() -> dict[str, object]:
         "hf_generation_oracle": {
             "schema_version": collector.HF_GENERATION_ORACLE_SCHEMA,
             "artifact_sha256": digest("hf-generation-oracle"),
-            "mode": "cache_off",
+            "mode": "cache-off",
         },
         "modes": [
             mode(collector.STRICT_PROJECTION_BIAS_BACKEND, teacher_token_ids),
