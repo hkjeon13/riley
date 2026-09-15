@@ -1,6 +1,6 @@
 # Hugging Face Rust 도입: serving 교체가 아닌 정확성·checkpoint 경계 — 2026-09-16
 
-상태: 조사와 Qwen2.5-3B raw-logit 대조를 완료했다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
+상태: 조사, Qwen2.5-3B raw-logit 대조, P0/V1 layer-0 pre-attention trace를 완료했다. 다음은 P0/V2 Q/K/V pre-bias trace다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
 
 ## 결정
 
@@ -45,6 +45,26 @@ Candle 0.9.1 Qwen2는 BF16 RoPE table, BF16 softmax, Candle CUDA RMSNorm을 사�
 | Candle 0.9.1 Qwen2 CUDA first forward | `3b3facf2…18bd78d5` | `bec504d4…44196f72` | 11 (`304`와 14.1875 동률) | 14.1875 | 14.125 |
 
 Candle과 HF top-32의 교집합은 30개다. `304`, `11`, `374`는 모두 두 결과의 가장 높은 후보군에 남았지만 raw hash는 다르다. Candle의 BF16 RoPE/softmax/RMSNorm과 internal KV write 때문에 이 row를 HF/Riley byte-equality 판정에 사용하지 않는다. run 전후 GPU idle memory는 모두 335 MiB였고 I/O PSI는 artifact 옆에 보존했다. I/O PSI는 이 numerical observation을 제외·가중·보정하는 데 사용하지 않는다.
+
+### P0/V1 — Qwen3B P2048 layer-0 pre-attention trace receipt — 2026-09-16
+
+외부 create-only artifact는 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-layer0-trace-20260915T175259Z-r2/`에 있다. Qwen2.5-3B-Instruct `aa8e72537993ba99e69dfaafa59ed015b17504d1`, BF16, RTX 4090, P2048의 token ID `3409`, `use_cache=false`, materialized reference attention으로 실행했다. source revision은 `37594b05`이며 trace source 범위는 clean이었다. comparison JSON SHA-256은 `96dd23bdd8441e001c725df004776006b55d8b22c91d0a4af43ec5baec5c9987`, HF manifest는 `aeacdf2ba3561fce238aaed91f761f270c2dbfe4011d658bacfdf005961472ff`, sidecar는 `b613146b1819891773272d2fffb0dde47545676b81fec2582f10897b71543d34`다.
+
+이 artifact는 `performance_claim_eligible=false`다. shared-host I/O full PSI가 높은 상태에서 발생한 load wall time은 serving throughput, TTFT, TPOT, vLLM 비교 결과가 아니다.
+
+| Stage | BF16 exact | 불일치 / 전체 | 최대 절대차 | 판정 |
+|---|---:|---:|---:|---|
+| `embedding` | 예 | 0 / 4,194,304 | 0 | exact |
+| `layer0.input_norm` | 예 | 0 / 4,194,304 | 0 | exact |
+| `layer0.q_proj` | 아니오 | 1,083,392 / 4,194,304 | 0.0625 | 첫 불일치 |
+| `layer0.k_proj` | 아니오 | 110,592 / 524,288 | 0.125 | projection 이후 차이 |
+| `layer0.v_proj` | 아니오 | 155,648 / 524,288 | 0.00390625 | projection 이후 차이 |
+| `layer0.q_rope` | 아니오 | 1,051,621 / 4,194,304 | 0.125 | upstream projection 차이를 포함 |
+| `layer0.k_rope` | 아니오 | 102,154 / 524,288 | 0.25 | upstream projection 차이를 포함 |
+
+V1의 Q/K/V projection capture는 Rust에서 `execute_projection_bias` 뒤에 수행된다. 따라서 projection GEMM의 reduction/layout 차이와 BF16 row-bias addition 차이를 이 결과만으로 구분할 수 없다.
+
+다음 P0/V2는 동일 pinned contract에서 Q/K/V의 pre-bias raw output을 별도 trace ID와 create-only artifact로 기록한다. V1 post-bias artifact는 보존한다. V2 pre-bias에서도 차이가 시작되면 GEMM 실행·reduction 경로를, pre-bias가 exact이고 post-bias에서만 차이가 생기면 bias-add 경로를 다음 진단 대상으로 삼는다. 어느 경우에도 이를 성능 개선 또는 serving correctness pass로 승격하지 않는다.
 
 ## PR HF-R0 — Candle Qwen raw-logit diagnostic
 
