@@ -582,11 +582,33 @@ mod source_contract_tests {
     }
 
     #[test]
-    fn qwen_rotary_trace_points_do_not_change_the_pinned_pr07_contract() {
+    fn qwen_extra_trace_points_do_not_change_the_pinned_pr07_contract() {
+        assert_eq!(LlamaTracePoint::ALL.len(), 18);
         assert!(!LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0QueryRotary));
         assert!(!LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0KeyRotary));
+        assert!(
+            !LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear)
+        );
+        assert!(
+            !LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear)
+        );
+        assert!(
+            !LlamaTracePoint::ALL.contains(&LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear)
+        );
         assert_eq!(LlamaTracePoint::Layer0QueryRotary.name(), "layer0.q_rope");
         assert_eq!(LlamaTracePoint::Layer0KeyRotary.name(), "layer0.k_rope");
+        assert_eq!(
+            LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear.name(),
+            "layer0.q_proj.unbiased_linear"
+        );
+        assert_eq!(
+            LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear.name(),
+            "layer0.k_proj.unbiased_linear"
+        );
+        assert_eq!(
+            LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear.name(),
+            "layer0.v_proj.unbiased_linear"
+        );
     }
 
     #[test]

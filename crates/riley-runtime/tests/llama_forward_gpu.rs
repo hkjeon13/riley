@@ -91,7 +91,9 @@ fn expected_shape(point: LlamaTracePoint) -> &'static [u64] {
     match point {
         LlamaTracePoint::Layer0KeyProjection
         | LlamaTracePoint::Layer0ValueProjection
-        | LlamaTracePoint::Layer0KeyRotary => KEY_VALUE,
+        | LlamaTracePoint::Layer0KeyRotary
+        | LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear
+        | LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear => KEY_VALUE,
         LlamaTracePoint::Layer0AttentionProbabilities => PROBABILITIES,
         LlamaTracePoint::Layer0AttentionContext => CONTEXT,
         LlamaTracePoint::Layer0GateProjection
@@ -102,6 +104,7 @@ fn expected_shape(point: LlamaTracePoint) -> &'static [u64] {
         | LlamaTracePoint::Layer0InputNorm
         | LlamaTracePoint::Layer0QueryProjection
         | LlamaTracePoint::Layer0QueryRotary
+        | LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear
         | LlamaTracePoint::Layer0AfterAttentionResidual
         | LlamaTracePoint::Layer0PostAttentionNorm
         | LlamaTracePoint::Layer0DownProjection

@@ -1,6 +1,6 @@
 # Hugging Face Rust 도입: serving 교체가 아닌 정확성·checkpoint 경계 — 2026-09-16
 
-상태: 조사, Qwen2.5-3B raw-logit 대조, P0/V1 layer-0 pre-attention trace를 완료했다. 다음은 P0/V2 Q/K/V pre-bias trace다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
+상태: 조사, Qwen2.5-3B raw-logit 대조, P0/V1 layer-0 pre-attention trace를 완료했다. P0/V2 Q/K/V bias-boundary trace 구현은 완료했고 원격 create-only artifact 실행이 남아 있다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
 
 ## 결정
 
@@ -64,7 +64,9 @@ Candle과 HF top-32의 교집합은 30개다. `304`, `11`, `374`는 모두 두 �
 
 V1의 Q/K/V projection capture는 Rust에서 `execute_projection_bias` 뒤에 수행된다. 따라서 projection GEMM의 reduction/layout 차이와 BF16 row-bias addition 차이를 이 결과만으로 구분할 수 없다.
 
-다음 P0/V2는 동일 pinned contract에서 Q/K/V의 pre-bias raw output을 별도 trace ID와 create-only artifact로 기록한다. V1 post-bias artifact는 보존한다. V2 pre-bias에서도 차이가 시작되면 GEMM 실행·reduction 경로를, pre-bias가 exact이고 post-bias에서만 차이가 생기면 bias-add 경로를 다음 진단 대상으로 삼는다. 어느 경우에도 이를 성능 개선 또는 serving correctness pass로 승격하지 않는다.
+다음 P0/V2는 동일 pinned contract에서 Q/K/V bias 경계를 별도 trace ID와 create-only artifact로 기록한다. Riley 쪽은 실제 standalone GEMM 직후와 별도 bias 연산 뒤를 각각 capture한다. HF 쪽의 `*.unbiased_linear`은 fused `nn.Linear`의 관측 불가능한 내부값이라고 주장하지 않고, unmodified module output을 먼저 capture한 뒤 같은 input·weight로 별도 실행한 `torch.nn.functional.linear(input, weight, bias=None)` shadow endpoint로 정의한다. V1 post-bias artifact는 보존한다.
+
+shadow no-bias endpoint에서도 차이가 시작되면 GEMM 실행·reduction·layout 후보를, shadow endpoint가 exact이고 real post-bias에서만 차이가 생기면 HF fused epilogue와 Riley의 BF16→FP32 add→BF16 staged rounding 경계를 다음 진단 대상으로 삼는다. 후자의 경우 row-bias kernel 오류로 단정하지 않고, 먼저 명시적 staged reference를 추가하는 V2b를 수행한다. 어느 경우에도 이를 성능 개선 또는 serving correctness pass로 승격하지 않는다.
 
 ## PR HF-R0 — Candle Qwen raw-logit diagnostic
 

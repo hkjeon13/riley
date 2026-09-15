@@ -41,7 +41,7 @@ const BF16_BYTES: u64 = 2;
 // logits + embedding-error scratch. Attention and GEMM workspaces are optional.
 const NON_ATTENTION_GRAPH_ALLOCATION_COUNT: u64 = 17;
 const TRACE_POINT_COUNT: usize = 18;
-const TRACE_STORAGE_POINT_COUNT: usize = 20;
+const TRACE_STORAGE_POINT_COUNT: usize = 23;
 
 /// Result type for preparing, executing, downloading, and closing PR07 forward state.
 pub type LlamaForwardResult<T> = Result<T, LlamaForwardError>;
@@ -111,6 +111,12 @@ pub enum LlamaTracePoint {
     Layer0QueryRotary,
     /// Layer-zero key after rotary positional embedding.
     Layer0KeyRotary,
+    /// Layer-zero query projection output before its bias addition.
+    Layer0QueryProjectionUnbiasedLinear,
+    /// Layer-zero key projection output before its bias addition.
+    Layer0KeyProjectionUnbiasedLinear,
+    /// Layer-zero value projection output before its bias addition.
+    Layer0ValueProjectionUnbiasedLinear,
 }
 
 impl LlamaTracePoint {
@@ -138,8 +144,8 @@ impl LlamaTracePoint {
 
     /// Every diagnostic checkpoint supported by the trace owner.
     ///
-    /// The two rotary checkpoints are deliberately outside of ALL because ALL
-    /// remains the immutable PR07 Hugging Face artifact contract.
+    /// Extra diagnostic checkpoints are deliberately outside of ALL because
+    /// ALL remains the immutable PR07 Hugging Face artifact contract.
     const STORAGE: [Self; TRACE_STORAGE_POINT_COUNT] = [
         Self::Embedding,
         Self::Layer0InputNorm,
@@ -161,9 +167,12 @@ impl LlamaTracePoint {
         Self::LastLogits,
         Self::Layer0QueryRotary,
         Self::Layer0KeyRotary,
+        Self::Layer0QueryProjectionUnbiasedLinear,
+        Self::Layer0KeyProjectionUnbiasedLinear,
+        Self::Layer0ValueProjectionUnbiasedLinear,
     ];
 
-    /// Canonical tensor name in the pinned PR07 trace manifest.
+    /// Stable tensor name used by trace artifacts.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -187,6 +196,9 @@ impl LlamaTracePoint {
             Self::LastLogits => "last_logits",
             Self::Layer0QueryRotary => "layer0.q_rope",
             Self::Layer0KeyRotary => "layer0.k_rope",
+            Self::Layer0QueryProjectionUnbiasedLinear => "layer0.q_proj.unbiased_linear",
+            Self::Layer0KeyProjectionUnbiasedLinear => "layer0.k_proj.unbiased_linear",
+            Self::Layer0ValueProjectionUnbiasedLinear => "layer0.v_proj.unbiased_linear",
         }
     }
 
@@ -720,7 +732,11 @@ fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaFor
     let bytes = match point {
         LlamaTracePoint::Layer0KeyProjection
         | LlamaTracePoint::Layer0ValueProjection
-        | LlamaTracePoint::Layer0KeyRotary => workspace.key_value_buffer_bytes(),
+        | LlamaTracePoint::Layer0KeyRotary
+        | LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear
+        | LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear => {
+            workspace.key_value_buffer_bytes()
+        }
         LlamaTracePoint::Layer0AttentionProbabilities => workspace.attention_buffer_bytes(),
         LlamaTracePoint::Layer0GateProjection
         | LlamaTracePoint::Layer0UpProjection
@@ -741,6 +757,7 @@ fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaFor
         | LlamaTracePoint::Layer0InputNorm
         | LlamaTracePoint::Layer0QueryProjection
         | LlamaTracePoint::Layer0QueryRotary
+        | LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear
         | LlamaTracePoint::Layer0AttentionContext
         | LlamaTracePoint::Layer0AfterAttentionResidual
         | LlamaTracePoint::Layer0PostAttentionNorm
@@ -2087,6 +2104,17 @@ impl PreparedLlamaForward {
                 stream,
                 query_site,
             )?;
+            if layer_index == 0 {
+                capture_trace(
+                    &mut trace,
+                    LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear,
+                    &mut buffers.hidden_projection,
+                    0,
+                    io_staging,
+                    stream,
+                    query_site,
+                )?;
+            }
             execute_projection_bias(
                 weights,
                 layer.query_bias(),
@@ -2118,6 +2146,17 @@ impl PreparedLlamaForward {
                 stream,
                 key_site,
             )?;
+            if layer_index == 0 {
+                capture_trace(
+                    &mut trace,
+                    LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear,
+                    &mut buffers.key_raw,
+                    0,
+                    io_staging,
+                    stream,
+                    key_site,
+                )?;
+            }
             execute_projection_bias(
                 weights,
                 layer.key_bias(),
@@ -2149,6 +2188,17 @@ impl PreparedLlamaForward {
                 stream,
                 value_site,
             )?;
+            if layer_index == 0 {
+                capture_trace(
+                    &mut trace,
+                    LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear,
+                    &mut buffers.value_raw,
+                    0,
+                    io_staging,
+                    stream,
+                    value_site,
+                )?;
+            }
             execute_projection_bias(
                 weights,
                 layer.value_bias(),
