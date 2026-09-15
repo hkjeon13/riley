@@ -102,6 +102,8 @@ def _capture() -> oracle.RawLogitCapture:
     values = tuple(float(oracle.TOP_K - index) for index in range(oracle.TOP_K))
     return oracle.RawLogitCapture(
         raw_bf16_le_sha256="d" * 64,
+        addressable_bf16_le_sha256="e" * 64,
+        non_addressable_bf16_le_sha256="f" * 64,
         argmax_token_id=token_ids[0],
         argmax_value_bf16_as_f32=values[0],
         top_token_ids=token_ids,
@@ -267,6 +269,12 @@ class Qwen3BServingOracleTests(unittest.TestCase):
                 tampered["contract"]["execution"]["use_cache"] = True
                 with self.assertRaisesRegex(
                     oracle.Qwen3BServingOracleError, "execution"
+                ):
+                    oracle.validate_oracle_artifact(tampered)
+                tampered = copy.deepcopy(artifact)
+                tampered["last_logits"]["addressable_bf16_le_bytes"] = 0
+                with self.assertRaisesRegex(
+                    oracle.Qwen3BServingOracleError, "raw-logit metadata"
                 ):
                     oracle.validate_oracle_artifact(tampered)
 

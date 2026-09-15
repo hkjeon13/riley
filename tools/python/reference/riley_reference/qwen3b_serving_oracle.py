@@ -30,9 +30,9 @@ from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-raw-logits.v1"
-ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-raw-logits"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-raw-logits-v1"
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-raw-logits.v2"
+ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-raw-logits-v2"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-raw-logits-v2"
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 MODEL_REVISION = "aa8e72537993ba99e69dfaafa59ed015b17504d1"
 WORKLOAD_SCHEMA_VERSION = "riley.n06a-d128-serving-workload.v1"
@@ -51,6 +51,8 @@ EXPECTED_PROMPT_TOKEN_ID = 3_409
 MODEL_VOCABULARY_SIZE = 151_936
 ADDRESSABLE_TOKEN_COUNT = 151_665
 RAW_LOGIT_BYTES = MODEL_VOCABULARY_SIZE * 2
+ADDRESSABLE_LOGIT_BYTES = ADDRESSABLE_TOKEN_COUNT * 2
+NON_ADDRESSABLE_LOGIT_BYTES = RAW_LOGIT_BYTES - ADDRESSABLE_LOGIT_BYTES
 TOP_K = 32
 PROBE_IDS = tuple(
     sorted(
@@ -155,6 +157,8 @@ class CheckpointManifest:
 @dataclass(frozen=True)
 class RawLogitCapture:
     raw_bf16_le_sha256: str
+    addressable_bf16_le_sha256: str
+    non_addressable_bf16_le_sha256: str
     argmax_token_id: int
     argmax_value_bf16_as_f32: float
     top_token_ids: tuple[int, ...]
@@ -897,9 +901,8 @@ class HuggingFaceQwen3BBackend:
                 raise Qwen3BServingOracleError(
                     "HF raw last logits contain non-finite values"
                 )
-            raw_bf16_le_sha256 = _sha256_bytes(
-                _canonical_bf16_le_bytes(last_logits, torch)
-            )
+            raw_bf16_le_bytes = _canonical_bf16_le_bytes(last_logits, torch)
+            raw_bf16_le_sha256 = _sha256_bytes(raw_bf16_le_bytes)
             values, token_ids = torch.topk(
                 last_logits.float(), k=TOP_K, largest=True, sorted=True
             )
@@ -911,6 +914,12 @@ class HuggingFaceQwen3BBackend:
             }
             return RawLogitCapture(
                 raw_bf16_le_sha256=raw_bf16_le_sha256,
+                addressable_bf16_le_sha256=_sha256_bytes(
+                    raw_bf16_le_bytes[:ADDRESSABLE_LOGIT_BYTES]
+                ),
+                non_addressable_bf16_le_sha256=_sha256_bytes(
+                    raw_bf16_le_bytes[ADDRESSABLE_LOGIT_BYTES:]
+                ),
                 argmax_token_id=top_token_ids[0],
                 argmax_value_bf16_as_f32=top_values[0],
                 top_token_ids=top_token_ids,
@@ -1075,6 +1084,10 @@ def build_oracle_artifact(
             "canonical_byte_order": "little-endian-u16",
             "raw_bf16_le_sha256": capture.raw_bf16_le_sha256,
             "raw_bf16_le_bytes": RAW_LOGIT_BYTES,
+            "addressable_bf16_le_sha256": capture.addressable_bf16_le_sha256,
+            "addressable_bf16_le_bytes": ADDRESSABLE_LOGIT_BYTES,
+            "non_addressable_bf16_le_sha256": capture.non_addressable_bf16_le_sha256,
+            "non_addressable_bf16_le_bytes": NON_ADDRESSABLE_LOGIT_BYTES,
             "argmax_token_id": capture.argmax_token_id,
             "argmax_value_bf16_as_f32": capture.argmax_value_bf16_as_f32,
             "top_k": TOP_K,
@@ -1373,6 +1386,10 @@ def validate_oracle_artifact(document: Mapping[str, object]) -> None:
             "canonical_byte_order",
             "raw_bf16_le_sha256",
             "raw_bf16_le_bytes",
+            "addressable_bf16_le_sha256",
+            "addressable_bf16_le_bytes",
+            "non_addressable_bf16_le_sha256",
+            "non_addressable_bf16_le_bytes",
             "argmax_token_id",
             "argmax_value_bf16_as_f32",
             "top_k",
@@ -1387,10 +1404,20 @@ def validate_oracle_artifact(document: Mapping[str, object]) -> None:
         or last_logits["element_count"] != MODEL_VOCABULARY_SIZE
         or last_logits["canonical_byte_order"] != "little-endian-u16"
         or last_logits["raw_bf16_le_bytes"] != RAW_LOGIT_BYTES
+        or last_logits["addressable_bf16_le_bytes"] != ADDRESSABLE_LOGIT_BYTES
+        or last_logits["non_addressable_bf16_le_bytes"] != NON_ADDRESSABLE_LOGIT_BYTES
         or last_logits["top_k"] != TOP_K
     ):
         raise Qwen3BServingOracleError("artifact raw-logit metadata differs")
     _require_sha256(last_logits["raw_bf16_le_sha256"], "artifact raw-logit SHA-256")
+    _require_sha256(
+        last_logits["addressable_bf16_le_sha256"],
+        "artifact addressable raw-logit SHA-256",
+    )
+    _require_sha256(
+        last_logits["non_addressable_bf16_le_sha256"],
+        "artifact non-addressable raw-logit SHA-256",
+    )
     top_ids = _require_u32_ids(
         last_logits["top_token_ids"],
         label="artifact top token IDs",
