@@ -85,7 +85,10 @@ N01_INDEX_ENV = "N01_REPEAT_CONTROL_INDEX"
 
 MAX_WORKLOAD_BYTES = 4 * 1024 * 1024
 MAX_MODEL_IDENTITY_MANIFEST_BYTES = 1 * 1024 * 1024
-MAX_MODEL_IDENTITY_METADATA_BYTES = 4 * 1024 * 1024
+# Qwen2.5-3B's tokenizer.json is about 7 MiB.  Keep metadata rehashing
+# bounded, while admitting the pinned tokenizer without treating it as a
+# multi-gigabyte checkpoint shard.
+MAX_MODEL_IDENTITY_METADATA_BYTES = 8 * 1024 * 1024
 MAX_MODEL_IDENTITY_GIT_OUTPUT_BYTES = 1 * 1024 * 1024
 MODEL_IDENTITY_GIT_TIMEOUT_SECONDS = 30.0
 MAX_STARTUP_LOG_BYTES = 8 * 1024 * 1024

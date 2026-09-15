@@ -325,6 +325,47 @@ class N06aPairedServingDriverTests(unittest.TestCase):
         )
         return driver._load_model_identity_manifest(manifest_path, model_path=model.resolve())
 
+    def test_model_identity_metadata_limit_admits_seven_mib_and_rejects_over_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            model = directory / "model"
+            model.mkdir()
+            tokenizer_payload = b"t" * (7 * 1024 * 1024)
+            shard_payload = b"fixture shard"
+            (model / "tokenizer.json").write_bytes(tokenizer_payload)
+            (model / "model-00001-of-00001.safetensors").write_bytes(shard_payload)
+            manifest_path = directory / "model-identity-manifest.json"
+            manifest = {
+                "schema_version": driver.MODEL_IDENTITY_MANIFEST_SCHEMA_VERSION,
+                "model_id": driver.MODEL_ID,
+                "model_revision": driver.MODEL_REVISION,
+                "model_path": str(model.resolve()),
+                "metadata_files": [
+                    {
+                        "path": "tokenizer.json",
+                        "size_bytes": len(tokenizer_payload),
+                        "sha256": hashlib.sha256(tokenizer_payload).hexdigest(),
+                    }
+                ],
+                "shards": [
+                    {
+                        "path": "model-00001-of-00001.safetensors",
+                        "size_bytes": len(shard_payload),
+                        "lfs_oid_sha256": hashlib.sha256(b"fixture-lfs-oid").hexdigest(),
+                    }
+                ],
+            }
+            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+            accepted = driver._load_model_identity_manifest(manifest_path, model_path=model.resolve())
+            self.assertEqual(driver.MAX_MODEL_IDENTITY_METADATA_BYTES, 8 * 1024 * 1024)
+            self.assertEqual(accepted.metadata_files[0].size_bytes, len(tokenizer_payload))
+
+            manifest["metadata_files"][0]["size_bytes"] = driver.MAX_MODEL_IDENTITY_METADATA_BYTES + 1
+            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(driver.DriverError, "model metadata size_bytes"):
+                driver._load_model_identity_manifest(manifest_path, model_path=model.resolve())
+
     def make_config(self, directory: Path) -> driver.DriverConfig:
         model = directory / "model"
         model.mkdir()

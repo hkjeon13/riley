@@ -107,7 +107,10 @@ and `lfs_oid_sha256`; the driver checks its size and the Git-LFS long-listing
 OID without rereading the full shard. Include every small metadata file and
 every serving shard once. A manifest whose revision, local path, small-file
 hash, shard size, Git HEAD, or LFS OID differs is rejected before a lane
-starts.
+starts. A metadata file may be at most 8 MiB; this admits the pinned
+Qwen2.5-3B `tokenizer.json` (7,031,645 bytes), which is still fully SHA-256
+rehashed for every paired attempt. Larger model payloads must remain shard entries and
+are validated by size plus their Git-LFS OID without a full payload reread.
 
 ## Docker vLLM command template
 

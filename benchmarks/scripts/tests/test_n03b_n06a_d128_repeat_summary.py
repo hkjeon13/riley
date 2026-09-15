@@ -201,6 +201,73 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             "model_identity_git_sha256": git_sha256,
         }
 
+    def test_model_identity_metadata_limit_replays_seven_mib_and_rejects_over_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            attempt = directory / "attempt"
+            attempt.mkdir()
+            fields = self.make_model_identity_artifacts(attempt, directory)
+            manifest_path = Path(fields["model_identity_manifest_path"])
+            validation_path = Path(fields["model_identity_validation_path"])
+            model = directory / "fixture-qwen-model"
+            tokenizer_payload = b"t" * (7 * 1024 * 1024)
+            (model / "tokenizer.json").write_bytes(tokenizer_payload)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["metadata_files"].append(
+                {
+                    "path": "tokenizer.json",
+                    "size_bytes": len(tokenizer_payload),
+                    "sha256": hashlib.sha256(tokenizer_payload).hexdigest(),
+                }
+            )
+
+            def write_bound_artifacts() -> dict[str, object]:
+                manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+                manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                validation["manifest_sha256"] = manifest_sha256
+                validation_path.write_text(json.dumps(validation, sort_keys=True) + "\n", encoding="utf-8")
+                validation_sha256 = hashlib.sha256(validation_path.read_bytes()).hexdigest()
+                fields["model_identity_manifest_sha256"] = manifest_sha256
+                fields["model_identity_validation_sha256"] = validation_sha256
+                return {
+                    "launch_provenance": {
+                        "model_identity": {
+                            "path": fields["model_identity_manifest_path"],
+                            "sha256": manifest_sha256,
+                            "source_path": fields["model_identity_manifest_path"],
+                            "source_sha256": manifest_sha256,
+                            "validation_path": fields["model_identity_validation_path"],
+                            "validation_sha256": validation_sha256,
+                            "git_path": fields["model_identity_git_path"],
+                            "git_sha256": fields["model_identity_git_sha256"],
+                        }
+                    }
+                }
+
+            config = write_bound_artifacts()
+            record = {"model_id": summary.QWEN_MODEL_ID, "model_revision": summary.QWEN_MODEL_REVISION}
+            accepted = summary._validate_model_identity_artifacts(
+                fields=fields,
+                config=config,
+                record=record,
+                attempt_dir=attempt.resolve(),
+                label="fixture",
+            )
+            self.assertEqual(summary.MAX_MODEL_IDENTITY_METADATA_BYTES, 8 * 1024 * 1024)
+            self.assertEqual(accepted["metadata_file_count"], 3)
+
+            manifest["metadata_files"][-1]["size_bytes"] = summary.MAX_MODEL_IDENTITY_METADATA_BYTES + 1
+            config = write_bound_artifacts()
+            with self.assertRaisesRegex(summary.SummaryError, "model metadata\\[2\\] identity is invalid"):
+                summary._validate_model_identity_artifacts(
+                    fields=fields,
+                    config=config,
+                    record=record,
+                    attempt_dir=attempt.resolve(),
+                    label="fixture",
+                )
+
     def make_attempt_directory(self, directory: Path, *, index: int, pair_order: str) -> Path:
         attempt = directory / "paired-driver" / f"timed-{index:03d}"
         attempt.mkdir(parents=True)

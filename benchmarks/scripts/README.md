@@ -171,7 +171,10 @@ Python일 수 있지만 Riley serving runtime의 Rust→native ABI→CUDA 경로
 exact `--model-path`, small metadata file의 size/SHA-256, 그리고 large shard의
 size/Git-LFS OID를 기록한다. driver는 small file만 rehash하고
 `git -C <model-path> rev-parse HEAD` 및 `git -C <model-path> lfs ls-files -l`로
-large shard OID를 검증한다. vLLM template도 exact
+large shard OID를 검증한다. small metadata file은 파일별 최대 8 MiB이며,
+Qwen2.5-3B `tokenizer.json`(7,031,645 bytes)은 각 paired attempt에서 full SHA-256 rehash
+대상이다. 이를 넘는 large shard는 payload를 reread하지 않고 size/Git-LFS OID로
+검증한다. vLLM template도 exact
 `vllm/vllm-openai@<digest>`, separate `--network host`, `--ipc host`,
 `--gpus device=0`, `{model_path}:/model:ro`, `--model /model`,
 `--served-model-name {model_id}`를 요구한다. 전체 schema와 invocation은
