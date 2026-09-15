@@ -1990,6 +1990,7 @@ mod cuda_backend {
         attention_prefill: &'static str,
         attention_decode: &'static str,
         gemm_reduction_policy: &'static str,
+        projection_bias_backend: &'static str,
         residual_rmsnorm: &'static str,
         cross_profile_fallback: &'static str,
         runtime_selection: &'static str,
@@ -2036,6 +2037,7 @@ mod cuda_backend {
                 attention_prefill: executor.prefill_attention_implementation_id(),
                 attention_decode: executor.decode_attention_implementation_id(),
                 gemm_reduction_policy: executor.gemm_reduction_policy_aggregate_id(),
+                projection_bias_backend: executor.projection_bias_backend_id(),
                 residual_rmsnorm: executor.residual_rmsnorm_implementation_id(),
                 cross_profile_fallback: "forbidden",
                 runtime_selection: executor.runtime_selection_policy_id(),
@@ -2095,6 +2097,12 @@ mod cuda_backend {
         #[must_use]
         pub const fn gemm_reduction_policy(&self) -> &'static str {
             self.gemm_reduction_policy
+        }
+
+        /// Q/K/V projection-bias mode bound to the cold-prepared executor.
+        #[must_use]
+        pub const fn projection_bias_backend(&self) -> &'static str {
+            self.projection_bias_backend
         }
 
         /// Prepared residual-plus-RMSNorm mode for the C02 experimental flag map.

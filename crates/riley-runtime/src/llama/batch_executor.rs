@@ -255,6 +255,17 @@ impl PreparedLlamaBatchExecutor {
         self.owner.forward.reduction_profile().id()
     }
 
+    /// Stable ID of the Q/K/V bias implementation selected during cold
+    /// preparation.
+    ///
+    /// This reports the prepared forward owner's resolved mode rather than a
+    /// caller preference, so serving startup receipts can bind an experiment
+    /// to the executor that actually owns its plans.
+    #[must_use]
+    pub const fn projection_bias_backend_id(&self) -> &'static str {
+        self.owner.forward.projection_bias_mode().id()
+    }
+
     /// Stable C02 value for the residual-plus-RMSNorm implementation.
     #[must_use]
     pub const fn residual_rmsnorm_implementation_id(&self) -> &'static str {

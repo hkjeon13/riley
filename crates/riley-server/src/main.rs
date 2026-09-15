@@ -1140,6 +1140,23 @@ fn native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
     ))
 }
 
+#[cfg(any(feature = "cuda", test))]
+fn projection_bias_backend_startup_receipt(
+    requested_backend: ProjectionBiasBackendMode,
+    resolved_backend: &str,
+) -> Result<String, String> {
+    if requested_backend.cli_id() != resolved_backend {
+        return Err(format!(
+            "projection bias requested backend {} resolved unexpected backend {resolved_backend}",
+            requested_backend.cli_id(),
+        ));
+    }
+    Ok(format!(
+        "RILEY_PROJECTION_BIAS requested_backend={} resolved_backend={resolved_backend} fallback_reason=none",
+        requested_backend.cli_id(),
+    ))
+}
+
 #[cfg(not(feature = "cuda"))]
 fn run_serve(
     options: ServeOptions,
@@ -1414,6 +1431,13 @@ fn run_serve(
     } else {
         None
     };
+    let projection_bias_startup_receipt = {
+        let facts = resources.effective_runtime_facts();
+        projection_bias_backend_startup_receipt(
+            options.projection_bias_backend,
+            facts.projection_bias_backend(),
+        )?
+    };
     let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
         Some(c02) => {
             let facts = resources.effective_runtime_facts();
@@ -1503,6 +1527,7 @@ fn run_serve(
     if let Some(receipt) = native_d128_two_stage_startup_receipt {
         eprintln!("{receipt}");
     }
+    eprintln!("{projection_bias_startup_receipt}");
     println!(
         "riley listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
         server.local_address(),
@@ -3234,8 +3259,8 @@ mod tests {
         native_bf16_paged_split_gqa_d128_two_stage_context_supported,
         native_bf16_paged_split_gqa_d128_two_stage_geometry_supported,
         native_bf16_paged_split_gqa_d128_two_stage_startup_receipt, parse_arguments,
-        validate_reduction_profile_context, validate_shutdown_metrics_path,
-        write_c02_startup_artifact, write_shutdown_metrics,
+        projection_bias_backend_startup_receipt, validate_reduction_profile_context,
+        validate_shutdown_metrics_path, write_c02_startup_artifact, write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -5049,6 +5074,33 @@ mod tests {
         assert!(
             native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
                 "riley.cuda.ragged-paged-attention.legacy-d64-v1"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn projection_bias_receipt_binds_the_prepared_backend_without_fallback() {
+        assert_eq!(
+            projection_bias_backend_startup_receipt(
+                ProjectionBiasBackendMode::StrictStagedV1,
+                "strict-staged-v1",
+            )
+            .expect("strict selection"),
+            "RILEY_PROJECTION_BIAS requested_backend=strict-staged-v1 resolved_backend=strict-staged-v1 fallback_reason=none"
+        );
+        assert_eq!(
+            projection_bias_backend_startup_receipt(
+                ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1,
+                "cublaslt-bias-epilogue-experimental-v1",
+            )
+            .expect("fused selection"),
+            "RILEY_PROJECTION_BIAS requested_backend=cublaslt-bias-epilogue-experimental-v1 resolved_backend=cublaslt-bias-epilogue-experimental-v1 fallback_reason=none"
+        );
+        assert!(
+            projection_bias_backend_startup_receipt(
+                ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1,
+                "strict-staged-v1",
             )
             .is_err()
         );
