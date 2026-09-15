@@ -20,6 +20,8 @@ import n03b_n06a_d128_repeat_summary as summary
 
 
 VLLM_IMAGE_DIGEST = "sha256:" + "a" * 64
+STRICT_PROJECTION_BIAS_BACKEND = "strict-staged-v1"
+EXPERIMENTAL_PROJECTION_BIAS_BACKEND = "cublaslt-bias-epilogue-experimental-v1"
 
 
 def psi(value: float) -> dict[str, object]:
@@ -93,14 +95,25 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         self.assertTrue(changed)
         stdout_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    def make_startup_snapshot(self, directory: Path) -> Path:
+    def make_startup_snapshot(
+        self,
+        directory: Path,
+        *,
+        projection_bias_backend: str = STRICT_PROJECTION_BIAS_BACKEND,
+        projection_bias_resolved_backend: str | None = None,
+        projection_bias_fallback_reason: str = "none",
+    ) -> Path:
         path = directory / "riley.startup.stderr.log"
         path.write_text(
             "RILEY_DECODE_ATTENTION "
             "requested_backend=native-bf16-paged-split-gqa-d128-two-stage "
             f"resolved_ragged_backend={summary.SERVING_IMPLEMENTATION_ID} "
             "fallback_reason=none query_heads=16 key_value_heads=2 head_size=128 "
-            "page_size=16 graph=false\n",
+            "page_size=16 graph=false\n"
+            "RILEY_PROJECTION_BIAS "
+            f"requested_backend={projection_bias_backend} "
+            f"resolved_backend={projection_bias_resolved_backend or projection_bias_backend} "
+            f"fallback_reason={projection_bias_fallback_reason}\n",
             encoding="utf-8",
         )
         return path
@@ -268,7 +281,14 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                     label="fixture",
                 )
 
-    def make_attempt_directory(self, directory: Path, *, index: int, pair_order: str) -> Path:
+    def make_attempt_directory(
+        self,
+        directory: Path,
+        *,
+        index: int,
+        pair_order: str,
+        projection_bias_backend: str = STRICT_PROJECTION_BIAS_BACKEND,
+    ) -> Path:
         attempt = directory / "paired-driver" / f"timed-{index:03d}"
         attempt.mkdir(parents=True)
         prompt_token_ids = list(range(2_048))
@@ -360,6 +380,7 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                             "git_path": model_identity["model_identity_git_path"],
                             "git_sha256": model_identity["model_identity_git_sha256"],
                         },
+                        "riley_projection_bias_backend": projection_bias_backend,
                         "vllm_image_digest": VLLM_IMAGE_DIGEST,
                         "vllm_docker_container": {
                             "name": container_name,
@@ -422,6 +443,8 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                         model_identity["model_path"],
                         "--model-id",
                         summary.QWEN_MODEL_ID,
+                        "--projection-bias-backend",
+                        projection_bias_backend,
                     ],
                     "controller": {
                         "token_client_path": str(Path(summary.token_client.__file__).resolve()),
@@ -909,10 +932,25 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         ]
         if lane == "riley":
             assert startup_log is not None
+            projection_bias_backend = config["launch_provenance"]["riley_projection_bias_backend"]
             provenance["riley_startup_snapshot"] = {
                 "path": str(startup_log.resolve()),
                 "sha256": hashlib.sha256(startup_log.read_bytes()).hexdigest(),
-                "receipt": {},
+                "receipt": {
+                    "requested_backend": summary.REQUESTED_BACKEND_CLI_ID,
+                    "resolved_ragged_backend": summary.SERVING_IMPLEMENTATION_ID,
+                    "fallback_reason": "none",
+                    "query_heads": "16",
+                    "key_value_heads": "2",
+                    "head_size": "128",
+                    "page_size": "16",
+                    "graph": "false",
+                },
+                "projection_bias_receipt": {
+                    "requested_backend": projection_bias_backend,
+                    "resolved_backend": projection_bias_backend,
+                    "fallback_reason": "none",
+                },
             }
         else:
             assert vllm_startup is not None
@@ -988,6 +1026,7 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         artifacts: dict[str, str],
         riley_wall_ms: float = 800.0,
         vllm_wall_ms: float = 1_000.0,
+        projection_bias_backend: str = STRICT_PROJECTION_BIAS_BACKEND,
     ) -> str:
         output_tokens = 100 * 128
         wall_ms = riley_wall_ms if lane == "riley" else vllm_wall_ms
@@ -1042,6 +1081,9 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                 head_size="128",
                 page_size="16",
                 graph_capture_enabled="false",
+                projection_bias_backend_requested=projection_bias_backend,
+                projection_bias_backend_resolved=projection_bias_backend,
+                projection_bias_fallback_reason="none",
             )
         else:
             values.update(
@@ -1058,17 +1100,30 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         root: Path,
         *,
         statuses: tuple[str, ...] = ("succeeded", "failed", "succeeded"),
+        projection_bias_backends: tuple[str, ...] | None = None,
     ) -> Path:
         output = root / "serving-evidence"
         output.mkdir()
         runs: list[dict[str, object]] = []
+        if projection_bias_backends is None:
+            projection_bias_backends = (STRICT_PROJECTION_BIAS_BACKEND,) * len(statuses)
+        self.assertEqual(len(projection_bias_backends), len(statuses))
         for index, status in enumerate(statuses, start=1):
             stdout = output / f"timed-{index:03d}.stdout.log"
             stderr = output / f"timed-{index:03d}.stderr.log"
             if status == "succeeded":
                 pair_order = "riley-vllm" if index % 2 else "vllm-riley"
-                attempt = self.make_attempt_directory(output, index=index, pair_order=pair_order)
-                startup_log = self.make_startup_snapshot(attempt)
+                projection_bias_backend = projection_bias_backends[index - 1]
+                attempt = self.make_attempt_directory(
+                    output,
+                    index=index,
+                    pair_order=pair_order,
+                    projection_bias_backend=projection_bias_backend,
+                )
+                startup_log = self.make_startup_snapshot(
+                    attempt,
+                    projection_bias_backend=projection_bias_backend,
+                )
                 riley_wall_ms = 800.0 + index * 10.0
                 vllm_wall_ms = 1000.0 + index * 10.0
                 vllm_startup = self.make_vllm_startup_snapshots(attempt)
@@ -1107,6 +1162,7 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                     pair_order=pair_order,
                     artifacts=riley_artifacts,
                     riley_wall_ms=riley_wall_ms,
+                    projection_bias_backend=projection_bias_backend,
                 )
                 vllm_marker = self.serving_marker(
                     lane="vllm",
@@ -1387,6 +1443,90 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             serving["successful_outer_pair_observations"][0]["riley"]["startup_snapshot"]["marker_prefix"],
             summary.STARTUP_RECEIPT_PREFIX,
         )
+        first_riley = serving["successful_outer_pair_observations"][0]["riley"]
+        self.assertEqual(first_riley["projection_bias_backend_requested"], STRICT_PROJECTION_BIAS_BACKEND)
+        self.assertEqual(first_riley["projection_bias_backend_resolved"], STRICT_PROJECTION_BIAS_BACKEND)
+        self.assertEqual(first_riley["projection_bias_fallback_reason"], "none")
+        self.assertEqual(
+            first_riley["startup_snapshot"]["projection_bias_receipt"],
+            {
+                "marker_prefix": "RILEY_PROJECTION_BIAS",
+                "requested_backend": STRICT_PROJECTION_BIAS_BACKEND,
+                "resolved_backend": STRICT_PROJECTION_BIAS_BACKEND,
+                "fallback_reason": "none",
+            },
+        )
+
+    def test_projection_bias_backend_is_reader_bound_and_mixed_modes_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(
+                Path(temporary),
+                statuses=("succeeded",),
+                projection_bias_backends=(EXPERIMENTAL_PROJECTION_BIAS_BACKEND,),
+            )
+            serving = summary.summarize(serving_receipt=receipt_path)["serving"]
+            assert serving is not None
+            riley = serving["successful_outer_pair_observations"][0]["riley"]
+            self.assertEqual(
+                riley["projection_bias_backend_requested"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(
+                riley["projection_bias_backend_resolved"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(riley["projection_bias_fallback_reason"], "none")
+            self.assertEqual(
+                riley["startup_snapshot"]["projection_bias_receipt"]["resolved_backend"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            lines = stdout_path.read_text(encoding="utf-8").splitlines()
+            riley_marker = summary._parse_marker_tokens(
+                next(line for line in lines if "lane=riley" in line),
+                prefix=summary.SERVING_MARKER_PREFIX,
+                label="fixture Riley marker",
+            )
+            vllm_marker = summary._parse_marker_tokens(
+                next(line for line in lines if "lane=vllm" in line),
+                prefix=summary.SERVING_MARKER_PREFIX,
+                label="fixture vLLM marker",
+            )
+            self.assertEqual(
+                riley_marker["projection_bias_backend_requested"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertNotIn("projection_bias_backend_requested", vllm_marker)
+            attempt_config = json.loads(Path(riley_marker["attempt_config_path"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                attempt_config["launch_provenance"]["riley_projection_bias_backend"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertNotIn("--projection-bias-backend", attempt_config["vllm_argv"])
+
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="projection_bias_backend_resolved",
+                value=STRICT_PROJECTION_BIAS_BACKEND,
+            )
+            with self.assertRaises(summary.SummaryError) as raised:
+                summary.summarize(serving_receipt=receipt_path)
+            self.assertIn("projection", str(raised.exception).lower())
+
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(
+                Path(temporary),
+                statuses=("succeeded", "succeeded"),
+                projection_bias_backends=(
+                    STRICT_PROJECTION_BIAS_BACKEND,
+                    EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+                ),
+            )
+            with self.assertRaises(summary.SummaryError) as raised:
+                summary.summarize(serving_receipt=receipt_path)
+            self.assertIn("projection", str(raised.exception).lower())
 
     def test_lane_psi_unavailable_and_malformed_are_exposed_without_excluding_a_pair(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

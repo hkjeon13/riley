@@ -22,6 +22,27 @@ Only the retained phase produces marker metrics. All raw request rows, the
 warmup rows, startup snapshots, lane commands, log hashes, and cleanup receipts
 are written create-only under `--artifact-root/<phase>-<index>/`.
 
+## Riley projection-bias campaign mode
+
+`--projection-bias-backend` is a Riley-only launch control. It defaults to
+`strict-staged-v1`; the only candidate value is
+`cublaslt-bias-epilogue-experimental-v1`. The driver sends it only to
+`riley serve`, never to the vLLM Docker argv. It retains the selected value in
+the attempt launch provenance and requires Riley's frozen stderr snapshot to
+contain exactly one independent receipt:
+
+```text
+RILEY_PROJECTION_BIAS requested_backend=<selected-mode> resolved_backend=<selected-mode> fallback_reason=none
+```
+
+The existing `RILEY_DECODE_ATTENTION` receipt remains an exact D128 contract;
+the projection receipt does not extend or replace it. Missing, duplicate,
+malformed, fallback, or requested/resolved-mismatch projection receipts prevent
+a timed marker. Run `strict-staged-v1` and the experimental mode as separate
+N06-A AB/BA campaigns. The offline summary rejects a receipt that mixes modes
+between timed attempts, while preserving the same model, workload, concurrency,
+GPU, peak-memory, and unforced-vLLM controls for each campaign.
+
 The driver accepts only `CUDA_VISIBLE_DEVICES=0` and requires the Docker vLLM
 argv to contain exactly `--gpus device=0`. This makes Riley's `--device 0`,
 the Docker container, and the host `nvidia-smi --id=0` sampler refer to the
@@ -207,6 +228,7 @@ python3 benchmarks/scripts/n01_repeat_control.py \
        --model-identity-manifest /var/tmp/riley-n06a/qwen3b-model-identity.json \
        --model-git /usr/bin/git \
        --riley-binary /data/riley-serving-260915-n01/target/release/riley \
+       --projection-bias-backend strict-staged-v1 \
        --vllm-command-json /var/tmp/riley-n06a/vllm-v0.29.0.json \
        --vllm-image-digest sha256:<the-inspected-64-hex-digest> \
        --vllm-version-command-json /var/tmp/riley-n06a/vllm-v0.29.0-inspect.json \

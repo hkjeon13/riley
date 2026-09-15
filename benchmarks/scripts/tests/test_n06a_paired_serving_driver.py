@@ -20,6 +20,10 @@ import n03b_n06a_d128_repeat_summary as summary
 import n06a_paired_serving_driver as driver
 
 
+STRICT_PROJECTION_BIAS_BACKEND = "strict-staged-v1"
+EXPERIMENTAL_PROJECTION_BIAS_BACKEND = "cublaslt-bias-epilogue-experimental-v1"
+
+
 class FakeProcess:
     _next_pid = 90_000
 
@@ -45,9 +49,17 @@ class FakeProcess:
 
 
 class FakePopen:
-    def __init__(self, events: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        events: list[str] | None = None,
+        *,
+        projection_bias_receipt_backend: str | None = None,
+        projection_bias_fallback_reason: str = "none",
+    ) -> None:
         self.calls: list[tuple[str, ...]] = []
         self.events = events
+        self.projection_bias_receipt_backend = projection_bias_receipt_backend
+        self.projection_bias_fallback_reason = projection_bias_fallback_reason
 
     def __call__(self, argv: list[str], **kwargs: object) -> FakeProcess:
         if self.events is not None:
@@ -58,6 +70,9 @@ class FakePopen:
         stderr = kwargs["stderr"]
         assert hasattr(stdout, "write") and hasattr(stderr, "write")
         if "--decode-attention-backend" in argv:
+            projection_bias_index = argv.index("--projection-bias-backend")
+            projection_bias_backend = argv[projection_bias_index + 1]
+            receipt_backend = self.projection_bias_receipt_backend or projection_bias_backend
             stderr.write(
                 (
                     "RILEY_DECODE_ATTENTION "
@@ -65,6 +80,10 @@ class FakePopen:
                     f"resolved_ragged_backend={driver.RESOLVED_BACKEND_ID} "
                     "fallback_reason=none query_heads=16 key_value_heads=2 "
                     "head_size=128 page_size=16 graph=false\n"
+                    "RILEY_PROJECTION_BIAS "
+                    f"requested_backend={projection_bias_backend} "
+                    f"resolved_backend={receipt_backend} "
+                    f"fallback_reason={self.projection_bias_fallback_reason}\n"
                 ).encode("utf-8")
             )
         else:
@@ -366,7 +385,12 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             with self.assertRaisesRegex(driver.DriverError, "model metadata size_bytes"):
                 driver._load_model_identity_manifest(manifest_path, model_path=model.resolve())
 
-    def make_config(self, directory: Path) -> driver.DriverConfig:
+    def make_config(
+        self,
+        directory: Path,
+        *,
+        projection_bias_backend: str = STRICT_PROJECTION_BIAS_BACKEND,
+    ) -> driver.DriverConfig:
         model = directory / "model"
         model.mkdir()
         riley = directory / "riley"
@@ -427,6 +451,7 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             model_git=model_git.resolve(),
             model_git_sha256=hashlib.sha256(model_git.read_bytes()).hexdigest(),
             riley_binary=riley.resolve(),
+            projection_bias_backend=projection_bias_backend,
             vllm_template=tuple(json.loads(template_path.read_text(encoding="utf-8"))),
             vllm_command_path=template_path.resolve(),
             vllm_command_sha256=hashlib.sha256(template_path.read_bytes()).hexdigest(),
@@ -676,8 +701,13 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             self.assertEqual(len(markers), 2)
             riley_argv = driver._riley_argv(config)
             self.assertEqual(riley_argv[riley_argv.index("--batch-token-budget") + 1], "2")
+            self.assertEqual(
+                riley_argv[riley_argv.index("--projection-bias-backend") + 1],
+                STRICT_PROJECTION_BIAS_BACKEND,
+            )
             vllm_argv = driver._vllm_argv(config)
             self.assertEqual(vllm_argv[vllm_argv.index("--max-num-batched-tokens") + 1], "2")
+            self.assertNotIn("--projection-bias-backend", vllm_argv)
             self.assertIn("lane=vllm", markers[0])
             self.assertIn("lane=riley", markers[1])
             parsed_vllm = summary._parse_marker_tokens(
@@ -689,6 +719,16 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             self.assertEqual(parsed_vllm["backend_resolved"], "FLASH_ATTN")
             self.assertEqual(parsed_riley["batch_token_budget"], "2")
             self.assertEqual(parsed_riley["max_model_len"], "32")
+            self.assertEqual(
+                parsed_riley["projection_bias_backend_requested"],
+                STRICT_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(
+                parsed_riley["projection_bias_backend_resolved"],
+                STRICT_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(parsed_riley["projection_bias_fallback_reason"], "none")
+            self.assertNotIn("projection_bias_backend_requested", parsed_vllm)
             self.assertEqual([call["port"] for call in runner.calls], [18081, 18081, 18080, 18080])
             self.assertEqual([call["phase"] for call in runner.calls], ["server-warmup", "retained", "server-warmup", "retained"])
             self.assertTrue((attempt_dir / "vllm.server-warmup.requests.jsonl").is_file())
@@ -700,17 +740,144 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             self.assertTrue((attempt_dir / "riley.whole-gpu-memory.peak.json").is_file())
             attempt = json.loads((attempt_dir / "attempt.config.json").read_text(encoding="utf-8"))
             self.assertEqual(attempt["launch_provenance"]["riley_binary"]["sha256"], config.riley_binary_sha256)
+            self.assertEqual(
+                attempt["launch_provenance"]["riley_projection_bias_backend"],
+                STRICT_PROJECTION_BIAS_BACKEND,
+            )
             self.assertEqual(attempt["launch_provenance"]["vllm_command_template"]["sha256"], config.vllm_command_sha256)
             vllm_provenance = json.loads((attempt_dir / "vllm.provenance.json").read_text(encoding="utf-8"))
             self.assertEqual(vllm_provenance["vllm_startup_snapshot"]["backend_resolved"], "FLASH_ATTN")
             self.assertEqual(vllm_provenance["vllm_startup_snapshot"]["stdout_sha256"], hashlib.sha256((attempt_dir / "vllm.startup.stdout.log").read_bytes()).hexdigest())
             self.assertTrue(vllm_provenance["cleanup"]["container"]["cleanup_verified"])
             self.assertEqual(vllm_provenance["cleanup"]["container"]["final_state"], "absent")
+            riley_provenance = json.loads((attempt_dir / "riley.provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                riley_provenance["riley_startup_snapshot"]["projection_bias_receipt"],
+                {
+                    "requested_backend": STRICT_PROJECTION_BIAS_BACKEND,
+                    "resolved_backend": STRICT_PROJECTION_BIAS_BACKEND,
+                    "fallback_reason": "none",
+                },
+            )
             self.assertEqual(attempt["vllm_argv"].count("--name"), 1)
             self.assertEqual(
                 attempt["vllm_argv"][attempt["vllm_argv"].index("--name") + 1],
                 attempt["launch_provenance"]["vllm_docker_container"]["name"],
             )
+
+    def test_experimental_projection_bias_backend_is_riley_only_and_receipt_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            config = self.make_config(
+                directory,
+                projection_bias_backend=EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            popen = FakePopen()
+            attempt_dir, markers = driver.execute_pair(
+                config,
+                driver.AttemptContext(phase="timed", index=1),
+                dependencies=self.dependencies(popen, SyntheticRunner()),
+            )
+
+            riley_launch = next(call for call in popen.calls if "--decode-attention-backend" in call)
+            vllm_launch = next(call for call in popen.calls if "--decode-attention-backend" not in call)
+            self.assertEqual(
+                riley_launch[riley_launch.index("--projection-bias-backend") + 1],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertNotIn("--projection-bias-backend", vllm_launch)
+            marker_by_lane = {
+                summary._parse_marker_tokens(marker, prefix=driver.MARKER_PREFIX, label="fixture marker")["lane"]: marker
+                for marker in markers
+            }
+            riley_marker = summary._parse_marker_tokens(
+                marker_by_lane["riley"], prefix=driver.MARKER_PREFIX, label="fixture Riley marker"
+            )
+            vllm_marker = summary._parse_marker_tokens(
+                marker_by_lane["vllm"], prefix=driver.MARKER_PREFIX, label="fixture vLLM marker"
+            )
+            self.assertEqual(
+                riley_marker["projection_bias_backend_requested"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(
+                riley_marker["projection_bias_backend_resolved"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            self.assertEqual(riley_marker["projection_bias_fallback_reason"], "none")
+            self.assertNotIn("projection_bias_backend_requested", vllm_marker)
+            attempt = json.loads((attempt_dir / "attempt.config.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                attempt["launch_provenance"]["riley_projection_bias_backend"],
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+
+    def test_projection_bias_startup_receipt_requires_the_selected_backend_and_no_fallback(self) -> None:
+        invalid_receipts = (
+            {
+                "projection_bias_receipt_backend": STRICT_PROJECTION_BIAS_BACKEND,
+                "projection_bias_fallback_reason": "none",
+            },
+            {
+                "projection_bias_receipt_backend": EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+                "projection_bias_fallback_reason": "cublaslt-unavailable",
+            },
+        )
+        for invalid in invalid_receipts:
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                with self.assertRaises(driver.DriverError) as raised:
+                    driver.execute_pair(
+                        self.make_config(
+                            directory,
+                            projection_bias_backend=EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+                        ),
+                        driver.AttemptContext(phase="timed", index=1),
+                        dependencies=self.dependencies(FakePopen(**invalid), SyntheticRunner()),
+                    )
+                self.assertIn("projection", str(raised.exception).lower())
+                failure = directory / "artifacts" / "timed-001" / "attempt.failure.json"
+                self.assertEqual(json.loads(failure.read_text(encoding="utf-8"))["emitted_markers"], [])
+
+    def test_projection_bias_startup_receipt_must_be_unique_and_exact(self) -> None:
+        attention_receipt = (
+            "RILEY_DECODE_ATTENTION "
+            f"requested_backend={driver.REQUESTED_BACKEND_CLI_ID} "
+            f"resolved_ragged_backend={driver.RESOLVED_BACKEND_ID} "
+            "fallback_reason=none query_heads=16 key_value_heads=2 "
+            "head_size=128 page_size=16 graph=false\n"
+        )
+        valid_projection_receipt = (
+            "RILEY_PROJECTION_BIAS "
+            f"requested_backend={STRICT_PROJECTION_BIAS_BACKEND} "
+            f"resolved_backend={STRICT_PROJECTION_BIAS_BACKEND} fallback_reason=none\n"
+        )
+        cases = (
+            ("missing", "", "exactly one projection-bias"),
+            (
+                "duplicate",
+                valid_projection_receipt + valid_projection_receipt,
+                "exactly one projection-bias",
+            ),
+            (
+                "unsupported-field",
+                valid_projection_receipt.rstrip("\n") + " unexpected=value\n",
+                "fields differ",
+            ),
+        )
+        for name, projection_receipts, expected_error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                stderr_path = directory / "riley.stderr.log"
+                snapshot_path = directory / "riley.startup.stderr.log"
+                stderr_path.write_text(attention_receipt + projection_receipts, encoding="utf-8")
+                with self.assertRaisesRegex(driver.DriverError, expected_error):
+                    driver.capture_riley_startup_snapshot(
+                        stderr_path,
+                        snapshot_path,
+                        projection_bias_backend=STRICT_PROJECTION_BIAS_BACKEND,
+                    )
+                self.assertFalse(snapshot_path.exists())
 
     def test_lane_psi_artifacts_are_marker_bound_and_high_pressure_is_not_a_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1095,6 +1262,25 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             self.assertEqual(config.vllm_backend_requested, driver.VLLM_AUTO_BACKEND_REQUESTED)
             self.assertEqual(config.vllm_image_digest, digest)
             self.assertEqual(config.vllm_gpu_memory_utilization, "0.65")
+            self.assertEqual(config.projection_bias_backend, STRICT_PROJECTION_BIAS_BACKEND)
+            arguments.projection_bias_backend = EXPERIMENTAL_PROJECTION_BIAS_BACKEND
+            candidate_config = driver.build_config(arguments)
+            self.assertEqual(
+                candidate_config.projection_bias_backend,
+                EXPERIMENTAL_PROJECTION_BIAS_BACKEND,
+            )
+            arguments.projection_bias_backend = "unsupported-projection-bias-backend"
+            with self.assertRaisesRegex(driver.DriverError, "projection-bias-backend"):
+                driver.build_config(arguments)
+            arguments.projection_bias_backend = STRICT_PROJECTION_BIAS_BACKEND
+            vllm_projection_flag = list(template)
+            vllm_projection_flag.extend(
+                ["--projection-bias-backend", STRICT_PROJECTION_BIAS_BACKEND]
+            )
+            template_path.write_text(json.dumps(vllm_projection_flag), encoding="utf-8")
+            with self.assertRaisesRegex(driver.DriverError, "projection-bias"):
+                driver.build_config(arguments)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
             wrong_image = list(template)
             image_index = wrong_image.index("vllm/vllm-openai@" + digest)
             wrong_image[image_index] = "untrusted-vllm:latest"

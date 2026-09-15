@@ -56,6 +56,7 @@ WORKLOAD_SCHEMA_VERSION = "riley.n06a-d128-serving-workload.v1"
 ARTIFACT_SCHEMA_VERSION = "riley.n06a-paired-serving-attempt.v1"
 MARKER_PREFIX = "riley-n06a-d128-serving"
 STARTUP_RECEIPT_PREFIX = "RILEY_DECODE_ATTENTION"
+PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX = "RILEY_PROJECTION_BIAS"
 REQUESTED_BACKEND_CLI_ID = "native-bf16-paged-split-gqa-d128-two-stage"
 RESOLVED_BACKEND_ID = (
     "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa."
@@ -75,6 +76,16 @@ VLLM_KV_CACHE_DTYPE = "bfloat16"
 VLLM_DTYPE_FLAG = "--dtype"
 VLLM_DTYPE = "bfloat16"
 VLLM_AUTO_BACKEND_REQUESTED = "vllm-auto"
+PROJECTION_BIAS_BACKEND_STRICT_STAGED_V1 = "strict-staged-v1"
+PROJECTION_BIAS_BACKEND_CUBLASLT_BIAS_EPILOGUE_EXPERIMENTAL_V1 = (
+    "cublaslt-bias-epilogue-experimental-v1"
+)
+PROJECTION_BIAS_BACKENDS = frozenset(
+    {
+        PROJECTION_BIAS_BACKEND_STRICT_STAGED_V1,
+        PROJECTION_BIAS_BACKEND_CUBLASLT_BIAS_EPILOGUE_EXPERIMENTAL_V1,
+    }
+)
 VLLM_IMAGE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 VLLM_BACKEND_RECEIPT_REGEX_PATTERN = (
     r"Using (?P<backend_resolved>[A-Z0-9_]+) attention backend out of potential backends:"
@@ -256,6 +267,7 @@ class DriverConfig:
     model_git: Path
     model_git_sha256: str
     riley_binary: Path
+    projection_bias_backend: str
     vllm_template: tuple[str, ...]
     vllm_command_path: Path
     vllm_command_sha256: str
@@ -589,6 +601,7 @@ class StartupSnapshot:
     path: Path
     sha256: str
     receipt: Mapping[str, str]
+    projection_bias_receipt: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -1518,6 +1531,11 @@ def _require_vllm_fairness_template(template: Sequence[str], *, image_digest: st
         )
     if any(token == "--attention-backend" or token.startswith("--attention-backend=") for token in template):
         raise DriverError("vllm-command-json must leave vLLM attention backend auto-selected")
+    if any(
+        token == "--projection-bias-backend" or token.startswith("--projection-bias-backend=")
+        for token in template
+    ):
+        raise DriverError("vllm-command-json must not receive Riley's projection-bias backend control")
     if _option_values(template, VLLM_DTYPE_FLAG, label="vllm-command-json") != [VLLM_DTYPE]:
         raise DriverError(f"vllm-command-json must set exactly one {VLLM_DTYPE_FLAG}={VLLM_DTYPE}")
     if _option_values(template, VLLM_KV_CACHE_DTYPE_FLAG, label="vllm-command-json") != [VLLM_KV_CACHE_DTYPE]:
@@ -1604,6 +1622,13 @@ def build_config(args: argparse.Namespace) -> DriverConfig:
         label="model-git",
     )
     riley_binary = _resolve_existing_file(args.riley_binary, "riley-binary", executable=True)
+    projection_bias_backend = _require_string(
+        args.projection_bias_backend,
+        "projection-bias-backend",
+    )
+    if projection_bias_backend not in PROJECTION_BIAS_BACKENDS:
+        allowed = ", ".join(sorted(PROJECTION_BIAS_BACKENDS))
+        raise DriverError(f"projection-bias-backend must be one of: {allowed}")
     vllm_template = _load_argv_template(args.vllm_command_json, label="vllm-command-json")
     vllm_command_path, _, vllm_command_sha256 = _sha256_file(
         args.vllm_command_json,
@@ -1697,6 +1722,7 @@ def build_config(args: argparse.Namespace) -> DriverConfig:
         model_git=model_git,
         model_git_sha256=model_git_sha256,
         riley_binary=riley_binary,
+        projection_bias_backend=projection_bias_backend,
         vllm_template=vllm_template,
         vllm_command_path=vllm_command_path,
         vllm_command_sha256=vllm_command_sha256,
@@ -2176,6 +2202,8 @@ def _riley_argv(config: DriverConfig) -> tuple[str, ...]:
         "disabled",
         "--decode-attention-backend",
         REQUESTED_BACKEND_CLI_ID,
+        "--projection-bias-backend",
+        config.projection_bias_backend,
         "--reduction-profile",
         "canonical-v1",
         "--sampling-backend",
@@ -2345,28 +2373,48 @@ def _parse_marker_fields(line: str, *, prefix: str, label: str) -> dict[str, str
     return fields
 
 
-def capture_riley_startup_snapshot(stderr_path: Path, destination: Path) -> StartupSnapshot:
-    """Copy current Riley stderr once and validate its actual D128 startup receipt."""
+def _riley_startup_receipts(
+    text: str,
+    *,
+    prefix: str,
+    label: str,
+) -> list[dict[str, str]]:
+    """Collect one exact marker-shaped startup receipt per matching log line."""
+    receipts: list[dict[str, str]] = []
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        offset = line.find(prefix)
+        if offset < 0:
+            continue
+        if line.find(prefix, offset + len(prefix)) >= 0:
+            raise DriverError(f"{label} line {line_number} contains two {prefix} startup receipts")
+        receipts.append(
+            _parse_marker_fields(
+                line[offset:],
+                prefix=prefix,
+                label=f"{label} line {line_number}",
+            )
+        )
+    return receipts
+
+
+def capture_riley_startup_snapshot(
+    stderr_path: Path,
+    destination: Path,
+    *,
+    projection_bias_backend: str,
+) -> StartupSnapshot:
+    """Copy Riley stderr and bind both D128 and projection-bias runtime receipts."""
     _, payload, sha256 = _sha256_file(stderr_path, maximum_bytes=MAX_STARTUP_LOG_BYTES, label="Riley stderr")
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
         raise DriverError("Riley stderr is not UTF-8 before startup snapshot") from error
-    receipts: list[dict[str, str]] = []
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        offset = line.find(STARTUP_RECEIPT_PREFIX)
-        if offset < 0:
-            continue
-        if line.find(STARTUP_RECEIPT_PREFIX, offset + len(STARTUP_RECEIPT_PREFIX)) >= 0:
-            raise DriverError(f"Riley stderr line {line_number} contains two startup receipts")
-        receipts.append(
-            _parse_marker_fields(
-                line[offset:],
-                prefix=STARTUP_RECEIPT_PREFIX,
-                label=f"Riley stderr line {line_number}",
-            )
-        )
+    receipts = _riley_startup_receipts(
+        text,
+        prefix=STARTUP_RECEIPT_PREFIX,
+        label="Riley stderr",
+    )
     if len(receipts) != 1:
         raise DriverError("Riley startup stderr must contain exactly one D128 startup receipt before measurement")
     receipt = receipts[0]
@@ -2394,8 +2442,33 @@ def capture_riley_startup_snapshot(stderr_path: Path, destination: Path) -> Star
     }
     if receipt != expected_values:
         raise DriverError("Riley startup receipt did not resolve the expected graph-disabled D128 backend")
+    projection_receipts = _riley_startup_receipts(
+        text,
+        prefix=PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX,
+        label="Riley stderr",
+    )
+    if len(projection_receipts) != 1:
+        raise DriverError(
+            "Riley startup stderr must contain exactly one projection-bias startup receipt before measurement"
+        )
+    projection_bias_receipt = projection_receipts[0]
+    expected_projection_fields = {"requested_backend", "resolved_backend", "fallback_reason"}
+    if set(projection_bias_receipt) != expected_projection_fields:
+        raise DriverError("Riley projection-bias startup receipt fields differ from N06-A contract")
+    expected_projection_values = {
+        "requested_backend": projection_bias_backend,
+        "resolved_backend": projection_bias_backend,
+        "fallback_reason": "none",
+    }
+    if projection_bias_receipt != expected_projection_values:
+        raise DriverError("Riley projection-bias startup receipt did not resolve the requested backend")
     _write_bytes_create_only(destination, payload)
-    return StartupSnapshot(path=destination.resolve(strict=True), sha256=sha256, receipt=receipt)
+    return StartupSnapshot(
+        path=destination.resolve(strict=True),
+        sha256=sha256,
+        receipt=receipt,
+        projection_bias_receipt=projection_bias_receipt,
+    )
 
 
 def _capture_log_snapshot(source: Path, destination: Path, *, label: str) -> tuple[Path, bytes, str]:
@@ -3130,11 +3203,21 @@ def _marker_values(
     if measurement.lane == "riley":
         if startup_snapshot is None:
             raise DriverError("Riley marker requires its startup stderr snapshot")
+        projection_bias_receipt = startup_snapshot.projection_bias_receipt
+        if projection_bias_receipt != {
+            "requested_backend": config.projection_bias_backend,
+            "resolved_backend": config.projection_bias_backend,
+            "fallback_reason": "none",
+        }:
+            raise DriverError("Riley marker requires the requested projection-bias backend receipt")
         values.update(
             {
                 "backend_requested": REQUESTED_BACKEND_CLI_ID,
                 "backend_resolved": RESOLVED_BACKEND_ID,
                 "fallback_reason": "none",
+                "projection_bias_backend_requested": projection_bias_receipt["requested_backend"],
+                "projection_bias_backend_resolved": projection_bias_receipt["resolved_backend"],
+                "projection_bias_fallback_reason": projection_bias_receipt["fallback_reason"],
                 "startup_log_path": str(startup_snapshot.path),
                 "startup_log_sha256": startup_snapshot.sha256,
                 "query_heads": "16",
@@ -3283,7 +3366,11 @@ def _run_lane(
         # lifecycle clock for the retained phase.
         ready = {**dict(ready_result), "ready_ns": dependencies.monotonic_ns()}
         if lane == "riley":
-            snapshot = capture_riley_startup_snapshot(process.stderr_path, attempt_dir / "riley.startup.stderr.log")
+            snapshot = capture_riley_startup_snapshot(
+                process.stderr_path,
+                attempt_dir / "riley.startup.stderr.log",
+                projection_bias_backend=config.projection_bias_backend,
+            )
         else:
             vllm_snapshot = capture_vllm_startup_snapshot(
                 stdout_path=process.stdout_path,
@@ -3491,6 +3578,7 @@ def _run_lane(
                     "path": str(snapshot.path),
                     "sha256": snapshot.sha256,
                     "receipt": dict(snapshot.receipt),
+                    "projection_bias_receipt": dict(snapshot.projection_bias_receipt),
                 }
             if vllm_snapshot is not None:
                 provenance["vllm_startup_snapshot"] = {
@@ -3613,6 +3701,7 @@ def execute_pair(
                     "git_sha256": config.model_git_sha256,
                 },
                 "riley_binary": {"path": str(config.riley_binary), "sha256": config.riley_binary_sha256},
+                "riley_projection_bias_backend": config.projection_bias_backend,
                 "vllm_command_template": {"path": str(config.vllm_command_path), "sha256": config.vllm_command_sha256},
                 "vllm_host_launcher": {"path": str(Path(config.vllm_template[0]).resolve()), "sha256": config.vllm_launcher_sha256},
                 "vllm_image_digest": config.vllm_image_digest,
@@ -3747,6 +3836,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="absolute git executable used for bounded rev-parse and git-lfs metadata validation",
     )
     parser.add_argument("--riley-binary", required=True, type=Path, help="absolute CUDA-enabled riley executable")
+    parser.add_argument(
+        "--projection-bias-backend",
+        default=PROJECTION_BIAS_BACKEND_STRICT_STAGED_V1,
+        choices=sorted(PROJECTION_BIAS_BACKENDS),
+        help=(
+            "Riley-only Q/K/V projection-bias mode; each paired N06-A campaign must use one "
+            "fixed mode and the runtime startup receipt must resolve it exactly"
+        ),
+    )
     parser.add_argument("--vllm-command-json", required=True, type=Path, help="JSON argv template; use {port}, {model_path}, and {model_id} exactly once")
     parser.add_argument(
         "--vllm-image-digest",

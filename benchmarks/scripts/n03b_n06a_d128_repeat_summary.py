@@ -48,6 +48,7 @@ REPEAT_RECEIPT_SCHEMA_VERSION = "riley.n01-repeat-control-receipt.v1"
 SUMMARY_SCHEMA_VERSION = "riley.n03b-n06a-d128-repeat-summary.v1"
 SERVING_MARKER_PREFIX = "riley-n06a-d128-serving"
 STARTUP_RECEIPT_PREFIX = "RILEY_DECODE_ATTENTION"
+PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX = "RILEY_PROJECTION_BIAS"
 REQUESTED_BACKEND_CLI_ID = "native-bf16-paged-split-gqa-d128-two-stage"
 ATTEMPT_ARTIFACT_SCHEMA_VERSION = "riley.n06a-paired-serving-attempt.v1"
 RETAINED_PHASE_SCHEMA_VERSION = "riley.n06a-streaming-phase.v1"
@@ -58,6 +59,16 @@ VLLM_PREFIX_CACHING_DISABLED = "disabled"
 VLLM_GPU_MEMORY_UTILIZATION = "0.65"
 WHOLE_GPU_SAMPLED_PEAK_LIMIT_BYTES = 19_000_000_000
 VLLM_AUTO_BACKEND_REQUESTED = "vllm-auto"
+PROJECTION_BIAS_BACKEND_STRICT_STAGED_V1 = "strict-staged-v1"
+PROJECTION_BIAS_BACKEND_CUBLASLT_BIAS_EPILOGUE_EXPERIMENTAL_V1 = (
+    "cublaslt-bias-epilogue-experimental-v1"
+)
+PROJECTION_BIAS_BACKENDS = frozenset(
+    {
+        PROJECTION_BIAS_BACKEND_STRICT_STAGED_V1,
+        PROJECTION_BIAS_BACKEND_CUBLASLT_BIAS_EPILOGUE_EXPERIMENTAL_V1,
+    }
+)
 VLLM_IMAGE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 DOCKER_CONTAINER_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
 DOCKER_CONTAINER_CLEANUP_SCHEMA_VERSION = "riley.n06a-docker-container-cleanup.v1"
@@ -972,6 +983,30 @@ def _load_timed_stdout(receipt: RepeatReceipt, run: Mapping[str, Any]) -> tuple[
     return text, {"path": str(path), "sha256": sha256}
 
 
+def _startup_receipt_fields(
+    text: str,
+    *,
+    prefix: str,
+    marker_label: str,
+) -> list[dict[str, str]]:
+    receipts: list[dict[str, str]] = []
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        offset = line.find(prefix)
+        if offset < 0:
+            continue
+        if line.find(prefix, offset + len(prefix)) >= 0:
+            raise SummaryError(f"{marker_label} startup log line {line_number} has multiple {prefix} receipts")
+        receipts.append(
+            _parse_marker_tokens(
+                line[offset:],
+                prefix=prefix,
+                label=f"{marker_label} startup log line {line_number}",
+            )
+        )
+    return receipts
+
+
 def _validate_startup_snapshot(
     *, path_text: str, expected_sha256: str, marker_label: str
 ) -> dict[str, Any]:
@@ -991,21 +1026,11 @@ def _validate_startup_snapshot(
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
         raise SummaryError(f"{marker_label} startup log snapshot is not UTF-8") from error
-    receipt_fields: list[dict[str, str]] = []
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        offset = line.find(STARTUP_RECEIPT_PREFIX)
-        if offset < 0:
-            continue
-        if line.find(STARTUP_RECEIPT_PREFIX, offset + len(STARTUP_RECEIPT_PREFIX)) >= 0:
-            raise SummaryError(f"{marker_label} startup log line {line_number} has multiple receipts")
-        receipt_fields.append(
-            _parse_marker_tokens(
-                line[offset:],
-                prefix=STARTUP_RECEIPT_PREFIX,
-                label=f"{marker_label} startup log line {line_number}",
-            )
-        )
+    receipt_fields = _startup_receipt_fields(
+        text,
+        prefix=STARTUP_RECEIPT_PREFIX,
+        marker_label=marker_label,
+    )
     if len(receipt_fields) != 1:
         raise SummaryError(
             f"{marker_label} startup log snapshot must contain exactly one {STARTUP_RECEIPT_PREFIX} receipt"
@@ -1046,6 +1071,38 @@ def _validate_startup_snapshot(
     }
     if geometry != {"query_heads": 16, "key_value_heads": 2, "head_size": 128, "page_size": 16}:
         raise SummaryError(f"{marker_label} startup receipt geometry differs from Qwen D128")
+    projection_receipt_fields = _startup_receipt_fields(
+        text,
+        prefix=PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX,
+        marker_label=marker_label,
+    )
+    if len(projection_receipt_fields) != 1:
+        raise SummaryError(
+            f"{marker_label} startup log snapshot must contain exactly one "
+            f"{PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX} receipt"
+        )
+    projection_fields = projection_receipt_fields[0]
+    expected_projection_fields = {"requested_backend", "resolved_backend", "fallback_reason"}
+    if set(projection_fields) != expected_projection_fields:
+        missing = sorted(expected_projection_fields - set(projection_fields))
+        extra = sorted(set(projection_fields) - expected_projection_fields)
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if extra:
+            details.append("unsupported " + ", ".join(extra))
+        raise SummaryError(f"{marker_label} projection-bias startup receipt has " + "; ".join(details))
+    requested_projection_backend = projection_fields["requested_backend"]
+    resolved_projection_backend = projection_fields["resolved_backend"]
+    if (
+        requested_projection_backend not in PROJECTION_BIAS_BACKENDS
+        or resolved_projection_backend not in PROJECTION_BIAS_BACKENDS
+        or requested_projection_backend != resolved_projection_backend
+        or projection_fields["fallback_reason"] != "none"
+    ):
+        raise SummaryError(
+            f"{marker_label} projection-bias startup receipt must resolve one supported requested backend without fallback"
+        )
     return {
         "path": str(resolved),
         "sha256": observed_sha256,
@@ -1053,6 +1110,12 @@ def _validate_startup_snapshot(
         "requested_backend": fields["requested_backend"],
         "resolved_ragged_backend": fields["resolved_ragged_backend"],
         "geometry": geometry,
+        "projection_bias_receipt": {
+            "marker_prefix": PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX,
+            "requested_backend": requested_projection_backend,
+            "resolved_backend": resolved_projection_backend,
+            "fallback_reason": projection_fields["fallback_reason"],
+        },
     }
 
 
@@ -1952,6 +2015,11 @@ def _validate_retained_artifacts(
         raise SummaryError(f"{label} attempt config must enable vLLM chunked prefill exactly once")
     if any(token == "--attention-backend" or token.startswith("--attention-backend=") for token in vllm_argv):
         raise SummaryError(f"{label} attempt config must leave the vLLM attention backend auto-selected")
+    if any(
+        token == "--projection-bias-backend" or token.startswith("--projection-bias-backend=")
+        for token in vllm_argv
+    ):
+        raise SummaryError(f"{label} attempt config must not pass Riley projection-bias control into vLLM")
     if (
         vllm_argv.count("--network") != 1
         or any(token.startswith("--network=") for token in vllm_argv)
@@ -2001,6 +2069,29 @@ def _validate_retained_artifacts(
         raise SummaryError(f"{label} attempt config Riley argv does not use the pinned model path")
     if _argv_option_values(raw_riley_argv, "--model-id", label=f"{label} attempt config.riley_argv") != [record["model_id"]]:
         raise SummaryError(f"{label} attempt config Riley argv does not use the pinned served model id")
+    if lane == "riley":
+        projection_bias_backend = _require_string(
+            launch_provenance.get("riley_projection_bias_backend"),
+            f"{label} attempt config Riley projection-bias backend",
+        )
+        if projection_bias_backend not in PROJECTION_BIAS_BACKENDS:
+            raise SummaryError(f"{label} attempt config Riley projection-bias backend is unsupported")
+        if (
+            fields["projection_bias_backend_requested"] != projection_bias_backend
+            or fields["projection_bias_backend_resolved"] != projection_bias_backend
+            or fields["projection_bias_fallback_reason"] != "none"
+        ):
+            raise SummaryError(
+                f"{label} Riley projection-bias marker differs from its attempt configuration"
+            )
+        if _argv_option_values(
+            raw_riley_argv,
+            "--projection-bias-backend",
+            label=f"{label} attempt config.riley_argv",
+        ) != [projection_bias_backend]:
+            raise SummaryError(
+                f"{label} attempt config Riley argv must bind exactly one selected projection-bias backend"
+            )
     docker_container = _require_exact_keys(
         launch_provenance.get("vllm_docker_container"),
         {"name", "detached", "cleanup_schema_version"},
@@ -3096,12 +3187,35 @@ def _validate_lane_provenance(
 
     vllm_snapshot_paths: dict[str, str] | None = None
     if lane == "riley":
-        snapshot = _require_mapping(provenance.get("riley_startup_snapshot"), f"{label} Riley startup provenance")
+        snapshot = _require_exact_keys(
+            provenance.get("riley_startup_snapshot"),
+            {"path", "sha256", "receipt", "projection_bias_receipt"},
+            f"{label} Riley startup provenance",
+        )
         if (
             snapshot.get("path") != fields["startup_log_path"]
             or snapshot.get("sha256") != fields["startup_log_sha256"]
         ):
             raise SummaryError(f"{label} Riley startup provenance differs from its marker snapshot")
+        expected_attention_receipt = {
+            "requested_backend": fields["backend_requested"],
+            "resolved_ragged_backend": fields["backend_resolved"],
+            "fallback_reason": fields["fallback_reason"],
+            "query_heads": fields["query_heads"],
+            "key_value_heads": fields["key_value_heads"],
+            "head_size": fields["head_size"],
+            "page_size": fields["page_size"],
+            "graph": fields["graph_capture_enabled"],
+        }
+        if snapshot.get("receipt") != expected_attention_receipt:
+            raise SummaryError(f"{label} Riley D128 startup provenance receipt differs from its marker")
+        expected_projection_bias_receipt = {
+            "requested_backend": fields["projection_bias_backend_requested"],
+            "resolved_backend": fields["projection_bias_backend_resolved"],
+            "fallback_reason": fields["projection_bias_fallback_reason"],
+        }
+        if snapshot.get("projection_bias_receipt") != expected_projection_bias_receipt:
+            raise SummaryError(f"{label} Riley projection-bias startup provenance differs from its marker")
         riley_snapshot_path = Path(fields["startup_log_path"])
         if riley_snapshot_path.parent != attempt_dir or riley_snapshot_path.name != "riley.startup.stderr.log":
             raise SummaryError(f"{label} Riley startup snapshot must be the dedicated frozen lane stderr log")
@@ -3252,6 +3366,9 @@ RILEY_SERVING_FIELDS = SERVING_COMMON_FIELDS | {
     "backend_requested",
     "backend_resolved",
     "fallback_reason",
+    "projection_bias_backend_requested",
+    "projection_bias_backend_resolved",
+    "projection_bias_fallback_reason",
     "startup_log_path",
     "startup_log_sha256",
     "query_heads",
@@ -3465,6 +3582,18 @@ def _parse_serving_record(
             raise SummaryError(f"{label} geometry must be QH16/KVH2/D128/page16")
         if fields["graph_capture_enabled"] != "false":
             raise SummaryError(f"{label}.graph_capture_enabled must be false")
+        projection_bias_backend_requested = fields["projection_bias_backend_requested"]
+        projection_bias_backend_resolved = fields["projection_bias_backend_resolved"]
+        projection_bias_fallback_reason = fields["projection_bias_fallback_reason"]
+        if (
+            projection_bias_backend_requested not in PROJECTION_BIAS_BACKENDS
+            or projection_bias_backend_resolved not in PROJECTION_BIAS_BACKENDS
+            or projection_bias_backend_requested != projection_bias_backend_resolved
+            or projection_bias_fallback_reason != "none"
+        ):
+            raise SummaryError(
+                f"{label} must resolve one supported Riley projection-bias backend without fallback"
+            )
         startup_snapshot = _validate_startup_snapshot(
             path_text=fields["startup_log_path"],
             expected_sha256=fields["startup_log_sha256"],
@@ -3475,10 +3604,26 @@ def _parse_serving_record(
             or fields["backend_resolved"] != startup_snapshot["resolved_ragged_backend"]
         ):
             raise SummaryError(f"{label} backend fields differ from its startup receipt")
+        projection_bias_startup_receipt = _require_mapping(
+            startup_snapshot.get("projection_bias_receipt"),
+            f"{label} projection-bias startup receipt",
+        )
+        if (
+            projection_bias_backend_requested
+            != projection_bias_startup_receipt.get("requested_backend")
+            or projection_bias_backend_resolved
+            != projection_bias_startup_receipt.get("resolved_backend")
+            or projection_bias_fallback_reason
+            != projection_bias_startup_receipt.get("fallback_reason")
+        ):
+            raise SummaryError(f"{label} projection-bias fields differ from its startup receipt")
         result.update(
             backend_requested=fields["backend_requested"],
             backend_resolved=fields["backend_resolved"],
             fallback_reason=fields["fallback_reason"],
+            projection_bias_backend_requested=projection_bias_backend_requested,
+            projection_bias_backend_resolved=projection_bias_backend_resolved,
+            projection_bias_fallback_reason=projection_bias_fallback_reason,
             geometry=geometry_values,
             startup_snapshot=startup_snapshot,
         )
@@ -3831,6 +3976,7 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
     attempt_config_paths: set[str] = set()
     failed_pairs: list[dict[str, Any]] = []
     expected_identity: dict[str, Any] | None = None
+    expected_projection_bias_backend: dict[str, str] | None = None
     for run in receipt.timed_runs:
         covariate = _timed_run_covariate(run)
         run_status = _require_string(run.get("status"), "timed serving run.status")
@@ -3948,6 +4094,18 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
                 expected_identity = identity
             elif identity != expected_identity:
                 raise SummaryError("successful serving outer attempts do not use one identical workload")
+            projection_bias_backend = {
+                "requested_backend": riley["projection_bias_backend_requested"],
+                "resolved_backend": riley["projection_bias_backend_resolved"],
+                "fallback_reason": riley["projection_bias_fallback_reason"],
+            }
+            if expected_projection_bias_backend is None:
+                expected_projection_bias_backend = projection_bias_backend
+            elif projection_bias_backend != expected_projection_bias_backend:
+                raise SummaryError(
+                    "successful serving outer attempts mix Riley projection-bias backends; "
+                    "summarize each backend campaign separately"
+                )
             observation = {
                 "timed_index": int(run["index"]),
                 "pair_order": riley["pair_order"],
@@ -4142,6 +4300,21 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
             },
             "execution": {
                 "graph_capture_enabled": False,
+            },
+            "projection_bias": {
+                "startup_receipt_prefix": PROJECTION_BIAS_STARTUP_RECEIPT_PREFIX,
+                "requested_backend": (
+                    expected_projection_bias_backend["requested_backend"]
+                    if expected_projection_bias_backend is not None
+                    else None
+                ),
+                "resolved_backend": (
+                    expected_projection_bias_backend["resolved_backend"]
+                    if expected_projection_bias_backend is not None
+                    else None
+                ),
+                "fallback_reason": "none",
+                "campaign_policy": "one fixed Riley projection-bias backend per serving receipt",
             },
         },
         "receipt": {
