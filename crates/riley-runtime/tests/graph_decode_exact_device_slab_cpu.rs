@@ -109,8 +109,13 @@ fn graph_decode_exact_device_slab_stays_a_cold_geometry_binding_boundary() {
         );
     }
     assert!(
-        binding_tail.contains("source.layout() != self.layout"),
+        binding_tail.contains("pure_decode_graph_v1_exact_metadata_layouts_match")
+            && binding_tail.contains("self.layout, source.layout()"),
         "C07 exact device slab must compare complete layouts before binding"
+    );
+    assert!(
+        GRAPH_DECODE_EXACT_DEVICE_SLAB_SOURCE.contains("expected == actual"),
+        "C07 exact device-slab layout helper must compare the complete layouts"
     );
     assert!(
         binding_tail.contains("device: &self.device"),

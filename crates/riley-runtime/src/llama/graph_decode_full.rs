@@ -1369,6 +1369,7 @@ pub struct OwnedLlamaDecodeExecutor {
     output_ready: bool,
     replays: u64,
     vllm_smol_p128_graph: bool,
+    numerical_profile: riley_cuda::DecodeNumericalProfile,
     batched_prefill: bool,
 }
 impl PreparedLlamaBatchExecutor {
@@ -1392,6 +1393,13 @@ impl PreparedLlamaBatchExecutor {
         let cuda = |e| cuda_error(ExecutionSite::global(LlamaOp::IterationCompletion), e);
         let mut stream = context.create_stream().map_err(cuda)?;
         let vllm_smol_p128_graph = self.config.vllm_smol_p128_graph();
+        let numerical_profile = if vllm_smol_p128_graph {
+            riley_cuda::DecodeNumericalProfile::VllmSmolP128V1
+        } else if self.owner.forward.rms_norm_profile() == LlamaRmsNormProfile::HuggingFaceSmolLm2 {
+            riley_cuda::DecodeNumericalProfile::HuggingFaceSmolLm2
+        } else {
+            riley_cuda::DecodeNumericalProfile::Canonical
+        };
         let batched_prefill = self.config.vllm_smol_p128_batched_prefill();
         let packed = if batched_prefill {
             Some(PackedDecodeParents::prepare(
@@ -1479,6 +1487,7 @@ impl PreparedLlamaBatchExecutor {
             output_ready: false,
             replays: 0,
             vllm_smol_p128_graph,
+            numerical_profile,
             batched_prefill,
         })
     }
@@ -1504,11 +1513,7 @@ impl OwnedLlamaDecodeExecutor {
     /// Stable arithmetic identity for request admission and evidence.
     #[must_use]
     pub const fn numerical_profile_id(&self) -> &'static str {
-        if self.vllm_smol_p128_graph {
-            "vllm-smol-p128-v1"
-        } else {
-            "existing"
-        }
+        self.numerical_profile.evidence_id()
     }
 
     /// Exact metadata bounds retained from the original executor.

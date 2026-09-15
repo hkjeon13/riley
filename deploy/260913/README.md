@@ -80,6 +80,10 @@ Blender는 사용자 지시에 따라 내려둔 상태를 유지하고 이후 �
 
 상세 근거는 [전체 연구](../../benchmarks/results/20260912-serving-optimization/RESEARCH_20260913.md), [HBM·CUDA 연구](../../benchmarks/results/20260912-serving-optimization/HBM_CUDA_RESEARCH_20260913.md), [현재 코드 접점](../../benchmarks/results/20260912-serving-optimization/RESEARCH_CODE_FIT_20260913.md)을 참조한다. 각 PR은 위 연구의 Riley 적용 제안이며 논문 주장을 현재 구현의 사실로 취급하지 않는다.
 
+## PR01 실행 계약 구현
+
+명시적 GPU capability·peer-access 검증과 관련 ABI/runtime 경로를 추가했고, CPU 및 단일 GPU evidence를 보존했다. 이는 hardware validation 구현 증거이며 serving 성능 결과나 multi-GPU 성능 주장은 아니다.
+
 ## N01/N02 현재 구현 — 2026-09-15
 
 [다음 단계 실행 계획](next-stage/README.md)은 N01의 versioned model·numerical contract, 20GB GPU budget validator, five-phase lifecycle receipt controller와 schema/unit test를 추가한다. controller의 GPU peak는 `nvidia-smi` sampled observation이며 연속 high-water 또는 serving 성능·정확성 검증이 아니다.
