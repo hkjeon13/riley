@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | [N01 계약·실험 준비](01-contract-and-experiment-harness.md) | 없음 | 로컬 manifest·validator·lifecycle controller 완료; 원격 receipt 대기 |
 | 2 | [N02 native BF16 대조군](02-native-bf16-control.md) | N01의 원격 receipt·품질 기준 | Qwen shape synthetic control 추가; SM89 실행·수치·비용 검증 대기 |
-| 조건부 | [N02B cuBLASLt fused-bias qualification](../33-cublaslt-bias-epilogue-qualification.md) | P0/V2b exact staged receipt | Qwen P2048 actual-HF Q/K/V BF16 exact·lifecycle pass; operator AB와 serving integration 대기 |
+| 조건부 | [N02B cuBLASLt fused-bias qualification](../33-cublaslt-bias-epilogue-qualification.md) | P0/V2b exact staged receipt | Qwen P2048 actual-HF Q/K/V BF16 exact·lifecycle·5-run operator AB pass; serving integration 대기 |
 | 3 | [N03 GQA·context 분할](03-gqa-context-parallelism.md) | N02 | merge 포함 순이득·전체 기여 가능성 |
 | 조건부 | [N04 공유 prefix state 병합](04-shared-prefix-cascade.md) | N02, 공유 workload 근거 | 공유 이득·비공유 fallback·COW 정확성 |
 | 조건부 | [N05 RMSNorm–GEMM 재배치](05-rmsnorm-gemm-reorder.md) | N02, 제거 비용 상한 | 수치 계약·순이득·기여 가능성 |
@@ -25,8 +25,8 @@
 - N01은 `benchmarks/next_stage/`의 모델·수치·20GB 계약 validator, `benchmarks/scripts/n01_experiment_lifecycle.py`의 five-phase receipt controller, schema와 unit test를 포함한다. controller는 실행 전에 descriptor/profile/materialized checkpoint의 실제 SHA-256, target model/profile linkage, duplicate JSON key와 manifest-relative working directory를 검증한다. N01 v1은 physical GPU 0 한 장만 허용한다. controller 자체에는 Blender lifecycle 동작이 없고 direct Blender/restore-helper argv는 거부한다.
 - receipt의 GPU 값은 `nvidia-smi`로 얻은 **sampled observed peak**다. warmup과 timed-serving에 실행 중 poll이 없으면 receipt는 실패하며, poll이 있어도 연속 high-water 또는 serving performance/correctness qualification은 아니다.
 - N02의 첫 control은 `crates/riley-cuda/tests/gemm_gpu.rs`에 있는 Qwen2.5-3B projection shape의 deterministic synthetic BF16 prepared-GEMM test다. 이는 full Qwen weights, attention, HTTP serving, 모델 품질, 또는 vLLM 비교가 아니다.
-- N02B는 `crates/riley-runtime/tests/qwen3b_bias_epilogue_gpu.rs`에서 offline HF layer-0 artifact, Rust checkpoint loader, cuBLASLt BIAS epilogue만으로 Q/K/V actual module output을 BF16 exact하게 확인했다. strict default path와 serving selector는 그대로다. receipt와 제한은 [N02B 문서](../33-cublaslt-bias-epilogue-qualification.md)에 남겼다.
-- 따라서 이 상태에서 vLLM 비교표는 만들지 않는다. operator AB timing을 별도로 통과하고 N06 full-model serving 통합 이후 동일 workload에서 첫 표를 작성한다.
+- N02B는 `crates/riley-runtime/tests/qwen3b_bias_epilogue_gpu.rs`에서 offline HF layer-0 artifact, Rust checkpoint loader, cuBLASLt BIAS epilogue만으로 Q/K/V actual module output을 BF16 exact하게 확인했다. 이어 `crates/riley-cuda/tests/gemm_bias_epilogue_ab_gpu.rs`가 strict GEMM→row-bias 대비 fused BIAS의 5 child-run CUDA-event ABBA operator receipt를 만들었다. strict default path와 serving selector는 그대로다. receipt와 제한은 [N02B 문서](../33-cublaslt-bias-epilogue-qualification.md)에 남겼다.
+- 따라서 이 상태에서 vLLM 비교표는 만들지 않는다. N02B selector integration과 N06 full-model serving 통합 이후 동일 workload에서 첫 표를 작성한다.
 
 ## 유지할 계약
 

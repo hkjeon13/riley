@@ -39,6 +39,24 @@ Q/K/V projection의 `GEMM → row_bias_add` 두 GPU launch와 BF16 output read/w
 
 따라서 이 정확한 Qwen revision·P2048 geometry에서만 `candidate_selector_eligible=true`가 되었다. 이는 arithmetic·lifecycle gate의 통과를 뜻하며, default selector 변경, CUDA Graph, full-model quality, TTFT/TPOT/throughput, vLLM 비교는 아직 증명하지 않는다.
 
+## 원격 operator AB receipt — 2026-09-15
+
+`f3fccb279e941369de6a28d2ef5fa859f2477c18`에서 같은 RTX 4090/SM89와 16 MiB workspace cap으로 strict `prepared GEMM → row-bias`와 fused BIAS를 비교했다. H2D, D2H, cold prepare는 event 구간 밖에 두고, 각 backend를 한 command batch에 넣어 CUDA event로 측정했다. 각 child process는 backend별 warmup 8회 뒤 ABBA 24 paired round를 실행했고, 이를 독립 process 5회로 반복했다. strict/fused는 의도적으로 다른 rounding contract이므로 두 결과끼리의 equality는 요구하지 않았다. separate actual-HF gate가 fused contract의 correctness를 맡는다.
+
+외부 create-only artifact는 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-bias-epilogue-ab-20260915T202405Z/`다. summary SHA-256은 `317135d2399877a19c7365d8b6a804ec3a40f03af622df5b7d2d821f79f9ffa4`, manifest SHA-256은 `c86301f4514f5469c045c0e9b20f79046e2aae1faa1ba02920812206e67d96de`이며 `SHA256SUMS`의 43개 file hash를 재검증했다. 모든 child에서 deterministic repeated output과 zero allocation delta를 확인했다.
+
+아래 speedup은 **strict median / fused median**이다. 각 값은 5개 child-run median의 median이며 bracket은 fixed-seed 10,000 paired bootstrap의 child-median 95% interval이다. 각 case에는 총 120 ABBA paired round가 남아 있다.
+
+| Projection | `M=1` | `M=8` | `M=32` | `M=2048` |
+|---|---:|---:|---:|---:|
+| Q `[M, 2048, 2048]` | 1.117× [1.111, 1.137] | 1.097× [1.075, 1.113] | 1.066× [1.056, 1.070] | 1.099× [1.098, 1.100] |
+| K `[M, 256, 2048]` | 1.226× [1.212, 1.233] | 1.102× [1.092, 1.111] | 1.076× [1.062, 1.077] | 1.125× [1.120, 1.130] |
+| V `[M, 256, 2048]` | 1.219× [1.213, 1.231] | 1.102× [1.097, 1.106] | 1.078× [1.075, 1.082] | 1.125× [1.120, 1.131] |
+
+대표 P2048 GPU-event median은 Q strict/fused `0.121880/0.110992 ms`, K `0.024200/0.021520 ms`, V `0.024224/0.021504 ms`다. GPU observed memory는 각 run 시작/종료 모두 335 MiB였고, utilization은 0–4%였다. I/O PSI `some/full avg10`은 run 사이 대략 `4.03/3.71`에서 `4.93/4.66` 범위였으며 이를 filter·weight·보정·재시도 선택에 사용하지 않았다.
+
+이 operator evidence는 fused candidate를 selector-integration **검토 단계**로 올린다. 그러나 full-model quality, current graph interaction, scheduler/HTTP behavior, throughput, TTFT/TPOT, P95/P99, failure rate와 vLLM 대비는 전혀 측정하지 않았다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
