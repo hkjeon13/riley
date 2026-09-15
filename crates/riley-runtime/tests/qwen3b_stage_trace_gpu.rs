@@ -2,6 +2,7 @@
 #![cfg(feature = "cuda")]
 #![allow(clippy::float_cmp, clippy::similar_names, clippy::too_many_lines)]
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -131,6 +132,7 @@ fn sha256_file(path: &Path) -> TestResult<String> {
         }
         digest.update(&buffer[..read]);
     }
+    let digest = digest.finalize();
     Ok(digest
         .iter()
         .fold(String::with_capacity(64), |mut output, byte| {
@@ -336,7 +338,10 @@ fn parse_sidecar_header(path: &Path) -> TestResult<(Map<String, Value>, u64, u64
     Ok((header, data_start, file.metadata()?.len()))
 }
 
-fn sidecar_tensors(manifest: &Value, sidecar: &Path) -> TestResult<Map<String, SidecarTensor>> {
+fn sidecar_tensors(
+    manifest: &Value,
+    sidecar: &Path,
+) -> TestResult<BTreeMap<String, SidecarTensor>> {
     let metadata = manifest["sidecar"]
         .as_object()
         .ok_or("HF trace manifest sidecar must be an object")?;
@@ -350,7 +355,7 @@ fn sidecar_tensors(manifest: &Value, sidecar: &Path) -> TestResult<Map<String, S
         return Err("HF trace sidecar binding differs".into());
     }
     let (header, data_start, sidecar_size) = parse_sidecar_header(&actual_sidecar)?;
-    let mut output = Map::new();
+    let mut output = BTreeMap::new();
     let manifest_tensors = manifest["tensors"]
         .as_object()
         .ok_or("HF trace manifest tensors must be an object")?;
@@ -386,7 +391,10 @@ fn sidecar_tensors(manifest: &Value, sidecar: &Path) -> TestResult<Map<String, S
             .ok_or("HF trace sidecar start differs")?;
         let end = offsets[1].as_u64().ok_or("HF trace sidecar end differs")?;
         let expected_bytes = u64::try_from(shape_byte_len(&shape)?)?;
-        if end < start || end - start != expected_bytes || data_start + end > sidecar_size {
+        let data_end = data_start
+            .checked_add(end)
+            .ok_or("HF trace sidecar data range overflows")?;
+        if end < start || end - start != expected_bytes || data_end > sidecar_size {
             return Err("HF trace sidecar tensor range differs".into());
         }
         let manifest_tensor = manifest_tensors
@@ -399,8 +407,10 @@ fn sidecar_tensors(manifest: &Value, sidecar: &Path) -> TestResult<Map<String, S
         output.insert(
             name.to_owned(),
             SidecarTensor {
-                data_start: data_start + start,
-                data_end: data_start + end,
+                data_start: data_start
+                    .checked_add(start)
+                    .ok_or("HF trace sidecar data range overflows")?,
+                data_end,
             },
         );
     }
