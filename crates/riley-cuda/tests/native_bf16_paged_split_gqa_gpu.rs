@@ -713,6 +713,8 @@ fn native_bf16_paged_split_gqa_d128_matches_reference_and_cpu_across_pages() -> 
         fixture.close()?;
     }
 
+    drop(native);
+    drop(reference);
     staging.close()?;
     stream.close()?;
     close_context(context)
