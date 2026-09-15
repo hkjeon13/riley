@@ -501,6 +501,98 @@ _Static_assert(offsetof(RileyCudaRaggedPagedAttentionParams, scale) == 552,
 _Static_assert(
     offsetof(RileyCudaRaggedPagedAttentionParams, reserved) == 560,
     "ragged paged attention reserved tail changed");
+_Static_assert(RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V2_VERSION == 2,
+               "native BF16 ragged split-GQA V2 ABI version changed");
+_Static_assert(sizeof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2) == 744,
+               "native BF16 ragged split-GQA V2 ABI size changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, format_version) ==
+        4,
+    "native BF16 ragged split-GQA V2 format-version offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, partial_states) ==
+        152,
+    "native BF16 ragged split-GQA V2 partial-state offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, reduction_steps) ==
+        200,
+    "native BF16 ragged split-GQA V2 reduction-step offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2,
+             reduction_normalizers) == 248,
+    "native BF16 ragged split-GQA V2 reduction-normalizer offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, output) == 296,
+    "native BF16 ragged split-GQA V2 output offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, batch) == 344,
+    "native BF16 ragged split-GQA V2 packed-batch offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2,
+             query_head_count) == 664,
+    "native BF16 ragged split-GQA V2 dimensions offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2,
+             output_row_count) == 688,
+    "native BF16 ragged split-GQA V2 output-row offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2,
+             partial_state_capacity) == 696,
+    "native BF16 ragged split-GQA V2 capacity offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, scale) == 704,
+    "native BF16 ragged split-GQA V2 scale offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2, reserved) == 712,
+    "native BF16 ragged split-GQA V2 reserved tail changed");
+_Static_assert(RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V3_VERSION == 3,
+               "native BF16 ragged split-GQA V3 ABI version changed");
+_Static_assert(sizeof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3) == 752,
+               "native BF16 ragged split-GQA V3 ABI size changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, format_version) ==
+        4,
+    "native BF16 ragged split-GQA V3 format-version offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, partial_states) ==
+        152,
+    "native BF16 ragged split-GQA V3 partial-state offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, reduction_steps) ==
+        200,
+    "native BF16 ragged split-GQA V3 reduction-step offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3,
+             reduction_normalizers) == 248,
+    "native BF16 ragged split-GQA V3 reduction-normalizer offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, output) == 296,
+    "native BF16 ragged split-GQA V3 output offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, batch) == 344,
+    "native BF16 ragged split-GQA V3 packed-batch offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3,
+             query_head_count) == 664,
+    "native BF16 ragged split-GQA V3 dimensions offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3,
+             output_row_count) == 688,
+    "native BF16 ragged split-GQA V3 output-row offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3,
+             partial_state_capacity) == 696,
+    "native BF16 ragged split-GQA V3 capacity offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3,
+             launch_partial_state_count) == 704,
+    "native BF16 ragged split-GQA V3 launch-count offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, scale) == 712,
+    "native BF16 ragged split-GQA V3 scale offset changed");
+_Static_assert(
+    offsetof(RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3, reserved) == 720,
+    "native BF16 ragged split-GQA V3 reserved tail changed");
 _Static_assert(sizeof(RileyCudaFixed37RaggedPagedAttentionParams) == 600,
                "fixed37 ragged paged attention ABI size changed");
 _Static_assert(
@@ -1026,6 +1118,14 @@ static RileyCudaStatus (*const ragged_paged_attention_grouped_heads_symbol)(
     const RileyCudaRaggedPagedAttentionParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) =
     riley_cuda_ragged_paged_attention_grouped_heads_execute;
+static RileyCudaStatus (*const native_bf16_ragged_paged_split_gqa_d128_v2_symbol)(
+    const RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2*, RileyCudaStream*,
+    RileyCudaErrorInfo*) =
+    riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_execute;
+static RileyCudaStatus (*const native_bf16_ragged_paged_split_gqa_d128_v3_symbol)(
+    const RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3*, RileyCudaStream*,
+    RileyCudaErrorInfo*) =
+    riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute;
 static RileyCudaStatus (*const
                                 fixed37_ragged_paged_attention_two_pass_symbol)(
     const RileyCudaFixed37RaggedPagedAttentionParams*,
@@ -1172,6 +1272,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
     (const void*)&ragged_paged_attention_grouped_heads_symbol,
+    (const void*)&native_bf16_ragged_paged_split_gqa_d128_v2_symbol,
+    (const void*)&native_bf16_ragged_paged_split_gqa_d128_v3_symbol,
     (const void*)&fixed37_ragged_paged_attention_two_pass_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_create_anchored_symbol,

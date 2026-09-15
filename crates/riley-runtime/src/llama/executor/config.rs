@@ -19,6 +19,7 @@ const RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1: &str =
     "riley.cuda.ragged-paged-attention.grouped-heads-d64-v1";
 const RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1: &str =
     "riley.cuda.ragged-paged-attention.fixed37-two-pass-d64-s8192-v1";
+const RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2: &str = "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
 
 /// Exact implementation selected for the attention residual/post-norm pair.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -65,6 +66,11 @@ pub enum RaggedAttentionImplementation {
     /// Reuse staged K/V tiles across the canonical query-head warps of a GQA
     /// key/value head, with a bounded grouped-head fallback for other shapes.
     GroupedHeads,
+    /// Explicit eager-only native-BF16 D128 two-stage GQA implementation for
+    /// the Qwen2.5-3B geometry (`QH=16`, `KVH=2`, page size 16). It is a
+    /// fail-closed opt-in: a different geometry is rejected during cold
+    /// preparation rather than falling back to a D64 implementation.
+    NativeBf16PagedSplitGqaD128TwoStage,
 }
 
 pub(in crate::llama) const fn execution_completion_implementation_id(
@@ -98,6 +104,12 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
     profile: AttentionReductionProfile,
     implementation: RaggedAttentionImplementation,
 ) -> &'static str {
+    if matches!(
+        implementation,
+        RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+    ) {
+        return RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2;
+    }
     match (profile, implementation) {
         (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::Legacy) => {
             RAGGED_PAGED_ATTENTION_LEGACY_D64_V1
@@ -105,6 +117,10 @@ pub(in crate::llama) const fn ragged_attention_implementation_id(
         (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::GroupedHeads) => {
             RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1
         }
+        (
+            AttentionReductionProfile::CanonicalV1,
+            RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage,
+        ) => RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2,
         (AttentionReductionProfile::FixedContiguous37BalancedV1, _) => {
             RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
         }
@@ -270,10 +286,31 @@ impl PreparedLlamaBatchExecutorConfig {
         self
     }
 
+    /// Selects the explicit eager-only Qwen2.5-3B D128 native-BF16 GQA
+    /// backend. This changes no default selection and never permits a
+    /// D64-style fallback for a mismatched model geometry.
+    #[must_use]
+    pub const fn with_native_bf16_paged_split_gqa_d128_two_stage(mut self) -> Self {
+        self.ragged_attention_implementation =
+            RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage;
+        self
+    }
+
     /// Returns the canonical ragged attention launch implementation.
     #[must_use]
     pub const fn ragged_attention_implementation(self) -> RaggedAttentionImplementation {
         self.ragged_attention_implementation
+    }
+
+    /// Whether this cold configuration selected the explicit D128 two-stage
+    /// backend. The owner uses this only to admit the exact model geometry and
+    /// allocate its dedicated eager workspace.
+    #[must_use]
+    pub const fn native_bf16_paged_split_gqa_d128_two_stage(self) -> bool {
+        matches!(
+            self.ragged_attention_implementation,
+            RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+        )
     }
 
     /// Selects the exact fused attention residual/post-norm implementation.
@@ -343,6 +380,29 @@ impl PreparedLlamaBatchExecutorConfig {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "metadata_transport",
                 reason: "packed async metadata requires iteration-batch completion",
+            });
+        }
+        Ok(())
+    }
+
+    /// Rejects unsupported profile combinations before any CUDA resource is
+    /// allocated. Geometry is deliberately checked by the prepared owner,
+    /// where the immutable model dimensions are available.
+    pub(in crate::llama) fn validate_attention_implementation(
+        self,
+    ) -> LlamaBatchExecutorResult<()> {
+        if self.native_bf16_paged_split_gqa_d128_two_stage()
+            && self.ragged_attention_reduction_profile != AttentionReductionProfile::CanonicalV1
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "ragged_attention_implementation",
+                reason: "native D128 two-stage attention requires canonical-v1 reductions",
+            });
+        }
+        if self.native_bf16_paged_split_gqa_d128_two_stage() && self.vllm_smol_p128_graph {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1",
+                reason: "native D128 two-stage attention is eager-only and cannot use the D64 graph",
             });
         }
         Ok(())
@@ -457,5 +517,56 @@ mod graph_numerical_profile_tests {
                 tokens == 128
             );
         }
+    }
+
+    #[test]
+    fn native_d128_two_stage_is_explicit_reversible_and_fail_closed_for_profiles() {
+        let defaults = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 1, 16, 1, 16).unwrap(),
+            PreparedLlamaForwardConfig::default(),
+        );
+        assert_eq!(
+            defaults.ragged_attention_implementation(),
+            RaggedAttentionImplementation::Legacy
+        );
+        let native = defaults.with_native_bf16_paged_split_gqa_d128_two_stage();
+        assert_eq!(
+            native.ragged_attention_implementation(),
+            RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
+        );
+        assert_eq!(
+            ragged_attention_implementation_id(
+                native.ragged_attention_reduction_profile(),
+                native.ragged_attention_implementation(),
+            ),
+            RAGGED_PAGED_ATTENTION_NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_V2
+        );
+        native
+            .validate_attention_implementation()
+            .expect("canonical native D128 selection is valid before geometry admission");
+        assert!(matches!(
+            native
+                .with_fixed37_reductions()
+                .validate_attention_implementation(),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "ragged_attention_implementation",
+                ..
+            })
+        ));
+        assert!(matches!(
+            native
+                .with_vllm_smol_p128_graph()
+                .validate_attention_implementation(),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1",
+                ..
+            })
+        ));
+        assert_eq!(
+            native
+                .with_legacy_ragged_attention_heads()
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::Legacy
+        );
     }
 }

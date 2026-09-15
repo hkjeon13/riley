@@ -6,10 +6,13 @@ use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
     CudaErrorKind, CudaEvent, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
     DecodeAttentionBackend, DecodeAttentionBackendAvailability, DecodeAttentionPreference,
-    DecodePartialReductionOrder, DecodePartialStateReduceParams, PAGED_KV_BLOCK_SIZE,
-    PagedDecodeAttentionParams, PagedDecodeAttentionRequest, PagedKvBlockTableHostV1,
-    PagedKvBlockTableV1, PagedKvCacheAppendParams, PreparedPagedDecodeAttention,
-    decode_partial_states_reduce, paged_kv_cache_append,
+    DecodePartialReductionOrder, DecodePartialStateReduceParams,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, PAGED_KV_BLOCK_SIZE,
+    PackedBatchHostV1, PackedBatchV1, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
+    PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
+    PreparedPagedDecodeAttention, decode_partial_states_reduce,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage, paged_kv_cache_append,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -1033,6 +1036,522 @@ fn n03a_paged_d128_paired_cuda_event_control() -> TestResult {
     for logical in [2_048_usize, 16_384] {
         run_paired_operator_control_case(&context, &mut stream, &mut staging, logical)?;
     }
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn native_bf16_ragged_paged_d128_two_stage_v3_c2048_b8_matches_v1_prefix_reducer_per_row()
+-> TestResult {
+    const ACTIVE_ROWS: usize = 8;
+    const OUTPUT_ROWS: usize = 9;
+    const PARTIAL_CAPACITY: usize = 2_048;
+    const PAGES_PER_SEQUENCE: usize = 512;
+    const PHYSICAL_BLOCKS: usize = ACTIVE_ROWS * PAGES_PER_SEQUENCE;
+
+    let (context, mut stream) = first_context()?;
+    let mut staging = context.allocate_pinned_host_buffer(STAGING_BYTES)?;
+    // B8 has uneven active prefixes from one through 128 pages, while each
+    // backing CSR sequence has 512 pages. Thus aggregate blocks (4096) exceed
+    // P=2048, but every row fits its independent workspace slice. The exact
+    // producer launch extent is L=128, avoiding the old all-P grid.
+    let row_positions = [0_u32, 16, 47, 63, 255, 511, 1_023, 2_047];
+    let row_sequence_slots = (0..ACTIVE_ROWS)
+        .map(u32::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    let sequence_block_offsets = (0..=ACTIVE_ROWS)
+        .map(|sequence| u32::try_from(sequence * PAGES_PER_SEQUENCE))
+        .collect::<Result<Vec<_>, _>>()?;
+    let block_ids = (0..PHYSICAL_BLOCKS)
+        .rev()
+        .map(u32::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    let valid_tokens = vec![u16::try_from(PAGE_SIZE)?; PHYSICAL_BLOCKS];
+    let launch_partial_state_count = row_positions
+        .iter()
+        .map(|&position| usize::try_from(u64::from(position) / PAGE_SIZE as u64 + 1))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .max()
+        .expect("B8 fixture has active rows");
+    assert_eq!(launch_partial_state_count, 128);
+    assert_eq!(PARTIAL_CAPACITY / launch_partial_state_count, 16);
+    let host = PackedBatchHostV1::new(
+        &sequence_block_offsets,
+        &block_ids,
+        &valid_tokens,
+        &row_sequence_slots,
+        &row_positions,
+        u64::try_from(PHYSICAL_BLOCKS)?,
+    )?;
+    assert!(
+        host.block_count() > u64::try_from(PARTIAL_CAPACITY)?,
+        "fixture must exercise aggregate CSR blocks greater than per-row P"
+    );
+
+    let query_values =
+        centered_pattern(ACTIVE_ROWS * QUERY_HEADS * HEAD_SIZE, 11, 7, 29, 14.0, 32.0);
+    let key_values = centered_pattern(
+        PHYSICAL_BLOCKS * KEY_VALUE_HEADS * PAGE_SIZE * HEAD_SIZE,
+        5,
+        3,
+        31,
+        15.0,
+        32.0,
+    );
+    let value_values = centered_pattern(
+        PHYSICAL_BLOCKS * KEY_VALUE_HEADS * PAGE_SIZE * HEAD_SIZE,
+        13,
+        9,
+        37,
+        18.0,
+        32.0,
+    );
+    let query = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&query_values),
+    )?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&key_values),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&value_values),
+    )?;
+    let offsets = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
+    let ids = upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?;
+    let valid = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let positions = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
+    let batch = PackedBatchV1::new(
+        host,
+        CudaBufferSpan::new(&offsets, CudaDType::U32, 0, offsets.byte_len())?,
+        CudaBufferSpan::new(&ids, CudaDType::U32, 0, ids.byte_len())?,
+        CudaBufferSpan::new(&valid, CudaDType::U16, 0, valid.byte_len())?,
+        CudaBufferSpan::new(&row_slots, CudaDType::U32, 0, row_slots.byte_len())?,
+        CudaBufferSpan::new(&positions, CudaDType::U32, 0, positions.byte_len())?,
+    )?;
+
+    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+        u64::try_from(OUTPUT_ROWS)?,
+        u64::try_from(PARTIAL_CAPACITY)?,
+    )?;
+    let mut partial_states = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(layout.partial_state_bytes() / 4)?
+        ]),
+    )?;
+    let mut reduction_steps = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(layout.reduction_step_bytes() / 4)?
+        ]),
+    )?;
+    let mut reduction_normalizers = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_f32(&vec![
+            STATE_SENTINEL;
+            usize::try_from(
+                layout.reduction_normalizer_bytes() / 4
+            )?
+        ]),
+    )?;
+    let output_elements = OUTPUT_ROWS * QUERY_HEADS * HEAD_SIZE;
+    let mut output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
+    )?;
+    let partial_state_len = partial_states.byte_len();
+    let reduction_step_len = reduction_steps.byte_len();
+    let normalizer_len = reduction_normalizers.byte_len();
+    let output_len = output.byte_len();
+    native_bf16_ragged_paged_split_gqa_d128_two_stage(
+        &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            partial_states: CudaBufferSpanMut::new(
+                &mut partial_states,
+                CudaDType::F32,
+                0,
+                partial_state_len,
+            )?,
+            reduction_steps: CudaBufferSpanMut::new(
+                &mut reduction_steps,
+                CudaDType::F32,
+                0,
+                reduction_step_len,
+            )?,
+            reduction_normalizers: CudaBufferSpanMut::new(
+                &mut reduction_normalizers,
+                CudaDType::F32,
+                0,
+                normalizer_len,
+            )?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+            batch,
+            query_head_count: u64::try_from(QUERY_HEADS)?,
+            key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
+            head_size: u64::try_from(HEAD_SIZE)?,
+            output_row_count: u64::try_from(OUTPUT_ROWS)?,
+            partial_state_capacity: u64::try_from(PARTIAL_CAPACITY)?,
+            scale: SCALE,
+            reduction_order: DecodePartialReductionOrder::LogicalAscending,
+        },
+        &mut stream,
+    )?;
+    stream.synchronize()?;
+
+    let row_state_bytes = layout.partial_state_bytes() / u64::try_from(OUTPUT_ROWS)?;
+    let mut generic_outputs = Vec::with_capacity(ACTIVE_ROWS);
+    for row in 0..ACTIVE_ROWS {
+        let mut generic = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_bf16(&vec![OUTPUT_SENTINEL; QUERY_HEADS * HEAD_SIZE]),
+        )?;
+        let generic_len = generic.byte_len();
+        let partial_state_count = u64::from(row_positions[row]) / u64::try_from(PAGE_SIZE)? + 1;
+        decode_partial_states_reduce(
+            &mut DecodePartialStateReduceParams {
+                partial_states: CudaBufferSpan::new(
+                    &partial_states,
+                    CudaDType::F32,
+                    u64::try_from(row)? * row_state_bytes,
+                    row_state_bytes,
+                )?,
+                output: CudaBufferSpanMut::new(&mut generic, CudaDType::BF16, 0, generic_len)?,
+                partial_state_count,
+                partial_state_capacity: u64::try_from(PARTIAL_CAPACITY)?,
+                query_head_count: u64::try_from(QUERY_HEADS)?,
+                head_size: u64::try_from(HEAD_SIZE)?,
+                order: DecodePartialReductionOrder::LogicalAscending,
+            },
+            &mut stream,
+        )?;
+        generic_outputs.push(generic);
+    }
+    stream.synchronize()?;
+    let v3_output = download(&context, &mut stream, &mut output)?;
+    let active_output_bytes = ACTIVE_ROWS * QUERY_HEADS * HEAD_SIZE * 2;
+    let mut generic_joined = Vec::with_capacity(active_output_bytes);
+    for generic in &mut generic_outputs {
+        generic_joined.extend(download(&context, &mut stream, generic)?);
+    }
+    assert_eq!(
+        &v3_output[..active_output_bytes],
+        generic_joined.as_slice(),
+        "V3 ragged output must exactly replay the V1 generic ascending reducer for every row"
+    );
+    assert_eq!(
+        &v3_output[active_output_bytes..],
+        encode_bf16(&vec![0.0; QUERY_HEADS * HEAD_SIZE]).as_slice(),
+        "inactive prepared output rows must be BF16 zero"
+    );
+
+    // The V1 reduction compares the shared producer state exactly. Exercise a
+    // separate materialized paged reference for each ragged row as well: its
+    // block table clips the backing 512-page sequence to that row's inclusive
+    // prefix, while preserving the shared shuffled physical K/V pool.
+    let availability = DecodeAttentionBackendAvailability::linked();
+    let row_query_bytes = u64::try_from(QUERY_HEADS * HEAD_SIZE * 2)?;
+    let mut materialized_reference = Vec::with_capacity(active_output_bytes / 2);
+    for row in 0..ACTIVE_ROWS {
+        let logical_token_count = u64::from(row_positions[row]) + 1;
+        let partial_state_count = logical_token_count.div_ceil(u64::try_from(PAGE_SIZE)?);
+        let block_begin = usize::try_from(sequence_block_offsets[row])?;
+        let block_end = block_begin + usize::try_from(partial_state_count)?;
+        assert!(
+            block_end <= usize::try_from(sequence_block_offsets[row + 1])?,
+            "row {row} materialized table exceeds its CSR range"
+        );
+        let mut reference_valid_tokens = vec![u16::try_from(PAGE_SIZE)?; block_end - block_begin];
+        let final_valid_tokens =
+            u16::try_from((logical_token_count - 1) % u64::try_from(PAGE_SIZE)? + 1)?;
+        *reference_valid_tokens
+            .last_mut()
+            .expect("active row has at least one logical page") = final_valid_tokens;
+        let reference_table_host = PagedKvBlockTableHostV1::new(
+            &block_ids[block_begin..block_end],
+            &reference_valid_tokens,
+            logical_token_count,
+            u64::try_from(PHYSICAL_BLOCKS)?,
+        )?;
+        let reference = PreparedPagedDecodeAttention::select(
+            &context,
+            PagedDecodeAttentionRequest::new(
+                logical_token_count,
+                u64::try_from(PHYSICAL_BLOCKS)?,
+                u64::try_from(QUERY_HEADS)?,
+                u64::try_from(KEY_VALUE_HEADS)?,
+                u64::try_from(HEAD_SIZE)?,
+                SCALE,
+            ),
+            DecodeAttentionPreference::Reference,
+            availability,
+        )?;
+        assert_eq!(
+            reference.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        let mut reference_workspace =
+            context.allocate_device_buffer(reference.workspace_bytes())?;
+        let mut reference_output = context.allocate_device_buffer(row_query_bytes)?;
+        let reference_valid = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u16(&reference_valid_tokens),
+        )?;
+        let reference_workspace_len = reference_workspace.byte_len();
+        let reference_output_len = reference_output.byte_len();
+        let reference_valid_len = reference_valid.byte_len();
+        reference.execute(
+            &mut PagedDecodeAttentionParams {
+                query: CudaBufferSpan::new(
+                    &query,
+                    CudaDType::BF16,
+                    u64::try_from(row)? * row_query_bytes,
+                    row_query_bytes,
+                )?,
+                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+                value_pool: CudaBufferSpan::new(
+                    &value_pool,
+                    CudaDType::BF16,
+                    0,
+                    value_pool.byte_len(),
+                )?,
+                workspace: CudaBufferSpanMut::new(
+                    &mut reference_workspace,
+                    reference.workspace_dtype(),
+                    0,
+                    reference_workspace_len,
+                )?,
+                output: CudaBufferSpanMut::new(
+                    &mut reference_output,
+                    CudaDType::BF16,
+                    0,
+                    reference_output_len,
+                )?,
+                block_table: PagedKvBlockTableV1::new(
+                    reference_table_host,
+                    CudaBufferSpan::new(
+                        &ids,
+                        CudaDType::U32,
+                        u64::try_from(block_begin)? * 4,
+                        u64::try_from(block_end - block_begin)? * 4,
+                    )?,
+                    CudaBufferSpan::new(&reference_valid, CudaDType::U16, 0, reference_valid_len)?,
+                )?,
+            },
+            &mut stream,
+        )?;
+        stream.synchronize()?;
+        materialized_reference.extend(decode_bf16(&download(
+            &context,
+            &mut stream,
+            &mut reference_output,
+        )?));
+        reference_valid.close()?;
+        reference_output.close()?;
+        reference_workspace.close()?;
+        drop(reference);
+    }
+    assert_close(
+        &decode_bf16(&v3_output[..active_output_bytes]),
+        &materialized_reference,
+        NATIVE_REFERENCE_ABS_TOLERANCE,
+        "V3 ragged B8 C2048 materialized-reference control",
+    );
+
+    let states = decode_f32(&download(&context, &mut stream, &mut partial_states)?);
+    let steps = decode_f32(&download(&context, &mut stream, &mut reduction_steps)?);
+    let normalizers = decode_f32(&download(
+        &context,
+        &mut stream,
+        &mut reduction_normalizers,
+    )?);
+    let state_stride = HEAD_SIZE + 2;
+    let row_state_elements = PARTIAL_CAPACITY * QUERY_HEADS * state_stride;
+    let row_step_elements = PARTIAL_CAPACITY * QUERY_HEADS * 2;
+    for row in 0..ACTIVE_ROWS {
+        let active_pages =
+            usize::try_from(u64::from(row_positions[row]) / u64::try_from(PAGE_SIZE)? + 1)?;
+        for partition in 0..active_pages {
+            for head in 0..QUERY_HEADS {
+                let state_base =
+                    row * row_state_elements + (partition * QUERY_HEADS + head) * state_stride;
+                assert!(states[state_base].is_finite());
+                assert!(states[state_base + 1].is_finite() && states[state_base + 1] > 0.0);
+                let step_base = row * row_step_elements + (partition * QUERY_HEADS + head) * 2;
+                assert!(steps[step_base].is_finite() && steps[step_base + 1].is_finite());
+            }
+        }
+        let state_tail_start = row * row_state_elements + active_pages * QUERY_HEADS * state_stride;
+        let state_tail_end = (row + 1) * row_state_elements;
+        assert!(
+            states[state_tail_start..state_tail_end]
+                .iter()
+                .all(|value| value.to_bits() == STATE_SENTINEL.to_bits())
+        );
+        let step_tail_start = row * row_step_elements + active_pages * QUERY_HEADS * 2;
+        let step_tail_end = (row + 1) * row_step_elements;
+        assert!(
+            steps[step_tail_start..step_tail_end]
+                .iter()
+                .all(|value| value.to_bits() == STATE_SENTINEL.to_bits())
+        );
+        assert!(
+            normalizers[row * QUERY_HEADS..(row + 1) * QUERY_HEADS]
+                .iter()
+                .all(|value| value.is_finite() && *value > 0.0)
+        );
+    }
+    assert!(
+        states[ACTIVE_ROWS * row_state_elements..]
+            .iter()
+            .all(|value| value.to_bits() == STATE_SENTINEL.to_bits())
+    );
+    assert!(
+        steps[ACTIVE_ROWS * row_step_elements..]
+            .iter()
+            .all(|value| value.to_bits() == STATE_SENTINEL.to_bits())
+    );
+    assert!(
+        normalizers[ACTIVE_ROWS * QUERY_HEADS..]
+            .iter()
+            .all(|value| value.to_bits() == STATE_SENTINEL.to_bits())
+    );
+
+    let mut untouched_output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
+    )?;
+    let untouched_len = untouched_output.byte_len();
+    let error = native_bf16_ragged_paged_split_gqa_d128_two_stage(
+        &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            partial_states: CudaBufferSpanMut::new(
+                &mut partial_states,
+                CudaDType::F32,
+                0,
+                partial_state_len - 4,
+            )?,
+            reduction_steps: CudaBufferSpanMut::new(
+                &mut reduction_steps,
+                CudaDType::F32,
+                0,
+                reduction_step_len,
+            )?,
+            reduction_normalizers: CudaBufferSpanMut::new(
+                &mut reduction_normalizers,
+                CudaDType::F32,
+                0,
+                normalizer_len,
+            )?,
+            output: CudaBufferSpanMut::new(
+                &mut untouched_output,
+                CudaDType::BF16,
+                0,
+                untouched_len,
+            )?,
+            batch,
+            query_head_count: u64::try_from(QUERY_HEADS)?,
+            key_value_head_count: u64::try_from(KEY_VALUE_HEADS)?,
+            head_size: u64::try_from(HEAD_SIZE)?,
+            output_row_count: u64::try_from(OUTPUT_ROWS)?,
+            partial_state_capacity: u64::try_from(PARTIAL_CAPACITY)?,
+            scale: SCALE,
+            reduction_order: DecodePartialReductionOrder::LogicalAscending,
+        },
+        &mut stream,
+    )
+    .expect_err("undersized V3 ragged workspace must fail before launch");
+    assert_eq!(error.kind(), CudaErrorKind::OutOfRange);
+    assert_eq!(
+        download(&context, &mut stream, &mut untouched_output)?,
+        encode_bf16(&vec![OUTPUT_SENTINEL; output_elements]),
+        "undersized V3 ragged workspace modified output"
+    );
+    println!(
+        "n03b-ragged-paged-d128-correctness schema_version=1 implementation_id=native-bf16-ragged-paged-split-gqa-d128-two-stage-v3 active_rows={ACTIVE_ROWS} output_rows={OUTPUT_ROWS} per_row_page_capacity={PARTIAL_CAPACITY} aggregate_csr_blocks={} v1_generic_ascending_exact=true inactive_output_zero=true state_bytes={} step_bytes={} normalizer_bytes={} workspace_total_bytes={} graph_capture_supported=false python_free=true status=passed",
+        host.block_count(),
+        layout.partial_state_bytes(),
+        layout.reduction_step_bytes(),
+        layout.reduction_normalizer_bytes(),
+        layout.total_bytes(),
+    );
+    untouched_output.close()?;
+    for generic in generic_outputs {
+        generic.close()?;
+    }
+    output.close()?;
+    reduction_normalizers.close()?;
+    reduction_steps.close()?;
+    partial_states.close()?;
+    positions.close()?;
+    row_slots.close()?;
+    valid.close()?;
+    ids.close()?;
+    offsets.close()?;
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
     staging.close()?;
     stream.close()?;
     close_context(context)

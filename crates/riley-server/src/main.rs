@@ -16,6 +16,24 @@ mod signal;
 
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
 const MAX_BATCH_SHAPE_BUCKETS: usize = 10;
+// Must stay aligned with the native runtime owner's qualified eager workspace
+// envelope. Keeping this parser-side fact prevents the default 512-token
+// batch budget from reaching CUDA preparation only to fail there.
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 32;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES: u64 =
+    8 * 1_024 * 1_024 * 1_024;
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID: &str = "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS: usize = 16;
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS: usize = 2;
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE: usize = 128;
+#[cfg(any(feature = "cuda", test))]
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE: usize = 16;
 #[cfg(any(feature = "cuda", test))]
 const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
 #[cfg(feature = "cuda")]
@@ -47,9 +65,10 @@ serve options:
   --metadata-transport MODE      synchronous or packed-async (default: synchronous)
   --execution-graph-policy MODE  disabled, auto, or require (default: disabled)
   --graph-numerics existing|vllm-smol-p128-v1  explicit bounded arithmetic (default: existing)
+  --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
-  --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+  --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648; native D128: 8589934592)
   --c02-candidate-id ID          release candidate identity for C02 evidence mode
   --c02-configuration-profile ID stable-default or max-performance-exact
   --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
@@ -85,6 +104,7 @@ struct ServeOptions {
     metadata_transport: MetadataTransportMode,
     sampling_backend: SamplingBackendMode,
     execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy,
+    decode_attention_backend: DecodeAttentionBackendMode,
     reduction_profile: ReductionProfileMode,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
@@ -128,6 +148,30 @@ enum MetadataTransportMode {
 enum ReductionProfileMode {
     CanonicalV1,
     FixedContiguous37BalancedV1,
+}
+
+/// Explicit server-level choice for the continuous-batch decode attention path.
+///
+/// The native D128 mode is deliberately opt-in. It is eager-only and its
+/// model/graph contract is checked before CUDA preparation; there is no
+/// fallback to a D64 implementation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum DecodeAttentionBackendMode {
+    #[default]
+    Existing,
+    NativeBf16PagedSplitGqaD128TwoStage,
+}
+
+impl DecodeAttentionBackendMode {
+    #[cfg(any(feature = "cuda", test))]
+    const fn cli_id(self) -> &'static str {
+        match self {
+            Self::Existing => "existing",
+            Self::NativeBf16PagedSplitGqaD128TwoStage => {
+                "native-bf16-paged-split-gqa-d128-two-stage"
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -245,6 +289,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut sampling_backend = None;
     let mut execution_graph_policy = None;
     let mut graph_numerics = None;
+    let mut decode_attention_backend = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -393,6 +438,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                     "--execution-graph-policy",
                 )?;
             }
+            "--decode-attention-backend" => set_once(
+                &mut decode_attention_backend,
+                parse_decode_attention_backend(next_value(
+                    &mut arguments,
+                    "--decode-attention-backend",
+                )?)?,
+                "--decode-attention-backend",
+            )?,
             "--sampling-backend" => set_once(
                 &mut sampling_backend,
                 parse_sampling_backend(next_value(&mut arguments, "--sampling-backend")?)?,
@@ -501,25 +554,87 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     let vllm_smol_p128_graph = graph_numerics.unwrap_or(false);
+    let execution_graph_policy =
+        execution_graph_policy.unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled);
+    let decode_attention_backend = decode_attention_backend.unwrap_or_default();
+    let reduction_profile = reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1);
+    let max_active_sequences = max_active_sequences.unwrap_or(8);
+    let max_weight_bytes = max_weight_bytes.unwrap_or_else(|| {
+        if decode_attention_backend
+            == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        {
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES
+        } else {
+            DEFAULT_MAX_WEIGHT_BYTES
+        }
+    });
+    let prefill_chunk_tokens = prefill_chunk_tokens.unwrap_or_else(|| {
+        if decode_attention_backend
+            == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        {
+            batch_token_budget
+        } else {
+            512
+        }
+    });
     if vllm_smol_p128_graph
-        && execution_graph_policy != Some(riley_runtime::llama::ExecutionGraphPolicy::Require)
+        && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Require
     {
         return Err("vllm-smol-p128-v1 requires --execution-graph-policy require".to_owned());
     }
     if vllm_smol_p128_graph && c02_runtime_config.is_some() {
         return Err("vllm-smol-p128-v1 uses separate numerical qualification, not C02 exact-change artifacts".to_owned());
     }
+    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        && execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled
+    {
+        return Err(
+            "native-bf16-paged-split-gqa-d128-two-stage is eager-only and requires --execution-graph-policy disabled"
+                .to_owned(),
+        );
+    }
+    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        && reduction_profile != ReductionProfileMode::CanonicalV1
+    {
+        return Err(
+            "native-bf16-paged-split-gqa-d128-two-stage requires --reduction-profile canonical-v1"
+                .to_owned(),
+        );
+    }
+    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        && batch_token_budget > NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS
+    {
+        return Err(format!(
+            "native-bf16-paged-split-gqa-d128-two-stage requires --batch-token-budget at most {NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS}"
+        ));
+    }
+    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        && prefill_chunk_tokens > batch_token_budget
+    {
+        return Err(
+            "native-bf16-paged-split-gqa-d128-two-stage requires --prefill-chunk-tokens no greater than --batch-token-budget"
+                .to_owned(),
+        );
+    }
+    if decode_attention_backend == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        && max_active_sequences > batch_token_budget
+    {
+        return Err(
+            "native-bf16-paged-split-gqa-d128-two-stage requires --max-active-sequences no greater than --batch-token-budget"
+                .to_owned(),
+        );
+    }
     Ok(CliCommand::Serve(ServeOptions {
         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
         model_id,
         bind_address,
         device_ordinal: device_ordinal.unwrap_or(0),
-        max_active_sequences: max_active_sequences.unwrap_or(8),
+        max_active_sequences,
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
         max_sequence_tokens,
         max_output_tokens,
         batch_token_budget,
-        prefill_chunk_tokens: prefill_chunk_tokens.unwrap_or(512),
+        prefill_chunk_tokens,
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
@@ -527,11 +642,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         batch_shape_buckets,
         metadata_transport,
         sampling_backend: sampling_backend.unwrap_or(SamplingBackendMode::Cpu),
-        execution_graph_policy: execution_graph_policy
-            .unwrap_or(riley_runtime::llama::ExecutionGraphPolicy::Disabled),
-        reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
+        execution_graph_policy,
+        decode_attention_backend,
+        reduction_profile,
         vllm_smol_p128_graph,
-        max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+        max_weight_bytes,
         shutdown_on_stdin,
         c02_runtime_config,
         c02_audit_dir,
@@ -611,6 +726,19 @@ fn parse_sampling_backend(value: OsString) -> Result<SamplingBackendMode, String
         "cpu" => Ok(SamplingBackendMode::Cpu),
         "gpu-greedy" => Ok(SamplingBackendMode::GpuGreedy),
         _ => Err("--sampling-backend requires cpu or gpu-greedy".to_owned()),
+    }
+}
+
+fn parse_decode_attention_backend(value: OsString) -> Result<DecodeAttentionBackendMode, String> {
+    match parse_utf8(value, "--decode-attention-backend")?.as_str() {
+        "existing" => Ok(DecodeAttentionBackendMode::Existing),
+        "native-bf16-paged-split-gqa-d128-two-stage" => {
+            Ok(DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage)
+        }
+        _ => Err(
+            "--decode-attention-backend requires existing or native-bf16-paged-split-gqa-d128-two-stage"
+                .to_owned(),
+        ),
     }
 }
 
@@ -831,6 +959,116 @@ fn display_argument(argument: &OsStr) -> String {
     argument.to_string_lossy().into_owned()
 }
 
+#[cfg(any(feature = "cuda", test))]
+const fn native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(
+    query_heads: usize,
+    key_value_heads: usize,
+    head_size: usize,
+    page_size: usize,
+) -> bool {
+    query_heads == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS
+        && key_value_heads == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS
+        && head_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE
+        && page_size == NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE
+}
+
+#[cfg(any(feature = "cuda", test))]
+const fn native_bf16_paged_split_gqa_d128_two_stage_context_supported(
+    maximum_sequence_tokens: usize,
+) -> bool {
+    maximum_sequence_tokens <= NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS
+}
+
+#[cfg(feature = "cuda")]
+fn validate_native_bf16_paged_split_gqa_d128_two_stage_model(
+    backend: DecodeAttentionBackendMode,
+    model: &riley_model::LoadedModel,
+) -> Result<(), String> {
+    if backend != DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage {
+        return Ok(());
+    }
+
+    let spec = model.spec();
+    if !native_bf16_paged_split_gqa_d128_two_stage_context_supported(spec.max_sequence_length()) {
+        return Err(format!(
+            "{} requires a model context at most {}; found {}",
+            backend.cli_id(),
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+            spec.max_sequence_length(),
+        ));
+    }
+    if spec.dtype().name() != "bf16" {
+        return Err(format!(
+            "{} requires a BF16 model, found {}",
+            backend.cli_id(),
+            spec.dtype()
+        ));
+    }
+    let page_size = riley_runtime::paged_kv::KV_BLOCK_SIZE;
+    if page_size != NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE {
+        return Err(format!(
+            "{} requires {}-token paged KV blocks, found {page_size}",
+            backend.cli_id(),
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
+        ));
+    }
+    let Some(first) = spec.blocks().first() else {
+        return Err(format!(
+            "{} requires at least one decoder block",
+            backend.cli_id()
+        ));
+    };
+    for block in spec.blocks() {
+        let attention = block.attention();
+        if !native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(
+            attention.query_heads(),
+            attention.key_value_heads(),
+            attention.head_dimension(),
+            page_size,
+        ) {
+            return Err(format!(
+                "{} requires QH={} KVH={} D={} page={}; layer {} has QH={} KVH={} D={}",
+                backend.cli_id(),
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS,
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS,
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE,
+                NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
+                block.index(),
+                attention.query_heads(),
+                attention.key_value_heads(),
+                attention.head_dimension(),
+            ));
+        }
+    }
+    debug_assert!(
+        native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(
+            first.attention().query_heads(),
+            first.attention().key_value_heads(),
+            first.attention().head_dimension(),
+            page_size,
+        )
+    );
+    Ok(())
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
+    resolved_ragged_backend: &str,
+) -> Result<String, String> {
+    if resolved_ragged_backend != NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID {
+        return Err(format!(
+            "native-bf16-paged-split-gqa-d128-two-stage resolved unexpected ragged backend {resolved_ragged_backend}; expected {NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID}"
+        ));
+    }
+    Ok(format!(
+        "RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend={resolved_ragged_backend} fallback_reason=none query_heads={} key_value_heads={} head_size={} page_size={} graph=false",
+        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_QUERY_HEADS,
+        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_KEY_VALUE_HEADS,
+        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_HEAD_SIZE,
+        NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_PAGE_SIZE,
+    ))
+}
+
 #[cfg(not(feature = "cuda"))]
 fn run_serve(
     options: ServeOptions,
@@ -856,6 +1094,7 @@ fn run_serve(
         options.metadata_transport,
         options.sampling_backend,
         options.execution_graph_policy,
+        options.decode_attention_backend,
         options.reduction_profile,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
@@ -954,6 +1193,10 @@ fn run_serve(
         .map_err(|error| format!("invalid model load limit: {error}"))?;
     let model = LoadedModel::load(&options.model_path, load_limits)
         .map_err(|error| format!("model load failed: {error}"))?;
+    validate_native_bf16_paged_split_gqa_d128_two_stage_model(
+        options.decode_attention_backend,
+        &model,
+    )?;
     let model_context = model.spec().max_sequence_length();
     let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(model_context);
     if max_sequence_tokens < 2 || max_sequence_tokens > model_context {
@@ -1043,15 +1286,23 @@ fn run_serve(
     } else {
         executor
     };
-    // Full graph kernels use the reviewed exact grouped-head implementation.
-    // Select it explicitly before deriving effective runtime facts; Disabled
-    // preserves the established CLI defaults.
-    let executor =
-        if options.execution_graph_policy != riley_runtime::llama::ExecutionGraphPolicy::Disabled {
-            executor.with_grouped_ragged_attention_heads()
-        } else {
-            executor
-        };
+    // The native D128 mode is eager-only and must retain its explicit
+    // selection. Graph-capable existing modes keep the established
+    // grouped-head selection; the default remains the legacy path.
+    let executor = match options.decode_attention_backend {
+        DecodeAttentionBackendMode::Existing => {
+            if options.execution_graph_policy
+                != riley_runtime::llama::ExecutionGraphPolicy::Disabled
+            {
+                executor.with_grouped_ragged_attention_heads()
+            } else {
+                executor
+            }
+        }
+        DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage => {
+            executor.with_native_bf16_paged_split_gqa_d128_two_stage()
+        }
+    };
     let model_id = options
         .model_id
         .unwrap_or_else(|| model.provenance().source_model().to_owned());
@@ -1078,6 +1329,16 @@ fn run_serve(
     )
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?
     .with_execution_graph_policy(options.execution_graph_policy);
+    let native_d128_two_stage_startup_receipt = if options.decode_attention_backend
+        == DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+    {
+        let facts = resources.effective_runtime_facts();
+        Some(native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
+            facts.attention_decode(),
+        )?)
+    } else {
+        None
+    };
     let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
         Some(c02) => {
             let facts = resources.effective_runtime_facts();
@@ -1164,6 +1425,9 @@ fn run_serve(
         c02_audit_root.is_some(),
     )
     .map_err(|error| format!("HTTP server startup failed: {error}"))?;
+    if let Some(receipt) = native_d128_two_stage_startup_receipt {
+        eprintln!("{receipt}");
+    }
     println!(
         "riley listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
         server.local_address(),
@@ -2880,17 +3144,21 @@ mod tests {
         C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS, C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION,
         C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION, C02_SHUTDOWN_SCHEMA_VERSION,
         C02AuditProcessIdentity, C02ConfigurationProfile, C02RuntimeConfigOptions,
-        C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
-        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
-        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, c02_canonical_json_bytes,
-        c02_endpoint_receipt, c02_generation_audit_completion_basename,
+        C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES,
+        DecodeAttentionBackendMode, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
+        MetadataTransportMode, NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID,
+        ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE,
+        c02_canonical_json_bytes, c02_endpoint_receipt, c02_generation_audit_completion_basename,
         c02_generation_audit_completion_marker_bytes, c02_generation_audit_record_basename,
         c02_native_fallback_event_basename, c02_native_fallback_event_bytes,
         c02_native_fallback_event_completion_basename,
         c02_native_fallback_event_completion_marker_bytes, c02_native_fallback_projection,
         c02_process_identity_from_linux_proc_stat, c02_runtime_identity, c02_sha256_hex,
         c02_shutdown_artifact_bytes, c02_shutdown_completion_basename,
-        c02_shutdown_completion_marker_bytes, c02_utc_timestamp_from_unix_seconds, parse_arguments,
+        c02_shutdown_completion_marker_bytes, c02_utc_timestamp_from_unix_seconds,
+        native_bf16_paged_split_gqa_d128_two_stage_context_supported,
+        native_bf16_paged_split_gqa_d128_two_stage_geometry_supported,
+        native_bf16_paged_split_gqa_d128_two_stage_startup_receipt, parse_arguments,
         validate_reduction_profile_context, validate_shutdown_metrics_path,
         write_c02_startup_artifact, write_shutdown_metrics,
     };
@@ -3792,6 +4060,8 @@ mod tests {
         assert_eq!(parse_arguments(args(&["-h"])), Ok(CliCommand::Help));
         assert!(USAGE.contains("--execution-completion MODE"));
         assert!(USAGE.contains("(default: iteration-batch)"));
+        assert!(USAGE.contains("--decode-attention-backend MODE"));
+        assert!(USAGE.contains("native-bf16-paged-split-gqa-d128-two-stage"));
         assert!(USAGE.contains("--reduction-profile ID"));
         assert!(USAGE.contains("(default: canonical-v1)"));
         assert!(USAGE.contains("--batch-shape-policy MODE"));
@@ -3832,6 +4102,7 @@ mod tests {
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
@@ -4219,6 +4490,7 @@ mod tests {
                 batch_shape_buckets: Some(vec![1, 2, 4, 8, 16, 32, 64]),
                 metadata_transport: MetadataTransportMode::PackedAsync,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 vllm_smol_p128_graph: false,
@@ -4373,6 +4645,7 @@ mod tests {
                 batch_shape_buckets: Some(vec![1, 3, 7]),
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,
@@ -4455,6 +4728,157 @@ mod tests {
     }
 
     #[test]
+    fn native_d128_two_stage_cli_is_explicit_eager_and_fail_closed() {
+        let CliCommand::Serve(options) = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/qwen25-3b",
+            "--decode-attention-backend",
+            "native-bf16-paged-split-gqa-d128-two-stage",
+            "--batch-token-budget",
+            "32",
+        ]))
+        .expect("explicit native D128 backend") else {
+            panic!("serve")
+        };
+        assert_eq!(
+            options.decode_attention_backend,
+            DecodeAttentionBackendMode::NativeBf16PagedSplitGqaD128TwoStage
+        );
+        assert_eq!(
+            options.decode_attention_backend.cli_id(),
+            "native-bf16-paged-split-gqa-d128-two-stage"
+        );
+        assert_eq!(
+            options.execution_graph_policy,
+            riley_runtime::llama::ExecutionGraphPolicy::Disabled
+        );
+        assert_eq!(options.reduction_profile, ReductionProfileMode::CanonicalV1);
+        assert_eq!(options.batch_token_budget, 32);
+        assert_eq!(options.prefill_chunk_tokens, 32);
+        assert_eq!(options.max_weight_bytes, 8 * 1_024 * 1_024 * 1_024);
+        assert!(native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_768));
+        assert!(!native_bf16_paged_split_gqa_d128_two_stage_context_supported(32_769));
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--batch-token-budget",
+                "32",
+                "--max-active-sequences",
+                "33",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--batch-token-budget",
+                "33",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--batch-token-budget",
+                "32",
+                "--prefill-chunk-tokens",
+                "33",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--decode-attention-backend",
+                "existing",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--execution-graph-policy",
+                "auto",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/qwen25-3b",
+                "--decode-attention-backend",
+                "native-bf16-paged-split-gqa-d128-two-stage",
+                "--reduction-profile",
+                "fixed-contiguous-37-balanced-v1",
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn native_d128_two_stage_receipt_pins_geometry_and_no_fallback() {
+        assert!(native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(16, 2, 128, 16));
+        assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(9, 3, 64, 16));
+        assert!(!native_bf16_paged_split_gqa_d128_two_stage_geometry_supported(16, 2, 128, 32));
+        let receipt = native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
+            NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_RAGGED_BACKEND_ID,
+        )
+        .expect("native ragged backend receipt");
+        assert_eq!(
+            receipt,
+            "RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2 fallback_reason=none query_heads=16 key_value_heads=2 head_size=128 page_size=16 graph=false"
+        );
+        assert!(
+            native_bf16_paged_split_gqa_d128_two_stage_startup_receipt(
+                "riley.cuda.ragged-paged-attention.legacy-d64-v1"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn fused_residual_norm_requires_explicit_per_operation_completion() {
         assert!(
             parse_arguments(args(&[
@@ -4494,6 +4918,7 @@ mod tests {
                 batch_shape_buckets: None,
                 metadata_transport: MetadataTransportMode::Synchronous,
                 execution_graph_policy: riley_runtime::llama::ExecutionGraphPolicy::Disabled,
+                decode_attention_backend: DecodeAttentionBackendMode::Existing,
                 sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 vllm_smol_p128_graph: false,

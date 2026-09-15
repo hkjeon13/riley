@@ -44,7 +44,8 @@ use super::executor::metadata::{
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{decode_greedy_tokens, greedy_result_bytes};
 use super::executor::owner::{
-    BatchHostWorkspace, PreparedLlamaBatchOwner, SUPPORTED_HEAD_DIMENSION,
+    BatchHostWorkspace, NativeD128TwoStageWorkspace, PreparedLlamaBatchOwner,
+    SUPPORTED_HEAD_DIMENSION,
 };
 use super::executor::poison::poison_for_batch_error;
 use super::executor::rope::absolute_rope_position_count;
@@ -115,11 +116,13 @@ impl PreparedLlamaBatchExecutor {
     /// Uploads weights and allocates every host/device byte used by repeated
     /// mixed-batch execution.
     ///
-    /// The current ragged kernel is deliberately D64-only. Preparation rejects
-    /// other head widths before uploading weights or allocating CUDA storage.
-    /// `max_input_tokens` remains the maximum dense GEMM row count and must not
-    /// exceed the model's maximum sequence length. Active-row mode prepares
-    /// smaller exact-M plans against the same [`PreparedLlamaForward`] owner.
+    /// The default ragged kernel is deliberately D64-only. An explicit native
+    /// D128 two-stage opt-in admits only its qualified Qwen GQA geometry and
+    /// owns a dedicated eager workspace; it never changes the default or graph
+    /// selections. `max_input_tokens` remains the maximum dense GEMM row count
+    /// and must not exceed the model's maximum sequence length. Active-row mode
+    /// prepares smaller exact-M plans against the same [`PreparedLlamaForward`]
+    /// owner.
     ///
     /// # Errors
     ///
@@ -135,6 +138,7 @@ impl PreparedLlamaBatchExecutor {
     ) -> LlamaBatchExecutorResult<Self> {
         let config = normalize_prepared_config(config);
         config.validate_metadata_transport()?;
+        config.validate_attention_implementation()?;
         let mut shape_history = shape_history_for_config(config)?;
         let bounds = config.metadata();
         let owner = PreparedLlamaBatchOwner::prepare(model, context, stream, config)?;
@@ -167,6 +171,10 @@ impl PreparedLlamaBatchExecutor {
                 .greedy_results
                 .as_ref()
                 .map_or(0, CudaDeviceBuffer::byte_len),
+            owner.native_d128_two_stage_workspace.as_ref().map_or(
+                0,
+                super::executor::owner::NativeD128TwoStageWorkspace::byte_len,
+            ),
         )?;
 
         Ok(Self {
@@ -456,6 +464,7 @@ impl PreparedLlamaBatchExecutor {
             device_input,
             gathered_logits,
             greedy_results,
+            native_d128_two_stage_workspace,
             host,
             poisoned,
         } = owner;
@@ -496,6 +505,7 @@ impl PreparedLlamaBatchExecutor {
             device_input,
             gathered_logits,
             greedy_results,
+            native_d128_two_stage_workspace.as_mut(),
             host,
             output_mode_requested,
             &mut dispatch_disposition,
@@ -743,6 +753,7 @@ fn execute_packed(
     device: &mut BatchDeviceInput,
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
+    native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     host: &mut BatchHostWorkspace,
     output_mode: BatchOutputMode,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -762,6 +773,7 @@ fn execute_packed(
         device,
         gathered_logits,
         greedy_results,
+        native_d128_two_stage_workspace,
         &mut host.input,
         output_mode == BatchOutputMode::GreedyTokens,
         dispatch_disposition,

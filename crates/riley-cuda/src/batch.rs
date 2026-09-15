@@ -1,3 +1,4 @@
+use crate::decode::DecodePartialReductionOrder;
 use crate::error::{CudaError, CudaResult};
 use crate::memory::CudaDeviceBuffer;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
@@ -17,6 +18,18 @@ pub const FIXED37_RAGGED_MAX_LOGICAL_TOKENS: u64 = 8_192;
 
 const BF16_BYTES: u64 = 2;
 const ATTENTION_HEAD_SIZE: u64 = 64;
+
+/// Fixed query-head count of the eager native ragged D128 two-stage path.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT: u64 = 16;
+/// Fixed KV-head count of the eager native ragged D128 two-stage path.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT: u64 = 2;
+/// Fixed head size of the eager native ragged D128 two-stage path.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE: u64 = 128;
+/// F32 words in one `[maximum, denominator, numerator[D]]` partial state.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_PARTIAL_STATE_WIDTH: u64 =
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE + 2;
+/// F32 words in one V2 transition pair.
+pub const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH: u64 = 2;
 
 /// Allocation-free validated host mirror of one packed multi-sequence batch.
 ///
@@ -647,6 +660,191 @@ pub struct RaggedPagedAttentionParams<'a> {
     pub scale: f32,
 }
 
+/// Byte requirements for the eager native D128 ragged two-stage workspace.
+///
+/// The layout keeps every fixed output row independent: partial states are
+/// `[M,P,16,130]` F32, transition pairs are `[M,P,16,2]` F32, and final
+/// normalizers are `[M,16]` F32. `P` is the maximum logical page count of one
+/// row, not the aggregate CSR block count of the batch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout {
+    partial_state_bytes: u64,
+    reduction_step_bytes: u64,
+    reduction_normalizer_bytes: u64,
+    total_bytes: u64,
+}
+
+impl NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout {
+    /// Calculates exact workspace spans for `M` prepared rows and per-row
+    /// page capacity `P`.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a zero axis or byte arithmetic overflow.
+    pub fn new(output_row_count: u64, partial_state_capacity: u64) -> CudaResult<Self> {
+        const OPERATION: &str = "NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new";
+        require_nonzero(OPERATION, "output_row_count", output_row_count)?;
+        require_nonzero(OPERATION, "partial_state_capacity", partial_state_capacity)?;
+        let partial_state_bytes = checked_bytes(
+            OPERATION,
+            &[
+                output_row_count,
+                partial_state_capacity,
+                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_PARTIAL_STATE_WIDTH,
+                CudaDType::F32.size_bytes(),
+            ],
+        )?;
+        let reduction_step_bytes = checked_bytes(
+            OPERATION,
+            &[
+                output_row_count,
+                partial_state_capacity,
+                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH,
+                CudaDType::F32.size_bytes(),
+            ],
+        )?;
+        let reduction_normalizer_bytes = checked_bytes(
+            OPERATION,
+            &[
+                output_row_count,
+                NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+                CudaDType::F32.size_bytes(),
+            ],
+        )?;
+        let total_bytes = partial_state_bytes
+            .checked_add(reduction_step_bytes)
+            .and_then(|bytes| bytes.checked_add(reduction_normalizer_bytes))
+            .ok_or_else(|| CudaError::out_of_range(OPERATION, "workspace byte total overflows"))?;
+        Ok(Self {
+            partial_state_bytes,
+            reduction_step_bytes,
+            reduction_normalizer_bytes,
+            total_bytes,
+        })
+    }
+
+    #[must_use]
+    pub const fn partial_state_bytes(self) -> u64 {
+        self.partial_state_bytes
+    }
+
+    #[must_use]
+    pub const fn reduction_step_bytes(self) -> u64 {
+        self.reduction_step_bytes
+    }
+
+    #[must_use]
+    pub const fn reduction_normalizer_bytes(self) -> u64 {
+        self.reduction_normalizer_bytes
+    }
+
+    #[must_use]
+    pub const fn total_bytes(self) -> u64 {
+        self.total_bytes
+    }
+}
+
+/// Inputs for the eager native BF16 D128 ragged two-stage paged attention
+/// control. The native ABI supports only QH=16, KVH=2, D=128, and page=16.
+///
+/// Each active row uses a private `P`-sized workspace slice. Inactive prepared
+/// rows are zeroed only in `output`; their workspace bytes stay untouched so a
+/// caller may use sentinel tails to audit active-row boundaries.
+#[derive(Debug)]
+pub struct NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'a> {
+    /// BF16 `[T,16,128]` active queries.
+    pub query: CudaBufferSpan<'a>,
+    /// BF16 `[physical_block_count,2,16,128]` key pool.
+    pub key_pool: CudaBufferSpan<'a>,
+    /// BF16 `[physical_block_count,2,16,128]` value pool.
+    pub value_pool: CudaBufferSpan<'a>,
+    /// F32 `[M,P,16,130]` V1-compatible partial-state prefix.
+    pub partial_states: CudaBufferSpanMut<'a>,
+    /// F32 `[M,P,16,2]` V2 transition-pair scratch.
+    pub reduction_steps: CudaBufferSpanMut<'a>,
+    /// F32 `[M,16]` final-normalizer scratch.
+    pub reduction_normalizers: CudaBufferSpanMut<'a>,
+    /// BF16 `[M,16,128]`; inactive rows `[T,M)` are zero-filled.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Host/device-bound ragged page-table translation.
+    pub batch: PackedBatchV1<'a>,
+    pub query_head_count: u64,
+    pub key_value_head_count: u64,
+    pub head_size: u64,
+    /// Prepared output row count `M`, at least active row count `T`.
+    pub output_row_count: u64,
+    /// Per-row logical-page capacity `P`. The wrapper derives the producer
+    /// grid's `L=max_row ceil((position+1)/16)` from [`PackedBatchHostV1`],
+    /// so callers cannot accidentally use `P` as a full-grid launch extent.
+    pub partial_state_capacity: u64,
+    /// Positive finite attention scale.
+    pub scale: f32,
+    /// Logical partial-state traversal order, replayed exactly by stage 2.
+    pub reduction_order: DecodePartialReductionOrder,
+}
+
+/// Executes eager-only native BF16 ragged paged D128 attention with V3 ordered
+/// transition/replay reduction.
+///
+/// This explicit control has no graph-capture ABI and never selects or falls
+/// back to the D64 ragged implementation. Direct-stream execution synchronizes
+/// before returning; command-batch execution retains every resource until its
+/// finish boundary.
+///
+/// # Errors
+///
+/// Returns before launch unless the fixed D128 geometry, per-row page capacity,
+/// packed metadata, workspace spans, ownership, and idle-state contract hold.
+#[allow(clippy::too_many_lines)]
+pub fn native_bf16_ragged_paged_split_gqa_d128_two_stage<S: CudaExecutionStream + ?Sized>(
+    params: &mut NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "native_bf16_ragged_paged_split_gqa_d128_two_stage";
+    let stream = execution_stream_mut(stream);
+    let launch_partial_state_count =
+        validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(OPERATION, params, stream)?;
+
+    #[cfg(feature = "cuda")]
+    {
+        let batch = params.batch.raw();
+        let reduction_order = match params.reduction_order {
+            DecodePartialReductionOrder::LogicalAscending => {
+                ffi::DECODE_REDUCTION_LOGICAL_ASCENDING
+            }
+            DecodePartialReductionOrder::LogicalDescending => {
+                ffi::DECODE_REDUCTION_LOGICAL_DESCENDING
+            }
+        };
+        ffi::native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+            params.query.raw(),
+            params.key_pool.raw(),
+            params.value_pool.raw(),
+            params.partial_states.raw(),
+            params.reduction_steps.raw(),
+            params.reduction_normalizers.raw(),
+            params.output.raw(),
+            &batch,
+            params.query_head_count,
+            params.key_value_head_count,
+            params.head_size,
+            params.output_row_count,
+            params.partial_state_capacity,
+            launch_partial_state_count,
+            params.scale,
+            reduction_order,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (params, launch_partial_state_count);
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Executes D64 GQA ragged paged attention and zero-fills inactive output rows.
 ///
 /// Each active row attends through its own logical position, inclusive. The
@@ -872,6 +1070,208 @@ fn validate_ragged_paged_attention(
             params.output.buffer(),
         ],
     )
+}
+
+#[allow(clippy::too_many_lines)]
+fn validate_native_bf16_ragged_paged_split_gqa_d128_two_stage(
+    operation: &'static str,
+    params: &NativeBf16RaggedPagedSplitGqaD128TwoStageParams<'_>,
+    stream: &CudaStream,
+) -> CudaResult<u64> {
+    const MAXIMUM_GRID_X: u64 = 2_147_483_647;
+    const MAXIMUM_GRID_Y_OR_Z: u64 = 65_535;
+    if params.query_head_count != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
+        || params.key_value_head_count
+            != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
+        || params.head_size != NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+    {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "native ragged two-stage attention requires QH=16, KVH=2, and head_size=128",
+        ));
+    }
+    require_nonzero(
+        operation,
+        "partial_state_capacity",
+        params.partial_state_capacity,
+    )?;
+    if !params.scale.is_finite() || params.scale <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "scale must be finite and greater than zero",
+        ));
+    }
+    let host = params.batch.host();
+    if params.output_row_count < host.active_row_count() {
+        return Err(CudaError::out_of_range(
+            operation,
+            "output_row_count must be at least active_row_count",
+        ));
+    }
+    if params.output_row_count > MAXIMUM_GRID_Y_OR_Z {
+        return Err(CudaError::out_of_range(
+            operation,
+            "native ragged two-stage output rows exceed the CUDA grid contract",
+        ));
+    }
+
+    let launch_partial_state_count = native_bf16_ragged_launch_partial_state_count(
+        operation,
+        host,
+        params.partial_state_capacity,
+    )?;
+    if launch_partial_state_count > MAXIMUM_GRID_X {
+        return Err(CudaError::out_of_range(
+            operation,
+            "native ragged two-stage producer grid exceeds the CUDA grid contract",
+        ));
+    }
+
+    for (name, dtype) in [
+        ("query", params.query.dtype()),
+        ("key_pool", params.key_pool.dtype()),
+        ("value_pool", params.value_pool.dtype()),
+        ("output", params.output.dtype()),
+    ] {
+        require_dtype(operation, name, dtype, CudaDType::BF16)?;
+    }
+    for (name, dtype) in [
+        ("partial_states", params.partial_states.dtype()),
+        ("reduction_steps", params.reduction_steps.dtype()),
+        (
+            "reduction_normalizers",
+            params.reduction_normalizers.dtype(),
+        ),
+    ] {
+        require_dtype(operation, name, dtype, CudaDType::F32)?;
+    }
+
+    let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+        params.output_row_count,
+        params.partial_state_capacity,
+    )?;
+    let query_bytes = checked_bytes(
+        operation,
+        &[
+            host.active_row_count(),
+            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+            BF16_BYTES,
+        ],
+    )?;
+    let output_bytes = checked_bytes(
+        operation,
+        &[
+            params.output_row_count,
+            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+            NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+            BF16_BYTES,
+        ],
+    )?;
+    let pool_bytes = paged_pool_bytes(
+        operation,
+        host.physical_block_count(),
+        NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT,
+        NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+    )?;
+    for (name, actual, required) in [
+        ("query", params.query.byte_len(), query_bytes),
+        ("key_pool", params.key_pool.byte_len(), pool_bytes),
+        ("value_pool", params.value_pool.byte_len(), pool_bytes),
+        (
+            "partial_states",
+            params.partial_states.byte_len(),
+            layout.partial_state_bytes(),
+        ),
+        (
+            "reduction_steps",
+            params.reduction_steps.byte_len(),
+            layout.reduction_step_bytes(),
+        ),
+        (
+            "reduction_normalizers",
+            params.reduction_normalizers.byte_len(),
+            layout.reduction_normalizer_bytes(),
+        ),
+        ("output", params.output.byte_len(), output_bytes),
+    ] {
+        require_capacity(operation, name, actual, required)?;
+    }
+    validate_batch_resources(
+        operation,
+        stream,
+        &params.batch,
+        &[
+            params.query.buffer(),
+            params.key_pool.buffer(),
+            params.value_pool.buffer(),
+            params.partial_states.buffer(),
+            params.reduction_steps.buffer(),
+            params.reduction_normalizers.buffer(),
+            params.output.buffer(),
+        ],
+    )?;
+    Ok(launch_partial_state_count)
+}
+
+/// Derives the exact producer-grid `L` from host-validated row prefixes.
+///
+/// `P` remains a per-row workspace stride. It is intentionally never compared
+/// to the aggregate CSR block count: independent rows may collectively own
+/// more pages than a single row can address. The returned `L` is in
+/// `1..=P`, and each active row's prefix is also checked against its CSR range.
+fn native_bf16_ragged_launch_partial_state_count(
+    operation: &'static str,
+    host: PackedBatchHostV1<'_>,
+    partial_state_capacity: u64,
+) -> CudaResult<u64> {
+    let mut launch_partial_state_count = 0_u64;
+    for (row, (&sequence_slot, &position)) in host
+        .row_sequence_slots()
+        .iter()
+        .zip(host.row_positions())
+        .enumerate()
+    {
+        let logical_page_count = u64::from(position) / PACKED_BATCH_BLOCK_SIZE + 1;
+        if logical_page_count > partial_state_capacity {
+            return Err(CudaError::out_of_range(
+                operation,
+                format!(
+                    "row {row} requires {logical_page_count} logical pages but partial_state_capacity is {partial_state_capacity}",
+                ),
+            ));
+        }
+        let sequence = usize::try_from(sequence_slot).map_err(|_| {
+            CudaError::out_of_range(
+                operation,
+                format!("row {row} sequence slot does not fit usize"),
+            )
+        })?;
+        let offsets = host.sequence_block_offsets();
+        let block_begin = u64::from(offsets[sequence]);
+        let block_end = u64::from(offsets[sequence + 1]);
+        let sequence_page_count = block_end.checked_sub(block_begin).ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                format!("row {row} has an invalid CSR page range"),
+            )
+        })?;
+        if logical_page_count > sequence_page_count {
+            return Err(CudaError::out_of_range(
+                operation,
+                format!(
+                    "row {row} prefix requires {logical_page_count} pages but its CSR range exposes {sequence_page_count}",
+                ),
+            ));
+        }
+        launch_partial_state_count = launch_partial_state_count.max(logical_page_count);
+    }
+    require_nonzero(
+        operation,
+        "launch_partial_state_count",
+        launch_partial_state_count,
+    )?;
+    Ok(launch_partial_state_count)
 }
 
 fn validate_fixed37_ragged_logical_tokens(
@@ -1368,6 +1768,67 @@ mod tests {
     }
 
     #[test]
+    fn native_ragged_d128_two_stage_workspace_is_per_prepared_row() {
+        let layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(32, 2_048)
+            .expect("M32 and per-row P2048 must fit u64 byte arithmetic");
+        assert_eq!(
+            layout.partial_state_bytes(),
+            32 * 2_048 * 16 * 130 * 4,
+            "states must be [M,P,QH,D+2] F32"
+        );
+        assert_eq!(
+            layout.reduction_step_bytes(),
+            32 * 2_048 * 16 * 2 * 4,
+            "steps must be [M,P,QH,2] F32"
+        );
+        assert_eq!(
+            layout.reduction_normalizer_bytes(),
+            32 * 16 * 4,
+            "normalizers must be [M,QH] F32"
+        );
+        assert_eq!(
+            layout.total_bytes(),
+            layout.partial_state_bytes()
+                + layout.reduction_step_bytes()
+                + layout.reduction_normalizer_bytes()
+        );
+        for (output_rows, capacity) in [(0, 1), (1, 0)] {
+            let error = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+                output_rows,
+                capacity,
+            )
+            .expect_err("zero workspace axis must fail closed");
+            assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+        }
+    }
+
+    #[test]
+    fn native_ragged_d128_two_stage_derives_launch_pages_per_row() {
+        // Three independent two-page sequences collectively own six blocks.
+        // P=2 is valid because workspace capacity is row-local, and the exact
+        // producer extent is L=max(1, 2, 2)=2 rather than the aggregate six.
+        let host = PackedBatchHostV1::new(
+            &[0, 2, 4, 6],
+            &[0, 1, 2, 3, 4, 5],
+            &[16, 3, 16, 16, 16, 16],
+            &[0, 1, 2],
+            &[0, 18, 31],
+            6,
+        )
+        .expect("row-local two-page CSR fixture");
+        assert!(host.block_count() > 2);
+        assert_eq!(
+            native_bf16_ragged_launch_partial_state_count("native_ragged_d128_test", host, 2,)
+                .expect("each row fits P=2"),
+            2,
+        );
+        let error =
+            native_bf16_ragged_launch_partial_state_count("native_ragged_d128_test", host, 1)
+                .expect_err("a two-page row must reject P=1 before launch");
+        assert_eq!(error.kind(), CudaErrorKind::OutOfRange);
+    }
+
+    #[test]
     fn public_batch_constants_and_symbols_match_the_native_header_source() {
         let header = include_str!("../../../kernels/include/riley_cuda.h");
         assert!(header.contains("#define RILEY_CUDA_PACKED_BATCH_VERSION 1u"));
@@ -1378,11 +1839,15 @@ mod tests {
             "RileyCudaPackedBatchV1",
             "RileyCudaRaggedPagedKvCacheWriteParams",
             "RileyCudaRaggedPagedAttentionParams",
+            "RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2",
+            "RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3",
             "riley_cuda_indexed_rope_execute",
             "riley_cuda_row_gather_execute",
             "riley_cuda_ragged_paged_kv_cache_write_execute",
             "riley_cuda_ragged_paged_attention_execute",
             "riley_cuda_ragged_paged_attention_grouped_heads_execute",
+            "riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_execute",
+            "riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute",
             "RileyCudaFixed37RaggedPagedAttentionParams",
             "riley_cuda_fixed37_ragged_paged_attention_two_pass_execute",
         ] {
@@ -1397,6 +1862,43 @@ mod tests {
             attention.find("uint64_t head_size;") < attention.find("uint64_t output_row_count;")
         );
         assert!(attention.find("uint64_t output_row_count;") < attention.find("float scale;"));
+        let native_ragged_v2 = header
+            .split("typedef struct RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("} RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2;")
+                    .next()
+            })
+            .expect("native ragged D128 V2 declaration");
+        assert!(
+            native_ragged_v2.find("RileyCudaPackedBatchV1 batch;")
+                < native_ragged_v2.find("uint64_t query_head_count;")
+        );
+        assert!(
+            native_ragged_v2.find("uint64_t output_row_count;")
+                < native_ragged_v2.find("uint64_t partial_state_capacity;")
+        );
+        assert!(
+            native_ragged_v2.find("uint64_t partial_state_capacity;")
+                < native_ragged_v2.find("float scale;")
+        );
+        assert!(!native_ragged_v2.contains("launch_partial_state_count"));
+        let native_ragged_v3 = header
+            .split("typedef struct RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("} RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3;")
+                    .next()
+            })
+            .expect("native ragged D128 V3 declaration");
+        assert!(
+            native_ragged_v3.find("uint64_t partial_state_capacity;")
+                < native_ragged_v3.find("uint64_t launch_partial_state_count;")
+        );
+        assert!(
+            native_ragged_v3.find("uint64_t launch_partial_state_count;")
+                < native_ragged_v3.find("float scale;")
+        );
         let fixed37_attention = header
             .split("typedef struct RileyCudaFixed37RaggedPagedAttentionParams")
             .nth(1)

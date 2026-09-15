@@ -35,6 +35,9 @@ pub enum LlamaBatchExecutorResource {
     PinnedIterationInput,
     GatheredLogits,
     GreedyResults,
+    NativeD128PartialStates,
+    NativeD128ReductionSteps,
+    NativeD128ReductionNormalizers,
     HostWorkspace,
 }
 
@@ -55,6 +58,9 @@ impl LlamaBatchExecutorResource {
             Self::PinnedIterationInput => "batch_pinned_iteration_input",
             Self::GatheredLogits => "batch_gathered_logits",
             Self::GreedyResults => "batch_greedy_results",
+            Self::NativeD128PartialStates => "native_d128_partial_states",
+            Self::NativeD128ReductionSteps => "native_d128_reduction_steps",
+            Self::NativeD128ReductionNormalizers => "native_d128_reduction_normalizers",
             Self::HostWorkspace => "batch_host_workspace",
         }
     }

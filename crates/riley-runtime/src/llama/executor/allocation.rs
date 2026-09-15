@@ -30,6 +30,7 @@ pub struct PreparedLlamaBatchAllocationReport {
     batch_input_device_bytes: u64,
     gathered_logits_capacity_bytes: u64,
     greedy_result_capacity_bytes: u64,
+    native_d128_two_stage_workspace_bytes: u64,
     additional_device_bytes: u64,
     total_device_bytes: u64,
     additional_device_allocation_count: u64,
@@ -77,6 +78,14 @@ impl PreparedLlamaBatchAllocationReport {
     #[must_use]
     pub const fn greedy_result_capacity_bytes(self) -> u64 {
         self.greedy_result_capacity_bytes
+    }
+
+    /// Combined bytes of the explicit native D128 two-stage partial-state,
+    /// transition, and normalizer workspaces. The default D64 path reports
+    /// zero because it owns none of these buffers.
+    #[must_use]
+    pub const fn native_d128_two_stage_workspace_bytes(self) -> u64 {
+        self.native_d128_two_stage_workspace_bytes
     }
 
     #[must_use]
@@ -129,6 +138,7 @@ pub(in crate::llama) fn build_batch_allocation_report(
     rope_bytes_per_kind: u64,
     gathered_logits_capacity_bytes: u64,
     greedy_result_capacity_bytes: u64,
+    native_d128_two_stage_workspace_bytes: u64,
 ) -> LlamaBatchExecutorResult<PreparedLlamaBatchAllocationReport> {
     let offset_count = sequence_block_offset_count(bounds.max_rows())?;
     let sequence_block_offsets_bytes = checked_byte_len(
@@ -199,8 +209,9 @@ pub(in crate::llama) fn build_batch_allocation_report(
         .and_then(|bytes| bytes.checked_add(batch_input_device_bytes))
         .and_then(|bytes| bytes.checked_add(gathered_logits_capacity_bytes))
         .and_then(|bytes| bytes.checked_add(greedy_result_capacity_bytes))
+        .and_then(|bytes| bytes.checked_add(native_d128_two_stage_workspace_bytes))
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::GatheredLogits,
+            resource: LlamaBatchExecutorResource::NativeD128PartialStates,
         })?;
     let total_device_bytes = forward
         .total_device_bytes()
@@ -220,8 +231,11 @@ pub(in crate::llama) fn build_batch_allocation_report(
     };
     let additional_device_allocation_count = base_allocations
         .checked_add(output_allocations)
+        .and_then(|count| {
+            count.checked_add(u64::from(native_d128_two_stage_workspace_bytes != 0) * 3)
+        })
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::GatheredLogits,
+            resource: LlamaBatchExecutorResource::NativeD128PartialStates,
         })?;
     let total_device_allocation_count = forward
         .device_allocation_count()
@@ -289,6 +303,7 @@ pub(in crate::llama) fn build_batch_allocation_report(
         batch_input_device_bytes,
         gathered_logits_capacity_bytes,
         greedy_result_capacity_bytes,
+        native_d128_two_stage_workspace_bytes,
         additional_device_bytes,
         total_device_bytes,
         additional_device_allocation_count,

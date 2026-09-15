@@ -34,10 +34,18 @@ pub use attention::{
     qk_gqa, scale_causal_mask_in_place,
 };
 pub use batch::{
-    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, IndexedRopeParams,
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE,
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT,
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_PARTIAL_STATE_WIDTH,
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT,
+    NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_TRANSITION_WIDTH,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageParams,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, PACKED_BATCH_BLOCK_SIZE,
     PACKED_BATCH_VERSION, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
     RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention,
-    grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
+    grouped_ragged_paged_attention, indexed_rope,
+    native_bf16_ragged_paged_split_gqa_d128_two_stage, ragged_paged_attention,
     ragged_paged_kv_cache_write, row_gather,
 };
 pub use decode::{

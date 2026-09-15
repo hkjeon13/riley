@@ -7,7 +7,8 @@
 //! iteration state and borrows these resources for dispatch.
 
 use riley_cuda::{
-    CudaContext, CudaDType, CudaDeviceBuffer, CudaStream, RopeTableParams, rope_table,
+    CudaContext, CudaDType, CudaDeviceBuffer, CudaStream,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout, RopeTableParams, rope_table,
 };
 use riley_model::LoadedModel;
 
@@ -29,10 +30,30 @@ use super::host::allocate_zeroed_host_bytes;
 use super::metadata::PackedIterationLayout;
 use super::output::{GREEDY_RESULT_BYTES, greedy_result_capacity_bytes, output_logits_bytes};
 use super::rope::{build_absolute_cpu_rope_tables, build_absolute_rope_angles};
-use crate::paged_kv::KvLayout;
+use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 
 const F32_BYTES: u64 = 4;
 pub(in crate::llama) const SUPPORTED_HEAD_DIMENSION: usize = 64;
+const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 32;
+const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
+
+/// Cold-owned workspace for the explicit eager native D128 two-stage ragged
+/// attention backend. It is reused layer by layer and never exists on the
+/// established D64 path.
+pub(in crate::llama) struct NativeD128TwoStageWorkspace {
+    pub(in crate::llama) partial_states: CudaDeviceBuffer,
+    pub(in crate::llama) reduction_steps: CudaDeviceBuffer,
+    pub(in crate::llama) reduction_normalizers: CudaDeviceBuffer,
+    pub(in crate::llama) partial_state_capacity: u64,
+    byte_len: u64,
+}
+
+impl NativeD128TwoStageWorkspace {
+    #[must_use]
+    pub(in crate::llama) const fn byte_len(&self) -> u64 {
+        self.byte_len
+    }
+}
 
 /// Host workspace coupled to the prepared device input and greedy result
 /// storage.  This remains private to the Llama executor boundary even though
@@ -59,6 +80,7 @@ pub(in crate::llama) struct PreparedLlamaBatchOwner {
     pub(in crate::llama) device_input: BatchDeviceInput,
     pub(in crate::llama) gathered_logits: Option<CudaDeviceBuffer>,
     pub(in crate::llama) greedy_results: Option<CudaDeviceBuffer>,
+    pub(in crate::llama) native_d128_two_stage_workspace: Option<NativeD128TwoStageWorkspace>,
     pub(in crate::llama) host: BatchHostWorkspace,
     pub(in crate::llama) poisoned: bool,
 }
@@ -253,13 +275,15 @@ impl PreparedLlamaBatchOwner {
                 reason: "the validated model must contain at least one decoder layer",
             })?
             .attention();
-        if attention.head_dimension() != SUPPORTED_HEAD_DIMENSION {
-            return Err(LlamaBatchExecutorError::UnsupportedHeadDimension {
-                expected: SUPPORTED_HEAD_DIMENSION,
-                actual: attention.head_dimension(),
-            });
-        }
         let bounds = config.metadata();
+        validate_batch_attention_geometry(
+            config,
+            attention.query_heads(),
+            attention.key_value_heads(),
+            attention.head_dimension(),
+            spec.max_sequence_length(),
+            bounds,
+        )?;
         if config.vllm_smol_p128_graph()
             && (bounds.max_rows() != 1
                 || !matches!(bounds.max_input_tokens(), 1 | 128)
@@ -322,12 +346,14 @@ impl PreparedLlamaBatchOwner {
             return Err(LlamaBatchExecutorError::Forward(error));
         }
         let dimensions = forward.plan.dimensions();
-        if dimensions.head_dimension() != SUPPORTED_HEAD_DIMENSION {
-            return Err(LlamaBatchExecutorError::UnsupportedHeadDimension {
-                expected: SUPPORTED_HEAD_DIMENSION,
-                actual: dimensions.head_dimension(),
-            });
-        }
+        validate_batch_attention_geometry(
+            config,
+            dimensions.query_heads(),
+            dimensions.key_value_heads(),
+            dimensions.head_dimension(),
+            spec.max_sequence_length(),
+            bounds,
+        )?;
         let layout = KvLayout::checked(
             forward.plan.layers().len(),
             bounds.physical_block_count(),
@@ -345,6 +371,46 @@ impl PreparedLlamaBatchOwner {
             layout.bytes_per_kind(),
             ExecutionSite::layer(0, LlamaOp::KvCacheWrite),
         )?;
+        let native_d128_two_stage_workspace = if config.native_bf16_paged_split_gqa_d128_two_stage()
+        {
+            let partial_state_capacity =
+                native_d128_partial_state_capacity(spec.max_sequence_length())?;
+            let workspace_layout = NativeBf16RaggedPagedSplitGqaD128TwoStageWorkspaceLayout::new(
+                usize_u64(
+                    bounds.max_input_tokens(),
+                    LlamaBatchExecutorResource::NativeD128PartialStates,
+                )?,
+                partial_state_capacity,
+            )
+            .map_err(|source| {
+                owner_cuda(
+                    ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention),
+                    source,
+                )
+            })?;
+            let attention_site = ExecutionSite::layer(0, LlamaOp::RaggedPagedAttention);
+            Some(NativeD128TwoStageWorkspace {
+                partial_states: allocate_device(
+                    context,
+                    workspace_layout.partial_state_bytes(),
+                    attention_site,
+                )?,
+                reduction_steps: allocate_device(
+                    context,
+                    workspace_layout.reduction_step_bytes(),
+                    attention_site,
+                )?,
+                reduction_normalizers: allocate_device(
+                    context,
+                    workspace_layout.reduction_normalizer_bytes(),
+                    attention_site,
+                )?,
+                partial_state_capacity,
+                byte_len: workspace_layout.total_bytes(),
+            })
+        } else {
+            None
+        };
         let rope_bytes_per_kind = checked_product_u64(
             &[
                 usize_u64(
@@ -446,6 +512,7 @@ impl PreparedLlamaBatchOwner {
             device_input,
             gathered_logits,
             greedy_results,
+            native_d128_two_stage_workspace,
             host,
             poisoned: false,
         })
@@ -470,6 +537,7 @@ impl PreparedLlamaBatchOwner {
             device_input,
             gathered_logits,
             greedy_results,
+            native_d128_two_stage_workspace,
             host,
             poisoned: _,
         } = self;
@@ -484,6 +552,23 @@ impl PreparedLlamaBatchOwner {
             LlamaBatchExecutorResource::ValueCache,
             value_cache.close(),
         );
+        if let Some(workspace) = native_d128_two_stage_workspace {
+            record_close(
+                &mut first,
+                LlamaBatchExecutorResource::NativeD128PartialStates,
+                workspace.partial_states.close(),
+            );
+            record_close(
+                &mut first,
+                LlamaBatchExecutorResource::NativeD128ReductionSteps,
+                workspace.reduction_steps.close(),
+            );
+            record_close(
+                &mut first,
+                LlamaBatchExecutorResource::NativeD128ReductionNormalizers,
+                workspace.reduction_normalizers.close(),
+            );
+        }
         record_close(
             &mut first,
             LlamaBatchExecutorResource::RopeCos,
@@ -565,6 +650,63 @@ fn allocate_device(
         .map_err(|source| owner_cuda(site, source))
 }
 
+fn validate_batch_attention_geometry(
+    config: PreparedLlamaBatchExecutorConfig,
+    query_heads: usize,
+    key_value_heads: usize,
+    head_dimension: usize,
+    maximum_sequence_tokens: usize,
+    bounds: LlamaBatchMetadataConfig,
+) -> LlamaBatchExecutorResult<()> {
+    if !config.native_bf16_paged_split_gqa_d128_two_stage() {
+        if head_dimension != SUPPORTED_HEAD_DIMENSION {
+            return Err(LlamaBatchExecutorError::UnsupportedHeadDimension {
+                expected: SUPPORTED_HEAD_DIMENSION,
+                actual: head_dimension,
+            });
+        }
+        return Ok(());
+    }
+
+    if query_heads != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT as usize
+        || key_value_heads
+            != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT as usize
+        || head_dimension != riley_cuda::NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_D128_HEAD_SIZE as usize
+    {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "native_d128_two_stage_geometry",
+            reason: "requires QH=16, KVH=2, and head_dimension=128",
+        });
+    }
+    if bounds.max_input_tokens() > NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "max_input_tokens",
+            reason: "native D128 two-stage requires a batch token budget at most 32",
+        });
+    }
+    if maximum_sequence_tokens > NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "model.max_sequence_length",
+            reason: "native D128 two-stage workspace is qualified through 32768 tokens",
+        });
+    }
+    Ok(())
+}
+
+fn native_d128_partial_state_capacity(
+    maximum_sequence_tokens: usize,
+) -> LlamaBatchExecutorResult<u64> {
+    let rounded = maximum_sequence_tokens
+        .checked_add(KV_BLOCK_SIZE - 1)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::NativeD128PartialStates,
+        })?;
+    usize_u64(
+        rounded / KV_BLOCK_SIZE,
+        LlamaBatchExecutorResource::NativeD128PartialStates,
+    )
+}
+
 fn checked_product_u64(
     values: &[u64],
     resource: LlamaBatchExecutorResource,
@@ -598,8 +740,15 @@ fn finish_close_errors(
 
 #[cfg(test)]
 mod tests {
-    use super::{finish_close_errors, record_first_error};
-    use crate::llama::executor::error::LlamaBatchExecutorError;
+    use super::{
+        NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS, NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+        finish_close_errors, native_d128_partial_state_capacity, record_first_error,
+        validate_batch_attention_geometry,
+    };
+    use crate::llama::batch::LlamaBatchMetadataConfig;
+    use crate::llama::executor::config::PreparedLlamaBatchExecutorConfig;
+    use crate::llama::executor::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource};
+    use crate::llama::forward::PreparedLlamaForwardConfig;
 
     fn failure(field: &'static str) -> LlamaBatchExecutorError {
         LlamaBatchExecutorError::InvalidConfiguration {
@@ -638,5 +787,99 @@ mod tests {
     #[test]
     fn cleanup_succeeds_when_every_close_succeeds() {
         finish_close_errors(None, None, None).expect("all successful close results must succeed");
+    }
+
+    fn native_config(
+        max_input_tokens: usize,
+    ) -> (PreparedLlamaBatchExecutorConfig, LlamaBatchMetadataConfig) {
+        let bounds = LlamaBatchMetadataConfig::new(
+            1,
+            max_input_tokens,
+            max_input_tokens,
+            1,
+            max_input_tokens,
+        )
+        .expect("small test metadata bounds are valid");
+        (
+            PreparedLlamaBatchExecutorConfig::new(bounds, PreparedLlamaForwardConfig::default())
+                .with_native_bf16_paged_split_gqa_d128_two_stage(),
+            bounds,
+        )
+    }
+
+    #[test]
+    fn native_d128_geometry_admission_is_exact_and_bounded() {
+        let (config, bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS);
+        validate_batch_attention_geometry(
+            config,
+            16,
+            2,
+            128,
+            NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+            bounds,
+        )
+        .expect("the qualified Qwen D128 geometry must be admitted");
+
+        assert!(matches!(
+            validate_batch_attention_geometry(
+                config,
+                15,
+                2,
+                128,
+                NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+                bounds,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "native_d128_two_stage_geometry",
+                ..
+            })
+        ));
+
+        let (over_rows, over_rows_bounds) = native_config(NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS + 1);
+        assert!(matches!(
+            validate_batch_attention_geometry(
+                over_rows,
+                16,
+                2,
+                128,
+                NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS,
+                over_rows_bounds,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "max_input_tokens",
+                ..
+            })
+        ));
+        assert!(matches!(
+            validate_batch_attention_geometry(
+                config,
+                16,
+                2,
+                128,
+                NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS + 1,
+                bounds,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "model.max_sequence_length",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn native_d128_workspace_capacity_tracks_per_row_page_count() {
+        assert_eq!(native_d128_partial_state_capacity(1).unwrap(), 1);
+        assert_eq!(native_d128_partial_state_capacity(16).unwrap(), 1);
+        assert_eq!(native_d128_partial_state_capacity(17).unwrap(), 2);
+        assert_eq!(
+            native_d128_partial_state_capacity(NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS).unwrap(),
+            2_048
+        );
+        assert!(matches!(
+            native_d128_partial_state_capacity(usize::MAX),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::NativeD128PartialStates,
+            })
+        ));
     }
 }

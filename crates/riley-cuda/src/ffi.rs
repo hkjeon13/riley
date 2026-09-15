@@ -94,6 +94,8 @@ const NATIVE_BF16_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 584;
 const PACKED_BATCH_V1_SIZE: u32 = 320;
 const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
 const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
+const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE: u32 = 744;
+const NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V3_SIZE: u32 = 752;
 const FIXED37_RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 600;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
@@ -1101,6 +1103,51 @@ struct RawRaggedPagedAttentionParams {
     output_row_count: u64,
     scale: f32,
     reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawNativeBf16RaggedPagedSplitGqaParamsV2 {
+    struct_size: u32,
+    format_version: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    reduction_steps: RawBufferSpan,
+    reduction_normalizers: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: RawPackedBatchV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawNativeBf16RaggedPagedSplitGqaParamsV3 {
+    struct_size: u32,
+    format_version: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    reduction_steps: RawBufferSpan,
+    reduction_normalizers: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: RawPackedBatchV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    partial_state_capacity: u64,
+    launch_partial_state_count: u64,
+    scale: f32,
+    reduction_order: u32,
     reserved: [u64; 4],
 }
 
@@ -2228,6 +2275,11 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_ragged_paged_attention_grouped_heads_execute(
         params: *const RawRaggedPagedAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+        params: *const RawNativeBf16RaggedPagedSplitGqaParamsV3,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -8065,6 +8117,63 @@ fn raw_packed_batch_v1(batch: &PackedBatchRawV1) -> RawPackedBatchV1 {
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(super) fn native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    reduction_steps: RawBufferSpan,
+    reduction_normalizers: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: &PackedBatchRawV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    partial_state_capacity: u64,
+    launch_partial_state_count: u64,
+    scale: f32,
+    reduction_order: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawNativeBf16RaggedPagedSplitGqaParamsV3 {
+        struct_size: NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V3_SIZE,
+        format_version: 3,
+        query,
+        key_pool,
+        value_pool,
+        partial_states,
+        reduction_steps,
+        reduction_normalizers,
+        output,
+        batch: raw_packed_batch_v1(batch),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        output_row_count,
+        partial_state_capacity,
+        launch_partial_state_count,
+        scale,
+        reduction_order,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA native BF16 ragged paged split-GQA D128 two-stage V3",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and all borrowed resources
+            // remain live through synchronous completion or command-batch
+            // retention by the native boundary.
+            unsafe {
+                riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+                    &params, stream, error,
+                )
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn ragged_paged_kv_cache_write_execute(
     key_source: RawBufferSpan,
     value_source: RawBufferSpan,
@@ -9416,6 +9525,66 @@ const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, query_head_count
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, output_row_count) == 544);
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, scale) == 552);
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, reserved) == 560);
+const _: () = assert!(
+    size_of::<RawNativeBf16RaggedPagedSplitGqaParamsV2>()
+        == NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V2_SIZE as usize
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, format_version) == 4);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, partial_states) == 152);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, reduction_steps) == 200);
+const _: () = assert!(
+    offset_of!(
+        RawNativeBf16RaggedPagedSplitGqaParamsV2,
+        reduction_normalizers
+    ) == 248
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, output) == 296);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, batch) == 344);
+const _: () =
+    assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, query_head_count) == 664);
+const _: () =
+    assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, output_row_count) == 688);
+const _: () = assert!(
+    offset_of!(
+        RawNativeBf16RaggedPagedSplitGqaParamsV2,
+        partial_state_capacity
+    ) == 696
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, scale) == 704);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV2, reserved) == 712);
+const _: () = assert!(
+    size_of::<RawNativeBf16RaggedPagedSplitGqaParamsV3>()
+        == NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_PARAMS_V3_SIZE as usize
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, format_version) == 4);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, partial_states) == 152);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, reduction_steps) == 200);
+const _: () = assert!(
+    offset_of!(
+        RawNativeBf16RaggedPagedSplitGqaParamsV3,
+        reduction_normalizers
+    ) == 248
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, output) == 296);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, batch) == 344);
+const _: () =
+    assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, query_head_count) == 664);
+const _: () =
+    assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, output_row_count) == 688);
+const _: () = assert!(
+    offset_of!(
+        RawNativeBf16RaggedPagedSplitGqaParamsV3,
+        partial_state_capacity
+    ) == 696
+);
+const _: () = assert!(
+    offset_of!(
+        RawNativeBf16RaggedPagedSplitGqaParamsV3,
+        launch_partial_state_count
+    ) == 704
+);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, scale) == 712);
+const _: () = assert!(offset_of!(RawNativeBf16RaggedPagedSplitGqaParamsV3, reserved) == 720);
 const _: () = assert!(size_of::<RawFixed37RaggedPagedAttentionParams>() == 600);
 const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, batch) == 200);
 const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, query_head_count) == 520);

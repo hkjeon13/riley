@@ -1045,6 +1045,77 @@ typedef struct RileyCudaRaggedPagedAttentionParams {
   uint64_t reserved[4];
 } RileyCudaRaggedPagedAttentionParams;
 
+// Eager-only native BF16 two-stage ragged paged decode for the fixed Qwen
+// D128 GQA geometry (QH=16, KVH=2, page=16). Query is BF16 [T,16,128],
+// K/V pools are BF16 [physical_block_count,2,16,128], and output is BF16
+// [output_row_count,16,128]. Each active row attends its own inclusive
+// prefix through the PackedBatchV1 CSR table.
+//
+// Each F32 workspace is independently owned and row-major: partial_states is
+// [output_row_count,partial_state_capacity,16,130], reduction_steps is
+// [output_row_count,partial_state_capacity,16,2], and
+// reduction_normalizers is [output_row_count,16]. `partial_state_capacity`
+// is a *per-row* logical-page capacity; it is not constrained by the total
+// number of blocks across the batch. Active rows write only the logical-page
+// prefix required by their row position. Inactive rows leave all workspaces
+// untouched and have their output rows overwritten with BF16 zero. The
+// transition/replay stages preserve the requested logical merge order exactly.
+// This descriptor is deliberately eager-only and has no graph-capture ABI.
+//
+// V2 launches one producer block for every prepared page in every active row:
+// its producer-grid X dimension is `partial_state_capacity`. Keep this public
+// 744-byte layout and its static-P execution contract intact. V3 adds an
+// explicit dynamic producer-grid extent without changing V2.
+#define RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V2_VERSION 2u
+typedef struct RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RileyCudaBufferSpan query;
+  RileyCudaBufferSpan key_pool;
+  RileyCudaBufferSpan value_pool;
+  RileyCudaBufferSpan partial_states;
+  RileyCudaBufferSpan reduction_steps;
+  RileyCudaBufferSpan reduction_normalizers;
+  RileyCudaBufferSpan output;
+  RileyCudaPackedBatchV1 batch;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t output_row_count;
+  uint64_t partial_state_capacity;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2;
+
+// V3 retains all V2 field offsets through `partial_state_capacity`, then adds
+// `launch_partial_state_count`. It is the maximum active per-row page count
+// in the current batch, may be smaller than capacity, sizes only the producer
+// grid, and must be in [1,partial_state_capacity] while covering every active
+// row's ceil((row_position+1)/16) prefix. Workspace stride remains capacity.
+#define RILEY_CUDA_NATIVE_BF16_RAGGED_PAGED_SPLIT_GQA_V3_VERSION 3u
+typedef struct RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RileyCudaBufferSpan query;
+  RileyCudaBufferSpan key_pool;
+  RileyCudaBufferSpan value_pool;
+  RileyCudaBufferSpan partial_states;
+  RileyCudaBufferSpan reduction_steps;
+  RileyCudaBufferSpan reduction_normalizers;
+  RileyCudaBufferSpan output;
+  RileyCudaPackedBatchV1 batch;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t output_row_count;
+  uint64_t partial_state_capacity;
+  uint64_t launch_partial_state_count;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3;
+
 // No-HBM fixed37 two-pass form of ragged paged attention. Tensor and packed
 // batch layouts match RileyCudaRaggedPagedAttentionParams, while
 // head_size is exactly 64 and every active row has logical T=row_position+1
@@ -2498,6 +2569,18 @@ RileyCudaStatus riley_cuda_ragged_paged_attention_execute(
 // one-warp launch available for rollout control and paired profiling.
 RileyCudaStatus riley_cuda_ragged_paged_attention_grouped_heads_execute(
     const RileyCudaRaggedPagedAttentionParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus
+riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_execute(
+    const RileyCudaNativeBf16RaggedPagedSplitGqaParamsV2* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// V3 admits a dynamic producer-grid extent while preserving the V2 entry
+// point's static-P execution behavior and descriptor layout.
+RileyCudaStatus
+riley_cuda_native_bf16_ragged_paged_split_gqa_d128_two_stage_v3_execute(
+    const RileyCudaNativeBf16RaggedPagedSplitGqaParamsV3* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // D64/T8192 no-HBM fixed37 execution follows the packed-call lifetime above:

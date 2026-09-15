@@ -11,12 +11,13 @@ use std::mem;
 use riley_cuda::{
     AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut,
     CudaCommandStream, CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStream,
-    EmbeddingParams, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1, PackedBatchV1,
+    DecodePartialReductionOrder, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
+    NativeBf16RaggedPagedSplitGqaD128TwoStageParams, PackedBatchHostV1, PackedBatchV1,
     RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
     ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
     embedding, fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention,
-    indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, row_gather,
-    silu,
+    indexed_rope, native_bf16_ragged_paged_split_gqa_d128_two_stage, ragged_paged_attention,
+    ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
 
 use super::super::batch::LlamaPackedBatchMetadata;
@@ -39,6 +40,7 @@ use super::error::{
 use super::gemm_plan::PreparedLlamaBatchShape;
 use super::metadata::{PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input};
 use super::output::{greedy_result_bytes, output_logits_bytes};
+use super::owner::NativeD128TwoStageWorkspace;
 use super::rope::absolute_rope_position_count;
 use crate::cuda_weights::CudaUploadedWeights;
 use crate::paged_kv::KvLayout;
@@ -219,6 +221,7 @@ pub(in crate::llama) fn execute_packed(
     device: &mut BatchDeviceInput,
     gathered_logits: &mut Option<CudaDeviceBuffer>,
     greedy_results: &mut Option<CudaDeviceBuffer>,
+    mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     host_input: &mut BatchHostInput,
     produce_greedy_tokens: bool,
     dispatch_disposition: &mut BatchDispatchDisposition,
@@ -382,6 +385,7 @@ pub(in crate::llama) fn execute_packed(
             rms_norm_profile,
             config.ragged_attention_reduction_profile(),
             config.ragged_attention_implementation(),
+            native_d128_two_stage_workspace.as_deref_mut(),
             layout,
             key_cache,
             value_cache,
@@ -548,6 +552,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     rms_norm_profile: LlamaRmsNormProfile,
     attention_reduction_profile: AttentionReductionProfile,
     attention_implementation: RaggedAttentionImplementation,
+    mut native_d128_two_stage_workspace: Option<&mut NativeD128TwoStageWorkspace>,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
     value_cache: &mut CudaDeviceBuffer,
@@ -823,7 +828,84 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
 
         let attention_site = ExecutionSite::layer(layer_index, LlamaOp::RaggedPagedAttention);
+        if attention_implementation
+            == RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage
         {
+            if attention_reduction_profile != AttentionReductionProfile::CanonicalV1 {
+                return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "ragged_attention_implementation",
+                    reason: "native D128 two-stage attention requires canonical-v1 reductions",
+                });
+            }
+            let workspace = native_d128_two_stage_workspace.as_deref_mut().ok_or(
+                LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "native_d128_two_stage_workspace",
+                    reason: "native D128 two-stage selection has no prepared workspace",
+                },
+            )?;
+            let partial_state_bytes = workspace.partial_states.byte_len();
+            let reduction_step_bytes = workspace.reduction_steps.byte_len();
+            let reduction_normalizer_bytes = workspace.reduction_normalizers.byte_len();
+            let mut params = NativeBf16RaggedPagedSplitGqaD128TwoStageParams {
+                query: span(
+                    &buffers.hidden_rotary,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    attention_site,
+                )?,
+                key_pool: CudaBufferSpan::new(
+                    key_cache,
+                    CudaDType::BF16,
+                    layer_offset,
+                    layout.layer_stride_bytes(),
+                )
+                .map_err(|source| batch_cuda(attention_site, source))?,
+                value_pool: CudaBufferSpan::new(
+                    value_cache,
+                    CudaDType::BF16,
+                    layer_offset,
+                    layout.layer_stride_bytes(),
+                )
+                .map_err(|source| batch_cuda(attention_site, source))?,
+                partial_states: CudaBufferSpanMut::new(
+                    &mut workspace.partial_states,
+                    CudaDType::F32,
+                    0,
+                    partial_state_bytes,
+                )
+                .map_err(|source| batch_cuda(attention_site, source))?,
+                reduction_steps: CudaBufferSpanMut::new(
+                    &mut workspace.reduction_steps,
+                    CudaDType::F32,
+                    0,
+                    reduction_step_bytes,
+                )
+                .map_err(|source| batch_cuda(attention_site, source))?,
+                reduction_normalizers: CudaBufferSpanMut::new(
+                    &mut workspace.reduction_normalizers,
+                    CudaDType::F32,
+                    0,
+                    reduction_normalizer_bytes,
+                )
+                .map_err(|source| batch_cuda(attention_site, source))?,
+                output: span_mut(
+                    &mut buffers.hidden_context,
+                    CudaDType::BF16,
+                    plan.workspace_spec().hidden_buffer_bytes(),
+                    attention_site,
+                )?,
+                batch,
+                query_head_count: query_heads,
+                key_value_head_count: key_value_heads,
+                head_size,
+                output_row_count: dense_rows,
+                partial_state_capacity: workspace.partial_state_capacity,
+                scale: 1.0 / (head_size as f32).sqrt(),
+                reduction_order: DecodePartialReductionOrder::LogicalAscending,
+            };
+            native_bf16_ragged_paged_split_gqa_d128_two_stage(&mut params, stream)
+                .map_err(|source| batch_cuda(attention_site, source))?;
+        } else {
             let mut params = RaggedPagedAttentionParams {
                 query: span(
                     &buffers.hidden_rotary,
@@ -865,6 +947,12 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     }
                     RaggedAttentionImplementation::GroupedHeads => {
                         grouped_ragged_paged_attention(&mut params, stream)
+                    }
+                    RaggedAttentionImplementation::NativeBf16PagedSplitGqaD128TwoStage => {
+                        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                            field: "ragged_attention_implementation",
+                            reason: "native D128 two-stage dispatch escaped its explicit branch",
+                        });
                     }
                 },
                 AttentionReductionProfile::FixedContiguous37BalancedV1 => {
