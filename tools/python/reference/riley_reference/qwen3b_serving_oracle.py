@@ -430,7 +430,7 @@ def load_workload(path: Path) -> ServingWorkload:
     )
 
 
-def _validate_checkpoint_config(config: Mapping[str, object]) -> None:
+def _validate_qwen3b_geometry(config: Mapping[str, object], *, label: str) -> None:
     expected = {
         "architectures": ["Qwen2ForCausalLM"],
         "model_type": "qwen2",
@@ -442,8 +442,27 @@ def _validate_checkpoint_config(config: Mapping[str, object]) -> None:
         "max_position_embeddings": 32_768,
         "vocab_size": MODEL_VOCABULARY_SIZE,
         "tie_word_embeddings": True,
-        "attention_bias": True,
-        "mlp_bias": False,
+    }
+    for field, required in expected.items():
+        if config.get(field) != required:
+            raise Qwen3BServingOracleError(
+                f"{label}.{field} differs from the Qwen2.5-3B contract"
+            )
+
+
+def _validate_checkpoint_config(config: Mapping[str, object]) -> None:
+    """Validate execution-relevant fields in the pinned on-disk config.json."""
+
+    _validate_qwen3b_geometry(config, label="checkpoint config")
+    expected = {
+        "attention_dropout": 0.0,
+        "rms_norm_eps": 1e-6,
+        "rope_theta": 1_000_000.0,
+        "sliding_window": 32_768,
+        "use_sliding_window": False,
+        "bos_token_id": 151_643,
+        "eos_token_id": 151_645,
+        "torch_dtype": "bfloat16",
     }
     for field, required in expected.items():
         if config.get(field) != required:
@@ -457,6 +476,34 @@ def _loaded_model_config_mapping(config: object) -> Mapping[str, object]:
     if not callable(exporter):
         raise Qwen3BServingOracleError("loaded model config does not expose to_dict")
     return _require_mapping(exporter(), "loaded model config")
+
+
+def _validate_loaded_model_config(config: object) -> None:
+    """Validate the HF-normalized config after `from_pretrained` has run."""
+
+    mapping = _loaded_model_config_mapping(config)
+    _validate_qwen3b_geometry(mapping, label="loaded model config")
+    for field, required in {
+        "attention_dropout": 0.0,
+        "rms_norm_eps": 1e-6,
+        "use_sliding_window": False,
+        "bos_token_id": 151_643,
+        "eos_token_id": 151_645,
+    }.items():
+        if mapping.get(field) != required:
+            raise Qwen3BServingOracleError(
+                f"loaded model config.{field} differs from the Qwen2.5-3B contract"
+            )
+    rope_parameters = _require_mapping(
+        mapping.get("rope_parameters"), "loaded model config.rope_parameters"
+    )
+    if (
+        rope_parameters.get("rope_type") != "default"
+        or rope_parameters.get("rope_theta") != 1_000_000.0
+    ):
+        raise Qwen3BServingOracleError(
+            "loaded model config rope parameters differ from the Qwen2.5-3B contract"
+        )
 
 
 def _checkpoint_file_size(root: Path, filename: str) -> int:
@@ -582,7 +629,7 @@ def _receipt_files(root: Path) -> tuple[FileRecord, ...]:
 
 
 def inspect_checkpoint(path: Path) -> CheckpointManifest:
-    """Validate the pinned receipt and regular-file sizes without rehashing 6GB."""
+    """Verify small metadata hashes and shard sizes without rereading 6GB weights."""
 
     root = _regular_directory(path.expanduser(), "checkpoint")
     receipt = FileRecord(
@@ -605,6 +652,11 @@ def inspect_checkpoint(path: Path) -> CheckpointManifest:
         if _checkpoint_file_size(root, filename) != record.size_bytes:
             raise Qwen3BServingOracleError(
                 f"checkpoint {filename} regular-file size differs from its receipt"
+            )
+        metadata_path = _regular_file(root / filename, f"checkpoint file {filename}")
+        if _sha256_file(metadata_path) != record.sha256:
+            raise Qwen3BServingOracleError(
+                f"checkpoint {filename} SHA-256 differs from its receipt"
             )
     config_raw = (root / "config.json").read_bytes()
     _validate_checkpoint_config(_parse_json(config_raw, "checkpoint config"))
@@ -737,7 +789,7 @@ class HuggingFaceQwen3BBackend:
         try:
             model.eval()
             config = getattr(model, "config", None)
-            _validate_checkpoint_config(_loaded_model_config_mapping(config))
+            _validate_loaded_model_config(config)
             if getattr(config, "_attn_implementation", None) != "eager":
                 raise Qwen3BServingOracleError(
                     "loaded model did not retain eager attention"

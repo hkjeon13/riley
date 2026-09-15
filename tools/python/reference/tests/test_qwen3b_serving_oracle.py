@@ -153,8 +153,15 @@ class _ConfigObject:
             "max_position_embeddings": 32_768,
             "vocab_size": oracle.MODEL_VOCABULARY_SIZE,
             "tie_word_embeddings": True,
-            "attention_bias": True,
-            "mlp_bias": False,
+            "attention_dropout": 0.0,
+            "rms_norm_eps": 1e-6,
+            "use_sliding_window": False,
+            "bos_token_id": 151_643,
+            "eos_token_id": 151_645,
+            "rope_parameters": {
+                "rope_theta": 1_000_000.0,
+                "rope_type": "default",
+            },
         }
 
 
@@ -216,8 +223,20 @@ class Qwen3BServingOracleTests(unittest.TestCase):
             )
 
     def test_loaded_transformers_config_uses_to_dict_without_torch(self) -> None:
-        config = oracle._loaded_model_config_mapping(_ConfigObject())
-        oracle._validate_checkpoint_config(config)
+        config = _ConfigObject()
+        mapping = oracle._loaded_model_config_mapping(config)
+        self.assertEqual(mapping["model_type"], "qwen2")
+        oracle._validate_loaded_model_config(config)
+        checkpoint_config = dict(mapping)
+        checkpoint_config.pop("rope_parameters")
+        checkpoint_config.update(
+            {
+                "rope_theta": 1_000_000.0,
+                "sliding_window": 32_768,
+                "torch_dtype": "bfloat16",
+            }
+        )
+        oracle._validate_checkpoint_config(checkpoint_config)
         with self.assertRaisesRegex(oracle.Qwen3BServingOracleError, "to_dict"):
             oracle._loaded_model_config_mapping({})
 
