@@ -113,6 +113,15 @@ covariate와 AB/BA order·first/second position별 descriptive pressure view만
 제공한다. 이 view에는 PSI bootstrap, pressure-adjusted effect, correlation 또는
 인과 해석이 없다.
 
+동시에 timed lane은 `<lane>.retained-phase-psi.json`도 남긴다. `pre`는 strict
+server warmup 뒤 retained client request phase 직전, `post`는 같은 phase 직후다.
+N03b는 두 snapshot이 marker-bound retained phase receipt의 start/end를 실제로
+감싸는지 확인하고, path/SHA-256을 marker-bound lane provenance를 통해 묶는다.
+이 값은 `retained_phase_pressure_covariates`와
+`order_by_retained_phase_pressure_sensitivity`에 descriptive context로만 나타난다.
+높거나 unavailable/malformed PSI는 결과 선택, weighting, 보정, promotion에 쓰지
+않는다.
+
 ```bash
 python3 benchmarks/scripts/n03b_n06a_d128_repeat_summary.py \
   --operator-receipt /var/tmp/riley-n03b-operator/<id>/n01-repeat-control-receipt.json \

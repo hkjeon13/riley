@@ -341,6 +341,13 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                             "resources": ["cpu", "io", "memory"],
                             "policy": summary.LANE_PSI_POLICY,
                         },
+                        "retained_phase_psi": {
+                            "schema_version": summary.RETAINED_PHASE_PSI_SCHEMA_VERSION,
+                            "proc_root": "/proc",
+                            "resources": ["cpu", "io", "memory"],
+                            "policy": summary.LANE_PSI_POLICY,
+                            "timing_scope": summary.RETAINED_PHASE_PSI_TIMING_SCOPE,
+                        },
                     },
                     "launch_provenance": {
                         "model_identity": {
@@ -801,6 +808,35 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         lane_pressure_path.write_text(
             json.dumps(lane_pressure, sort_keys=True) + "\n", encoding="utf-8"
         )
+        retained_phase = json.loads(
+            (attempt / f"{lane}.phase.json").read_text(encoding="utf-8")
+        )
+        retained_phase_pressure_path = attempt / f"{lane}.retained-phase-psi.json"
+        retained_phase_pressure = {
+            "schema_version": summary.RETAINED_PHASE_PSI_SCHEMA_VERSION,
+            "policy": summary.LANE_PSI_POLICY,
+            "timing_scope": summary.RETAINED_PHASE_PSI_TIMING_SCOPE,
+            "lane": lane,
+            "attempt": {
+                "phase": config["phase"],
+                "index": config["index"],
+                "pair_order": config["pair_order"],
+            },
+            "proc_root": "/proc",
+            "pre": lane_psi_snapshot(
+                started_ns=0,
+                finished_ns=0,
+                base=1_100 if lane == "riley" else 2_100,
+            ),
+            "post": lane_psi_snapshot(
+                started_ns=int(retained_phase["phase_finished_ns"]) + 1,
+                finished_ns=int(retained_phase["phase_finished_ns"]) + 2,
+                base=1_300 if lane == "riley" else 2_300,
+            ),
+        }
+        retained_phase_pressure_path.write_text(
+            json.dumps(retained_phase_pressure, sort_keys=True) + "\n", encoding="utf-8"
+        )
         provenance: dict[str, object] = {
             "argv": config[f"{lane}_argv"],
             "pid": 10_000 if lane == "riley" else 10_001,
@@ -825,6 +861,12 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                 "path": str(lane_pressure_path.resolve()),
                 "sha256": hashlib.sha256(lane_pressure_path.read_bytes()).hexdigest(),
                 "policy": summary.LANE_PSI_POLICY,
+            },
+            "retained_phase_pressure": {
+                "path": str(retained_phase_pressure_path.resolve()),
+                "sha256": hashlib.sha256(retained_phase_pressure_path.read_bytes()).hexdigest(),
+                "policy": summary.LANE_PSI_POLICY,
+                "timing_scope": summary.RETAINED_PHASE_PSI_TIMING_SCOPE,
             },
             "post_lane_gpu_idle": {
                 "schema_version": "riley.n06a-post-lane-gpu-idle-census.v1",
@@ -1291,12 +1333,22 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         self.assertEqual(serving["paired_tail_effect_status"]["status"], "incomplete")
         self.assertEqual(len(serving["timed_run_pressure_covariates"]), 3)
         self.assertEqual(len(serving["lane_pressure_covariates"]), 4)
+        self.assertEqual(len(serving["retained_phase_pressure_covariates"]), 4)
         first_lane_pressure = serving["lane_pressure_covariates"][0]
         self.assertEqual(first_lane_pressure["timed_index"], 1)
         self.assertEqual(first_lane_pressure["pair_order"], "riley-vllm")
         self.assertEqual(first_lane_pressure["lane"], "riley")
         self.assertEqual(first_lane_pressure["lane_position"], "first")
         self.assertGreater(first_lane_pressure["derived"]["io"]["some"]["total_delta_us"], 0)
+        first_retained_pressure = serving["retained_phase_pressure_covariates"][0]
+        self.assertEqual(first_retained_pressure["timed_index"], 1)
+        self.assertEqual(first_retained_pressure["lane"], "riley")
+        self.assertEqual(first_retained_pressure["phase"]["phase_started_ns"], 1)
+        self.assertGreater(
+            first_retained_pressure["post"]["snapshot_started_ns"],
+            first_retained_pressure["phase"]["phase_started_ns"],
+        )
+        self.assertGreater(first_retained_pressure["derived"]["io"]["some"]["total_delta_us"], 0)
         pressure_view = serving["order_by_lane_pressure_sensitivity"]
         self.assertEqual(pressure_view["status"], "descriptive")
         self.assertEqual(
@@ -1306,6 +1358,11 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         self.assertEqual(
             pressure_view["by_pair_order"]["vllm-riley"]["lanes"]["riley"]["lane_position"],
             "second",
+        )
+        retained_pressure_view = serving["order_by_retained_phase_pressure_sensitivity"]
+        self.assertEqual(retained_pressure_view["status"], "descriptive")
+        self.assertEqual(
+            retained_pressure_view["observation_scope"], "retained client-observed request phase"
         )
         failed = serving["timed_run_pressure_covariates"][1]
         self.assertEqual(failed["status"], "failed")
@@ -1347,6 +1404,8 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
             provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
             pressure_path = Path(provenance["lane_pressure"]["path"])
             pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+            retained_pressure_path = Path(provenance["retained_phase_pressure"]["path"])
+            retained_pressure = json.loads(retained_pressure_path.read_text(encoding="utf-8"))
             for phase, status in (("pre", "unavailable"), ("post", "malformed")):
                 pressure[phase]["psi"]["io"] = {
                     "status": status,
@@ -1355,8 +1414,21 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
                     "full": None,
                     "error": f"fixture {status}",
                 }
+                retained_pressure[phase]["psi"]["io"] = {
+                    "status": status,
+                    "source": "/proc/pressure/io",
+                    "some": None,
+                    "full": None,
+                    "error": f"fixture retained {status}",
+                }
             pressure_path.write_text(json.dumps(pressure, sort_keys=True) + "\n", encoding="utf-8")
+            retained_pressure_path.write_text(
+                json.dumps(retained_pressure, sort_keys=True) + "\n", encoding="utf-8"
+            )
             provenance["lane_pressure"]["sha256"] = hashlib.sha256(pressure_path.read_bytes()).hexdigest()
+            provenance["retained_phase_pressure"]["sha256"] = hashlib.sha256(
+                retained_pressure_path.read_bytes()
+            ).hexdigest()
             provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
             self.replace_marker_field(
                 stdout_path,
@@ -1374,11 +1446,56 @@ class N03bN06aD128RepeatSummaryTests(unittest.TestCase):
         )
         self.assertEqual(riley_covariate["pre"]["psi"]["io"]["status"], "unavailable")
         self.assertEqual(riley_covariate["post"]["psi"]["io"]["status"], "malformed")
+        retained_riley_covariate = next(
+            item
+            for item in serving["retained_phase_pressure_covariates"]
+            if item["timed_index"] == 1 and item["lane"] == "riley"
+        )
+        self.assertEqual(
+            retained_riley_covariate["pre"]["psi"]["io"]["status"], "unavailable"
+        )
+        self.assertEqual(
+            retained_riley_covariate["post"]["psi"]["io"]["status"], "malformed"
+        )
         self.assertEqual(
             serving["order_by_lane_pressure_sensitivity"]["by_pair_order"]["riley-vllm"]
             ["lanes"]["riley"]["resources"]["io"]["categories"]["some"]["available_pair_count"],
             0,
         )
+
+    def test_rejects_retained_phase_psi_outside_the_hashed_request_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = self.make_serving_receipt(Path(temporary), statuses=("succeeded",))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            stdout_path = Path(receipt["timed_runs"][0]["stdout_path"])
+            riley_line = next(
+                line for line in stdout_path.read_text(encoding="utf-8").splitlines() if "lane=riley" in line
+            )
+            provenance_path = Path(
+                next(token.split("=", 1)[1] for token in riley_line.split() if token.startswith("lane_provenance_path="))
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            retained_pressure_path = Path(provenance["retained_phase_pressure"]["path"])
+            retained_pressure = json.loads(retained_pressure_path.read_text(encoding="utf-8"))
+            phase_path = provenance_path.parent / "riley.phase.json"
+            phase = json.loads(phase_path.read_text(encoding="utf-8"))
+            retained_pressure["post"]["snapshot_started_ns"] = int(phase["phase_finished_ns"]) - 1
+            retained_pressure["post"]["snapshot_finished_ns"] = int(phase["phase_finished_ns"]) - 1
+            retained_pressure_path.write_text(
+                json.dumps(retained_pressure, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            provenance["retained_phase_pressure"]["sha256"] = hashlib.sha256(
+                retained_pressure_path.read_bytes()
+            ).hexdigest()
+            provenance_path.write_text(json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8")
+            self.replace_marker_field(
+                stdout_path,
+                lane="riley",
+                field="lane_provenance_sha256",
+                value=hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            )
+            with self.assertRaisesRegex(summary.SummaryError, "falls before retained phase finish"):
+                summary.summarize(serving_receipt=receipt_path)
 
     def test_rejects_lane_psi_path_and_cumulative_total_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

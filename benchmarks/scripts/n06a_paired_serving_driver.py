@@ -128,6 +128,11 @@ DOCKER_CONTAINER_CLEANUP_SCHEMA_VERSION = "riley.n06a-docker-container-cleanup.v
 GPU_IDLE_CENSUS_SCHEMA_VERSION = "riley.n06a-post-lane-gpu-idle-census.v1"
 LANE_PSI_SCHEMA_VERSION = "riley.n06a-lane-psi.v1"
 LANE_PSI_POLICY = "observed-only; never used for lane eligibility, sample selection, or performance adjustment"
+RETAINED_PHASE_PSI_SCHEMA_VERSION = "riley.n06a-retained-phase-psi.v1"
+RETAINED_PHASE_PSI_TIMING_SCOPE = (
+    "pre snapshot completes before and post snapshot begins after the retained "
+    "client-observed request phase; not CUDA or scheduler commit time"
+)
 PSI_RESOURCES = ("cpu", "io", "memory")
 MAX_LANE_PSI_FILE_BYTES = 64 * 1024
 LANE_PSI_PROC_ROOT = Path("/proc")
@@ -642,6 +647,14 @@ class LaneProvenanceArtifact:
 @dataclass(frozen=True)
 class LanePressureArtifact:
     """Immutable CPU/I/O/memory PSI snapshots taken immediately around one lane."""
+
+    path: Path
+    sha256: str
+
+
+@dataclass(frozen=True)
+class RetainedPhasePressureArtifact:
+    """Immutable PSI snapshots that bracket one lane's retained request phase."""
 
     path: Path
     sha256: str
@@ -1776,6 +1789,47 @@ def _write_lane_pressure_artifact(
         label=f"{lane} lane PSI artifact",
     )
     return LanePressureArtifact(path=resolved, sha256=sha256)
+
+
+def _write_retained_phase_pressure_artifact(
+    *,
+    attempt_dir: Path,
+    lane: str,
+    context: AttemptContext,
+    pre: Mapping[str, Any],
+    post: Mapping[str, Any],
+) -> RetainedPhasePressureArtifact:
+    """Freeze PSI observations immediately around the retained client phase.
+
+    The phase receipt itself is independently marker-bound.  N03b cross-checks
+    these two snapshots against that receipt's start/end timestamps, so this
+    artifact records a covariate for the measured request window rather than
+    treating host pressure as an admission condition.
+    """
+    path = attempt_dir / f"{lane}.retained-phase-psi.json"
+    _write_json_create_only(
+        path,
+        {
+            "schema_version": RETAINED_PHASE_PSI_SCHEMA_VERSION,
+            "policy": LANE_PSI_POLICY,
+            "timing_scope": RETAINED_PHASE_PSI_TIMING_SCOPE,
+            "lane": lane,
+            "attempt": {
+                "phase": context.phase,
+                "index": context.index,
+                "pair_order": context.pair_order if context.phase == "timed" else None,
+            },
+            "proc_root": str(LANE_PSI_PROC_ROOT),
+            "pre": dict(pre),
+            "post": dict(post),
+        },
+    )
+    resolved, _, sha256 = _sha256_file(
+        path,
+        maximum_bytes=MAX_WORKLOAD_BYTES,
+        label=f"{lane} retained-phase PSI artifact",
+    )
+    return RetainedPhasePressureArtifact(path=resolved, sha256=sha256)
 
 
 def _retained_artifacts(attempt_dir: Path, lane: str) -> RetainedArtifacts:
@@ -3120,8 +3174,9 @@ def _lane_provenance(
     whole_gpu_memory: Mapping[str, Any],
     cleanup_completed_ns: int,
     lane_pressure: LanePressureArtifact,
+    retained_phase_pressure: RetainedPhasePressureArtifact | None,
 ) -> dict[str, Any]:
-    return {
+    result: dict[str, Any] = {
         "argv": list(managed.command),
         "pid": managed.process.pid,
         "started_ns": managed.started_ns,
@@ -3137,6 +3192,14 @@ def _lane_provenance(
             "policy": LANE_PSI_POLICY,
         },
     }
+    if retained_phase_pressure is not None:
+        result["retained_phase_pressure"] = {
+            "path": str(retained_phase_pressure.path),
+            "sha256": retained_phase_pressure.sha256,
+            "policy": LANE_PSI_POLICY,
+            "timing_scope": RETAINED_PHASE_PSI_TIMING_SCOPE,
+        }
+    return result
 
 
 def _run_lane(
@@ -3176,6 +3239,9 @@ def _run_lane(
     lane_pressure_pre: Mapping[str, Any] | None = None
     lane_pressure_post: Mapping[str, Any] | None = None
     lane_pressure_artifact: LanePressureArtifact | None = None
+    retained_phase_pressure_pre: Mapping[str, Any] | None = None
+    retained_phase_pressure_post: Mapping[str, Any] | None = None
+    retained_phase_pressure_artifact: RetainedPhasePressureArtifact | None = None
     sampler_factory = dependencies.gpu_memory_sampler_factory or WholeGpuMemorySampler
     sampler = sampler_factory(
         nvidia_smi=config.nvidia_smi,
@@ -3251,13 +3317,38 @@ def _run_lane(
             concurrency=config.concurrency,
         )
         if retain_measurement:
-            rows, accounting = runner(
-                **common,
-                count=request_count,
-                phase="retained",
+            pressure_snapshot = dependencies.lane_psi_snapshot or capture_lane_psi_snapshot
+            # Capture the measured client request window itself.  Unlike the
+            # lane-boundary receipt, these snapshots exclude server startup,
+            # strict server warmup, shutdown, and post-lane GPU accounting.
+            # They remain observation-only even when pressure is high or
+            # procfs reports it as unavailable/malformed.
+            retained_phase_pressure_pre = pressure_snapshot(
+                proc_root=LANE_PSI_PROC_ROOT,
+                monotonic_ns=dependencies.monotonic_ns,
             )
+            try:
+                rows, accounting = runner(
+                    **common,
+                    count=request_count,
+                    phase="retained",
+                )
+            finally:
+                retained_phase_pressure_post = pressure_snapshot(
+                    proc_root=LANE_PSI_PROC_ROOT,
+                    monotonic_ns=dependencies.monotonic_ns,
+                )
             _write_jsonl_create_only(attempt_dir / f"{lane}.requests.jsonl", rows)
             _write_json_create_only(attempt_dir / f"{lane}.phase.json", dict(accounting))
+            if retained_phase_pressure_pre is None or retained_phase_pressure_post is None:
+                raise DriverError(f"{lane} retained phase PSI observations are unavailable")
+            retained_phase_pressure_artifact = _write_retained_phase_pressure_artifact(
+                attempt_dir=attempt_dir,
+                lane=lane,
+                context=context,
+                pre=retained_phase_pressure_pre,
+                post=retained_phase_pressure_post,
+            )
             measurement = _measurement_from_phase(lane, rows, accounting)
     except BaseException as error:
         failure = error
@@ -3392,6 +3483,7 @@ def _run_lane(
                 gpu_evidence,
                 cleanup_completed_ns if cleanup_completed_ns is not None else process.started_ns,
                 lane_pressure_artifact,
+                retained_phase_pressure_artifact,
             )
             provenance["post_lane_gpu_idle"] = dict(post_lane_gpu_idle)
             if snapshot is not None:
@@ -3497,6 +3589,13 @@ def execute_pair(
                     "proc_root": str(LANE_PSI_PROC_ROOT),
                     "resources": list(PSI_RESOURCES),
                     "policy": LANE_PSI_POLICY,
+                },
+                "retained_phase_psi": {
+                    "schema_version": RETAINED_PHASE_PSI_SCHEMA_VERSION,
+                    "proc_root": str(LANE_PSI_PROC_ROOT),
+                    "resources": list(PSI_RESOURCES),
+                    "policy": LANE_PSI_POLICY,
+                    "timing_scope": RETAINED_PHASE_PSI_TIMING_SCOPE,
                 },
                 "startup_timeout_seconds": config.startup_timeout_seconds,
                 "request_timeout_seconds": config.request_timeout_seconds,

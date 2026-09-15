@@ -106,6 +106,11 @@ MAX_BOOTSTRAP_DRAWS_PER_METRIC = 250_000
 PSI_RESOURCES = ("cpu", "io", "memory")
 LANE_PSI_SCHEMA_VERSION = "riley.n06a-lane-psi.v1"
 LANE_PSI_POLICY = "observed-only; never used for lane eligibility, sample selection, or performance adjustment"
+RETAINED_PHASE_PSI_SCHEMA_VERSION = "riley.n06a-retained-phase-psi.v1"
+RETAINED_PHASE_PSI_TIMING_SCOPE = (
+    "pre snapshot completes before and post snapshot begins after the retained "
+    "client-observed request phase; not CUDA or scheduler commit time"
+)
 
 QWEN_MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 QWEN_MODEL_REVISION = "aa8e72537993ba99e69dfaafa59ed015b17504d1"
@@ -2445,6 +2450,35 @@ def _validate_lane_psi_configuration(
     return proc_root
 
 
+def _validate_retained_phase_psi_configuration(
+    configuration: Mapping[str, Any], *, label: str
+) -> str | None:
+    """Read the opt-in retained-phase PSI contract, preserving older receipts."""
+    raw = configuration.get("retained_phase_psi")
+    if raw is None:
+        return None
+    value = _require_mapping(raw, f"{label}.retained_phase_psi")
+    expected_keys = {"schema_version", "proc_root", "resources", "policy", "timing_scope"}
+    if set(value) != expected_keys:
+        raise SummaryError(f"{label}.retained_phase_psi fields differ from the N06-A contract")
+    if value.get("schema_version") != RETAINED_PHASE_PSI_SCHEMA_VERSION:
+        raise SummaryError(f"{label}.retained_phase_psi schema version differs")
+    if value.get("policy") != LANE_PSI_POLICY:
+        raise SummaryError(f"{label}.retained_phase_psi policy differs")
+    if value.get("timing_scope") != RETAINED_PHASE_PSI_TIMING_SCOPE:
+        raise SummaryError(f"{label}.retained_phase_psi timing scope differs")
+    proc_root = _require_string(
+        value.get("proc_root"), f"{label}.retained_phase_psi.proc_root"
+    )
+    if proc_root != "/proc":
+        raise SummaryError(f"{label}.retained_phase_psi.proc_root must be /proc")
+    if value.get("resources") != list(PSI_RESOURCES):
+        raise SummaryError(
+            f"{label}.retained_phase_psi.resources must be CPU/I/O/memory in contract order"
+        )
+    return proc_root
+
+
 def _validate_lane_psi_snapshot(
     value: object,
     *,
@@ -2489,6 +2523,42 @@ def _validate_lane_psi_snapshot(
         },
         "phase": phase,
     }
+
+
+def _derive_psi_delta(
+    *, pre: Mapping[str, Any], post: Mapping[str, Any], label: str
+) -> dict[str, dict[str, Any]]:
+    """Derive descriptive PSI deltas without using them as a decision input."""
+    if post["snapshot_started_ns"] < pre["snapshot_finished_ns"]:
+        raise SummaryError(f"{label} PSI snapshots move backwards")
+    snapshot_window_us = (
+        post["snapshot_started_ns"] - pre["snapshot_finished_ns"]
+    ) / 1_000.0
+    if snapshot_window_us <= 0.0:
+        raise SummaryError(f"{label} PSI snapshot window must be positive")
+    derived: dict[str, dict[str, Any]] = {}
+    for resource in PSI_RESOURCES:
+        resource_derived: dict[str, Any] = {}
+        for category in ("some", "full"):
+            pre_metrics = pre["psi"][resource][category]
+            post_metrics = post["psi"][resource][category]
+            if pre_metrics is None or post_metrics is None:
+                resource_derived[category] = None
+                continue
+            total_delta_us = int(post_metrics["total"]) - int(pre_metrics["total"])
+            if total_delta_us < 0:
+                raise SummaryError(
+                    f"{label} PSI {resource}.{category}.total moves backwards"
+                )
+            resource_derived[category] = {
+                "pre_avg10_percent": float(pre_metrics["avg10"]),
+                "post_avg10_percent": float(post_metrics["avg10"]),
+                "total_delta_us": total_delta_us,
+                "snapshot_window_us": snapshot_window_us,
+                "stall_percent": total_delta_us * 100.0 / snapshot_window_us,
+            }
+        derived[resource] = resource_derived
+    return derived
 
 
 def _validate_lane_pressure_artifact(
@@ -2555,34 +2625,145 @@ def _validate_lane_pressure_artifact(
         raise SummaryError(f"{label} lane PSI post snapshot falls before final whole-GPU sampler completion")
     if post["snapshot_finished_ns"] > first_post_lane_gpu_idle_started_ns:
         raise SummaryError(f"{label} lane PSI post snapshot extends past post-lane GPU idle census")
-    if post["snapshot_started_ns"] < pre["snapshot_finished_ns"]:
-        raise SummaryError(f"{label} lane PSI snapshots move backwards")
-    snapshot_window_us = (post["snapshot_started_ns"] - pre["snapshot_finished_ns"]) / 1_000.0
-    if snapshot_window_us <= 0.0:
-        raise SummaryError(f"{label} lane PSI snapshot window must be positive")
-    derived: dict[str, dict[str, Any]] = {}
-    for resource in PSI_RESOURCES:
-        resource_derived: dict[str, Any] = {}
-        for category in ("some", "full"):
-            pre_metrics = pre["psi"][resource][category]
-            post_metrics = post["psi"][resource][category]
-            if pre_metrics is None or post_metrics is None:
-                resource_derived[category] = None
-                continue
-            total_delta_us = int(post_metrics["total"]) - int(pre_metrics["total"])
-            if total_delta_us < 0:
-                raise SummaryError(f"{label} lane PSI {resource}.{category}.total moves backwards")
-            resource_derived[category] = {
-                "pre_avg10_percent": float(pre_metrics["avg10"]),
-                "post_avg10_percent": float(post_metrics["avg10"]),
-                "total_delta_us": total_delta_us,
-                "snapshot_window_us": snapshot_window_us,
-                "stall_percent": total_delta_us * 100.0 / snapshot_window_us,
-            }
-        derived[resource] = resource_derived
+    derived = _derive_psi_delta(pre=pre, post=post, label=f"{label} lane")
     return {
         "path": str(artifact_path),
         "sha256": artifact_sha256,
+        "pre": pre,
+        "post": post,
+        "derived": derived,
+    }
+
+
+def _validate_retained_phase_pressure_artifact(
+    *,
+    lane: str,
+    provenance: Mapping[str, Any],
+    attempt_dir: Path,
+    attempt_config: Mapping[str, Any],
+    configuration: Mapping[str, Any],
+    ready_ns: int,
+    cleanup_completed_ns: int,
+    retained_phase: Mapping[str, Any],
+    label: str,
+) -> dict[str, Any] | None:
+    """Validate marker-bound PSI snapshots that bracket retained requests.
+
+    The configuration is intentionally optional for compatibility with older
+    immutable evidence.  Once the current N06-A driver declares it, both
+    lanes must retain the dedicated artifact and the reader verifies that its
+    snapshots surround the independently hashed retained phase receipt.
+    """
+    proc_root = _validate_retained_phase_psi_configuration(configuration, label=label)
+    reference_value = provenance.get("retained_phase_pressure")
+    if proc_root is None:
+        if reference_value is not None:
+            raise SummaryError(
+                f"{label} retains phase-aligned PSI without its attempt configuration contract"
+            )
+        return None
+    reference = _require_exact_keys(
+        reference_value,
+        {"path", "sha256", "policy", "timing_scope"},
+        f"{label} lane provenance.retained_phase_pressure",
+    )
+    if (
+        reference.get("policy") != LANE_PSI_POLICY
+        or reference.get("timing_scope") != RETAINED_PHASE_PSI_TIMING_SCOPE
+    ):
+        raise SummaryError(f"{label} retained-phase PSI provenance contract differs")
+    artifact_path, artifact_payload, artifact_sha256 = _read_marked_artifact(
+        path_text=_require_string(
+            reference.get("path"), f"{label} retained-phase PSI path"
+        ),
+        expected_sha256=_require_string(
+            reference.get("sha256"), f"{label} retained-phase PSI SHA-256"
+        ),
+        label=f"{label} retained-phase PSI artifact",
+        maximum_bytes=MAX_LANE_PSI_ARTIFACT_BYTES,
+    )
+    if artifact_path.parent != attempt_dir or artifact_path.name != f"{lane}.retained-phase-psi.json":
+        raise SummaryError(
+            f"{label} retained-phase PSI artifact must be the dedicated lane file in its attempt directory"
+        )
+    artifact = _require_exact_keys(
+        _decode_json(artifact_payload, label=f"{label} retained-phase PSI artifact"),
+        {
+            "schema_version",
+            "policy",
+            "timing_scope",
+            "lane",
+            "attempt",
+            "proc_root",
+            "pre",
+            "post",
+        },
+        f"{label} retained-phase PSI artifact",
+    )
+    if (
+        artifact.get("schema_version") != RETAINED_PHASE_PSI_SCHEMA_VERSION
+        or artifact.get("policy") != LANE_PSI_POLICY
+        or artifact.get("timing_scope") != RETAINED_PHASE_PSI_TIMING_SCOPE
+        or artifact.get("lane") != lane
+    ):
+        raise SummaryError(f"{label} retained-phase PSI artifact identity differs")
+    if artifact.get("proc_root") != proc_root:
+        raise SummaryError(
+            f"{label} retained-phase PSI artifact proc_root differs from its attempt configuration"
+        )
+    expected_attempt = {
+        "phase": attempt_config.get("phase"),
+        "index": attempt_config.get("index"),
+        "pair_order": attempt_config.get("pair_order"),
+    }
+    if artifact.get("attempt") != expected_attempt:
+        raise SummaryError(
+            f"{label} retained-phase PSI artifact attempt identity differs from its attempt config"
+        )
+    pre = _validate_lane_psi_snapshot(
+        artifact.get("pre"),
+        phase="pre",
+        proc_root=proc_root,
+        label=f"{label} retained-phase PSI pre",
+    )
+    post = _validate_lane_psi_snapshot(
+        artifact.get("post"),
+        phase="post",
+        proc_root=proc_root,
+        label=f"{label} retained-phase PSI post",
+    )
+    phase_started_ns = _require_integer(
+        retained_phase.get("phase_started_ns"),
+        f"{label} retained phase phase_started_ns",
+        minimum=ready_ns,
+    )
+    phase_finished_ns = _require_integer(
+        retained_phase.get("phase_finished_ns"),
+        f"{label} retained phase phase_finished_ns",
+        minimum=phase_started_ns,
+    )
+    if phase_finished_ns <= phase_started_ns:
+        raise SummaryError(f"{label} retained phase PSI has an empty retained phase interval")
+    if pre["snapshot_started_ns"] < ready_ns:
+        raise SummaryError(f"{label} retained-phase PSI pre snapshot precedes readiness")
+    if pre["snapshot_finished_ns"] > phase_started_ns:
+        raise SummaryError(f"{label} retained-phase PSI pre snapshot falls after retained phase start")
+    if post["snapshot_started_ns"] < phase_finished_ns:
+        raise SummaryError(f"{label} retained-phase PSI post snapshot falls before retained phase finish")
+    if post["snapshot_finished_ns"] > cleanup_completed_ns:
+        raise SummaryError(f"{label} retained-phase PSI post snapshot falls after owned cleanup")
+    derived = _derive_psi_delta(
+        pre=pre,
+        post=post,
+        label=f"{label} retained-phase",
+    )
+    return {
+        "path": str(artifact_path),
+        "sha256": artifact_sha256,
+        "phase": {
+            "phase_started_ns": phase_started_ns,
+            "phase_finished_ns": phase_finished_ns,
+        },
         "pre": pre,
         "post": post,
         "derived": derived,
@@ -2901,6 +3082,17 @@ def _validate_lane_provenance(
             raise SummaryError(
                 f"{label} {phase_name} phase is outside the owned server lifecycle/readiness interval"
             )
+    retained_phase_pressure = _validate_retained_phase_pressure_artifact(
+        lane=lane,
+        provenance=provenance,
+        attempt_dir=attempt_dir,
+        attempt_config=config,
+        configuration=configuration,
+        ready_ns=ready_ns,
+        cleanup_completed_ns=cleanup_completed_ns,
+        retained_phase=retained_phase,
+        label=label,
+    )
 
     vllm_snapshot_paths: dict[str, str] | None = None
     if lane == "riley":
@@ -2986,6 +3178,7 @@ def _validate_lane_provenance(
         "cleanup_completed_ns": cleanup_completed_ns,
         "post_lane_gpu_idle": post_lane_gpu_idle,
         "lane_pressure": lane_pressure,
+        "retained_phase_pressure": retained_phase_pressure,
     }
     if vllm_snapshot_paths is not None:
         result["vllm_startup_snapshot"] = vllm_snapshot_paths
@@ -3531,10 +3724,30 @@ def _lane_pressure_covariate(
     }
 
 
+def _retained_phase_pressure_covariate(
+    *, timed_index: int, pair_order: str, lane: str, pressure: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Expose the PSI covariate tied to the retained request interval."""
+    result = _lane_pressure_covariate(
+        timed_index=timed_index,
+        pair_order=pair_order,
+        lane=lane,
+        pressure=pressure,
+    )
+    result["phase"] = pressure["phase"]
+    return result
+
+
 def _order_by_lane_pressure_sensitivity(
-    covariates: Sequence[Mapping[str, Any]],
+    covariates: Sequence[Mapping[str, Any]], *, observation_scope: str
 ) -> dict[str, Any]:
     """Expose order/position pressure differences without altering any metric."""
+    if not covariates:
+        return {
+            "status": "not-recorded",
+            "observation_scope": observation_scope,
+            "reason": "the immutable attempt configuration predates this observation-only PSI receipt",
+        }
     by_order: dict[str, list[Mapping[str, Any]]] = {
         order: [item for item in covariates if item["pair_order"] == order]
         for order in ("riley-vllm", "vllm-riley")
@@ -3595,6 +3808,7 @@ def _order_by_lane_pressure_sensitivity(
         }
     return {
         "status": "descriptive",
+        "observation_scope": observation_scope,
         "policy": (
             "Lane PSI is shown by AB/BA order and lane position only; it is never used "
             "to select, filter, pair, weight, adjust, or promote a performance result."
@@ -3608,6 +3822,7 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
     receipt = _load_repeat_receipt(receipt_path)
     covariates: list[dict[str, Any]] = []
     lane_pressure_covariates: list[dict[str, Any]] = []
+    retained_phase_pressure_covariates: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
     startup_snapshot_paths: set[str] = set()
     vllm_startup_snapshot_paths: set[str] = set()
@@ -3759,9 +3974,46 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
             }
             covariate["lane_pressure"] = lane_pressure
             lane_pressure_covariates.extend(lane_pressure[lane] for lane in ("riley", "vllm"))
+            retained_phase_pressure_raw = {
+                lane: _require_mapping(
+                    (riley if lane == "riley" else vllm).get("lane_provenance"),
+                    f"validated {lane} lane provenance",
+                ).get("retained_phase_pressure")
+                for lane in ("riley", "vllm")
+            }
+            if any(value is None for value in retained_phase_pressure_raw.values()):
+                # A legacy receipt without the opt-in configuration remains
+                # readable, but a current attempt must provide both lanes.
+                if any(value is not None for value in retained_phase_pressure_raw.values()):
+                    raise SummaryError(
+                        "paired lanes disagree on retained-phase PSI availability"
+                    )
+                covariate["retained_phase_pressure"] = None
+            else:
+                retained_phase_pressure_by_lane = {
+                    lane: _require_mapping(
+                        retained_phase_pressure_raw[lane],
+                        f"validated {lane} retained-phase PSI provenance",
+                    )
+                    for lane in ("riley", "vllm")
+                }
+                retained_phase_pressure = {
+                    lane: _retained_phase_pressure_covariate(
+                        timed_index=int(run["index"]),
+                        pair_order=riley["pair_order"],
+                        lane=lane,
+                        pressure=retained_phase_pressure_by_lane[lane],
+                    )
+                    for lane in ("riley", "vllm")
+                }
+                covariate["retained_phase_pressure"] = retained_phase_pressure
+                retained_phase_pressure_covariates.extend(
+                    retained_phase_pressure[lane] for lane in ("riley", "vllm")
+                )
             covariate["stdout"] = stdout
         else:
             covariate["lane_pressure"] = None
+            covariate["retained_phase_pressure"] = None
             if run_status == N01_NOT_STARTED_AFTER_FAILED_CLEANUP_STATUS:
                 failed_pairs.append(
                     {
@@ -3911,7 +4163,13 @@ def _serving_summary(receipt_path: Path) -> dict[str, Any]:
         "timed_run_pressure_covariates": covariates,
         "lane_pressure_covariates": lane_pressure_covariates,
         "order_by_lane_pressure_sensitivity": _order_by_lane_pressure_sensitivity(
-            lane_pressure_covariates
+            lane_pressure_covariates,
+            observation_scope="whole owned lane lifecycle",
+        ),
+        "retained_phase_pressure_covariates": retained_phase_pressure_covariates,
+        "order_by_retained_phase_pressure_sensitivity": _order_by_lane_pressure_sensitivity(
+            retained_phase_pressure_covariates,
+            observation_scope="retained client-observed request phase",
         ),
         "successful_outer_pair_observations": observations,
         "per_lane": per_lane,

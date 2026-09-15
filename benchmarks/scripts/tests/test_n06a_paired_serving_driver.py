@@ -728,8 +728,10 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             for lane in ("riley", "vllm"):
                 provenance_path = attempt_dir / f"{lane}.provenance.json"
                 pressure_path = attempt_dir / f"{lane}.lane-psi.json"
+                retained_pressure_path = attempt_dir / f"{lane}.retained-phase-psi.json"
                 provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
                 pressure = json.loads(pressure_path.read_text(encoding="utf-8"))
+                retained_pressure = json.loads(retained_pressure_path.read_text(encoding="utf-8"))
                 marker_fields = summary._parse_marker_tokens(
                     marker_by_lane[lane], prefix=driver.MARKER_PREFIX, label=f"fixture {lane} marker"
                 )
@@ -744,7 +746,24 @@ class N06aPairedServingDriverTests(unittest.TestCase):
                     hashlib.sha256(pressure_path.read_bytes()).hexdigest(),
                 )
                 self.assertEqual(pressure["policy"], driver.LANE_PSI_POLICY)
+                self.assertEqual(
+                    retained_pressure["schema_version"], driver.RETAINED_PHASE_PSI_SCHEMA_VERSION
+                )
+                self.assertEqual(
+                    retained_pressure["timing_scope"], driver.RETAINED_PHASE_PSI_TIMING_SCOPE
+                )
+                self.assertEqual(
+                    provenance["retained_phase_pressure"]["path"],
+                    str(retained_pressure_path.resolve()),
+                )
+                self.assertEqual(
+                    provenance["retained_phase_pressure"]["sha256"],
+                    hashlib.sha256(retained_pressure_path.read_bytes()).hexdigest(),
+                )
                 self.assertGreaterEqual(pressure["pre"]["psi"]["io"]["some"]["avg10"], 1_000.0)
+                self.assertGreaterEqual(
+                    retained_pressure["pre"]["psi"]["io"]["some"]["avg10"], 1_000.0
+                )
                 self.assertLessEqual(
                     pressure["pre"]["snapshot_finished_ns"], provenance["started_ns"]
                 )
@@ -776,7 +795,18 @@ class N06aPairedServingDriverTests(unittest.TestCase):
         self.assertEqual(snapshot["psi"]["memory"]["status"], "unavailable")
 
     def test_unavailable_or_malformed_lane_psi_is_retained_without_blocking_markers(self) -> None:
-        snapshots = iter(("unavailable", "malformed", "unavailable", "malformed"))
+        snapshots = iter(
+            (
+                "unavailable",
+                "malformed",
+                "unavailable",
+                "malformed",
+                "unavailable",
+                "malformed",
+                "unavailable",
+                "malformed",
+            )
+        )
 
         def pressure_snapshot(**kwargs: object) -> dict[str, object]:
             status = next(snapshots)
@@ -815,8 +845,17 @@ class N06aPairedServingDriverTests(unittest.TestCase):
             riley_pressure = json.loads(
                 (attempt_dir / "riley.lane-psi.json").read_text(encoding="utf-8")
             )
+            riley_retained_pressure = json.loads(
+                (attempt_dir / "riley.retained-phase-psi.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(riley_pressure["pre"]["psi"]["io"]["status"], "unavailable")
             self.assertEqual(riley_pressure["post"]["psi"]["io"]["status"], "malformed")
+            self.assertEqual(
+                riley_retained_pressure["pre"]["psi"]["io"]["status"], "malformed"
+            )
+            self.assertEqual(
+                riley_retained_pressure["post"]["psi"]["io"]["status"], "unavailable"
+            )
 
     def test_warmup_outer_attempt_retains_per_server_warmup_but_emits_no_markers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

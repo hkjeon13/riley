@@ -268,6 +268,16 @@ The offline N03b output exposes the validated lane records as
 AB/BA order and lane position. That view is descriptive only: it has no PSI
 bootstrap, pressure-adjusted effect, or causal interpretation.
 
+For every timed lane, the driver also records a separate create-only
+`<lane>.retained-phase-psi.json`. Its `pre` snapshot completes after the
+strict server warmup and before the retained client request phase starts; its
+`post` snapshot begins after that phase finishes and before owned cleanup. The
+artifact path/SHA-256 is named by the marker-bound lane provenance, while N03b
+cross-checks both bounds against the independently hashed retained phase
+receipt. N03b exposes it as `retained_phase_pressure_covariates` and
+`order_by_retained_phase_pressure_sensitivity`, again only as descriptive
+context with no PSI-based selection, adjustment, weighting, or promotion.
+
 Before starting the next lane, the driver also records a separate GPU-0 idle
 census. It must show no compute-process PID and `memory.used <= 512 MiB` after
 the owned lane cleanup. The census is evidence only: it never terminates an
