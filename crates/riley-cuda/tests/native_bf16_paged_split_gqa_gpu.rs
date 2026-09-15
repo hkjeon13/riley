@@ -18,7 +18,9 @@ const QUERY_HEADS: usize = 16;
 const KEY_VALUE_HEADS: usize = 2;
 const HEAD_SIZE: usize = 128;
 const PAGE_SIZE: usize = 16;
-const SCALE: f32 = 1.0 / 128.0_f32.sqrt();
+// IEEE-754 f32 representation of 1 / sqrt(128), pinned without a non-const
+// `sqrt` call so this CUDA integration target builds on the workspace MSRV.
+const SCALE: f32 = 0.088_388_346;
 const MAX_CONTEXT: usize = 16_384;
 const PHYSICAL_BLOCKS: usize = MAX_CONTEXT.div_ceil(PAGE_SIZE) + 3;
 const STAGING_BYTES: u64 = 16 * 1024 * 1024;
@@ -72,7 +74,7 @@ impl PagedFixture {
         )?)
     }
 
-    fn close(mut self) -> TestResult {
+    fn close(self) -> TestResult {
         self.valid.close()?;
         self.ids.close()?;
         self.value_pool.close()?;
