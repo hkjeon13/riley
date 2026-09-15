@@ -377,8 +377,9 @@ fn load_hf_cache_off_oracle() -> TestResult<HfCacheOffOracle> {
 }
 
 fn load_model() -> TestResult<LoadedModel> {
+    let checkpoint = required_path("RILEY_QWEN3B_CHECKPOINT");
     let model = LoadedModel::load(
-        required_path("RILEY_QWEN3B_CHECKPOINT"),
+        &checkpoint,
         LoadLimits::default().with_weight_byte_limits(MAX_WEIGHT_BYTES, MAX_WEIGHT_BYTES)?,
     )?;
     assert_eq!(model.config().family(), ModelFamily::Qwen2);

@@ -26,6 +26,9 @@ serde = { version = "=1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.145", optional = true }
 sha2 = { version = "=0.11.0", default-features = false, optional = true }
 
+[dev-dependencies]
+riley-tensor = { path = "../riley-tensor" }
+
 [lints]
 workspace = true
 
