@@ -24,6 +24,7 @@ use riley_runtime::llama::{
 use riley_runtime::sampling::{SamplingParams, SamplingRng, SamplingWorkspace, TokenConstraints};
 use riley_tensor::DType;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -32,6 +33,8 @@ const BF16_BYTES: usize = 2;
 const GOLDEN_SCHEMA: &str = "riley-qwen2-compat-v1";
 const QWEN_MODEL_ID: &str = "Qwen/Qwen2.5-0.5B-Instruct";
 const QWEN_REVISION: &str = "7ae557604adf67be50417f59c2c2f167def9a775";
+const QWEN3B_MODEL_ID: &str = "Qwen/Qwen2.5-3B-Instruct";
+const QWEN3B_REVISION: &str = "aa8e72537993ba99e69dfaafa59ed015b17504d1";
 const EXPECTED_SOURCE_ARCHITECTURE: &str = "Qwen2ForCausalLM";
 const EXPECTED_HIDDEN_SIZE: usize = 896;
 const EXPECTED_INTERMEDIATE_SIZE: usize = 4_864;
@@ -48,6 +51,15 @@ const EXPECTED_LOGICAL_WEIGHT_COUNT: usize = EXPECTED_LAYER_COUNT * 12 + 3;
 const EXPECTED_GOLDEN_CASE_NAMES: [&str; 3] = ["english", "korean", "code"];
 const EXPECTED_GOLDEN_OUTPUT_TOKENS: usize = 8;
 const EXPECTED_RAW_TOP_TOKENS: usize = 10;
+const QWEN3B_LAYER_COUNT: usize = 36;
+const QWEN3B_HIDDEN_SIZE: usize = 2_048;
+const QWEN3B_QUERY_HEADS: usize = 16;
+const QWEN3B_KEY_VALUE_HEADS: usize = 2;
+const QWEN3B_HEAD_DIMENSION: usize = 128;
+const QWEN3B_PROBE_OUTPUT_TOKENS: usize = 8;
+const QWEN3B_MAX_WEIGHT_BYTES: u64 = 8 * ONE_GIB;
+const QWEN3B_SERVING_WORKLOAD_SHA256: &str =
+    "7a0a8fec31d45e397e1ec57335fa1c9de2d3da7daa9a32e9002a62763c05261e";
 // Reuse the immutable PR01 E0 v2 final-logits max-absolute-error bound. The
 // committed Qwen fixture intentionally stores sparse logits rather than the
 // full row, so its cosine and mean-absolute-error gates cannot be recomputed
@@ -70,6 +82,14 @@ struct GoldenCase {
     max_new_tokens: usize,
     cache_on_token_ids: Vec<u32>,
     cache_off_token_ids: Vec<u32>,
+}
+
+#[derive(Debug)]
+struct ServingWorkload {
+    case: String,
+    prompt: String,
+    prompt_token_ids: Vec<u32>,
+    output_token_ids: Vec<u32>,
 }
 
 #[derive(Debug, Default)]
@@ -101,8 +121,25 @@ fn qwen_golden_path() -> PathBuf {
         .expect("RILEY_QWEN_GOLDEN must name the remote Qwen golden fixture")
 }
 
+fn qwen3b_checkpoint_path() -> PathBuf {
+    std::env::var_os("RILEY_QWEN3B_CHECKPOINT")
+        .map(PathBuf::from)
+        .expect("RILEY_QWEN3B_CHECKPOINT must name the remote Qwen2.5-3B checkpoint directory")
+}
+
+fn qwen_serving_workload_path() -> PathBuf {
+    std::env::var_os("RILEY_QWEN_SERVING_WORKLOAD")
+        .map(PathBuf::from)
+        .expect("RILEY_QWEN_SERVING_WORKLOAD must name the immutable Qwen serving workload")
+}
+
 fn qwen_load_limits() -> TestResult<LoadLimits> {
     Ok(LoadLimits::default().with_weight_byte_limits(ONE_GIB, ONE_GIB)?)
+}
+
+fn qwen3b_load_limits() -> TestResult<LoadLimits> {
+    Ok(LoadLimits::default()
+        .with_weight_byte_limits(QWEN3B_MAX_WEIGHT_BYTES, QWEN3B_MAX_WEIGHT_BYTES)?)
 }
 
 fn exact_qwen_decode_config() -> PreparedLlamaDecodeConfig {
@@ -118,6 +155,13 @@ fn load_qwen() -> TestResult<LoadedModel> {
     Ok(LoadedModel::load(
         &qwen_checkpoint_path(),
         qwen_load_limits()?,
+    )?)
+}
+
+fn load_qwen3b() -> TestResult<LoadedModel> {
+    Ok(LoadedModel::load(
+        &qwen3b_checkpoint_path(),
+        qwen3b_load_limits()?,
     )?)
 }
 
@@ -138,6 +182,13 @@ fn close_context(context: CudaContext) -> TestResult {
     assert!(context.allocation_stats()?.is_zero());
     context.close()?;
     Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn json_u32(value: &Value, field: &'static str) -> TestResult<u32> {
@@ -168,6 +219,102 @@ fn json_f32_array(value: &Value, field: &'static str) -> TestResult<Vec<f32>> {
         output.push(number);
     }
     Ok(output)
+}
+
+fn load_qwen_serving_workload() -> TestResult<ServingWorkload> {
+    let payload = fs::read(qwen_serving_workload_path())?;
+    assert_eq!(
+        sha256_hex(&payload),
+        QWEN3B_SERVING_WORKLOAD_SHA256,
+        "Qwen serving workload bytes differ from the immutable C8 vLLM oracle"
+    );
+    let document: Value = serde_json::from_slice(&payload)?;
+    let object = document
+        .as_object()
+        .ok_or("Qwen serving workload must be an object")?;
+    let actual_fields: BTreeSet<_> = object.keys().map(String::as_str).collect();
+    let expected_fields: BTreeSet<_> = [
+        "schema_version",
+        "case",
+        "model_id",
+        "model_revision",
+        "prompt",
+        "prompt_token_ids",
+        "output_token_ids",
+        "output_text",
+        "finish_reason",
+        "sampling",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        actual_fields, expected_fields,
+        "Qwen serving workload fields differ from the immutable N06-A schema"
+    );
+    assert_eq!(
+        document["schema_version"].as_str(),
+        Some("riley.n06a-d128-serving-workload.v1")
+    );
+    assert_eq!(document["model_id"].as_str(), Some(QWEN3B_MODEL_ID));
+    assert_eq!(document["model_revision"].as_str(), Some(QWEN3B_REVISION));
+    let case = document["case"]
+        .as_str()
+        .ok_or("Qwen serving workload case must be a string")?
+        .to_owned();
+    assert!(
+        !case.is_empty(),
+        "Qwen serving workload case must not be empty"
+    );
+    let prompt = document["prompt"]
+        .as_str()
+        .ok_or("Qwen serving workload prompt must be a string")?;
+    assert!(
+        !prompt.is_empty(),
+        "Qwen serving workload prompt must not be empty"
+    );
+    let prompt_token_ids = json_u32_array(
+        &document["prompt_token_ids"],
+        "Qwen serving workload prompt_token_ids must be a U32 array",
+    )?;
+    let output_token_ids = json_u32_array(
+        &document["output_token_ids"],
+        "Qwen serving workload output_token_ids must be a U32 array",
+    )?;
+    assert_eq!(
+        prompt_token_ids.len(),
+        2_048,
+        "Qwen serving workload must retain its P2048 prompt"
+    );
+    assert!(
+        output_token_ids.len() >= QWEN3B_PROBE_OUTPUT_TOKENS,
+        "Qwen serving workload must retain at least eight vLLM output-token oracles"
+    );
+    let output_text = document["output_text"]
+        .as_str()
+        .ok_or("Qwen serving workload output_text must be a string")?;
+    assert!(
+        !output_text.is_empty(),
+        "Qwen serving workload output_text must not be empty"
+    );
+    assert_eq!(document["finish_reason"].as_str(), Some("length"));
+    let sampling = document["sampling"]
+        .as_object()
+        .ok_or("Qwen serving workload sampling must be an object")?;
+    let actual_sampling_fields: BTreeSet<_> = sampling.keys().map(String::as_str).collect();
+    let expected_sampling_fields: BTreeSet<_> = ["temperature", "top_p"].into_iter().collect();
+    assert_eq!(
+        actual_sampling_fields, expected_sampling_fields,
+        "Qwen serving workload sampling fields differ"
+    );
+    assert_eq!(sampling["temperature"].as_f64(), Some(0.0));
+    assert_eq!(sampling["top_p"].as_f64(), Some(1.0));
+
+    Ok(ServingWorkload {
+        case,
+        prompt: prompt.to_owned(),
+        prompt_token_ids,
+        output_token_ids,
+    })
 }
 
 fn parse_probe_values(value: &Value) -> TestResult<BTreeMap<u32, f32>> {
@@ -349,6 +496,36 @@ fn assert_model_contract(model: &LoadedModel) {
         assert!(attention.bias().value());
         assert!(!attention.bias().output());
         assert!(!block.mlp().has_bias());
+    }
+}
+
+fn assert_qwen3b_model_contract(model: &LoadedModel) {
+    assert_eq!(model.config().family(), ModelFamily::Qwen2);
+    assert_eq!(model.provenance().source_model(), QWEN3B_MODEL_ID);
+    assert_eq!(model.provenance().source_revision(), QWEN3B_REVISION);
+
+    let spec = model.spec();
+    assert_eq!(spec.architecture(), ModelArchitecture::Llama);
+    assert_eq!(spec.source_architecture(), EXPECTED_SOURCE_ARCHITECTURE);
+    assert_eq!(spec.dtype(), DType::BF16);
+    assert_eq!(spec.blocks().len(), QWEN3B_LAYER_COUNT);
+    assert_eq!(spec.embedding().hidden_size(), QWEN3B_HIDDEN_SIZE);
+    assert_eq!(spec.embedding().vocabulary_size(), EXPECTED_VOCABULARY_SIZE);
+    assert_eq!(spec.max_sequence_length(), EXPECTED_MAX_SEQUENCE_LENGTH);
+    assert_eq!(
+        model.tokenizer().addressable_token_count(),
+        EXPECTED_ADDRESSABLE_TOKEN_COUNT
+    );
+    for (index, block) in spec.blocks().iter().enumerate() {
+        assert_eq!(block.index(), index);
+        let attention = block.attention();
+        assert_eq!(attention.query_heads(), QWEN3B_QUERY_HEADS);
+        assert_eq!(attention.key_value_heads(), QWEN3B_KEY_VALUE_HEADS);
+        assert_eq!(attention.head_dimension(), QWEN3B_HEAD_DIMENSION);
+        assert!(attention.bias().query());
+        assert!(attention.bias().key());
+        assert!(attention.bias().value());
+        assert!(!attention.bias().output());
     }
 }
 
@@ -549,6 +726,108 @@ fn capture_generation_event(trace: &mut GenerationTrace, event: LlamaGenerationE
             panic!("the fixed Qwen golden generation must not be cancelled")
         }
     }
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 reference-prefix diagnostic"]
+fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> TestResult {
+    let workload = load_qwen_serving_workload()?;
+    let model = load_qwen3b()?;
+    assert_qwen3b_model_contract(&model);
+    let encoded = model.tokenizer().encode(
+        &workload.prompt,
+        EncodeOptions {
+            add_special_tokens: true,
+        },
+    )?;
+    assert_eq!(
+        encoded, workload.prompt_token_ids,
+        "the serving tokenizer must reproduce the immutable workload prompt IDs"
+    );
+    let addressable_token_count = model.tokenizer().addressable_token_count();
+    assert!(
+        workload.prompt_token_ids.iter().all(|&token| {
+            usize::try_from(token).is_ok_and(|token| token < addressable_token_count)
+        }),
+        "Qwen serving workload prompt includes an ID outside the tokenizer domain"
+    );
+    assert!(
+        workload.output_token_ids[..QWEN3B_PROBE_OUTPUT_TOKENS]
+            .iter()
+            .all(|&token| usize::try_from(token)
+                .is_ok_and(|token| token < addressable_token_count)),
+        "Qwen serving workload oracle includes an ID outside the tokenizer domain"
+    );
+
+    let maximum_sequence_length = workload
+        .prompt_token_ids
+        .len()
+        .checked_add(QWEN3B_PROBE_OUTPUT_TOKENS)
+        .ok_or("Qwen3B P2048 reference-prefix capacity overflow")?;
+    let (context, mut stream) = first_context()?;
+    let mut decode = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        workload.prompt_token_ids.len(),
+        maximum_sequence_length,
+        exact_qwen_decode_config(),
+    )?;
+    decode.prefill(&workload.prompt_token_ids, &mut stream)?;
+    assert_eq!(decode.phase(), LlamaDecodePhase::Prefilled);
+    assert_eq!(decode.logical_length(), workload.prompt_token_ids.len());
+    assert_eq!(decode.maximum_length(), maximum_sequence_length);
+
+    let mut logits = vec![0_u8; logits_row_bytes()?];
+    decode.download_last_logits(&mut logits, &mut stream)?;
+    let expected_first_token = workload.output_token_ids[0];
+    let actual_first_token = top1(addressable_logits(&logits));
+    assert_eq!(
+        actual_first_token, expected_first_token,
+        "case={} reference-prefill first token actual={} expected={}",
+        workload.case, actual_first_token, expected_first_token
+    );
+
+    for output_index in 1..QWEN3B_PROBE_OUTPUT_TOKENS {
+        decode.decode(workload.output_token_ids[output_index - 1], &mut stream)?;
+        decode.download_last_logits(&mut logits, &mut stream)?;
+        let expected_token = workload.output_token_ids[output_index];
+        let actual_token = top1(addressable_logits(&logits));
+        assert_eq!(
+            actual_token, expected_token,
+            "case={} reference-decode token_index={} actual={} expected={}",
+            workload.case, output_index, actual_token, expected_token
+        );
+    }
+    assert_eq!(decode.phase(), LlamaDecodePhase::Decoding);
+    assert_eq!(
+        decode.logical_length(),
+        workload.prompt_token_ids.len() + QWEN3B_PROBE_OUTPUT_TOKENS - 1
+    );
+
+    println!(
+        concat!(
+            "QWEN3B_REFERENCE_PREFIX schema_version=1 case={} model_id={} model_revision={} ",
+            "prompt_tokens={} oracle_output_tokens={} probe_decode_steps={} ",
+            "direct_decode_calls={} attention=reference-paged-kv ",
+            "reference_prefill_first_token_expected={} ",
+            "reference_prefill_first_token_actual={} performance_claim_eligible=false status=passed"
+        ),
+        workload.case,
+        QWEN3B_MODEL_ID,
+        QWEN3B_REVISION,
+        workload.prompt_token_ids.len(),
+        workload.output_token_ids.len(),
+        QWEN3B_PROBE_OUTPUT_TOKENS,
+        QWEN3B_PROBE_OUTPUT_TOKENS - 1,
+        expected_first_token,
+        actual_first_token,
+    );
+
+    decode.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    stream.close()?;
+    close_context(context)
 }
 
 #[test]
