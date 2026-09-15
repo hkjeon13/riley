@@ -765,6 +765,24 @@ fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> 
         .checked_add(QWEN3B_PROBE_OUTPUT_TOKENS)
         .ok_or("Qwen3B P2048 reference-prefix capacity overflow")?;
     let (context, mut stream) = first_context()?;
+
+    // Keep this cache-free materialized-reference prefill separate from the
+    // paged owner below. The host copy lets the two raw BF16 rows be compared
+    // without retaining both 3B CUDA owners at once.
+    let mut cache_free = PreparedLlamaForward::prepare(
+        &model,
+        &context,
+        &mut stream,
+        workload.prompt_token_ids.len(),
+        PreparedLlamaForwardConfig::default().with_reference_attention(),
+    )?;
+    cache_free.forward(&workload.prompt_token_ids, &mut stream)?;
+    let mut cache_free_prefill_logits = vec![0_u8; logits_row_bytes()?];
+    cache_free.download_last_logits(&mut cache_free_prefill_logits, &mut stream)?;
+    let cache_free_first_token = top1(addressable_logits(&cache_free_prefill_logits));
+    cache_free.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+
     let mut decode = PreparedLlamaDecode::prepare(
         &model,
         &context,
@@ -778,21 +796,36 @@ fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> 
     assert_eq!(decode.logical_length(), workload.prompt_token_ids.len());
     assert_eq!(decode.maximum_length(), maximum_sequence_length);
 
-    let mut logits = vec![0_u8; logits_row_bytes()?];
-    decode.download_last_logits(&mut logits, &mut stream)?;
-    let expected_first_token = workload.output_token_ids[0];
-    let actual_first_token = top1(addressable_logits(&logits));
+    let mut paged_logits = vec![0_u8; logits_row_bytes()?];
+    decode.download_last_logits(&mut paged_logits, &mut stream)?;
+    let paged_first_token = top1(addressable_logits(&paged_logits));
+    assert!(
+        cache_free_prefill_logits == paged_logits,
+        "case={} cache-free/reference-paged prefill raw BF16 rows differ \\
+cache_free_sha256={} paged_sha256={} cache_free_argmax={} paged_argmax={}",
+        workload.case,
+        sha256_hex(&cache_free_prefill_logits),
+        sha256_hex(&paged_logits),
+        cache_free_first_token,
+        paged_first_token,
+    );
     assert_eq!(
-        actual_first_token, expected_first_token,
+        paged_first_token, cache_free_first_token,
+        "case={} cache-free/reference-paged prefill argmax differs paged={} cache_free={}",
+        workload.case, paged_first_token, cache_free_first_token
+    );
+    let expected_first_token = workload.output_token_ids[0];
+    assert_eq!(
+        paged_first_token, expected_first_token,
         "case={} reference-prefill first token actual={} expected={}",
-        workload.case, actual_first_token, expected_first_token
+        workload.case, paged_first_token, expected_first_token
     );
 
     for output_index in 1..QWEN3B_PROBE_OUTPUT_TOKENS {
         decode.decode(workload.output_token_ids[output_index - 1], &mut stream)?;
-        decode.download_last_logits(&mut logits, &mut stream)?;
+        decode.download_last_logits(&mut paged_logits, &mut stream)?;
         let expected_token = workload.output_token_ids[output_index];
-        let actual_token = top1(addressable_logits(&logits));
+        let actual_token = top1(addressable_logits(&paged_logits));
         assert_eq!(
             actual_token, expected_token,
             "case={} reference-decode token_index={} actual={} expected={}",
@@ -810,6 +843,7 @@ fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> 
             "QWEN3B_REFERENCE_PREFIX schema_version=1 case={} model_id={} model_revision={} ",
             "prompt_tokens={} oracle_output_tokens={} probe_decode_steps={} ",
             "direct_decode_calls={} attention=reference-paged-kv ",
+            "cache_free_paged_prefill_bf16_exact=true cache_free_paged_prefill_argmax_exact=true ",
             "reference_prefill_first_token_expected={} ",
             "reference_prefill_first_token_actual={} performance_claim_eligible=false status=passed"
         ),
@@ -821,7 +855,7 @@ fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> 
         QWEN3B_PROBE_OUTPUT_TOKENS,
         QWEN3B_PROBE_OUTPUT_TOKENS - 1,
         expected_first_token,
-        actual_first_token,
+        paged_first_token,
     );
 
     decode.close()?;
