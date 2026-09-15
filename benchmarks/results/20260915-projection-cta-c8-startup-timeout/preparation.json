@@ -1,0 +1,24 @@
+{
+  "hashes": {
+    "prior": "a525729d037b519e9c796b7574f960820fb6cbeb1e0d60e4a8a504c4cd616403",
+    "candidate": "3b2ebf01179305a425ca31ee7dc28245c05843f3597ff9e5c88e4e4d361312e3"
+  },
+  "controller_sha256": "d74ad9e5654fe3e1194a3b737cf4e6813d36b40536898555cb8f58e61a58b485",
+  "client_sha256": "563e366dbd95f3003aa0bcf1e4e7746fc11bbd672478cffb4d3ca82a14c8ec15",
+  "source_fixture_sha256": "d35683a3e24ccb6c5437ad022189c01f04203d83dd7f11fb14c680ccc3706188",
+  "concurrency": 8,
+  "active_capacity": 8,
+  "warmup": 64,
+  "retained": 2048,
+  "kv_payload_bytes_per_engine": 754974720,
+  "riley_cache_page_limit": 512,
+  "vllm_prefix_caching": true,
+  "client_treatment": "gc-phase-disabled-v1",
+  "artifact_storage": "tmpfs:/dev/shm",
+  "phase_cleanup": "release previous rows and full collect before every phase",
+  "readiness_timeout_seconds": 600,
+  "qualification": false,
+  "host_quiet_timeout_seconds": 0,
+  "reference_scope": "same-model prior Riley greedy baseline; vLLM agreement reported separately",
+  "gpu": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, NVIDIA GeForce RTX 4090, 580.178.04, 24564"
+}

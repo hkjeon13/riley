@@ -16,10 +16,12 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('root',type=pathlib.Path);parser.add_argument('out',type=pathlib.Path)
     parser.add_argument('--concurrency',type=int,default=32);parser.add_argument('--warmup',type=int,default=64);parser.add_argument('--retained',type=int,default=256)
     parser.add_argument('--cooldown-timeout-seconds',type=int,default=120)
+    parser.add_argument('--readiness-timeout-seconds',type=int,default=600)
     parser.add_argument("--host-quiet-timeout-seconds",type=int,default=0)
     args=parser.parse_args();assert args.concurrency in (8,16,32,64) and args.warmup>=32 and args.retained>=128
     assert args.host_quiet_timeout_seconds==0 or 10<=args.host_quiet_timeout_seconds<=600
     assert 120<=args.cooldown_timeout_seconds<=900
+    assert 60<=args.readiness_timeout_seconds<=3600
     assert args.out.parent.resolve()==pathlib.Path('/dev/shm'),'controlled artifact spool must be tmpfs'
     fs=os.statvfs(args.out.parent);assert fs.f_bavail*fs.f_frsize>=12*1024**3,'tmpfs capacity guard'
     mem={line.split(':')[0]:int(line.split()[1]) for line in pathlib.Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')}
@@ -98,7 +100,7 @@ def main():
             startup_begin=time.monotonic_ns()
             process=subprocess.Popen(argv,env=child,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
             try:
-                deadline=time.monotonic()+600
+                deadline=time.monotonic()+args.readiness_timeout_seconds
                 while True:
                     assert process.poll() is None,'server exited before readiness: '+name
                     try:
@@ -116,7 +118,7 @@ def main():
                 try:process.wait(timeout=40)
                 except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=10)
                 write(args.out/(name+'-exit.json'),{'exit_code':process.returncode,'gpu_after':gpu('temperature.gpu,memory.used')})
-    write(args.out/'preparation.json',{'hashes':hashes,'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'source_fixture_sha256':file_hash(args.root/'workload.json'),'concurrency':args.concurrency,'active_capacity':min(args.concurrency,32),'warmup':args.warmup,'retained':args.retained,'kv_payload_bytes_per_engine':754974720,'riley_cache_page_limit':512,'vllm_prefix_caching':True,'client_treatment':'gc-phase-disabled-v1','artifact_storage':'tmpfs:/dev/shm','phase_cleanup':'release previous rows and full collect before every phase','readiness_timeout_seconds':600,'qualification':False,'host_quiet_timeout_seconds':args.host_quiet_timeout_seconds,'reference_scope':'same-model prior Riley greedy baseline; vLLM agreement reported separately','gpu':gpu('uuid,name,driver_version,memory.total')})
+    write(args.out/'preparation.json',{'hashes':hashes,'controller_sha256':file_hash(__file__),'client_sha256':file_hash(pathlib.Path(__file__).with_name('paired_decode_serving_screen.py')),'source_fixture_sha256':file_hash(args.root/'workload.json'),'concurrency':args.concurrency,'active_capacity':min(args.concurrency,32),'warmup':args.warmup,'retained':args.retained,'kv_payload_bytes_per_engine':754974720,'riley_cache_page_limit':512,'vllm_prefix_caching':True,'client_treatment':'gc-phase-disabled-v1','artifact_storage':'tmpfs:/dev/shm','phase_cleanup':'release previous rows and full collect before every phase','readiness_timeout_seconds':args.readiness_timeout_seconds,'qualification':False,'host_quiet_timeout_seconds':args.host_quiet_timeout_seconds,'reference_scope':'same-model prior Riley greedy baseline; vLLM agreement reported separately','gpu':gpu('uuid,name,driver_version,memory.total')})
     # Capture immutable references before any timed comparison. Placeholders
     # intentionally fail comparison checks; protocol completeness must still pass.
     with server('prior','references') as port:

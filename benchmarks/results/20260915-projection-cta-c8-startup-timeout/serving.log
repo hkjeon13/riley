@@ -1,0 +1,11 @@
+references complete
+Traceback (most recent call last):
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/projection_cta_serving_screen.py", line 194, in <module>
+    if __name__=='__main__':main()
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/projection_cta_serving_screen.py", line 132, in main
+    with server('vllm029','preflight-vllm029') as port:
+  File "/usr/lib/python3.10/contextlib.py", line 135, in __enter__
+    return next(self.gen)
+  File "/data/riley-serving-260913-recovery/source/benchmarks/analysis/projection_cta_serving_screen.py", line 108, in server
+    assert time.monotonic()<deadline,'readiness timeout';time.sleep(.5)
+AssertionError: readiness timeout
