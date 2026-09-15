@@ -24,7 +24,8 @@ use super::super::batch::LlamaPackedBatchMetadata;
 use super::super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaForward,
     execute_gemm, execute_profile_residual_rms_norm, execute_profile_rms_norm,
-    execute_projection_bias, poison_for_cuda_error, span, span_mut, weight_span,
+    execute_projection_bias, execute_projection_with_optional_bias_epilogue, poison_for_cuda_error,
+    span, span_mut, weight_span,
 };
 use super::super::{ExecutionSite, LlamaExecutionPlan, LlamaOp};
 use super::buffers::{BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES};
@@ -668,57 +669,48 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         }
 
         let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
-        execute_gemm(
-            &mut gemms.hidden,
+        let (strict, fused) = gemms.query_projection_plans();
+        execute_projection_with_optional_bias_epilogue(
+            strict,
+            fused,
+            weights,
+            layer.query_bias(),
             &buffers.hidden_norm,
             weight_span(weights, layer.query_weight(), query_site)?,
             hidden_projection,
             &mut buffers.gemm_workspace,
-            stream,
-            query_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.query_bias(),
-            hidden_projection,
             dense_rows,
             hidden,
             stream,
             query_site,
         )?;
         let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
-        execute_gemm(
-            &mut gemms.key_value,
+        let (strict, fused) = gemms.key_value_projection_plans();
+        execute_projection_with_optional_bias_epilogue(
+            strict,
+            fused,
+            weights,
+            layer.key_bias(),
             &buffers.hidden_norm,
             weight_span(weights, layer.key_weight(), key_site)?,
             &mut buffers.key_raw,
             &mut buffers.gemm_workspace,
-            stream,
-            key_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.key_bias(),
-            &mut buffers.key_raw,
             dense_rows,
             key_value_width,
             stream,
             key_site,
         )?;
         let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
-        execute_gemm(
-            &mut gemms.key_value,
+        let (strict, fused) = gemms.key_value_projection_plans();
+        execute_projection_with_optional_bias_epilogue(
+            strict,
+            fused,
+            weights,
+            layer.value_bias(),
             &buffers.hidden_norm,
             weight_span(weights, layer.value_weight(), value_site)?,
             &mut buffers.value_raw,
             &mut buffers.gemm_workspace,
-            stream,
-            value_site,
-        )?;
-        execute_projection_bias(
-            weights,
-            layer.value_bias(),
-            &mut buffers.value_raw,
             dense_rows,
             key_value_width,
             stream,

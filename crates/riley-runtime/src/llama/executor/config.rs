@@ -7,9 +7,9 @@
 
 use riley_cuda::AttentionReductionProfile;
 
-use super::super::LlamaReductionProfile;
 use super::super::batch::LlamaBatchMetadataConfig;
 use super::super::forward::PreparedLlamaForwardConfig;
+use super::super::{LlamaProjectionBiasMode, LlamaReductionProfile};
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResult};
 use super::shape::{LlamaBatchShapeBuckets, LlamaBatchShapePolicy};
 
@@ -405,6 +405,15 @@ impl PreparedLlamaBatchExecutorConfig {
                 reason: "native D128 two-stage attention is eager-only and cannot use the D64 graph",
             });
         }
+        if self.forward.projection_bias_mode()
+            == LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1
+            && self.vllm_smol_p128_graph
+        {
+            return Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1",
+                reason: "cuBLASLt Q/K/V bias epilogue is eager-only and cannot use the graph",
+            });
+        }
         Ok(())
     }
 
@@ -568,5 +577,27 @@ mod graph_numerical_profile_tests {
                 .ragged_attention_implementation(),
             RaggedAttentionImplementation::Legacy
         );
+    }
+
+    #[test]
+    fn fused_qkv_bias_epilogue_rejects_the_existing_graph_selection() {
+        let forward =
+            PreparedLlamaForwardConfig::default().with_cublaslt_bias_epilogue_projection_bias();
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            LlamaBatchMetadataConfig::new(1, 128, 16, 1, 16).unwrap(),
+            forward,
+        );
+        config
+            .validate_attention_implementation()
+            .expect("eager fused bias selection is valid before model admission");
+        assert!(matches!(
+            config
+                .with_vllm_smol_p128_graph()
+                .validate_attention_implementation(),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "vllm-smol-p128-v1",
+                ..
+            })
+        ));
     }
 }

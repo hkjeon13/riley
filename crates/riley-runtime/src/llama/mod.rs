@@ -146,6 +146,9 @@ pub use plan::{
 #[cfg(any(feature = "cuda", test))]
 pub use reduction_profile::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
 
+#[cfg(any(feature = "cuda", test))]
+pub use forward::LlamaProjectionBiasMode;
+
 #[cfg(feature = "cuda")]
 pub use forward::{
     LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaTracePoint,

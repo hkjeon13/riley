@@ -8,15 +8,15 @@ use std::mem;
 
 use riley_cuda::{
     AttentionBackend, AttentionBackendAvailability, AttentionMask, AttentionPreference,
-    AttentionSelectionTrace, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
-    CudaDeviceBuffer, CudaError, CudaErrorStage, CudaExecutionStream, CudaGemmConfig,
-    CudaPinnedHostBuffer, CudaPreparedFixed37Gemm, CudaPreparedGemm, CudaStream, EmbeddingError,
-    EmbeddingParams, Fixed37GemmParams, GatedMultiplyParams, GemmParams, PrefillAttentionParams,
-    PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams, ResidualRmsNormParams,
-    RmsNormParams, RopeParams, RopeTableParams, RowBiasAddInPlaceParams, SiluParams, embedding,
-    fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
-    hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, residual_add,
-    residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
+    AttentionSelectionTrace, BiasGemmParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
+    CudaDType, CudaDeviceBuffer, CudaError, CudaErrorStage, CudaExecutionStream, CudaGemmConfig,
+    CudaPinnedHostBuffer, CudaPreparedBiasEpilogueGemm, CudaPreparedFixed37Gemm, CudaPreparedGemm,
+    CudaStream, EmbeddingError, EmbeddingParams, Fixed37GemmParams, GatedMultiplyParams,
+    GemmParams, PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams,
+    RowBiasAddInPlaceParams, SiluParams, embedding, fixed37_residual_rms_norm, fixed37_rms_norm,
+    gated_multiply, hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm,
+    residual_add, residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
 };
 use riley_model::{LoadedModel, ModelConfig};
 
@@ -55,6 +55,8 @@ pub enum LlamaForwardResource {
     IoStaging,
     HiddenGemm,
     KeyValueGemm,
+    QueryBiasEpilogueGemm,
+    KeyValueBiasEpilogueGemm,
     IntermediateGemm,
     DownGemm,
     LmHeadGemm,
@@ -347,6 +349,7 @@ impl PreparedLlamaForward {
             gemms,
             attention,
             reduction_profile: _,
+            projection_bias_mode: _,
             rms_norm_profile: _,
             rope_table_profile: _,
             gemm_reduction_policies: _,
@@ -365,6 +368,7 @@ impl PreparedLlamaForward {
             intermediate,
             down,
             lm_head,
+            projection_bias_epilogue,
         } = gemms;
         let ForwardBuffers {
             token_ids,
@@ -405,6 +409,19 @@ impl PreparedLlamaForward {
             LlamaForwardResource::LmHeadGemm,
             lm_head.close(),
         );
+        if let Some(ProjectionBiasEpilogueGemmPlans { query, key_value }) = projection_bias_epilogue
+        {
+            record_close(
+                &mut first,
+                LlamaForwardResource::QueryBiasEpilogueGemm,
+                query.close(),
+            );
+            record_close(
+                &mut first,
+                LlamaForwardResource::KeyValueBiasEpilogueGemm,
+                key_value.close(),
+            );
+        }
         record_close(
             &mut first,
             LlamaForwardResource::Attention,
@@ -572,6 +589,89 @@ pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
     let output = span_mut(output, CudaDType::BF16, config.output_bytes(), site)?;
     plan.execute(input, weight, output, workspace, stream)
         .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
+/// Executes one already-qualified Q/K/V cuBLASLt BIAS epilogue.
+///
+/// The caller selects this only from a cold owner that verified every decoder
+/// layer has the corresponding BF16 bias. A missing bias therefore signals a
+/// broken immutable plan rather than a request to fall back after dispatch.
+pub(super) fn execute_bias_epilogue_gemm<S: CudaExecutionStream + ?Sized>(
+    plan: &mut CudaPreparedBiasEpilogueGemm,
+    weights: &CudaUploadedWeights,
+    bias_id: Option<PhysicalWeightId>,
+    input: &CudaDeviceBuffer,
+    weight: CudaBufferSpan<'_>,
+    output: &mut CudaDeviceBuffer,
+    workspace: &mut Option<CudaDeviceBuffer>,
+    stream: &mut S,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let bias_id = bias_id.ok_or(LlamaForwardError::InvalidConfiguration {
+        field: "projection_bias_mode",
+        reason: "bias epilogue was selected for a projection without a bound bias",
+    })?;
+    let config = plan.config();
+    let required_workspace = plan.algorithm_metadata().workspace_bytes();
+    let workspace = if required_workspace == 0 {
+        None
+    } else {
+        let buffer = workspace
+            .as_mut()
+            .ok_or(LlamaForwardError::InvalidConfiguration {
+                field: "gemm_workspace",
+                reason: "selected bias-epilogue algorithm workspace was not allocated",
+            })?;
+        Some(span_mut(buffer, CudaDType::U8, required_workspace, site)?)
+    };
+    let input = span(input, CudaDType::BF16, config.input_bytes(), site)?;
+    let bias = weight_span(weights, bias_id, site)?;
+    let output = span_mut(output, CudaDType::BF16, config.output_bytes(), site)?;
+    let mut params = BiasGemmParams {
+        input,
+        weight,
+        bias,
+        output,
+        workspace,
+    };
+    plan.execute(&mut params, stream)
+        .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
+/// Selects the prepared fused Q/K/V plan when present, otherwise preserves
+/// the strict standalone-GEMM and row-bias sequence.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn execute_projection_with_optional_bias_epilogue<S: CudaExecutionStream + ?Sized>(
+    strict_plan: &mut PreparedLlamaGemm,
+    fused_plan: Option<&mut CudaPreparedBiasEpilogueGemm>,
+    weights: &CudaUploadedWeights,
+    bias_id: Option<PhysicalWeightId>,
+    input: &CudaDeviceBuffer,
+    weight: CudaBufferSpan<'_>,
+    output: &mut CudaDeviceBuffer,
+    workspace: &mut Option<CudaDeviceBuffer>,
+    row_count: u64,
+    column_count: u64,
+    stream: &mut S,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    match fused_plan {
+        Some(fused_plan) => execute_bias_epilogue_gemm(
+            fused_plan, weights, bias_id, input, weight, output, workspace, stream, site,
+        ),
+        None => {
+            execute_gemm(strict_plan, input, weight, output, workspace, stream, site)?;
+            execute_projection_bias(
+                weights,
+                bias_id,
+                output,
+                row_count,
+                column_count,
+                stream,
+                site,
+            )
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -808,6 +908,16 @@ fn capture_trace(
     Ok(())
 }
 
+fn trace_requests_unbiased_qkv_projection(trace: &PreparedLlamaTrace) -> bool {
+    [
+        LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear,
+        LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear,
+        LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear,
+    ]
+    .into_iter()
+    .any(|point| trace.requests(point))
+}
+
 impl LlamaForwardResource {
     const fn name(self) -> &'static str {
         match self {
@@ -816,6 +926,8 @@ impl LlamaForwardResource {
             Self::IoStaging => "io_staging",
             Self::HiddenGemm => "hidden_gemm",
             Self::KeyValueGemm => "key_value_gemm",
+            Self::QueryBiasEpilogueGemm => "query_bias_epilogue_gemm",
+            Self::KeyValueBiasEpilogueGemm => "key_value_bias_epilogue_gemm",
             Self::IntermediateGemm => "intermediate_gemm",
             Self::DownGemm => "down_gemm",
             Self::LmHeadGemm => "lm_head_gemm",
@@ -1022,6 +1134,38 @@ impl From<LlamaPlanError> for LlamaForwardError {
     }
 }
 
+/// Q/K/V bias implementation selected during cold preparation.
+///
+/// The strict staged path remains the default compatibility contract. The
+/// fused mode is opt-in because it intentionally adopts cuBLASLt's BF16 BIAS
+/// epilogue rounding, which is qualified separately against the external
+/// module output. It is eager-only until a complete CUDA-graph capture contract is
+/// implemented for the same plan and pointer lifetime.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum LlamaProjectionBiasMode {
+    /// Preserve standalone GEMM followed by the established BF16 row-bias add.
+    #[default]
+    StrictStagedV1,
+    /// Use the qualified cuBLASLt BIAS epilogue for Q/K/V projections only.
+    CublasLtBiasEpilogueExperimentalV1,
+}
+
+impl LlamaProjectionBiasMode {
+    /// Stable cold-selection identifier for logs and benchmark provenance.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::StrictStagedV1 => "strict-staged-v1",
+            Self::CublasLtBiasEpilogueExperimentalV1 => "cublaslt-bias-epilogue-experimental-v1",
+        }
+    }
+
+    const fn requires_qkv_bias_epilogue(self) -> bool {
+        matches!(self, Self::CublasLtBiasEpilogueExperimentalV1)
+    }
+}
+
 /// Cold-path limits for one fixed-sequence forward owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[allow(clippy::struct_field_names)]
@@ -1032,6 +1176,7 @@ pub struct PreparedLlamaForwardConfig {
     attention_budget_bytes: u64,
     attention_preference: AttentionPreference,
     reduction_profile: LlamaReductionProfile,
+    projection_bias_mode: LlamaProjectionBiasMode,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -1049,6 +1194,7 @@ impl PreparedLlamaForwardConfig {
             attention_budget_bytes,
             attention_preference: AttentionPreference::Optimized,
             reduction_profile: LlamaReductionProfile::CanonicalV1,
+            projection_bias_mode: LlamaProjectionBiasMode::StrictStagedV1,
         }
     }
 
@@ -1099,6 +1245,31 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Selects the Q/K/V bias implementation used by one prepared owner.
+    ///
+    /// `CublasLtBiasEpilogueExperimentalV1` remains explicit because its
+    /// arithmetic is the qualified fused-Hugging-Face contract, rather than
+    /// the established staged BF16 compatibility contract.
+    #[must_use]
+    pub const fn with_projection_bias_mode(mut self, mode: LlamaProjectionBiasMode) -> Self {
+        self.projection_bias_mode = mode;
+        self
+    }
+
+    /// Selects the established standalone-GEMM plus row-bias contract.
+    #[must_use]
+    pub const fn with_strict_staged_projection_bias(mut self) -> Self {
+        self.projection_bias_mode = LlamaProjectionBiasMode::StrictStagedV1;
+        self
+    }
+
+    /// Selects the qualified eager-only cuBLASLt Q/K/V BIAS epilogue.
+    #[must_use]
+    pub const fn with_cublaslt_bias_epilogue_projection_bias(mut self) -> Self {
+        self.projection_bias_mode = LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1;
+        self
+    }
+
     #[must_use]
     pub const fn upload_staging_bytes(self) -> u64 {
         self.upload_staging_bytes
@@ -1130,6 +1301,12 @@ impl PreparedLlamaForwardConfig {
         self.reduction_profile
     }
 
+    /// Q/K/V bias implementation selected for cold preparation.
+    #[must_use]
+    pub const fn projection_bias_mode(self) -> LlamaProjectionBiasMode {
+        self.projection_bias_mode
+    }
+
     fn validate(self) -> LlamaForwardResult<()> {
         if self.upload_staging_bytes == 0 {
             return Err(LlamaForwardError::InvalidConfiguration {
@@ -1141,6 +1318,14 @@ impl PreparedLlamaForwardConfig {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "io_staging_bytes",
                 reason: "must be non-zero",
+            });
+        }
+        if self.projection_bias_mode.requires_qkv_bias_epilogue()
+            && self.reduction_profile != LlamaReductionProfile::CanonicalV1
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "cuBLASLt bias epilogue requires canonical-v1 reductions",
             });
         }
         Ok(())
@@ -1225,12 +1410,23 @@ impl PreparedLlamaAllocationReport {
     }
 }
 
+/// Qualified eager-only Q/K/V BIAS-epilogue plans.
+///
+/// Query and key/value have distinct output widths. K and V share one
+/// geometry and therefore one immutable cuBLASLt plan; the runtime bias
+/// pointer remains an explicit hot-path input.
+pub(super) struct ProjectionBiasEpilogueGemmPlans {
+    query: CudaPreparedBiasEpilogueGemm,
+    key_value: CudaPreparedBiasEpilogueGemm,
+}
+
 pub(super) struct GemmPlans {
     pub(super) hidden: PreparedLlamaGemm,
     pub(super) key_value: PreparedLlamaGemm,
     pub(super) intermediate: PreparedLlamaGemm,
     pub(super) down: PreparedLlamaGemm,
     pub(super) lm_head: PreparedLlamaGemm,
+    projection_bias_epilogue: Option<ProjectionBiasEpilogueGemmPlans>,
 }
 
 impl GemmPlans {
@@ -1240,19 +1436,69 @@ impl GemmPlans {
             || self.intermediate.is_poisoned()
             || self.down.is_poisoned()
             || self.lm_head.is_poisoned()
+            || self
+                .projection_bias_epilogue
+                .as_ref()
+                .is_some_and(|plans| plans.query.is_poisoned() || plans.key_value.is_poisoned())
     }
 
     pub(super) fn maximum_workspace_bytes(&self) -> u64 {
+        let projection_bias_workspace = self.projection_bias_epilogue.as_ref().map_or(0, |plans| {
+            plans
+                .query
+                .algorithm_metadata()
+                .workspace_bytes()
+                .max(plans.key_value.algorithm_metadata().workspace_bytes())
+        });
         [
             self.hidden.workspace_bytes(),
             self.key_value.workspace_bytes(),
             self.intermediate.workspace_bytes(),
             self.down.workspace_bytes(),
             self.lm_head.workspace_bytes(),
+            projection_bias_workspace,
         ]
         .into_iter()
         .max()
         .unwrap_or(0)
+    }
+
+    pub(super) fn query_projection_plans(
+        &mut self,
+    ) -> (
+        &mut PreparedLlamaGemm,
+        Option<&mut CudaPreparedBiasEpilogueGemm>,
+    ) {
+        let Self {
+            hidden,
+            projection_bias_epilogue,
+            ..
+        } = self;
+        (
+            hidden,
+            projection_bias_epilogue
+                .as_mut()
+                .map(|plans| &mut plans.query),
+        )
+    }
+
+    pub(super) fn key_value_projection_plans(
+        &mut self,
+    ) -> (
+        &mut PreparedLlamaGemm,
+        Option<&mut CudaPreparedBiasEpilogueGemm>,
+    ) {
+        let Self {
+            key_value,
+            projection_bias_epilogue,
+            ..
+        } = self;
+        (
+            key_value,
+            projection_bias_epilogue
+                .as_mut()
+                .map(|plans| &mut plans.key_value),
+        )
     }
 
     pub(super) fn close(self) -> LlamaForwardResult<()> {
@@ -1262,6 +1508,7 @@ impl GemmPlans {
             intermediate,
             down,
             lm_head,
+            projection_bias_epilogue,
         } = self;
         let mut first = None;
         record_close(&mut first, LlamaForwardResource::HiddenGemm, hidden.close());
@@ -1281,6 +1528,19 @@ impl GemmPlans {
             LlamaForwardResource::LmHeadGemm,
             lm_head.close(),
         );
+        if let Some(ProjectionBiasEpilogueGemmPlans { query, key_value }) = projection_bias_epilogue
+        {
+            record_close(
+                &mut first,
+                LlamaForwardResource::QueryBiasEpilogueGemm,
+                query.close(),
+            );
+            record_close(
+                &mut first,
+                LlamaForwardResource::KeyValueBiasEpilogueGemm,
+                key_value.close(),
+            );
+        }
         first.map_or(Ok(()), Err)
     }
 }
@@ -1314,6 +1574,7 @@ pub struct PreparedLlamaForward {
     pub(super) gemms: GemmPlans,
     attention: PreparedPrefillAttention,
     reduction_profile: LlamaReductionProfile,
+    projection_bias_mode: LlamaProjectionBiasMode,
     rms_norm_profile: LlamaRmsNormProfile,
     rope_table_profile: LlamaRopeTableProfile,
     gemm_reduction_policies: LlamaGemmReductionPolicies,
@@ -1334,6 +1595,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("plan", &self.plan)
             .field("attention_selection", &self.attention.selection_trace())
             .field("reduction_profile", &self.reduction_profile)
+            .field("projection_bias_mode", &self.projection_bias_mode)
             .field("rms_norm_profile", &self.rms_norm_profile)
             .field("rope_table_profile", &self.rope_table_profile)
             .field("gemm_reduction_policies", &self.gemm_reduction_policies)
@@ -1413,10 +1675,12 @@ impl PreparedLlamaForward {
 
         let gemms = prepare_gemms(
             context,
+            &weights,
             &plan,
             config.gemm_workspace_cap_bytes,
             config.reduction_profile,
             gemm_reduction_policies,
+            config.projection_bias_mode,
             None,
         )?;
         let gemm_workspace_bytes = gemms.maximum_workspace_bytes();
@@ -1485,6 +1749,7 @@ impl PreparedLlamaForward {
             gemms,
             attention,
             reduction_profile: config.reduction_profile,
+            projection_bias_mode: config.projection_bias_mode,
             rms_norm_profile,
             rope_table_profile,
             gemm_reduction_policies,
@@ -1534,10 +1799,12 @@ impl PreparedLlamaForward {
         }
         let gemms = prepare_gemms(
             context,
+            &self.weights,
             &plan,
             self.gemm_workspace_cap_bytes,
             self.reduction_profile,
             self.gemm_reduction_policies,
+            self.projection_bias_mode,
             Some(&self.gemms),
         )?;
         Ok((plan, gemms))
@@ -1616,6 +1883,12 @@ impl PreparedLlamaForward {
         self.reduction_profile
     }
 
+    /// Q/K/V bias implementation selected during this owner's cold preparation.
+    #[must_use]
+    pub const fn projection_bias_mode(&self) -> LlamaProjectionBiasMode {
+        self.projection_bias_mode
+    }
+
     pub(super) const fn rms_norm_profile(&self) -> LlamaRmsNormProfile {
         self.rms_norm_profile
     }
@@ -1635,6 +1908,12 @@ impl PreparedLlamaForward {
     pub fn prepare_trace(&self) -> LlamaForwardResult<PreparedLlamaTrace> {
         if !attention_probabilities_available(self.attention.backend()) {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
+        }
+        if self.projection_bias_mode.requires_qkv_bias_epilogue() {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "trace",
+                reason: "fused Q/K/V bias epilogue has no unbiased-linear trace checkpoint",
+            });
         }
         PreparedLlamaTrace::prepare(&self.plan, &LlamaTracePoint::ALL)
     }
@@ -1660,6 +1939,20 @@ impl PreparedLlamaForward {
             && !attention_probabilities_available(self.attention.backend())
         {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
+        }
+        if self.projection_bias_mode.requires_qkv_bias_epilogue()
+            && [
+                LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear,
+                LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear,
+                LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear,
+            ]
+            .into_iter()
+            .any(|point| points.contains(&point))
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "trace",
+                reason: "fused Q/K/V bias epilogue has no unbiased-linear trace checkpoint",
+            });
         }
         PreparedLlamaTrace::prepare(&self.plan, points)
     }
@@ -1839,6 +2132,14 @@ impl PreparedLlamaForward {
             && !attention_probabilities_available(self.attention.backend())
         {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
+        }
+        if self.projection_bias_mode.requires_qkv_bias_epilogue()
+            && trace_requests_unbiased_qkv_projection(trace)
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "trace",
+                reason: "fused Q/K/V bias epilogue has no unbiased-linear trace checkpoint",
+            });
         }
         trace.validate(&self.plan)?;
         trace.reset();
@@ -2095,35 +2396,50 @@ impl PreparedLlamaForward {
 
             let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
             let query_weight = weight_span(weights, layer.query_weight(), query_site)?;
-            execute_gemm(
-                &mut gemms.hidden,
-                &buffers.hidden_norm,
-                query_weight,
-                &mut buffers.hidden_projection,
-                &mut buffers.gemm_workspace,
-                stream,
-                query_site,
-            )?;
-            if layer_index == 0 {
-                capture_trace(
-                    &mut trace,
-                    LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear,
+            let (strict, fused) = gemms.query_projection_plans();
+            if let Some(fused) = fused {
+                execute_bias_epilogue_gemm(
+                    fused,
+                    weights,
+                    layer.query_bias(),
+                    &buffers.hidden_norm,
+                    query_weight,
                     &mut buffers.hidden_projection,
-                    0,
-                    io_staging,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    query_site,
+                )?;
+            } else {
+                execute_gemm(
+                    strict,
+                    &buffers.hidden_norm,
+                    query_weight,
+                    &mut buffers.hidden_projection,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    query_site,
+                )?;
+                if layer_index == 0 {
+                    capture_trace(
+                        &mut trace,
+                        LlamaTracePoint::Layer0QueryProjectionUnbiasedLinear,
+                        &mut buffers.hidden_projection,
+                        0,
+                        io_staging,
+                        stream,
+                        query_site,
+                    )?;
+                }
+                execute_projection_bias(
+                    weights,
+                    layer.query_bias(),
+                    &mut buffers.hidden_projection,
+                    sequence,
+                    hidden,
                     stream,
                     query_site,
                 )?;
             }
-            execute_projection_bias(
-                weights,
-                layer.query_bias(),
-                &mut buffers.hidden_projection,
-                sequence,
-                hidden,
-                stream,
-                query_site,
-            )?;
             if layer_index == 0 {
                 capture_trace(
                     &mut trace,
@@ -2137,35 +2453,50 @@ impl PreparedLlamaForward {
             }
             let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
             let key_weight = weight_span(weights, layer.key_weight(), key_site)?;
-            execute_gemm(
-                &mut gemms.key_value,
-                &buffers.hidden_norm,
-                key_weight,
-                &mut buffers.key_raw,
-                &mut buffers.gemm_workspace,
-                stream,
-                key_site,
-            )?;
-            if layer_index == 0 {
-                capture_trace(
-                    &mut trace,
-                    LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear,
+            let (strict, fused) = gemms.key_value_projection_plans();
+            if let Some(fused) = fused {
+                execute_bias_epilogue_gemm(
+                    fused,
+                    weights,
+                    layer.key_bias(),
+                    &buffers.hidden_norm,
+                    key_weight,
                     &mut buffers.key_raw,
-                    0,
-                    io_staging,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    key_site,
+                )?;
+            } else {
+                execute_gemm(
+                    strict,
+                    &buffers.hidden_norm,
+                    key_weight,
+                    &mut buffers.key_raw,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    key_site,
+                )?;
+                if layer_index == 0 {
+                    capture_trace(
+                        &mut trace,
+                        LlamaTracePoint::Layer0KeyProjectionUnbiasedLinear,
+                        &mut buffers.key_raw,
+                        0,
+                        io_staging,
+                        stream,
+                        key_site,
+                    )?;
+                }
+                execute_projection_bias(
+                    weights,
+                    layer.key_bias(),
+                    &mut buffers.key_raw,
+                    sequence,
+                    key_value_width,
                     stream,
                     key_site,
                 )?;
             }
-            execute_projection_bias(
-                weights,
-                layer.key_bias(),
-                &mut buffers.key_raw,
-                sequence,
-                key_value_width,
-                stream,
-                key_site,
-            )?;
             if layer_index == 0 {
                 capture_trace(
                     &mut trace,
@@ -2179,35 +2510,50 @@ impl PreparedLlamaForward {
             }
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
             let value_weight = weight_span(weights, layer.value_weight(), value_site)?;
-            execute_gemm(
-                &mut gemms.key_value,
-                &buffers.hidden_norm,
-                value_weight,
-                &mut buffers.value_raw,
-                &mut buffers.gemm_workspace,
-                stream,
-                value_site,
-            )?;
-            if layer_index == 0 {
-                capture_trace(
-                    &mut trace,
-                    LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear,
+            let (strict, fused) = gemms.key_value_projection_plans();
+            if let Some(fused) = fused {
+                execute_bias_epilogue_gemm(
+                    fused,
+                    weights,
+                    layer.value_bias(),
+                    &buffers.hidden_norm,
+                    value_weight,
                     &mut buffers.value_raw,
-                    0,
-                    io_staging,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    value_site,
+                )?;
+            } else {
+                execute_gemm(
+                    strict,
+                    &buffers.hidden_norm,
+                    value_weight,
+                    &mut buffers.value_raw,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    value_site,
+                )?;
+                if layer_index == 0 {
+                    capture_trace(
+                        &mut trace,
+                        LlamaTracePoint::Layer0ValueProjectionUnbiasedLinear,
+                        &mut buffers.value_raw,
+                        0,
+                        io_staging,
+                        stream,
+                        value_site,
+                    )?;
+                }
+                execute_projection_bias(
+                    weights,
+                    layer.value_bias(),
+                    &mut buffers.value_raw,
+                    sequence,
+                    key_value_width,
                     stream,
                     value_site,
                 )?;
             }
-            execute_projection_bias(
-                weights,
-                layer.value_bias(),
-                &mut buffers.value_raw,
-                sequence,
-                key_value_width,
-                stream,
-                value_site,
-            )?;
             if layer_index == 0 {
                 capture_trace(
                     &mut trace,
@@ -2846,10 +3192,12 @@ fn build_allocation_report(
 
 pub(super) fn prepare_gemms(
     context: &CudaContext,
+    weights: &CudaUploadedWeights,
     plan: &LlamaExecutionPlan,
     workspace_cap: u64,
     reduction_profile: LlamaReductionProfile,
     policies: LlamaGemmReductionPolicies,
+    projection_bias_mode: LlamaProjectionBiasMode,
     anchors: Option<&GemmPlans>,
 ) -> LlamaForwardResult<GemmPlans> {
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
@@ -2900,47 +3248,105 @@ pub(super) fn prepare_gemms(
         }
         .map_err(|source| LlamaForwardError::cuda(site, source))
     };
+    let hidden_plan = prepare(
+        sequence,
+        hidden,
+        hidden,
+        policies.hidden(),
+        ExecutionSite::layer(0, LlamaOp::QueryProjection),
+        anchors.map(|value| &value.hidden),
+    )?;
+    let key_value_plan = prepare(
+        sequence,
+        key_value,
+        hidden,
+        policies.key_value(),
+        ExecutionSite::layer(0, LlamaOp::KeyProjection),
+        anchors.map(|value| &value.key_value),
+    )?;
+    let intermediate_plan = prepare(
+        sequence,
+        intermediate,
+        hidden,
+        policies.intermediate(),
+        ExecutionSite::layer(0, LlamaOp::GateProjection),
+        anchors.map(|value| &value.intermediate),
+    )?;
+    let down_plan = prepare(
+        sequence,
+        hidden,
+        intermediate,
+        policies.down(),
+        ExecutionSite::layer(0, LlamaOp::DownProjection),
+        anchors.map(|value| &value.down),
+    )?;
+    let lm_head_plan = prepare(
+        sequence,
+        vocabulary,
+        hidden,
+        policies.lm_head(),
+        ExecutionSite::global(LlamaOp::LmHead),
+        anchors.map(|value| &value.lm_head),
+    )?;
+
+    let projection_bias_epilogue = if projection_bias_mode.requires_qkv_bias_epilogue() {
+        let first_layer = plan
+            .layers()
+            .first()
+            .ok_or(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "cuBLASLt bias epilogue requires at least one decoder layer",
+            })?;
+        if plan.layers().iter().any(|layer| {
+            layer.query_bias().is_none()
+                || layer.key_bias().is_none()
+                || layer.value_bias().is_none()
+        }) {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                reason: "cuBLASLt bias epilogue requires Q/K/V biases in every decoder layer",
+            });
+        }
+        let query_site = ExecutionSite::layer(0, LlamaOp::QueryProjection);
+        let key_site = ExecutionSite::layer(0, LlamaOp::KeyProjection);
+        let query_bias_id =
+            first_layer
+                .query_bias()
+                .ok_or(LlamaForwardError::InvalidConfiguration {
+                    field: "projection_bias_mode",
+                    reason: "cuBLASLt bias epilogue requires a layer-zero query bias",
+                })?;
+        let key_bias_id =
+            first_layer
+                .key_bias()
+                .ok_or(LlamaForwardError::InvalidConfiguration {
+                    field: "projection_bias_mode",
+                    reason: "cuBLASLt bias epilogue requires a layer-zero key bias",
+                })?;
+        let query_bias = weight_span(weights, query_bias_id, query_site)?;
+        let key_bias = weight_span(weights, key_bias_id, key_site)?;
+        let query_config = CudaGemmConfig::new(sequence, hidden, hidden, workspace_cap)
+            .map_err(|source| LlamaForwardError::cuda(query_site, source))?;
+        let key_value_config = CudaGemmConfig::new(sequence, key_value, hidden, workspace_cap)
+            .map_err(|source| LlamaForwardError::cuda(key_site, source))?;
+        let query = context
+            .prepare_bias_epilogue_gemm(query_config, query_bias)
+            .map_err(|source| LlamaForwardError::cuda(query_site, source))?;
+        let key_value = context
+            .prepare_bias_epilogue_gemm(key_value_config, key_bias)
+            .map_err(|source| LlamaForwardError::cuda(key_site, source))?;
+        Some(ProjectionBiasEpilogueGemmPlans { query, key_value })
+    } else {
+        None
+    };
+
     Ok(GemmPlans {
-        hidden: prepare(
-            sequence,
-            hidden,
-            hidden,
-            policies.hidden(),
-            ExecutionSite::layer(0, LlamaOp::QueryProjection),
-            anchors.map(|value| &value.hidden),
-        )?,
-        key_value: prepare(
-            sequence,
-            key_value,
-            hidden,
-            policies.key_value(),
-            ExecutionSite::layer(0, LlamaOp::KeyProjection),
-            anchors.map(|value| &value.key_value),
-        )?,
-        intermediate: prepare(
-            sequence,
-            intermediate,
-            hidden,
-            policies.intermediate(),
-            ExecutionSite::layer(0, LlamaOp::GateProjection),
-            anchors.map(|value| &value.intermediate),
-        )?,
-        down: prepare(
-            sequence,
-            hidden,
-            intermediate,
-            policies.down(),
-            ExecutionSite::layer(0, LlamaOp::DownProjection),
-            anchors.map(|value| &value.down),
-        )?,
-        lm_head: prepare(
-            sequence,
-            vocabulary,
-            hidden,
-            policies.lm_head(),
-            ExecutionSite::global(LlamaOp::LmHead),
-            anchors.map(|value| &value.lm_head),
-        )?,
+        hidden: hidden_plan,
+        key_value: key_value_plan,
+        intermediate: intermediate_plan,
+        down: down_plan,
+        lm_head: lm_head_plan,
+        projection_bias_epilogue,
     })
 }
 
@@ -3108,6 +3514,36 @@ fn to_u64(value: usize, resource: LlamaForwardResource) -> LlamaForwardResult<u6
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn projection_bias_mode_is_strict_by_default_and_fused_is_canonical_only() {
+        let defaults = PreparedLlamaForwardConfig::default();
+        assert_eq!(
+            defaults.projection_bias_mode(),
+            LlamaProjectionBiasMode::StrictStagedV1
+        );
+        let fused = defaults.with_cublaslt_bias_epilogue_projection_bias();
+        assert_eq!(
+            fused.projection_bias_mode(),
+            LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1
+        );
+        fused
+            .validate()
+            .expect("fused Q/K/V bias epilogue accepts canonical reductions");
+        assert!(matches!(
+            fused.with_fixed37_reductions().validate(),
+            Err(LlamaForwardError::InvalidConfiguration {
+                field: "projection_bias_mode",
+                ..
+            })
+        ));
+        assert_eq!(
+            fused
+                .with_strict_staged_projection_bias()
+                .projection_bias_mode(),
+            LlamaProjectionBiasMode::StrictStagedV1
+        );
+    }
 
     #[test]
     fn workspace_growth_updates_exact_allocation_totals_once() {

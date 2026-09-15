@@ -24,6 +24,8 @@ const MAX_SAFETENSORS_HEADER_BYTES: usize = 1_048_576;
 const TRACE_SCHEMA_VERSION: &str = "1.0.0";
 const HF_ARTIFACT_KIND: &str = "qwen3b-hf-eager-layer0-pre-attention-trace";
 const RESULT_ARTIFACT_KIND: &str = "qwen3b-riley-layer0-pre-attention-comparison";
+const FUSED_QKV_RESULT_ARTIFACT_KIND: &str =
+    "qwen3b-riley-cublaslt-bias-epilogue-layer0-qkv-comparison";
 const TRACE_ID: &str = "qwen3b-p2048-layer0-pre-attention-v1";
 const QWEN3B_MODEL_ID: &str = "Qwen/Qwen2.5-3B-Instruct";
 const QWEN3B_REVISION: &str = "aa8e72537993ba99e69dfaafa59ed015b17504d1";
@@ -77,6 +79,24 @@ const TRACE_STAGES: [(LlamaTracePoint, &str, &str); 7] = [
     ),
 ];
 
+const FUSED_QKV_STAGES: [(LlamaTracePoint, &str, &str); 3] = [
+    (
+        LlamaTracePoint::Layer0QueryProjection,
+        "layer0.q_proj",
+        "trace/layer0/q_proj",
+    ),
+    (
+        LlamaTracePoint::Layer0KeyProjection,
+        "layer0.k_proj",
+        "trace/layer0/k_proj",
+    ),
+    (
+        LlamaTracePoint::Layer0ValueProjection,
+        "layer0.v_proj",
+        "trace/layer0/v_proj",
+    ),
+];
+
 struct TraceInputs {
     checkpoint: PathBuf,
     workload: PathBuf,
@@ -101,13 +121,13 @@ fn required_path(variable: &str) -> TestResult<PathBuf> {
     Ok(path)
 }
 
-fn trace_inputs() -> TestResult<TraceInputs> {
+fn trace_inputs(output_variable: &str) -> TestResult<TraceInputs> {
     Ok(TraceInputs {
         checkpoint: required_path("RILEY_QWEN3B_CHECKPOINT")?,
         workload: required_path("RILEY_QWEN_SERVING_WORKLOAD")?,
         manifest: required_path("RILEY_QWEN3B_STAGE_TRACE_MANIFEST")?,
         sidecar: required_path("RILEY_QWEN3B_STAGE_TRACE_SIDECAR")?,
-        output: required_path("RILEY_QWEN3B_STAGE_TRACE_OUTPUT")?,
+        output: required_path(output_variable)?,
     })
 }
 
@@ -552,7 +572,7 @@ fn unix_seconds() -> TestResult<u64> {
 #[test]
 #[ignore = "remote-only Qwen2.5-3B P2048 HF/Rust pre-attention discriminator"]
 fn qwen3b_p2048_layer0_pre_attention_trace_matches_hf_artifact() -> TestResult {
-    let inputs = trace_inputs()?;
+    let inputs = trace_inputs("RILEY_QWEN3B_STAGE_TRACE_OUTPUT")?;
     let prompt_tokens = load_prompt_ids(&inputs.workload)?;
     let manifest = read_manifest(&inputs.manifest)?;
     let sidecar = regular_file(&inputs.sidecar, "HF trace sidecar")?;
@@ -652,6 +672,116 @@ fn qwen3b_p2048_layer0_pre_attention_trace_matches_hf_artifact() -> TestResult {
         TRACE_ID,
         first_non_exact.unwrap_or("none"),
         exact_count,
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 integrated fused-QKV Hugging Face gate"]
+fn qwen3b_p2048_fused_qkv_trace_matches_hf_module_output() -> TestResult {
+    let inputs = trace_inputs("RILEY_QWEN3B_FUSED_QKV_TRACE_OUTPUT")?;
+    let prompt_tokens = load_prompt_ids(&inputs.workload)?;
+    let manifest = read_manifest(&inputs.manifest)?;
+    let sidecar = regular_file(&inputs.sidecar, "HF trace sidecar")?;
+    let sidecar_tensors = sidecar_tensors(&manifest, &sidecar)?;
+    let model = load_qwen3b(&inputs.checkpoint)?;
+
+    let runtime = CudaRuntime::initialize()?;
+    let context = runtime.device(0)?.create_context()?;
+    let mut stream = context.create_stream()?;
+    let config = PreparedLlamaForwardConfig::default()
+        .with_reference_attention()
+        .with_cublaslt_bias_epilogue_projection_bias();
+    let mut forward =
+        PreparedLlamaForward::prepare(&model, &context, &mut stream, prompt_tokens.len(), config)?;
+    let points: Vec<_> = FUSED_QKV_STAGES
+        .iter()
+        .map(|(point, _, _)| *point)
+        .collect();
+    let mut trace = forward.prepare_trace_points(&points)?;
+    forward.upload_tokens(&prompt_tokens, &mut stream)?;
+    forward.execute_traced(&mut stream, &mut trace)?;
+    if trace.captured_count() != u32::try_from(FUSED_QKV_STAGES.len())? {
+        return Err("Riley fused trace did not capture every Q/K/V stage".into());
+    }
+
+    let manifest_tensors = manifest["tensors"]
+        .as_object()
+        .ok_or("HF trace manifest tensors must be an object")?;
+    let mut stages = Map::new();
+    for (point, name, _) in FUSED_QKV_STAGES {
+        let riley = trace
+            .tensor(point)
+            .ok_or("Riley fused trace tensor is missing")?;
+        let expected_shape = expected_shape(name);
+        if riley.len() != shape_byte_len(&expected_shape)? {
+            return Err(
+                "Riley fused trace tensor byte count differs from the trace contract".into(),
+            );
+        }
+        let manifest_tensor = manifest_tensors
+            .get(name)
+            .and_then(Value::as_object)
+            .ok_or("HF trace manifest tensor is missing")?;
+        let expected_sha = manifest_tensor["bf16_le_sha256"]
+            .as_str()
+            .ok_or("HF trace manifest raw BF16 SHA-256 is missing")?;
+        let hf_metadata = sidecar_tensors
+            .get(name)
+            .ok_or("HF trace sidecar tensor is missing")?;
+        let hf = read_sidecar_tensor(&sidecar, hf_metadata, expected_sha)?;
+        let metrics = stage_metrics(&hf, riley)?;
+        if metrics["bf16_exact"] != true {
+            return Err(
+                format!("fused {name} differs from the unmodified HF module output").into(),
+            );
+        }
+        stages.insert(name.to_owned(), metrics);
+    }
+
+    let selected_mode = forward.projection_bias_mode().id();
+    forward.close()?;
+    drop(trace);
+    context.synchronize()?;
+    if !context.allocation_stats()?.is_zero() {
+        return Err("Riley fused trace left a CUDA allocation after close".into());
+    }
+    stream.close()?;
+    context.close()?;
+
+    let result = json!({
+        "schema_version": TRACE_SCHEMA_VERSION,
+        "artifact_kind": FUSED_QKV_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "hf_trace": {
+            "manifest_path": inputs.manifest,
+            "manifest_sha256": sha256_file(&inputs.manifest)?,
+            "sidecar_path": sidecar,
+            "sidecar_sha256": sha256_file(&sidecar)?,
+        },
+        "contract": {
+            "trace_id": TRACE_ID,
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "workload_sha256": QWEN3B_WORKLOAD_SHA256,
+            "prompt_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_SHA256,
+            "attention_backend": "materialized-reference",
+            "projection_bias_mode": selected_mode,
+            "use_cache": false,
+            "dtype": "bfloat16",
+        },
+        "summary": {
+            "stage_count": FUSED_QKV_STAGES.len(),
+            "bf16_exact_stage_count": FUSED_QKV_STAGES.len(),
+        },
+        "stages": stages,
+    });
+    write_artifact_exclusive(&inputs.output, &result)?;
+    println!(
+        "QWEN3B_FUSED_QKV_TRACE trace_id={} exact_stages={} performance_claim_eligible=false",
+        TRACE_ID,
+        FUSED_QKV_STAGES.len(),
     );
     Ok(())
 }
