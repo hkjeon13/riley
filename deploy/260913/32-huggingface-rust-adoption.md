@@ -1,6 +1,6 @@
 # Hugging Face Rust 도입: serving 교체가 아닌 정확성·checkpoint 경계 — 2026-09-16
 
-상태: 조사, Qwen2.5-3B raw-logit 대조, P0/V1 layer-0 pre-attention trace와 P0/V2 Q/K/V bias-boundary trace를 완료했다. V2는 현재 Riley GEMM 결과가 HF no-bias shadow endpoint와 exact이고, 불일치가 post-bias 경계에서 시작함을 보였다. 다음 correctness 진단은 V2b의 명시적 staged-bias reference다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
+상태: 조사, Qwen2.5-3B raw-logit 대조, P0/V1 layer-0 pre-attention trace, P0/V2 bias-boundary trace, P0/V2b explicit staged-bias trace를 완료했다. V2b는 Riley의 strict row-bias 경로가 명시적 BF16→FP32 add→BF16 rounding reference와 exact이고, HF fused module output과의 차이가 별도 수치 계약임을 보였다. 이 문서는 Rust serving 경로에 Python을 넣지 않는다. HF Python은 외부 create-only correctness artifact를 만드는 오프라인 기준으로만 남는다.
 
 ## 결정
 
@@ -85,7 +85,23 @@ HF의 `*.unbiased_linear`은 module forward를 수정하지 않은 뒤 동일 in
 
 Rust GPU test는 38.82초에 통과했고 close 뒤 CUDA allocation zero도 검증했다. 다만 이 시간에는 checkpoint I/O와 initialization이 포함되어 있으므로 serving latency나 kernel performance가 아니다. run 전후 GPU idle memory는 모두 335 MiB였고, I/O PSI는 artifact에 기록했지만 결과의 제외·가중·보정에 사용하지 않았다. artifact 자체도 `performance_claim_eligible=false`다.
 
-판정: 현재 standalone GEMM/reduction/layout은 이 exact no-bias endpoint에서 원인이 아니다. 세 projection 모두 real post-bias에서만 달라지므로, 다음 작업은 fused HF epilogue와 Riley의 staged BF16 rounding 사이를 가르는 **V2b explicit staged-bias reference**다. V2b는 같은 no-bias BF16 row와 FP32 bias로 `round_bf16(no_bias.to(float32) + bias.to(float32))` endpoint를 별도 기록한다. Riley가 V2b staged endpoint와 exact이면 현 불일치는 HF fused epilogue contract 차이로 분류하고, 그렇지 않으면 bias row/layout/operator를 점검한다. 그 전에는 GEMM kernel 교체나 serving 성능 주장으로 진행하지 않는다.
+판정: 현재 standalone GEMM/reduction/layout은 이 exact no-bias endpoint에서 원인이 아니다. 다음 V2b는 같은 no-bias BF16 row와 FP32 bias로 `round_bf16(no_bias.to(float32) + bias.to(float32))` endpoint를 별도 기록해 strict bias 연산의 contract를 검증한다. V2b 결과 전에는 GEMM kernel 교체나 serving 성능 주장으로 진행하지 않는다.
+
+### P0/V2b — Qwen3B P2048 explicit staged-bias trace receipt — 2026-09-16
+
+외부 create-only artifact는 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-qkv-staged-bias-20260915T192215Z/`에 있다. source revision은 `3235b71cffd050582b696fe20a24757dc1472bc2`이며, HF manifest SHA-256은 `b4c2cb075b84709c3df2d2d3d7a71c34eb793041b5278c20511d6a6516032045`, safetensors sidecar는 `19d8d00b2c69a717f4a8c8a33a318de1b62602c266fa6e2913d6763c7b51c618`, Riley comparison JSON은 `cb6a50bd73b5136be71eee5b438bd7048cc8edafc9aee0587be416943bdda31b`다.
+
+각 Q/K/V triple은 V2 no-bias shadow endpoint, `BF16(no_bias.to(float32) + bias.to(float32))` staged endpoint, 실제 unmodified HF module output 순서다. Riley는 기존 standalone GEMM·post-bias trace를 재사용했다. 따라서 V2b는 serving operator나 API를 바꾸지 않고, current strict row-bias arithmetic만 독립 기준과 비교한다.
+
+| Projection | HF no-bias ↔ Riley GEMM | HF staged ↔ Riley post-bias | HF staged ↔ HF actual module | HF actual module ↔ Riley post-bias |
+|---|---|---|---|---|
+| Q, 4,194,304 elements | exact | exact | 1,083,392 unequal; max 0.0625 | 1,083,392 unequal; max 0.0625 |
+| K, 524,288 elements | exact | exact | 110,592 unequal; max 0.125 | 110,592 unequal; max 0.125 |
+| V, 524,288 elements | exact | exact | 155,648 unequal; max 0.00390625 | 155,648 unequal; max 0.00390625 |
+
+Rust GPU test는 61.80초에 통과했고 close 뒤 CUDA allocation zero를 검증했다. 이 시간에는 checkpoint I/O와 initialization이 포함되어 serving latency나 kernel performance가 아니다. run 전후 GPU idle memory는 모두 335 MiB였다. I/O PSI는 artifact에 기록했지만 `performance_claim_eligible=false`인 numerical receipt의 제외·가중·보정에 사용하지 않았다.
+
+판정: Riley strict post-bias는 Q/K/V 모두 explicit staged reference와 BF16 exact다. 따라서 현 차이는 bias row/layout/kernel 결함이 아니라 HF fused epilogue와 strict two-rounding contract의 차이다. strict 기본 경로는 유지한다. 다음 후보는 [cuBLASLt bias-epilogue qualification](33-cublaslt-bias-epilogue-qualification.md)이며, fused result가 사전 선언한 HF actual-module gate를 통과한 경우에만 별도 opt-in profile로 평가한다. 이 candidate가 실패하면 strict arithmetic을 보존하는 GEMM→row-bias composite CUDA Graph 경로를 별도로 검토한다.
 
 ## PR HF-R0 — Candle Qwen raw-logit diagnostic
 

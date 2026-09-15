@@ -10,6 +10,7 @@
 |---|---|---|---|
 | 1 | [N01 계약·실험 준비](01-contract-and-experiment-harness.md) | 없음 | 로컬 manifest·validator·lifecycle controller 완료; 원격 receipt 대기 |
 | 2 | [N02 native BF16 대조군](02-native-bf16-control.md) | N01의 원격 receipt·품질 기준 | Qwen shape synthetic control 추가; SM89 실행·수치·비용 검증 대기 |
+| 조건부 | [N02B cuBLASLt fused-bias qualification](../33-cublaslt-bias-epilogue-qualification.md) | P0/V2b exact staged receipt | strict 경로를 보존한 native fused contract·operator AB 결과 |
 | 3 | [N03 GQA·context 분할](03-gqa-context-parallelism.md) | N02 | merge 포함 순이득·전체 기여 가능성 |
 | 조건부 | [N04 공유 prefix state 병합](04-shared-prefix-cascade.md) | N02, 공유 workload 근거 | 공유 이득·비공유 fallback·COW 정확성 |
 | 조건부 | [N05 RMSNorm–GEMM 재배치](05-rmsnorm-gemm-reorder.md) | N02, 제거 비용 상한 | 수치 계약·순이득·기여 가능성 |
