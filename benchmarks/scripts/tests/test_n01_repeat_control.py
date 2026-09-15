@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -64,6 +67,68 @@ time.sleep(1)
 """
 
 
+ENVIRONMENT_COMMAND = r"""
+import json
+import os
+print(json.dumps({
+    "phase": os.environ.get("N01_REPEAT_CONTROL_PHASE"),
+    "index": os.environ.get("N01_REPEAT_CONTROL_INDEX"),
+}, sort_keys=True))
+"""
+
+
+N06A_TIMEOUT_PARENT_COMMAND = r"""
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+child = Path(os.environ["N01_N06A_TIMEOUT_CHILD"])
+child_pid_path = Path(os.environ["N01_N06A_TIMEOUT_CHILD_PID"])
+process = subprocess.Popen([sys.executable, str(child)], start_new_session=True)
+child_pid_path.write_text(str(process.pid), encoding="utf-8")
+while True:
+    time.sleep(1)
+"""
+
+
+N06A_TIMEOUT_CHILD_COMMAND = r"""
+import os
+from pathlib import Path
+import signal
+import time
+
+signal_path = Path(os.environ["N01_N06A_TIMEOUT_CHILD_SIGNAL"])
+
+def handle_term(_signal, _frame):
+    signal_path.write_text("SIGTERM", encoding="utf-8")
+    raise SystemExit(0)
+
+signal.signal(signal.SIGTERM, handle_term)
+while True:
+    time.sleep(1)
+"""
+
+
+N06A_ABSENT_DOCKER = r"""
+import json
+import os
+from pathlib import Path
+import sys
+
+Path(os.environ["N01_N06A_DOCKER_LOG"]).open("a", encoding="utf-8").write(
+    json.dumps(sys.argv[1:]) + "\n"
+)
+arguments = sys.argv[1:]
+if arguments[:3] == ["container", "ls", "--all"]:
+    raise SystemExit(0)
+if arguments[:2] == ["container", "inspect"]:
+    raise SystemExit(1)
+raise SystemExit(71)
+"""
+
+
 class N01RepeatControlTests(unittest.TestCase):
     def write_proc_snapshot(self, proc_root: Path, *, value: int = 1) -> None:
         (proc_root / "pressure").mkdir(parents=True)
@@ -100,6 +165,7 @@ class N01RepeatControlTests(unittest.TestCase):
         warmups: int = 1,
         repeats: int = 3,
         timeout_seconds: float = 5.0,
+        n06a_timeout_cleanup: control.N06ATimeoutCleanupConfig | None = None,
     ) -> control.RepeatControlConfig:
         return control.RepeatControlConfig(
             output_dir=directory / output_name,
@@ -113,6 +179,7 @@ class N01RepeatControlTests(unittest.TestCase):
             bootstrap_resamples=400,
             bootstrap_seed=99,
             receipt_name="receipt.json",
+            n06a_timeout_cleanup=n06a_timeout_cleanup,
         )
 
     def test_retains_every_timed_attempt_with_pressure_and_gpu_observations(self) -> None:
@@ -283,6 +350,358 @@ class N01RepeatControlTests(unittest.TestCase):
                     control.run_repeat_control(symlink_config)
             self.assertEqual(Path(receipt["receipt_path"]).read_bytes(), first_bytes)
             self.assertEqual((directory / "command-counter.txt").read_text(encoding="utf-8"), "2")
+
+    def test_child_receives_attempt_context_without_mutating_controller_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            proc_root = directory / "proc"
+            self.write_proc_snapshot(proc_root)
+            command = self.write_program(directory, "environment_command.py", ENVIRONMENT_COMMAND)
+            nvidia_smi = self.write_program(directory, "fake_nvidia_smi.py", FAKE_NVIDIA_SMI)
+            config = self.make_config(
+                directory,
+                command=(sys.executable, str(command)),
+                nvidia_smi=nvidia_smi,
+                proc_root=proc_root,
+                warmups=1,
+                repeats=2,
+            )
+            environment = {"N01_REPEAT_TEST_NVIDIA_COUNTER": str(directory / "nvidia-counter.txt")}
+            with mock.patch.dict(os.environ, environment, clear=False):
+                self.assertNotIn("N01_REPEAT_CONTROL_PHASE", os.environ)
+                self.assertNotIn("N01_REPEAT_CONTROL_INDEX", os.environ)
+                receipt = control.run_repeat_control(config)
+                self.assertNotIn("N01_REPEAT_CONTROL_PHASE", os.environ)
+                self.assertNotIn("N01_REPEAT_CONTROL_INDEX", os.environ)
+            self.assertEqual(receipt["status"], "completed")
+            observed = []
+            for kind, index in (("warmup", 1), ("timed", 1), ("timed", 2)):
+                stdout = directory / "receipt" / f"{kind}-{index:03d}.stdout.log"
+                observed.append(json.loads(stdout.read_text(encoding="utf-8")))
+            self.assertEqual(
+                observed,
+                [
+                    {"index": "1", "phase": "warmup"},
+                    {"index": "1", "phase": "timed"},
+                    {"index": "2", "phase": "timed"},
+                ],
+            )
+
+    def test_n06a_parent_cleanup_name_is_exact_and_cli_requires_explicit_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            artifact_root = directory / "n06a-artifacts"
+            cleanup = control.N06ATimeoutCleanupConfig(
+                artifact_root=artifact_root,
+                docker_launcher="/usr/bin/docker",
+                command_timeout_seconds=3.0,
+            )
+            normalized = control._validate_n06a_timeout_cleanup(cleanup)
+            assert normalized is not None
+            attempt_dir, name = control.n06a_vllm_container_name(
+                normalized,
+                kind="timed",
+                index=2,
+            )
+            expected_attempt = (artifact_root.resolve() / "timed-002").resolve()
+            expected_digest = hashlib.sha256(str(expected_attempt).encode("utf-8")).hexdigest()[:20]
+            self.assertEqual(attempt_dir, expected_attempt)
+            self.assertEqual(name, f"riley-n06a-vllm-timed-0002-{expected_digest}")
+
+            with self.assertRaisesRegex(control.ControlError, "must be supplied together"):
+                control.parse_command_line(
+                    [
+                        "--output-dir",
+                        str(directory / "output"),
+                        "--n06a-timeout-cleanup-artifact-root",
+                        str(artifact_root),
+                        "--",
+                        sys.executable,
+                        "-V",
+                    ]
+                )
+            parsed = control.parse_command_line(
+                [
+                    "--output-dir",
+                    str(directory / "output"),
+                    "--n06a-timeout-cleanup-artifact-root",
+                    str(artifact_root),
+                    "--n06a-timeout-cleanup-docker-launcher",
+                    "/usr/bin/docker",
+                    "--n06a-timeout-cleanup-command-timeout-seconds",
+                    "2.5",
+                    "--",
+                    sys.executable,
+                    "-V",
+                ]
+            )
+            self.assertIsNotNone(parsed.n06a_timeout_cleanup)
+            assert parsed.n06a_timeout_cleanup is not None
+            self.assertEqual(parsed.n06a_timeout_cleanup.artifact_root, artifact_root.resolve())
+            self.assertEqual(parsed.n06a_timeout_cleanup.docker_launcher, "/usr/bin/docker")
+            self.assertEqual(parsed.n06a_timeout_cleanup.command_timeout_seconds, 2.5)
+
+    def test_n06a_daemon_cleanup_touches_only_the_exact_derived_container(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            cleanup = control.N06ATimeoutCleanupConfig(
+                artifact_root=directory / "artifacts",
+                docker_launcher="/usr/bin/docker",
+                command_timeout_seconds=1.0,
+            )
+            cleanup = control._validate_n06a_timeout_cleanup(cleanup)
+            assert cleanup is not None
+            _, container_name = control.n06a_vllm_container_name(
+                cleanup,
+                kind="timed",
+                index=1,
+            )
+            invocations: list[list[str]] = []
+            inventory_count = 0
+
+            def fake_run(argv, **_kwargs):
+                nonlocal inventory_count
+                rendered = list(argv)
+                invocations.append(rendered)
+                arguments = rendered[1:]
+                if arguments[:3] == ["container", "ls", "--all"]:
+                    inventory_count += 1
+                    stdout = (
+                        f"{container_name}\t{'a' * 12}\n".encode()
+                        if inventory_count == 1
+                        else b""
+                    )
+                    return subprocess.CompletedProcess(rendered, 0, stdout, b"")
+                if arguments[:2] == ["container", "stop"]:
+                    self.assertEqual(arguments[-1], container_name)
+                    return subprocess.CompletedProcess(rendered, 0, b"", b"")
+                if arguments[:2] == ["container", "wait"]:
+                    self.assertEqual(arguments[-1], container_name)
+                    return subprocess.CompletedProcess(rendered, 0, b"0\n", b"")
+                if arguments[:2] == ["container", "inspect"]:
+                    self.assertEqual(arguments[-1], container_name)
+                    return subprocess.CompletedProcess(rendered, 1, b"", b"No such container")
+                self.fail(f"unexpected Docker cleanup argv: {arguments!r}")
+
+            with mock.patch.object(control.subprocess, "run", side_effect=fake_run):
+                receipt = control._cleanup_n06a_owned_container(cleanup, container_name)
+
+            self.assertTrue(receipt["cleanup_verified"])
+            self.assertEqual(receipt["initial_state"], "present")
+            self.assertEqual(receipt["final_state"], "absent")
+            operations = [command["operation"] for command in receipt["commands"]]
+            self.assertEqual(
+                operations,
+                ["inventory-before", "stop", "wait", "inventory-after-stop", "inspect-absence"],
+            )
+            self.assertTrue(invocations)
+            self.assertFalse(any("prune" in argv for argv in invocations))
+            inventory = invocations[0]
+            self.assertIn(f"name=^/{container_name}$", inventory)
+            for argv in invocations:
+                arguments = argv[1:]
+                if arguments[:3] == ["container", "ls", "--all"]:
+                    self.assertIn(f"name=^/{container_name}$", arguments)
+                else:
+                    self.assertEqual(arguments[-1], container_name)
+
+    def test_n06a_timeout_snapshot_signals_only_recorded_separate_group_leader(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            proc_root = directory / "proc"
+
+            def write_stat(pid: int, parent_pid: int, process_group: int, session: int) -> None:
+                task_directory = proc_root / str(pid) / "task" / str(pid)
+                task_directory.mkdir(parents=True)
+                # /proc/<pid>/stat fields after comm start at field 3.  Field
+                # 22 (zero-based suffix index 19) is the immutable start tick.
+                suffix = [
+                    "S",
+                    str(parent_pid),
+                    str(process_group),
+                    str(session),
+                    *(["0"] * 15),
+                    str(pid * 10),
+                ]
+                (proc_root / str(pid) / "stat").write_text(
+                    f"{pid} (n06a-test) {' '.join(suffix)}\n",
+                    encoding="utf-8",
+                )
+                (task_directory / "children").write_text("", encoding="utf-8")
+
+            write_stat(100, 1, 100, 100)
+            write_stat(101, 100, 100, 100)  # N06-A driver remains in N01's group.
+            write_stat(200, 101, 200, 200)  # Separate Riley/Docker session leader.
+            write_stat(201, 200, 200, 200)
+            (proc_root / "100" / "task" / "100" / "children").write_text("101", encoding="utf-8")
+            (proc_root / "101" / "task" / "101" / "children").write_text("200", encoding="utf-8")
+            (proc_root / "200" / "task" / "200" / "children").write_text("201", encoding="utf-8")
+            signals: list[tuple[int, int]] = []
+            process = type("FakeProcess", (), {"pid": 100})()
+            with mock.patch.object(control.os, "name", "posix"), mock.patch.object(
+                control.os,
+                "getpgid",
+                return_value=100,
+            ), mock.patch.object(
+                control.os,
+                "killpg",
+                side_effect=lambda pgid, signal_number: signals.append((pgid, signal_number)),
+            ):
+                receipt = control._signal_recorded_descendant_groups(
+                    process,
+                    proc_root=proc_root,
+                )
+
+            self.assertTrue(receipt["snapshot"]["snapshot_complete"])
+            self.assertEqual(signals, [(200, control.signal.SIGTERM)])
+            self.assertEqual(
+                receipt["candidate_groups"],
+                [{"pgid": 200, "leader_pid": 200, "leader_starttime_ticks": 2000}],
+            )
+            self.assertIn(
+                {"pid": 101, "pgid": 100, "reason": "covered-by-outer-process-group"},
+                receipt["skipped_processes"],
+            )
+            for pid in (101, 200, 201):
+                shutil.rmtree(proc_root / str(pid))
+            finalized = control._finalize_recorded_descendant_cleanup(
+                receipt,
+                timeout_seconds=0.1,
+            )
+            self.assertTrue(finalized["cleanup_verified"])
+            self.assertEqual(finalized["status"], "cleaned")
+
+    def test_n06a_unproven_post_attempt_cleanup_turns_success_into_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            proc_root = directory / "proc"
+            self.write_proc_snapshot(proc_root)
+            command = self.write_program(directory, "environment_command.py", ENVIRONMENT_COMMAND)
+            nvidia_smi = self.write_program(directory, "fake_nvidia_smi.py", FAKE_NVIDIA_SMI)
+            cleanup = control.N06ATimeoutCleanupConfig(
+                artifact_root=directory / "n06a-artifacts",
+                docker_launcher="/usr/bin/docker",
+                command_timeout_seconds=1.0,
+            )
+            config = self.make_config(
+                directory,
+                command=(sys.executable, str(command)),
+                nvidia_smi=nvidia_smi,
+                proc_root=proc_root,
+                warmups=1,
+                repeats=1,
+                n06a_timeout_cleanup=cleanup,
+            )
+            unproven = {
+                "schema_version": control.N06A_DOCKER_CONTAINER_CLEANUP_SCHEMA_VERSION,
+                "cleanup_verified": False,
+                "errors": ["fake daemon unavailable"],
+            }
+            environment = {"N01_REPEAT_TEST_NVIDIA_COUNTER": str(directory / "nvidia-counter.txt")}
+            with mock.patch.dict(os.environ, environment, clear=False), mock.patch.object(
+                control,
+                "_cleanup_n06a_owned_container",
+                return_value=unproven,
+            ):
+                receipt = control.run_repeat_control(config)
+
+            self.assertEqual(receipt["status"], "completed-with-failures")
+            self.assertEqual(
+                [run["status"] for run in [*receipt["warmup_runs"], *receipt["timed_runs"]]],
+                ["failed-cleanup", "not-started-after-failed-cleanup"],
+            )
+            failed_cleanup = receipt["warmup_runs"][0]
+            parent_cleanup = failed_cleanup["n06a_parent_cleanup"]
+            self.assertFalse(parent_cleanup["cleanup_verified"])
+            self.assertIn("N06-A parent cleanup is unproven", failed_cleanup["error"])
+            evidence = Path(parent_cleanup["receipt_path"])
+            self.assertTrue(evidence.is_file())
+            self.assertEqual(
+                parent_cleanup["receipt_sha256"],
+                hashlib.sha256(evidence.read_bytes()).hexdigest(),
+            )
+            self.assertFalse(json.loads(evidence.read_text(encoding="utf-8"))["cleanup_verified"])
+            blocked = receipt["timed_runs"][0]
+            self.assertEqual(
+                blocked,
+                {
+                    "kind": "timed",
+                    "index": 1,
+                    "status": "not-started-after-failed-cleanup",
+                    "blocking_kind": "warmup",
+                    "blocking_index": 1,
+                    "reason": control.N06A_NOT_STARTED_AFTER_FAILED_CLEANUP_REASON,
+                },
+            )
+            self.assertFalse((directory / "receipt" / "timed-001.stdout.log").exists())
+            self.assertFalse((directory / "receipt" / "timed-001.n06a-parent-cleanup.json").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux /proc process ancestry")
+    def test_n06a_timeout_cleans_separate_descendant_session_before_outer_driver(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            proc_root = Path("/proc")
+            parent = self.write_program(
+                directory,
+                "n06a_timeout_parent.py",
+                N06A_TIMEOUT_PARENT_COMMAND,
+            )
+            child = self.write_program(
+                directory,
+                "n06a_timeout_child.py",
+                N06A_TIMEOUT_CHILD_COMMAND,
+            )
+            docker = self.write_program(directory, "n06a_absent_docker.py", N06A_ABSENT_DOCKER)
+            nvidia_smi = self.write_program(directory, "fake_nvidia_smi.py", FAKE_NVIDIA_SMI)
+            cleanup = control.N06ATimeoutCleanupConfig(
+                artifact_root=directory / "n06a-artifacts",
+                docker_launcher=str(docker),
+                command_timeout_seconds=1.0,
+            )
+            config = self.make_config(
+                directory,
+                command=(sys.executable, str(parent)),
+                nvidia_smi=nvidia_smi,
+                proc_root=proc_root,
+                warmups=1,
+                repeats=1,
+                timeout_seconds=0.5,
+                n06a_timeout_cleanup=cleanup,
+            )
+            child_signal = directory / "child-signal.txt"
+            environment = {
+                "N01_REPEAT_TEST_NVIDIA_COUNTER": str(directory / "nvidia-counter.txt"),
+                "N01_N06A_TIMEOUT_CHILD": str(child),
+                "N01_N06A_TIMEOUT_CHILD_PID": str(directory / "child.pid"),
+                "N01_N06A_TIMEOUT_CHILD_SIGNAL": str(child_signal),
+                "N01_N06A_DOCKER_LOG": str(directory / "docker.jsonl"),
+            }
+            with mock.patch.dict(os.environ, environment, clear=False):
+                receipt = control.run_repeat_control(config)
+
+            self.assertEqual(receipt["status"], "completed-with-failures")
+            self.assertEqual(
+                [run["status"] for run in [*receipt["warmup_runs"], *receipt["timed_runs"]]],
+                ["timed-out", "timed-out"],
+            )
+            self.assertEqual(child_signal.read_text(encoding="utf-8"), "SIGTERM")
+            for run in [*receipt["warmup_runs"], *receipt["timed_runs"]]:
+                parent_cleanup = run["n06a_parent_cleanup"]
+                self.assertTrue(parent_cleanup["cleanup_verified"])
+                self.assertTrue(parent_cleanup["docker_container_cleanup"]["cleanup_verified"])
+                descendants = parent_cleanup["timeout_descendant_cleanup"]
+                self.assertTrue(descendants["cleanup_verified"])
+                self.assertEqual(descendants["status"], "cleaned")
+                self.assertTrue(
+                    any(action["status"] == "signalled" for action in descendants["actions"])
+                )
+                self.assertTrue(parent_cleanup["outer_process_cleanup"]["cleanup_verified"])
+            docker_commands = [
+                json.loads(line)
+                for line in (directory / "docker.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertTrue(docker_commands)
+            self.assertFalse(any("prune" in command for command in docker_commands))
 
     def test_malformed_cli_and_optional_linux_fields_are_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

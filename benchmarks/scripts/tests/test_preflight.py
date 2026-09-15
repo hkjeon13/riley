@@ -9,6 +9,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PREFLIGHT = REPOSITORY_ROOT / "benchmarks/scripts/preflight.sh"
+HOST_PROFILE = PREFLIGHT.parent / "host_profiles/rtx4090-ubuntu22-driver580-host-v3.env"
 
 
 NVIDIA_SMI = r"""#!/usr/bin/env sh
@@ -23,9 +24,10 @@ case "$*" in
     fi
     ;;
   *--query-gpu=name*)
-    printf '%s, 8.9, %s, 0, 580.173.02, %s, 35, 450.00, 2520, 10501\n' \
+    printf '%s, 8.9, %s, %s, %s, %s, %s, 450.00, 2520, 10501\n' \
       'NVIDIA GeForce RTX 4090' "${FAKE_MEMORY_TOTAL_MIB:-24564}" \
-      "${FAKE_PERSISTENCE_MODE:-Disabled}"
+      "${FAKE_IDLE_MEMORY_MIB:-0}" "${FAKE_DRIVER_VERSION:-580.173.02}" \
+      "${FAKE_PERSISTENCE_MODE:-Disabled}" "${FAKE_TEMPERATURE_C:-35}"
     ;;
   *)
     echo "unexpected nvidia-smi argv: $*" >&2
@@ -87,10 +89,14 @@ class PreflightTests(unittest.TestCase):
         second_governor: str | None = None,
         governor_policy_count: int = 24,
         memory_total_mib: int = 24_564,
+        idle_memory_mib: int = 0,
+        driver_version: str = "580.173.02",
+        temperature_c: int = 35,
         kernel_release: str = "6.8.0-138-generic",
         ram_kib: int = 65_610_936,
         compute_query_ok: bool = True,
         environment_id: str = "rtx4090-ubuntu22-driver580-v1",
+        extra_environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         tools = root / "fake-bin"
         tools.mkdir()
@@ -101,6 +107,11 @@ class PreflightTests(unittest.TestCase):
         self._program(tools, "uname", UNAME)
         self._program(tools, "mawk", MAWK)
         preflight = root / "preflight-under-test.sh"
+        profile_directory = root / "host_profiles"
+        profile_directory.mkdir()
+        (profile_directory / HOST_PROFILE.name).write_text(
+            HOST_PROFILE.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         preflight_source = PREFLIGHT.read_text(encoding="utf-8")
         for name in ("nvidia-smi", "timedatectl", "df", "git", "uname", "mawk"):
             reviewed_path = f"/usr/bin/{name}"
@@ -149,6 +160,9 @@ class PreflightTests(unittest.TestCase):
                 "FAKE_AVAILABLE_KIB": str(available_kib),
                 "FAKE_PERSISTENCE_MODE": persistence,
                 "FAKE_MEMORY_TOTAL_MIB": str(memory_total_mib),
+                "FAKE_IDLE_MEMORY_MIB": str(idle_memory_mib),
+                "FAKE_DRIVER_VERSION": driver_version,
+                "FAKE_TEMPERATURE_C": str(temperature_c),
                 "FAKE_KERNEL_RELEASE": kernel_release,
                 "FAKE_COMPUTE_QUERY_OK": "yes" if compute_query_ok else "no",
                 "RILEY_CPU_GOVERNOR_ROOT": str(governor_root),
@@ -157,6 +171,8 @@ class PreflightTests(unittest.TestCase):
                 "RILEY_PREFLIGHT_ENVIRONMENT_ID": environment_id,
             }
         )
+        if extra_environment:
+            environment.update(extra_environment)
         return subprocess.run(
             ["/bin/bash", str(preflight)],
             cwd=REPOSITORY_ROOT,
@@ -175,36 +191,76 @@ class PreflightTests(unittest.TestCase):
             line.split("=", 1) for line in completed.stdout.splitlines() if line
         )
         self.assertEqual(values["driver_version"], "580.173.02")
+        self.assertEqual(values["driver_version_prefix"], "580.")
         self.assertEqual(values["persistence_mode"], "Disabled")
         self.assertEqual(values["cpu_governor"], "powersave")
         self.assertEqual(values["cpu_governor_policy_count"], "24")
         self.assertEqual(values["environment_id"], "rtx4090-ubuntu22-driver580-v1")
+        self.assertEqual(values["host_profile_schema_version"], "riley.host-profile.v1")
+        self.assertEqual(values["host_profile_id"], "rtx4090-ubuntu22-driver580-host-v3")
+        self.assertEqual(values["host_profile_version"], "3")
         self.assertEqual(values["os_id"], "ubuntu")
         self.assertEqual(values["os_version_id"], "22.04")
         self.assertEqual(values["kernel_release"], "6.8.0-138-generic")
         self.assertEqual(values["machine"], "x86_64")
         self.assertEqual(values["cpu_model"], "Intel Core i7-13700K")
+        self.assertIn("i7-13700K", values["cpu_model_observed"])
         self.assertEqual(values["physical_cpu_cores"], "16")
         self.assertEqual(values["logical_cpu_threads"], "24")
         self.assertEqual(values["ram_bytes"], "67185598464")
+        self.assertEqual(values["ram_bytes_target"], "67185594368")
+        self.assertEqual(values["ram_bytes_tolerance_bytes"], str(16 * 1024 * 1024))
         self.assertEqual(values["memory_total_mib"], "24564")
+        self.assertEqual(values["idle_memory_limit_mib"], "512")
+        self.assertEqual(values["start_temperature_limit_c"], "48")
         self.assertEqual(values["clock_synchronized"], "yes")
         self.assertEqual(values["staging_available_bytes"], str(30 * 1024**3))
         self.assertEqual(values["staging_minimum_bytes"], str(20 * 1024**3))
 
-    def test_september_snapshot_requires_its_exact_identity(self) -> None:
+    def test_checked_in_profile_tolerates_boot_page_variation_but_not_a_different_host(self) -> None:
         snapshot = "rtx4090-ubuntu22-driver580-20260911-v2"
-        with tempfile.TemporaryDirectory() as directory:
-            result = self._run(Path(directory), environment_id=snapshot, ram_kib=65_610_932)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("environment_id=" + snapshot, result.stdout)
-        self.assertIn("ram_bytes=67185594368", result.stdout)
-        for identity, ram in [(snapshot, 65_610_936), (snapshot, 65_610_931),
-                              ("rtx4090-ubuntu22-driver580-v1", 65_610_932),
-                              ("arbitrary-host", 65_610_932)]:
+        accepted = (
+            (snapshot, 65_610_932),
+            (snapshot, 65_610_936),
+            ("rtx4090-ubuntu22-driver580-v1", 65_610_932),
+            ("rtx4090-ubuntu22-driver580-v1", 65_610_932 + 8 * 1024),
+        )
+        for identity, ram in accepted:
+            with self.subTest(identity=identity, ram=ram), tempfile.TemporaryDirectory() as directory:
+                result = self._run(Path(directory), environment_id=identity, ram_kib=ram)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("host_profile_id=rtx4090-ubuntu22-driver580-host-v3", result.stdout)
+        rejected = (
+            (snapshot, 65_610_932 + 16 * 1024 + 1),
+            ("arbitrary-host", 65_610_932),
+        )
+        for identity, ram in rejected:
             with self.subTest(identity=identity, ram=ram), tempfile.TemporaryDirectory() as directory:
                 result = self._run(Path(directory), environment_id=identity, ram_kib=ram)
                 self.assertNotEqual(result.returncode, 0)
+
+    def test_profile_accepts_the_driver_branch_and_bounded_desktop_idle_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run(
+                Path(directory), driver_version="580.200.01", idle_memory_mib=512
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for label, overrides in {
+            "driver branch": {"driver_version": "581.1.0"},
+            "idle memory": {"idle_memory_mib": 513},
+        }.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                result = self._run(Path(directory), **overrides)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr.startswith("preflight:"))
+
+    def test_ambient_host_policy_overrides_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run(
+                Path(directory), extra_environment={"RILEY_MAX_IDLE_MEMORY_MIB": "999999"}
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("checked-in host profile revision", result.stderr)
 
     def test_primary_environment_checks_fail_closed(self) -> None:
         cases = {
@@ -216,7 +272,7 @@ class PreflightTests(unittest.TestCase):
             "governor policy count": {"governor_policy_count": 23},
             "GPU memory": {"memory_total_mib": 24_563},
             "kernel": {"kernel_release": "6.8.0-139-generic"},
-            "RAM": {"ram_kib": 65_610_935},
+            "RAM": {"ram_kib": 65_610_932 + 16 * 1024 + 1},
             "compute query": {"compute_query_ok": False},
         }
         for label, overrides in cases.items():

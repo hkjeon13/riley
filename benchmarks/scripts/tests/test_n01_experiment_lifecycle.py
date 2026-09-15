@@ -19,6 +19,7 @@ from n01_experiment_lifecycle import (
     GLOBAL_GPU_PEAK_CEILING_BYTES,
     MIB_BYTES,
     PHASES,
+    SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES,
     UNCERTAINTY_RESERVE_BYTES,
     ManifestError,
     parse_nvidia_smi,
@@ -163,6 +164,7 @@ class N01ExperimentLifecycleTests(unittest.TestCase):
             self.assertEqual(receipt["overall"]["overall_global_gpu_peak_bytes"], 900 * MIB_BYTES)
             self.assertEqual(receipt["memory_budget"]["global_peak_ceiling_bytes"], GLOBAL_GPU_PEAK_CEILING_BYTES)
             self.assertEqual(receipt["memory_budget"]["uncertainty_reserve_bytes"], UNCERTAINTY_RESERVE_BYTES)
+            self.assertEqual(receipt["memory_budget"]["reserve_adjusted_limit_bytes"], SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES)
             self.assertTrue(receipt["overall"]["reserve_satisfied"])
             self.assertEqual(receipt["overall"]["sampled_peak_evidence_status"], "sampled-observed-not-continuous")
             self.assertEqual(receipt["overall"]["missing_in_process_sample_phases"], [])
@@ -286,7 +288,11 @@ class N01ExperimentLifecycleTests(unittest.TestCase):
             self.assertTrue(receipt["overall"]["within_global_peak_ceiling"])
             self.assertFalse(receipt["overall"]["reserve_satisfied"])
             self.assertLess(receipt["overall"]["overall_global_gpu_peak_bytes"], GLOBAL_GPU_PEAK_CEILING_BYTES)
-            self.assertIn("global GPU peak did not retain the 1,000,000,000-byte reserve", receipt["failure_reasons"])
+            self.assertGreater(receipt["overall"]["overall_global_gpu_peak_bytes"], SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES)
+            self.assertIn(
+                "sampled whole-GPU peak exceeded the 19,000,000,000-byte reserve-adjusted limit",
+                receipt["failure_reasons"],
+            )
 
     def test_contract_binding_digest_mismatch_rejects_before_gpu_or_phase_command(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

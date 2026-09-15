@@ -135,8 +135,10 @@ class RunnerTests(unittest.TestCase):
             runner.preflight(self.plan, self.binding, self.root)
         sleep.assert_called_once_with(2)
         env = host_check.call_args.kwargs["env"]
-        self.assertEqual(env["RILEY_MAX_IDLE_MEMORY_MIB"], "512")
-        self.assertEqual(env["RILEY_MAX_START_TEMPERATURE_C"], "48")
+        self.assertEqual(env["RILEY_PREFLIGHT_ENVIRONMENT_ID"], "test-env")
+        self.assertNotIn("RILEY_MAX_IDLE_MEMORY_MIB", env)
+        self.assertNotIn("RILEY_MAX_START_TEMPERATURE_C", env)
+        self.assertEqual(runner.CONDITION["host_profile_id"], "rtx4090-ubuntu22-driver580-host-v3")
         self.assertFalse(json.loads((self.root / "live-condition.json").read_text())["canonical_qualification"])
         with self.assertRaisesRegex(ValueError, "512"):
             runner.check_idle({"compute_pids": [], "memory_used_mib": 513})

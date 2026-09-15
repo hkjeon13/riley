@@ -25,6 +25,12 @@ RILEY_PREFLIGHT_OUTPUT_ROOT=/var/tmp/riley-preflight \
 스크립트는 상태를 바꾸지 않는다. GPU 종류·개수·compute capability, idle memory, 온도, compute process와 clean Git revision을 확인하고 비교에 필요한 snapshot을 출력한다. 실패한 run은 측정하지 않는다.
 preflight 출력을 checkout 안에 redirect하면 검사가 시작되기 전에 Git tree가 dirty가
 될 수 있으므로 artifact는 반드시 repository 밖에 둔다.
+현재 RTX 4090 profile은
+`host_profiles/rtx4090-ubuntu22-driver580-host-v3.env`이며 profile ID/version과
+관측 CPU/RAM/driver/idle-GPU 값을 함께 기록한다. RAM은
+67,185,594,368 B의 ±16 MiB 범위, NVIDIA `580.` driver branch, idle GPU ≤512 MiB,
+start temperature ≤48°C를 확인한다. 이 값은 profile에 명시된 허용 범위이며,
+각 campaign의 실제 관측값도 receipt에서 다시 확인해야 한다.
 
 ## Reference fixture
 
@@ -46,6 +52,149 @@ UV_PYTHON=3.13.15 UV_PYTHON_DOWNLOADS=never \
 checkout 밖에서 생성·검증한 뒤 SHA-256과 diff를 검토한 artifact만 version-control
 workflow로 `benchmarks/reference/`에 반입한다. 정확한 CLI와 model cache 준비
 명령은 `tools/python/reference/README.md`가 권위 있는 문서다.
+
+## N03b/N06-A D128 반복 증적
+
+`n01_repeat_control.py`는 production host의 I/O 압력이 남아 있는 상태에서도
+반복을 보존하는 outer-process controller다. 모든 timed attempt의 stdout/stderr,
+성공·실패·timeout, CPU/I/O/memory PSI pre/post snapshot을 남긴다. PSI는
+quiet-window 선택이나 결과 제외 조건이 아니다. child process에는 controller가 parent shell을 바꾸지 않고
+`N01_REPEAT_CONTROL_PHASE=warmup|timed`와 one-based
+`N01_REPEAT_CONTROL_INDEX`를 넣는다. N06-A driver는 이 index만으로 timed lane
+order를 결정한다.
+
+```bash
+OUT=/var/tmp/riley-n03b-n06a/<unique-run-id>
+python3 benchmarks/scripts/n01_repeat_control.py \
+  --output-dir "$OUT" \
+  --working-directory /absolute/path/to/riley \
+  --warmups 1 --repeats 6 --timeout-seconds 1800 \
+  --n06a-timeout-cleanup-artifact-root "$OUT/paired-driver" \
+  --n06a-timeout-cleanup-docker-launcher /usr/bin/docker \
+  -- python3 /absolute/path/to/n06a_paired_serving_driver.py \
+       --artifact-root "$OUT/paired-driver" \
+       <required-N06-A-options>
+```
+
+`--n06a-timeout-cleanup-artifact-root` and
+`--n06a-timeout-cleanup-docker-launcher` are an all-or-nothing pair. They make
+N01 retain a sidecar for the exact owned vLLM container cleanup after a timeout
+or interruption; the corresponding `failed-cleanup` attempt remains visible as
+an incomplete failure. If that cleanup is unproven, N01 fail-stops: it launches
+no later warmup or timed child and records each remaining planned index as an
+exact `not-started-after-failed-cleanup` placeholder with no fabricated
+logs, PSI, or cleanup sidecar. Do not place `ionice` or `nice` around this timed N01
+command: Docker's daemon-created vLLM process would not inherit it, so it is
+not a common AB/BA condition. A low-priority wrapper may be used only for host
+preparation outside the timed command. The optional
+`--n06a-timeout-cleanup-command-timeout-seconds` bounds each cleanup command;
+its default and maximum are 30 seconds.
+
+`n03b_n06a_d128_repeat_summary.py`는 새 artifact를 만들지 않고 immutable
+receipt와 log를 읽어 median, sample standard deviation, deterministic 95%
+bootstrap CI를 계산한다. pooled effect와 Riley-first/vLLM-first order-stratified
+effect를 모두 내보낸다. 실패한 attempt는 성능 표본에는 들어가지 않지만 output의
+`pair_completion`과 `timed_run_pressure_covariates`에는 항상 남는다. 하나라도
+planned timed pair가 실패하면 `promotion_status`는 `incomplete`이고 `0/N`을
+포함한 failure reason을 남긴다. 결과 root는 checkout과 기존
+`benchmarks/results/20260912-serving-optimization/` 밖의 새 경로여야 한다.
+shared host의 CPU를 과도하게 쓰지 않도록 reader는 100,000 resamples 및 metric당
+250,000 bootstrap draw를 넘는 receipt를 거부한다.
+
+```bash
+python3 benchmarks/scripts/n03b_n06a_d128_repeat_summary.py \
+  --operator-receipt /var/tmp/riley-n03b-operator/<id>/n01-repeat-control-receipt.json \
+  --serving-receipt "$OUT"/n01-repeat-control-receipt.json \
+  > /var/tmp/riley-n03b-n06a/<unique-run-id>-summary.json
+```
+
+`--operator-receipt`는 현재 V2 prepared paged-decode control의 exact
+`riley.cuda.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2`
+identity를 N03a reader로 검증한다. 이것은 operator 결과이며 full-model 또는
+vLLM 결과가 아니다.
+
+`--serving-receipt`의 성공 outer command는 stdout에 Riley와 vLLM 각각 한 개의
+`riley-n06a-d128-serving` key=value marker를 남겨야 한다. 양쪽 marker는 model
+revision, workload, concurrency, `batch_token_budget`, `max_model_len`,
+fixed vLLM prefix-cache/image/memory envelope, model identity manifest and
+Git/LFS validation, hashed retained JSONL/phase/attempt-config/whole-GPU
+peak/lane-provenance artifacts, vLLM stdout/stderr
+startup snapshots, request/output-token count, complete zero-failure accounting, client-observed
+one-token SSE TTFT/TPOT/E2E
+percentiles와 wall throughput이 일치하는 workload를 가리킨다. `pair_order`는 timed
+odd index에서 `riley-vllm`, even index에서 `vllm-riley`여야 한다. Riley marker는
+CLI request에는 `native-bf16-paged-split-gqa-d128-two-stage`를, resolve에는 다음
+exact runtime implementation을 기록한다.
+
+paired driver는 한 lane의 retained 측정과 owned-server cleanup이 끝난 뒤 그 marker를
+stdout에 쓰며, 두 marker의 line order도 선언한 `pair_order`와 같아야 한다. 이 규칙은 shared host의 시간 변동을
+engine 순서와 혼동하지 않기 위한 것이다.
+
+```text
+riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2
+```
+
+또한 Riley marker는 attempt마다 서로 다른 absolute `startup_log_path`와 SHA-256을
+포함한다. 이는 live `server.log`가 아니라 ready 직후 `riley serve`의 **stderr**에서
+만든 create-only snapshot이어야 한다. summary는 current `riley serve`가 실제로 쓰는
+다음 한 줄을 SHA-256과 함께 직접 파싱한다.
+
+```text
+RILEY_DECODE_ATTENTION requested_backend=native-bf16-paged-split-gqa-d128-two-stage resolved_ragged_backend=<exact-id> fallback_reason=none query_heads=16 key_value_heads=2 head_size=128 page_size=16 graph=false
+```
+
+이 startup receipt가 없거나 D64 fallback으로 바뀌면 serving 통계 자체를 거부한다.
+vLLM marker도 ready 직후 create-only stdout/stderr snapshot의 absolute path와 SHA-256,
+그리고 lane launch/cleanup provenance path와 SHA-256을 포함한다. summary는 provenance의
+argv·cleanup·whole-GPU lifecycle을 marker 및 attempt config와 맞춘 뒤,
+`Using (?P<backend_resolved>[A-Z0-9_]+) attention backend out of potential backends:`
+auto-selector receipt를 두 startup snapshot에서 정확히 한 번 확인한다.
+`runtime_python` 또는 generic JSON backend receipt처럼 실제 server가 아직 만들지 않는
+필드는 이 성능 evidence의 요구사항으로 쓰지 않는다. benchmark controller/client는
+Python일 수 있지만 Riley serving runtime의 Rust→native ABI→CUDA 경로에는 Python이
+들어가지 않는다는 것은 별도의 source/runtime release check로 검증한다.
+
+각 N06-A 실행에는 `--model-identity-manifest`가 필수다. 이 manifest는
+`riley.n06a-model-identity-manifest.v1` schema로 pinned model ID/revision,
+exact `--model-path`, small metadata file의 size/SHA-256, 그리고 large shard의
+size/Git-LFS OID를 기록한다. driver는 small file만 rehash하고
+`git -C <model-path> rev-parse HEAD` 및 `git -C <model-path> lfs ls-files -l`로
+large shard OID를 검증한다. vLLM template도 exact
+`vllm/vllm-openai@<digest>`, separate `--network host`, `--ipc host`,
+`--gpus device=0`, `{model_path}:/model:ro`, `--model /model`,
+`--served-model-name {model_id}`를 요구한다. 전체 schema와 invocation은
+[`n06a_paired_serving_driver.md`](n06a_paired_serving_driver.md)가 권위 있다.
+
+Summary는 N03a operator control과 N06-A full-model paired serving을 별도 object로
+내보낸다. operator speedup을 serving speedup으로 재사용하지 않으며, `p99_status`
+가 `qualified`인 경우에는 각 lane/cell에 최소 1,000 retained latency samples가
+있어야 한다. P95/P99 paired ratio와 delta에는 outer-pair bootstrap CI가 포함되며,
+planned pair가 빠졌거나 P99 표본이 부족하면 tail 결과는 descriptive/incomplete로
+표시된다.
+N06-A driver는 owned lane마다 physical GPU 0의 `nvidia-smi memory.used`를
+0.25~0.5초 간격으로 sample한다. sampler는 server launch 전에 시작하고 owned-process
+cleanup 뒤에 종료하며, raw row의 query start/end, observed cadence, lifecycle overlap을
+peak receipt와 marker hash로 binding한다. query가 0.5초를 넘거나,
+`configured interval + 0.5초`보다 긴 sample gap, running-lifetime overlap 누락,
+sample error, 또는 `19,000,000,000` bytes 초과가 있으면 marker를 내지 않는다.
+driver는 `CUDA_VISIBLE_DEVICES=0`과 Docker `--gpus device=0`을 강제하여 Riley lane,
+vLLM lane, host sampler의 physical GPU identity를 일치시킨다. 이 ceiling은 run 중
+allocation을 선제 중단하는 live limiter가 아니라, lane 후 marker eligibility를
+판정하는 sampled evidence다. N01의 GPU pre/post snapshot과 CPU/I/O/memory PSI는
+선택·filter·보정에 쓰지 않는 pre/post covariate일 뿐이다.
+각 lane cleanup 뒤와 다음 lane 시작 전에는 별도 GPU-0 idle census가 retained
+provenance에 남아야 한다. 이 census는 compute-process PID가 없고
+`memory.used <= 512 MiB`임을 보이며, unrelated process를 종료하지 않는다.
+그 조건을 증명하지 못하면 lane은 비교 표본이 될 수 없다.
+`n06a_paired_serving_driver.py`의 Docker argv template, strict reference
+workload, per-server warmup, vLLM startup-log backend/graph/compile/KV
+attestation, and C/M examples are
+[`n06a_paired_serving_driver.md`](n06a_paired_serving_driver.md)에 있다.
+
+이 문서는 execution contract만 정의한다. 이 문서만으로 Riley와 vLLM의 실제
+비교 결과나 우위를 주장할 수 없으며, 실행된 AB/BA receipt가 raw stream replay,
+model identity, lifecycle, cleanup, whole-GPU peak, post-lane idle 검증을 모두
+통과한 뒤에만 serving result로 읽는다.
 
 ## 반복성 gate
 

@@ -86,22 +86,31 @@ class CampaignFixture:
             "\n".join(
                 (
                     "environment_id=rtx4090-ubuntu22-driver580-v1",
+                    "host_profile_schema_version=riley.host-profile.v1",
+                    "host_profile_id=rtx4090-ubuntu22-driver580-host-v3",
+                    "host_profile_version=3",
                     "os_id=ubuntu",
                     "os_version_id=22.04",
                     "kernel_release=6.8.0-138-generic",
                     "machine=x86_64",
                     "cpu_model=Intel Core i7-13700K",
+                    "cpu_model_observed=13th Gen Intel(R) Core(TM) i7-13700K",
                     "physical_cpu_cores=16",
                     "logical_cpu_threads=24",
                     "ram_bytes=67185598464",
+                    "ram_bytes_target=67185594368",
+                    "ram_bytes_tolerance_bytes=16777216",
                     "git_revision=" + "d" * 40,
                     "gpu_name=NVIDIA GeForce RTX 4090",
                     "compute_capability=8.9",
                     "memory_total_mib=24564",
                     "memory_used_mib=0",
                     "driver_version=580.173.02",
+                    "driver_version_prefix=580.",
                     "persistence_mode=Disabled",
+                    "idle_memory_limit_mib=512",
                     "temperature_c=35",
+                    "start_temperature_limit_c=48",
                     "power_limit_w=450.00",
                     "graphics_clock_mhz=2550",
                     "memory_clock_mhz=10501",
@@ -657,7 +666,7 @@ class CampaignCheckerTests(unittest.TestCase):
         self.assertEqual(plan["readiness"]["state"], "blocked")
         self.fixture.preflight_path.write_text(
             self.fixture.preflight_path.read_text(encoding="utf-8").replace(
-                "memory_used_mib=0", "memory_used_mib=257"
+                "memory_used_mib=0", "memory_used_mib=513"
             ),
             encoding="utf-8",
         )
@@ -667,18 +676,18 @@ class CampaignCheckerTests(unittest.TestCase):
                 {"git_revision": "d" * 40},
             )
 
-    def test_september_preflight_identity_does_not_accept_v1_ram(self) -> None:
+    def test_profile_tolerates_boot_page_variation_but_not_a_different_host(self) -> None:
         original = self.fixture.preflight_path.read_text()
         updated = original.replace("rtx4090-ubuntu22-driver580-v1",
                                     "rtx4090-ubuntu22-driver580-20260911-v2")
         self.fixture.preflight_path.write_text(updated)
+        values = competitive_common.load_preflight_receipt(
+            self.fixture.preflight_path, {"git_revision": "d" * 40})
+        self.assertEqual(values["ram_bytes"], "67185598464")
+        self.fixture.preflight_path.write_text(updated.replace("67185598464", "67000000000"))
         with self.assertRaisesRegex(competitive_common.ContractError, "ram_bytes"):
             competitive_common.load_preflight_receipt(
                 self.fixture.preflight_path, {"git_revision": "d" * 40})
-        self.fixture.preflight_path.write_text(updated.replace("67185598464", "67185594368"))
-        values = competitive_common.load_preflight_receipt(
-            self.fixture.preflight_path, {"git_revision": "d" * 40})
-        self.assertEqual(values["ram_bytes"], "67185594368")
 
     def _write_plan_and_rebind_raw(self, plan: dict[str, object]) -> None:
         self.fixture.plan = plan
@@ -737,12 +746,12 @@ class CampaignCheckerTests(unittest.TestCase):
         plan = self.fixture._build_plan()
         self.fixture.preflight_path.write_text(
             self.fixture.preflight_path.read_text(encoding="utf-8").replace(
-                "memory_used_mib=0", "memory_used_mib=257"
+                "memory_used_mib=0", "memory_used_mib=513"
             ),
             encoding="utf-8",
         )
         plan["preflight"]["sha256"] = hashlib.sha256(self.fixture.preflight_path.read_bytes()).hexdigest()  # type: ignore[index]
-        plan["preflight"]["values"]["memory_used_mib"] = "257"  # type: ignore[index]
+        plan["preflight"]["values"]["memory_used_mib"] = "513"  # type: ignore[index]
         self._write_plan_and_rebind_raw(plan)
         report = self.report()
         self.assertEqual(report["status"], "incomparable")

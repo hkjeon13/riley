@@ -53,7 +53,7 @@ CANONICAL_ASSET_SHA256: dict[str, str] = {
     "benchmarks/competitive/lanes/riley.json": "9035fa499d6dec60a29668199d754ff7d677b2c4794900a2fd98be0dbd4623fa",
     "benchmarks/competitive/lanes/vllm-current.json": "8b1ce0ac66c7a8f7631f126c59b33a4a13d48b9d5ffa332fafcb76e6056b1047",
 }
-CANONICAL_PREFLIGHT_SHA256 = "442c5e8a65b1cf9a0abb5c20c375aa6b022f8766a347bda5f12b83dbfd9553df"
+CANONICAL_PREFLIGHT_SHA256 = "7c471ae33e6664bad2361817e1c4fd3ccfc8f3a6610a48102d433119aeb402b9"
 
 # `benchmarks/scripts/preflight.sh` emits this closed receipt.  C01 accepts
 # the complete snapshot only: accepting a hand-selected subset would let a
@@ -62,22 +62,31 @@ CANONICAL_PREFLIGHT_SHA256 = "442c5e8a65b1cf9a0abb5c20c375aa6b022f8766a347bda5f1
 PREFLIGHT_REQUIRED_KEYS = frozenset(
     {
         "environment_id",
+        "host_profile_schema_version",
+        "host_profile_id",
+        "host_profile_version",
         "os_id",
         "os_version_id",
         "kernel_release",
         "machine",
         "cpu_model",
+        "cpu_model_observed",
         "physical_cpu_cores",
         "logical_cpu_threads",
         "ram_bytes",
+        "ram_bytes_target",
+        "ram_bytes_tolerance_bytes",
         "git_revision",
         "gpu_name",
         "compute_capability",
         "memory_total_mib",
         "memory_used_mib",
         "driver_version",
+        "driver_version_prefix",
         "persistence_mode",
+        "idle_memory_limit_mib",
         "temperature_c",
+        "start_temperature_limit_c",
         "power_limit_w",
         "graphics_clock_mhz",
         "memory_clock_mhz",
@@ -88,8 +97,17 @@ PREFLIGHT_REQUIRED_KEYS = frozenset(
         "staging_minimum_bytes",
     }
 )
-PREFLIGHT_EXACT_VALUES = {
-    "environment_id": "rtx4090-ubuntu22-driver580-v1",
+HOST_PROFILE_VALUES = {
+    "host_profile_schema_version": "riley.host-profile.v1",
+    "host_profile_id": "rtx4090-ubuntu22-driver580-host-v3",
+    "host_profile_version": "3",
+    "ram_bytes_target": "67185594368",
+    "ram_bytes_tolerance_bytes": str(16 * 1024**2),
+    "driver_version_prefix": "580.",
+    "idle_memory_limit_mib": "512",
+    "start_temperature_limit_c": "48",
+}
+PREFLIGHT_STATIC_VALUES = {
     "os_id": "ubuntu",
     "os_version_id": "22.04",
     "kernel_release": "6.8.0-138-generic",
@@ -97,11 +115,9 @@ PREFLIGHT_EXACT_VALUES = {
     "cpu_model": "Intel Core i7-13700K",
     "physical_cpu_cores": "16",
     "logical_cpu_threads": "24",
-    "ram_bytes": "67185598464",
     "gpu_name": "NVIDIA GeForce RTX 4090",
     "compute_capability": "8.9",
     "memory_total_mib": "24564",
-    "driver_version": "580.173.02",
     "persistence_mode": "Disabled",
     "cpu_governor": "powersave",
     "cpu_governor_policy_count": "24",
@@ -109,11 +125,15 @@ PREFLIGHT_EXACT_VALUES = {
     "staging_minimum_bytes": str(20 * 1024**3),
 }
 PREFLIGHT_ENVIRONMENTS = {
-    PREFLIGHT_EXACT_VALUES["environment_id"]: PREFLIGHT_EXACT_VALUES,
+    "rtx4090-ubuntu22-driver580-v1": {
+        **HOST_PROFILE_VALUES,
+        **PREFLIGHT_STATIC_VALUES,
+        "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    },
     "rtx4090-ubuntu22-driver580-20260911-v2": {
-        **PREFLIGHT_EXACT_VALUES,
+        **HOST_PROFILE_VALUES,
+        **PREFLIGHT_STATIC_VALUES,
         "environment_id": "rtx4090-ubuntu22-driver580-20260911-v2",
-        "ram_bytes": "67185594368",
     },
 }
 
@@ -486,8 +506,8 @@ def load_preflight_receipt(path: Path, source: Mapping[str, Any]) -> dict[str, s
         if values[key] != expected:
             raise ContractError(f"{path}: preflight {key} must be {expected!r}")
     integer_limits = {
-        "memory_used_mib": (0, 256),
-        "temperature_c": (0, 50),
+        "memory_used_mib": (0, int(HOST_PROFILE_VALUES["idle_memory_limit_mib"])),
+        "temperature_c": (0, int(HOST_PROFILE_VALUES["start_temperature_limit_c"])),
         "staging_available_bytes": (20 * 1024**3, None),
     }
     for key, (minimum, maximum) in integer_limits.items():
@@ -497,6 +517,16 @@ def load_preflight_receipt(path: Path, source: Mapping[str, Any]) -> dict[str, s
             raise ContractError(f"{path}: preflight {key} must be an integer") from error
         if parsed < minimum or (maximum is not None and parsed > maximum):
             raise ContractError(f"{path}: preflight {key} is outside its contract bound")
+    try:
+        observed_ram_bytes = int(values["ram_bytes"])
+        ram_target_bytes = int(values["ram_bytes_target"])
+        ram_tolerance_bytes = int(values["ram_bytes_tolerance_bytes"])
+    except ValueError as error:
+        raise ContractError(f"{path}: preflight RAM values must be integers") from error
+    if abs(observed_ram_bytes - ram_target_bytes) > ram_tolerance_bytes:
+        raise ContractError(f"{path}: preflight ram_bytes is outside its profile tolerance")
+    if not values["driver_version"].startswith(values["driver_version_prefix"]):
+        raise ContractError(f"{path}: preflight driver_version is outside its profile branch")
     try:
         power_limit = float(values["power_limit_w"])
     except ValueError as error:

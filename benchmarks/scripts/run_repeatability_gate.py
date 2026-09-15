@@ -73,7 +73,14 @@ EXPECTED_CELLS = (
     },
 )
 EXPECTED_INDEPENDENT_RUNS = 5
-PRIMARY_DRIVER_VERSION = "580.173.02"
+HOST_PROFILE_SCHEMA_VERSION = "riley.host-profile.v1"
+HOST_PROFILE_ID = "rtx4090-ubuntu22-driver580-host-v3"
+HOST_PROFILE_VERSION = "3"
+HOST_PROFILE_DRIVER_VERSION_PREFIX = "580."
+HOST_PROFILE_RAM_BYTES_TARGET = 67_185_594_368
+HOST_PROFILE_RAM_BYTES_TOLERANCE = 16 * 1024 * 1024
+HOST_PROFILE_IDLE_MEMORY_LIMIT_MIB = 512
+HOST_PROFILE_START_TEMPERATURE_LIMIT_C = 48
 PRIMARY_PERSISTENCE_MODE = "Disabled"
 PRIMARY_CPU_GOVERNOR = "powersave"
 PRIMARY_ENVIRONMENT_ID = "rtx4090-ubuntu22-driver580-v1"
@@ -85,7 +92,6 @@ PRIMARY_CPU_MODEL = "Intel Core i7-13700K"
 PRIMARY_CPU_PHYSICAL_CORES = 16
 PRIMARY_CPU_LOGICAL_THREADS = 24
 PRIMARY_CPU_GOVERNOR_POLICY_COUNT = 24
-PRIMARY_RAM_BYTES = 67_185_598_464
 PRIMARY_GPU_MEMORY_MIB = 24_564
 MINIMUM_STAGING_AVAILABLE_BYTES = 20 * 1024 * 1024 * 1024
 REPRODUCIBILITY_ENVIRONMENT_KEYS = (
@@ -231,14 +237,20 @@ EXPECTED_CACHE_POLICY = {
 }
 PREFLIGHT_COMPARABILITY_KEYS = (
     "environment_id",
+    "host_profile_schema_version",
+    "host_profile_id",
+    "host_profile_version",
     "os_id",
     "os_version_id",
     "kernel_release",
     "machine",
     "cpu_model",
+    "cpu_model_observed",
     "physical_cpu_cores",
     "logical_cpu_threads",
     "ram_bytes",
+    "ram_bytes_target",
+    "ram_bytes_tolerance_bytes",
     "persistence_mode",
     "power_limit_w",
     "graphics_clock_mhz",
@@ -246,10 +258,15 @@ PREFLIGHT_COMPARABILITY_KEYS = (
     "cpu_governor",
     "cpu_governor_policy_count",
     "driver_version",
+    "driver_version_prefix",
     "memory_total_mib",
+    "idle_memory_limit_mib",
+    "start_temperature_limit_c",
 )
 PREFLIGHT_REQUIRED_KEYS = (
     *PREFLIGHT_COMPARABILITY_KEYS,
+    "memory_used_mib",
+    "temperature_c",
     "clock_synchronized",
     "staging_available_bytes",
     "staging_minimum_bytes",
@@ -1607,7 +1624,16 @@ def _build_plan(args: argparse.Namespace, output_root: Path) -> dict[str, Any]:
             "path": str(preflight_path),
             "required_comparability_keys": list(PREFLIGHT_COMPARABILITY_KEYS),
             "required_keys": list(PREFLIGHT_REQUIRED_KEYS),
-            "required_driver_version": PRIMARY_DRIVER_VERSION,
+            "host_profile": {
+                "schema_version": HOST_PROFILE_SCHEMA_VERSION,
+                "id": HOST_PROFILE_ID,
+                "version": HOST_PROFILE_VERSION,
+                "driver_version_prefix": HOST_PROFILE_DRIVER_VERSION_PREFIX,
+                "ram_bytes_target": HOST_PROFILE_RAM_BYTES_TARGET,
+                "ram_bytes_tolerance_bytes": HOST_PROFILE_RAM_BYTES_TOLERANCE,
+                "idle_memory_limit_mib": HOST_PROFILE_IDLE_MEMORY_LIMIT_MIB,
+                "start_temperature_limit_c": HOST_PROFILE_START_TEMPERATURE_LIMIT_C,
+            },
             "required_persistence_mode": PRIMARY_PERSISTENCE_MODE,
             "required_cpu_governor": PRIMARY_CPU_GOVERNOR,
             "required_host": {
@@ -1620,7 +1646,6 @@ def _build_plan(args: argparse.Namespace, output_root: Path) -> dict[str, Any]:
                 "physical_cpu_cores": PRIMARY_CPU_PHYSICAL_CORES,
                 "logical_cpu_threads": PRIMARY_CPU_LOGICAL_THREADS,
                 "cpu_governor_policy_count": PRIMARY_CPU_GOVERNOR_POLICY_COUNT,
-                "ram_bytes": PRIMARY_RAM_BYTES,
             },
             "required_gpu_memory_mib": PRIMARY_GPU_MEMORY_MIB,
             "minimum_staging_available_bytes": MINIMUM_STAGING_AVAILABLE_BYTES,
@@ -1718,10 +1743,21 @@ def _parse_preflight(path: Path, git_revision: str) -> tuple[dict[str, str], dic
         raise RunnerError(
             "preflight stdout is missing required keys: " + ", ".join(missing)
         )
-    if values["driver_version"] != PRIMARY_DRIVER_VERSION:
+    profile_values = {
+        "host_profile_schema_version": HOST_PROFILE_SCHEMA_VERSION,
+        "host_profile_id": HOST_PROFILE_ID,
+        "host_profile_version": HOST_PROFILE_VERSION,
+        "driver_version_prefix": HOST_PROFILE_DRIVER_VERSION_PREFIX,
+    }
+    for key, expected in profile_values.items():
+        if values[key] != expected:
+            raise RunnerError(
+                f"preflight {key} must be {expected!r}, found {values[key]!r}"
+            )
+    if not values["driver_version"].startswith(values["driver_version_prefix"]):
         raise RunnerError(
-            "preflight driver_version must be "
-            f"{PRIMARY_DRIVER_VERSION}, found {values['driver_version']}"
+            "preflight driver_version must use profile branch "
+            f"{values['driver_version_prefix']!r}, found {values['driver_version']!r}"
         )
     if values["persistence_mode"] != PRIMARY_PERSISTENCE_MODE:
         raise RunnerError(
@@ -1760,7 +1796,6 @@ def _parse_preflight(path: Path, git_revision: str) -> tuple[dict[str, str], dic
     integer_host_values = {
         "physical_cpu_cores": PRIMARY_CPU_PHYSICAL_CORES,
         "logical_cpu_threads": PRIMARY_CPU_LOGICAL_THREADS,
-        "ram_bytes": PRIMARY_RAM_BYTES,
     }
     for key, expected in integer_host_values.items():
         try:
@@ -1772,6 +1807,26 @@ def _parse_preflight(path: Path, git_revision: str) -> tuple[dict[str, str], dic
                 f"preflight {key} must be {expected}, found {observed}"
             )
     try:
+        ram_bytes = int(values["ram_bytes"])
+        ram_target = int(values["ram_bytes_target"])
+        ram_tolerance = int(values["ram_bytes_tolerance_bytes"])
+    except ValueError as error:
+        raise RunnerError(
+            "preflight RAM observation and profile tolerance must be base-10 integers"
+        ) from error
+    if (
+        ram_target != HOST_PROFILE_RAM_BYTES_TARGET
+        or ram_tolerance != HOST_PROFILE_RAM_BYTES_TOLERANCE
+    ):
+        raise RunnerError(
+            "preflight RAM profile differs from the checked-in host profile"
+        )
+    if abs(ram_bytes - ram_target) > ram_tolerance:
+        raise RunnerError(
+            "preflight ram_bytes is outside the checked-in profile tolerance: "
+            f"{ram_bytes} not within {ram_tolerance} bytes of {ram_target}"
+        )
+    try:
         memory_total_mib = int(values["memory_total_mib"])
     except ValueError as error:
         raise RunnerError("preflight memory_total_mib must be a base-10 integer") from error
@@ -1779,6 +1834,35 @@ def _parse_preflight(path: Path, git_revision: str) -> tuple[dict[str, str], dic
         raise RunnerError(
             f"preflight memory_total_mib must be {PRIMARY_GPU_MEMORY_MIB}, "
             f"found {memory_total_mib}"
+        )
+    try:
+        idle_memory_mib = int(values["memory_used_mib"])
+        idle_memory_limit_mib = int(values["idle_memory_limit_mib"])
+        temperature_c = int(values["temperature_c"])
+        start_temperature_limit_c = int(values["start_temperature_limit_c"])
+    except ValueError as error:
+        raise RunnerError(
+            "preflight idle-memory and temperature observations must be base-10 integers"
+        ) from error
+    if idle_memory_limit_mib != HOST_PROFILE_IDLE_MEMORY_LIMIT_MIB:
+        raise RunnerError(
+            "preflight idle_memory_limit_mib differs from the checked-in host profile"
+        )
+    if start_temperature_limit_c != HOST_PROFILE_START_TEMPERATURE_LIMIT_C:
+        raise RunnerError(
+            "preflight start_temperature_limit_c differs from the checked-in host profile"
+        )
+    if idle_memory_mib < 0 or temperature_c < 0:
+        raise RunnerError(
+            "preflight idle-memory and temperature observations must be nonnegative"
+        )
+    if idle_memory_mib > idle_memory_limit_mib:
+        raise RunnerError(
+            f"preflight idle GPU memory {idle_memory_mib} MiB exceeds {idle_memory_limit_mib} MiB"
+        )
+    if temperature_c > start_temperature_limit_c:
+        raise RunnerError(
+            f"preflight start temperature {temperature_c} C exceeds {start_temperature_limit_c} C"
         )
     if values["clock_synchronized"] != "yes":
         raise RunnerError(
@@ -1822,7 +1906,7 @@ def _preflight_drift(
 
 
 _TEMPERATURE_LIMIT_FAILURE = re.compile(
-    r"preflight: start temperature (?P<temperature>[0-9]+) C exceeds 50 C"
+    r"preflight: start temperature (?P<temperature>[0-9]+) C exceeds (?P<limit>[0-9]+) C"
 )
 
 

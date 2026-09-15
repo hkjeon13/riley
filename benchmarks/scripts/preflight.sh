@@ -2,39 +2,120 @@
 
 set -euo pipefail
 
-expected_gpu="${RILEY_EXPECTED_GPU:-NVIDIA GeForce RTX 4090}"
-expected_compute_cap="${RILEY_EXPECTED_COMPUTE_CAP:-8.9}"
-max_idle_memory_mib="${RILEY_MAX_IDLE_MEMORY_MIB:-256}"
-max_start_temperature_c="${RILEY_MAX_START_TEMPERATURE_C:-50}"
-expected_driver_version='580.173.02'
-expected_persistence_mode='Disabled'
-expected_cpu_governor='powersave'
-expected_cpu_governor_policy_count='24'
-expected_memory_total_mib='24564'
-expected_environment_id='rtx4090-ubuntu22-driver580-v1'
-expected_os_id='ubuntu'
-expected_os_version_id='22.04'
-expected_kernel_release='6.8.0-138-generic'
-expected_machine='x86_64'
-expected_cpu_model='Intel Core i7-13700K'
-expected_physical_cpu_cores='16'
-expected_logical_cpu_threads='24'
-expected_mem_total_kib='65610936'
-expected_ram_bytes='67185598464'
-# Keep the original environment reproducible. The September host snapshot
-# reports one fewer OS-visible page; it gets a distinct, exact identity.
-case "${RILEY_PREFLIGHT_ENVIRONMENT_ID:-rtx4090-ubuntu22-driver580-v1}" in
-  rtx4090-ubuntu22-driver580-v1) ;;
-  rtx4090-ubuntu22-driver580-20260911-v2)
-    expected_environment_id='rtx4090-ubuntu22-driver580-20260911-v2'
-    expected_mem_total_kib='65610932'
-    expected_ram_bytes='67185594368'
-    ;;
-  *)
-    echo "preflight: unsupported environment ID" >&2
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+host_profile_path="${script_dir}/host_profiles/rtx4090-ubuntu22-driver580-host-v3.env"
+requested_environment_id="${RILEY_PREFLIGHT_ENVIRONMENT_ID:-rtx4090-ubuntu22-driver580-v1}"
+
+# Host policy is checked in and recorded below.  Do not permit an ambient
+# threshold or identity override to make a run appear comparable.
+for forbidden_override in \
+  RILEY_EXPECTED_GPU RILEY_EXPECTED_COMPUTE_CAP \
+  RILEY_MAX_IDLE_MEMORY_MIB RILEY_MAX_START_TEMPERATURE_C; do
+  if declare -p "${forbidden_override}" >/dev/null 2>&1; then
+    echo "preflight: ${forbidden_override} is not supported; use a checked-in host profile revision" >&2
     exit 2
-    ;;
-esac
+  fi
+done
+
+if [[ ! -f "${host_profile_path}" || -L "${host_profile_path}" || ! -r "${host_profile_path}" ]]; then
+  echo "preflight: checked-in host profile is not a readable regular file" >&2
+  exit 2
+fi
+
+profile_keys=(
+  schema_version profile_id profile_version environment_ids
+  gpu_name compute_capability memory_total_mib driver_version_prefix
+  persistence_mode os_id os_version_id kernel_release machine
+  cpu_model cpu_model_substring physical_cpu_cores logical_cpu_threads
+  cpu_governor cpu_governor_policy_count ram_bytes_target
+  ram_bytes_tolerance_bytes max_idle_memory_mib max_start_temperature_c
+)
+profile_values=()
+profile_key_index=0
+while IFS= read -r profile_line || [[ -n "${profile_line}" ]]; do
+  [[ -z "${profile_line}" || "${profile_line}" == \#* ]] && continue
+  if [[ "${profile_line}" != *=* ]]; then
+    echo "preflight: host profile has a malformed line" >&2
+    exit 2
+  fi
+  profile_key="${profile_line%%=*}"
+  profile_value="${profile_line#*=}"
+  if (( profile_key_index >= ${#profile_keys[@]} )) || [[ "${profile_key}" != "${profile_keys[${profile_key_index}]}" ]]; then
+    echo "preflight: host profile keys must be complete and in reviewed order" >&2
+    exit 2
+  fi
+  profile_values[${profile_key_index}]="${profile_value}"
+  profile_key_index=$((profile_key_index + 1))
+done < "${host_profile_path}"
+if (( profile_key_index != ${#profile_keys[@]} )); then
+  echo "preflight: host profile is incomplete" >&2
+  exit 2
+fi
+for profile_value in "${profile_values[@]}"; do
+  if [[ -z "${profile_value}" ]]; then
+    echo "preflight: host profile has an empty value" >&2
+    exit 2
+  fi
+done
+profile_schema_version="${profile_values[0]}"
+profile_id="${profile_values[1]}"
+profile_version="${profile_values[2]}"
+profile_environment_ids="${profile_values[3]}"
+expected_gpu="${profile_values[4]}"
+expected_compute_cap="${profile_values[5]}"
+expected_memory_total_mib="${profile_values[6]}"
+driver_version_prefix="${profile_values[7]}"
+expected_persistence_mode="${profile_values[8]}"
+expected_os_id="${profile_values[9]}"
+expected_os_version_id="${profile_values[10]}"
+expected_kernel_release="${profile_values[11]}"
+expected_machine="${profile_values[12]}"
+expected_cpu_model="${profile_values[13]}"
+expected_cpu_model_substring="${profile_values[14]}"
+expected_physical_cpu_cores="${profile_values[15]}"
+expected_logical_cpu_threads="${profile_values[16]}"
+expected_cpu_governor="${profile_values[17]}"
+expected_cpu_governor_policy_count="${profile_values[18]}"
+ram_bytes_target="${profile_values[19]}"
+ram_bytes_tolerance_bytes="${profile_values[20]}"
+max_idle_memory_mib="${profile_values[21]}"
+max_start_temperature_c="${profile_values[22]}"
+if [[ "${profile_schema_version}" != "riley.host-profile.v1" || "${profile_version}" != "3" ]]; then
+  echo "preflight: unsupported checked-in host profile version" >&2
+  exit 2
+fi
+numeric_profile_keys=(
+  memory_total_mib physical_cpu_cores logical_cpu_threads cpu_governor_policy_count
+  ram_bytes_target ram_bytes_tolerance_bytes max_idle_memory_mib max_start_temperature_c
+)
+numeric_profile_values=(
+  "${expected_memory_total_mib}" "${expected_physical_cpu_cores}" "${expected_logical_cpu_threads}" "${expected_cpu_governor_policy_count}"
+  "${ram_bytes_target}" "${ram_bytes_tolerance_bytes}" "${max_idle_memory_mib}" "${max_start_temperature_c}"
+)
+for numeric_profile_index in "${!numeric_profile_keys[@]}"; do
+  numeric_profile_key="${numeric_profile_keys[${numeric_profile_index}]}"
+  numeric_profile_value="${numeric_profile_values[${numeric_profile_index}]}"
+  if [[ ! "${numeric_profile_value}" =~ ^[0-9]+$ ]]; then
+    echo "preflight: host profile ${numeric_profile_key} must be a nonnegative integer" >&2
+    exit 2
+  fi
+done
+if [[ ! "${driver_version_prefix}" =~ ^[0-9]+\.$ ]]; then
+  echo "preflight: host profile driver_version_prefix must name a driver branch" >&2
+  exit 2
+fi
+environment_supported=false
+IFS=',' read -r -a supported_environment_ids <<< "${profile_environment_ids}"
+for supported_environment_id in "${supported_environment_ids[@]}"; do
+  if [[ "${requested_environment_id}" == "${supported_environment_id}" ]]; then
+    environment_supported=true
+    break
+  fi
+done
+if [[ "${environment_supported}" != true ]]; then
+  echo "preflight: unsupported environment ID" >&2
+  exit 2
+fi
 minimum_staging_available_bytes=21474836480
 cpu_governor_root="${RILEY_CPU_GOVERNOR_ROOT:-/sys/devices/system/cpu/cpufreq}"
 host_root="${RILEY_HOST_ROOT:-}"
@@ -76,8 +157,8 @@ os_version_id="$(/usr/bin/sed -n 's/^VERSION_ID=//p' "${os_release_path}" | /usr
 kernel_release="$(/usr/bin/uname -r)"
 machine="$(/usr/bin/uname -m)"
 cpu_model_raw="$(/usr/bin/mawk -F: '/^model name[[:space:]]*:/ { sub(/^[[:space:]]+/, "", $2); print $2; exit }' "${cpuinfo_path}")"
-if [[ "${cpu_model_raw}" != *"i7-13700K"* ]]; then
-  echo "preflight: expected CPU containing i7-13700K, found ${cpu_model_raw:-unknown}" >&2
+if [[ "${cpu_model_raw}" != *"${expected_cpu_model_substring}"* ]]; then
+  echo "preflight: expected CPU containing ${expected_cpu_model_substring}, found ${cpu_model_raw:-unknown}" >&2
   exit 2
 fi
 cpu_model="${expected_cpu_model}"
@@ -106,8 +187,12 @@ if [[ "${physical_cpu_cores}" != "${expected_physical_cpu_cores}" || "${logical_
   echo "preflight: expected CPU topology ${expected_physical_cpu_cores} cores/${expected_logical_cpu_threads} threads, found ${physical_cpu_cores}/${logical_cpu_threads}" >&2
   exit 2
 fi
-if [[ "${mem_total_kib}" != "${expected_mem_total_kib}" || "${ram_bytes}" != "${expected_ram_bytes}" ]]; then
-  echo "preflight: expected RAM ${expected_ram_bytes} bytes, found ${ram_bytes}" >&2
+ram_bytes_delta="$((ram_bytes - ram_bytes_target))"
+if (( ram_bytes_delta < 0 )); then
+  ram_bytes_delta="$((-ram_bytes_delta))"
+fi
+if (( ram_bytes_delta > ram_bytes_tolerance_bytes )); then
+  echo "preflight: observed RAM ${ram_bytes} bytes differs from profile target ${ram_bytes_target} by more than ${ram_bytes_tolerance_bytes} bytes" >&2
   exit 2
 fi
 
@@ -121,6 +206,11 @@ temperature_c="$(trim "${temperature_c}")"
 power_limit_w="$(trim "${power_limit_w}")"
 graphics_clock_mhz="$(trim "${graphics_clock_mhz}")"
 memory_clock_mhz="$(trim "${memory_clock_mhz}")"
+
+if [[ ! "${memory_total_mib}" =~ ^[0-9]+$ || ! "${memory_used_mib}" =~ ^[0-9]+$ || ! "${temperature_c}" =~ ^[0-9]+$ ]]; then
+  echo "preflight: nvidia-smi returned a nonnumeric memory or temperature value" >&2
+  exit 2
+fi
 
 if [[ "${gpu_name}" != "${expected_gpu}" ]]; then
   echo "preflight: expected GPU '${expected_gpu}', found '${gpu_name}'" >&2
@@ -137,8 +227,8 @@ if [[ "${memory_total_mib}" != "${expected_memory_total_mib}" ]]; then
   exit 2
 fi
 
-if [[ "${driver_version}" != "${expected_driver_version}" ]]; then
-  echo "preflight: expected NVIDIA driver ${expected_driver_version}, found ${driver_version}" >&2
+if [[ "${driver_version}" != "${driver_version_prefix}"* ]]; then
+  echo "preflight: expected NVIDIA driver branch ${driver_version_prefix}*, found ${driver_version}" >&2
   exit 2
 fi
 
@@ -227,23 +317,32 @@ if (( staging_available_bytes < minimum_staging_available_bytes )); then
   exit 2
 fi
 
-printf 'environment_id=%s\n' "${expected_environment_id}"
+printf 'environment_id=%s\n' "${requested_environment_id}"
+printf 'host_profile_schema_version=%s\n' "${profile_schema_version}"
+printf 'host_profile_id=%s\n' "${profile_id}"
+printf 'host_profile_version=%s\n' "${profile_version}"
 printf 'os_id=%s\n' "${os_id}"
 printf 'os_version_id=%s\n' "${os_version_id}"
 printf 'kernel_release=%s\n' "${kernel_release}"
 printf 'machine=%s\n' "${machine}"
 printf 'cpu_model=%s\n' "${cpu_model}"
+printf 'cpu_model_observed=%s\n' "${cpu_model_raw}"
 printf 'physical_cpu_cores=%s\n' "${physical_cpu_cores}"
 printf 'logical_cpu_threads=%s\n' "${logical_cpu_threads}"
 printf 'ram_bytes=%s\n' "${ram_bytes}"
+printf 'ram_bytes_target=%s\n' "${ram_bytes_target}"
+printf 'ram_bytes_tolerance_bytes=%s\n' "${ram_bytes_tolerance_bytes}"
 printf 'git_revision=%s\n' "${git_revision}"
 printf 'gpu_name=%s\n' "${gpu_name}"
 printf 'compute_capability=%s\n' "${compute_cap}"
 printf 'memory_total_mib=%s\n' "${memory_total_mib}"
 printf 'memory_used_mib=%s\n' "${memory_used_mib}"
 printf 'driver_version=%s\n' "${driver_version}"
+printf 'driver_version_prefix=%s\n' "${driver_version_prefix}"
 printf 'persistence_mode=%s\n' "${persistence_mode}"
+printf 'idle_memory_limit_mib=%s\n' "${max_idle_memory_mib}"
 printf 'temperature_c=%s\n' "${temperature_c}"
+printf 'start_temperature_limit_c=%s\n' "${max_start_temperature_c}"
 printf 'power_limit_w=%s\n' "${power_limit_w}"
 printf 'graphics_clock_mhz=%s\n' "${graphics_clock_mhz}"
 printf 'memory_clock_mhz=%s\n' "${memory_clock_mhz}"

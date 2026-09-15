@@ -32,7 +32,8 @@ CONDITION = {
     "gui_retained": True,
     "idle_memory_limit_mib": 512,
     "start_temperature_limit_c": 48,
-    "canonical_idle_memory_limit_mib": 256,
+    "host_profile_id": "rtx4090-ubuntu22-driver580-host-v3",
+    "host_profile_version": 3,
     "canonical_qualification": False,
     "scope": "single-concurrency HTTP serving diagnostic",
 }
@@ -144,8 +145,7 @@ def preflight(plan, binding, directory, timeout=300):
         write_json(directory / "cooldown.json", samples)
     env = os.environ.copy()
     env.update(RILEY_PREFLIGHT_OUTPUT_ROOT=str(directory),
-               RILEY_PREFLIGHT_ENVIRONMENT_ID=plan["preflight_environment_id"],
-               RILEY_MAX_IDLE_MEMORY_MIB="512", RILEY_MAX_START_TEMPERATURE_C="48")
+               RILEY_PREFLIGHT_ENVIRONMENT_ID=plan["preflight_environment_id"])
     argv = plan.get("preflight_argv", ["bash", str(Path(plan["source_root"]) / "benchmarks/scripts/preflight.sh")])
     with (directory / "preflight.stdout").open("x") as out, (directory / "preflight.stderr").open("x") as err:
         subprocess.run(argv, cwd=plan["source_root"], env=env, stdout=out, stderr=err, check=True)

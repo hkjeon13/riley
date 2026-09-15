@@ -48,6 +48,10 @@ SAMPLING_REQUIRED_PHASES = ("warmup", "timed-serving")
 EVIDENCE_SCOPES = {"operator-control", "full-model-serving"}
 GLOBAL_GPU_PEAK_CEILING_BYTES = 20_000_000_000
 UNCERTAINTY_RESERVE_BYTES = 1_000_000_000
+# A lifecycle receipt can only pass when the sampled whole-GPU observation is
+# at or below this reserve-adjusted bound.  The 20 GB ceiling remains recorded
+# separately so receipts retain both the absolute ceiling and the safety gap.
+SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES = 19_000_000_000
 MIB_BYTES = 1024 * 1024
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 ENVIRONMENT_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -600,7 +604,7 @@ def phase_memory(samples: list[dict[str, Any]], start_index: int, end_index: int
         "peak_global_gpu_used_bytes": peak,
         "peak_over_phase_baseline_bytes": peak - baseline,
         "within_global_peak_ceiling": peak <= GLOBAL_GPU_PEAK_CEILING_BYTES,
-        "reserve_satisfied": peak <= GLOBAL_GPU_PEAK_CEILING_BYTES - UNCERTAINTY_RESERVE_BYTES,
+        "reserve_satisfied": peak <= SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES,
         **host_memory,
     }
 
@@ -815,7 +819,7 @@ def overall_memory(
         "peak_over_lifecycle_baseline_bytes": None if peak is None or baseline_used is None else peak - baseline_used,
         "headroom_to_global_peak_ceiling_bytes": observed_headroom,
         "within_global_peak_ceiling": peak is not None and peak <= GLOBAL_GPU_PEAK_CEILING_BYTES,
-        "reserve_satisfied": peak is not None and peak <= GLOBAL_GPU_PEAK_CEILING_BYTES - UNCERTAINTY_RESERVE_BYTES,
+        "reserve_satisfied": peak is not None and peak <= SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES,
         "required_in_process_phase_count": len(SAMPLING_REQUIRED_PHASES),
         "phases_with_in_process_samples": len(SAMPLING_REQUIRED_PHASES) - len(missing_live_samples),
         "missing_in_process_sample_phases": missing_live_samples,
@@ -880,7 +884,7 @@ def invalid_manifest_receipt(manifest_path: Path, manifest_bytes: bytes | None, 
         "memory_budget": {
             "global_peak_ceiling_bytes": GLOBAL_GPU_PEAK_CEILING_BYTES,
             "uncertainty_reserve_bytes": UNCERTAINTY_RESERVE_BYTES,
-            "reserve_adjusted_limit_bytes": GLOBAL_GPU_PEAK_CEILING_BYTES - UNCERTAINTY_RESERVE_BYTES,
+            "reserve_adjusted_limit_bytes": SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES,
         },
         "baseline": None,
         "phases": phases,
@@ -1002,7 +1006,9 @@ def run_manifest(manifest_path: Path, receipt_path: Path) -> int:
     if not overall["within_global_peak_ceiling"]:
         failure_reasons.append("global GPU peak exceeded the 20,000,000,000-byte ceiling or was unavailable")
     if not overall["reserve_satisfied"]:
-        failure_reasons.append("global GPU peak did not retain the 1,000,000,000-byte reserve")
+        failure_reasons.append(
+            "sampled whole-GPU peak exceeded the 19,000,000,000-byte reserve-adjusted limit"
+        )
     if overall["missing_in_process_sample_phases"]:
         failure_reasons.append(
             "sampled GPU peak lacks an in-process poll for "
@@ -1026,7 +1032,7 @@ def run_manifest(manifest_path: Path, receipt_path: Path) -> int:
         "memory_budget": {
             "global_peak_ceiling_bytes": GLOBAL_GPU_PEAK_CEILING_BYTES,
             "uncertainty_reserve_bytes": UNCERTAINTY_RESERVE_BYTES,
-            "reserve_adjusted_limit_bytes": GLOBAL_GPU_PEAK_CEILING_BYTES - UNCERTAINTY_RESERVE_BYTES,
+            "reserve_adjusted_limit_bytes": SAMPLED_GLOBAL_GPU_PEAK_LIMIT_BYTES,
         },
         "baseline": baseline,
         "phases": phases,

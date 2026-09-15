@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,15 +38,22 @@ mode = os.environ.get("FAKE_PREFLIGHT_CONTRACT", "valid")
 power_limit = "451.00" if int(os.environ.get("FAKE_PREFLIGHT_DRIFT_AT", "0")) == count else "450.00"
 values = {
     "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    "host_profile_schema_version": "riley.host-profile.v1",
+    "host_profile_id": "rtx4090-ubuntu22-driver580-host-v3",
+    "host_profile_version": "3",
     "os_id": "ubuntu",
     "os_version_id": "22.04",
     "kernel_release": "6.8.0-138-generic",
     "machine": "x86_64",
     "cpu_model": "Intel Core i7-13700K",
+    "cpu_model_observed": "13th Gen Intel(R) Core(TM) i7-13700K",
     "physical_cpu_cores": "16",
     "logical_cpu_threads": "24",
-    "ram_bytes": "67185598464",
-    "driver_version": "580.173.02",
+    "ram_bytes": os.environ.get("FAKE_PREFLIGHT_RAM_BYTES", "67185598464"),
+    "ram_bytes_target": "67185594368",
+    "ram_bytes_tolerance_bytes": str(16 * 1024 * 1024),
+    "driver_version": os.environ.get("FAKE_PREFLIGHT_DRIVER_VERSION", "580.173.02"),
+    "driver_version_prefix": "580.",
     "persistence_mode": "Disabled",
     "power_limit_w": power_limit,
     "graphics_clock_mhz": "2520",
@@ -53,6 +61,10 @@ values = {
     "cpu_governor": "powersave",
     "cpu_governor_policy_count": "24",
     "memory_total_mib": "24564",
+    "memory_used_mib": "0",
+    "idle_memory_limit_mib": "512",
+    "temperature_c": "35",
+    "start_temperature_limit_c": "48",
     "clock_synchronized": "yes",
     "staging_available_bytes": str(50 * 1024 * 1024 * 1024),
     "staging_minimum_bytes": str(20 * 1024 * 1024 * 1024),
@@ -69,6 +81,10 @@ elif mode == "performance-governor":
     values["cpu_governor"] = "performance"
 elif mode == "wrong-host":
     values["kernel_release"] = "6.8.0-139-generic"
+elif mode == "negative-idle":
+    values["memory_used_mib"] = "-1"
+elif mode == "negative-temperature":
+    values["temperature_c"] = "-1"
 for key, value in values.items():
     print(f"{key}={value}")
 if mode == "duplicate":
@@ -795,6 +811,8 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             "persistence-enabled",
             "performance-governor",
             "wrong-host",
+            "negative-idle",
+            "negative-temperature",
         )
         for mode in modes:
             with self.subTest(mode), tempfile.TemporaryDirectory() as directory:
@@ -812,6 +830,42 @@ class RepeatabilityRunnerTests(unittest.TestCase):
                 self.assertEqual(
                     [event["stage"] for event in fakes.events()],
                     ["python-find", "sync", "prime", "prime", "prime", "preflight"],
+                )
+
+    def test_host_profile_driver_branch_and_ram_tolerance_are_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fakes = FakePrograms(root)
+
+            def parse_receipt(**overrides: str) -> dict[str, str]:
+                completed = subprocess.run(
+                    [sys.executable, str(fakes.preflight)],
+                    env={**os.environ, **fakes.environment(**overrides)},
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                receipt = root / f"preflight-{uuid.uuid4().hex}.stdout"
+                receipt.write_text(completed.stdout, encoding="utf-8")
+                values, _ = runner._parse_preflight(receipt, "unused")
+                return values
+
+            accepted = parse_receipt(
+                FAKE_PREFLIGHT_DRIVER_VERSION="580.200.01",
+                FAKE_PREFLIGHT_RAM_BYTES=str(
+                    runner.HOST_PROFILE_RAM_BYTES_TARGET + 8 * 1024 * 1024
+                ),
+            )
+            self.assertEqual(accepted["driver_version"], "580.200.01")
+            with self.assertRaisesRegex(runner.RunnerError, "driver_version"):
+                parse_receipt(FAKE_PREFLIGHT_DRIVER_VERSION="581.1.0")
+            with self.assertRaisesRegex(runner.RunnerError, "ram_bytes"):
+                parse_receipt(
+                    FAKE_PREFLIGHT_RAM_BYTES=str(
+                        runner.HOST_PROFILE_RAM_BYTES_TARGET
+                        + runner.HOST_PROFILE_RAM_BYTES_TOLERANCE
+                        + 1
+                    )
                 )
 
     def test_preflight_failure_stops_and_preserves_artifacts(self) -> None:
