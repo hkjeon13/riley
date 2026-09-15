@@ -57,7 +57,7 @@ Q/K/V projection의 `GEMM → row_bias_add` 두 GPU launch와 BF16 output read/w
 
 이 operator evidence는 fused candidate를 selector-integration **검토 단계**로 올린다. 그러나 full-model quality, current graph interaction, scheduler/HTTP behavior, throughput, TTFT/TPOT, P95/P99, failure rate와 vLLM 대비는 전혀 측정하지 않았다.
 
-## P1 server generation discriminator — 2026-09-16
+## P1 historical server smoke and cache-reference correction — 2026-09-16
 
 `43981337`의 실제 server selector를 같은 Qwen2.5-3B P2048/O128 조건에서
 `strict-staged-v1`과 `cublaslt-bias-epilogue-experimental-v1`로 각각 실행했다.
@@ -68,17 +68,21 @@ graceful shutdown도 정상이다.
 
 서버의 기존 vLLM token reference는 첫 token이 `374`인 반면, 같은 immutable
 checkpoint를 local-only HF eager BF16 container에서 직접 token ID로 실행한
-cache-on/cache-off reference는 모두 `304`로 시작했다. HF reference는 padded
-vocabulary tail을 selection 전에 mask하고, eager cache-on와 full-prefix
-cache-off 128 token ID hash와 text가 동일한 경우만 qualified로
-기록했다. 이는 serving 경로에 Python을 넣은 것이 아니라 checkout 밖
-create-only numerical artifact다.
+full-prefix cache-off reference는 `304`로 시작했다. 이 HF artifact는 serving
+경로에 Python을 넣은 것이 아니라 checkout 밖 create-only numerical artifact다.
 
-| 비교 대상 | HF cache-on과 첫 불일치 | 같은 위치 token 일치 / 128 | 판정 |
+후속 검토에서 historical artifact의 `generation.cache_on` row 1이 prefill 뒤
+길이 2048 cache에 `Y0`를 logical position `2049`에서 소비한 것을 확인했다.
+정확한 위치는 `2048`이어야 한다. 따라서 이 cache-on 행렬은 cached decode
+reference가 아니며, 이전의 cache-on/cache-off token hash·text parity와
+`HF internal cache parity` 판정은 철회한다. immutable artifact와 당시 smoke
+결과는 재작성하지 않고 보존한다. cache-off 행렬은 각 row가 `prompt + teacher[:i]`
+full prefix를 사용하므로 selected-token teacher reference로만 계속 사용한다.
+
+| 비교 대상 | historical cache-off와 첫 선택 token 불일치 | 같은 위치 token 일치 / 128 | 현재 해석 |
 |---|---:|---:|---|
-| HF eager cache-off | 없음 | 128 | HF internal cache parity 통과 |
-| Riley fused Q/K/V bias epilogue | 8 | 108 | HF보다 가까우나 full generation exact 불통과 |
-| Riley strict staged bias | 3 | 19 | 현 strict arithmetic profile의 별도 수치 계약 |
+| Riley fused Q/K/V bias epilogue | 8 | 108 | smoke 관측값; corrected cached reference 전에는 quality gate가 아님 |
+| Riley strict staged bias | 3 | 19 | smoke 관측값; 별도 수치 계약의 quality gate가 아님 |
 | existing vLLM workload token reference | 0 | 해당 없음 | Riley/HF correctness golden으로 사용 불가; 별도 원인 판정 필요 |
 
 HF artifact는 `/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-generation-oracle-r2-20260915T213902Z/`에 create-only로 남겼다.
@@ -91,12 +95,49 @@ shared-host I/O pressure 중 model materialization을 포함하므로 throughput
 TTFT, TPOT, latency 또는 vLLM 성능 비교가 아니다.
 
 판정: fused selector는 default로 승격하지 않고, N06-A performance campaign도
-실행하지 않는다. 다음 correctness batch는 HF per-step logit/top-k artifact와
-Riley prefill/decode logits를 step 8에서 대조해 최초 차이가 Q/K/V projection
-뒤 attention/KV/decode 중 어디에서 생기는지 분리한다. strict와 fused는
-각각 독립 numerical profile로 유지하며, exact generation gate 또는 사전
-선언한 profile-specific quality gate를 통과한 경우에만 동일 profile 내부의
-serving ABBA 및 vLLM 비교로 진행한다.
+실행하지 않는다. 다음 correctness batch는 corrected HF teacher-forced
+cache-on/cache-off raw-logit artifact를 만들고, Riley scheduler-committed
+prefill/decode logits와 대조하는 것이다. strict와 fused는 각각 독립 numerical
+profile로 유지하며, corrected artifact에 대해 사전 선언한 profile-specific
+quality gate를 통과한 경우에만 동일 profile 내부의 serving ABBA 및 vLLM
+비교로 진행한다.
+
+## P2 scheduler-committed native-D128 teacher-forced trace — 2026-09-16
+
+`fc792554cf40f43daca5ba38b2e390dc32f85c5d`에서 real `Scheduler`와
+`execute_llama_iteration_timed`를 사용하는 ignored CUDA test를 RTX 4090/SM89에서
+실행했다. artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-native-d128-teacher-forced-trace-r2-20260915T222011Z/`에
+create-only로 보존했다. canonical `trace.json` SHA-256은
+`e5039137c2ad850de166d72bb87054a10f73dac76aefa807851017a7d43508d5`, source
+stdout log SHA-256은
+`1a220166da08f8b81753c69de9b74ba7b66365a1ac5827534d43d26749badd8b`이며
+`SHA256SUMS`의 모든 항목을 재검증했다.
+
+test는 C8/M32 capacity configuration을 사용하지만 실제로는 request 1개와
+scheduled batch 1개만 제출했다. P2048은 32-token chunk 64회로 prefill하고,
+그 뒤 1-token decode 8회를 scheduler commit까지 수행해 final prefill 포함 9개
+teacher-forced row를 남겼다. HTTP, continuous-concurrency throughput, latency
+timing은 측정하지 않았다. 총 223.39초에는 checkpoint load와 초기화가 포함되어
+TTFT·TPOT·throughput으로 해석할 수 없다.
+
+old cache-on 행렬은 사용하지 않았다. 각 row는 immutable historical artifact의
+valid full-prefix `cache-off` selected token을 제출 뒤 scheduler가 실제 commit한
+값과 비교한다. top-32 순서는 observation이며 tie-sensitive correctness gate가
+아니다.
+
+| profile | selected token 일치 / 9 | raw argmax 일치 / 9 | 첫 selected-token 불일치 step | top-32 set overlap | full raw BF16 logit hash |
+|---|---:|---:|---:|---:|---:|
+| `strict-staged-v1` | 8 / 9 | 8 / 9 | 3 | 20–31 | 0 / 9 |
+| `cublaslt-bias-epilogue-experimental-v1` | 8 / 9 | 8 / 9 | 8 | 25–31 | 0 / 9 |
+
+fused 후보는 이 한정된 full-prefix teacher trace에서 strict보다 더 오래 selected
+token을 유지했지만, 어느 profile도 HF와 raw BF16 logits exact이 아니다. 따라서
+이는 fused numerical trajectory가 더 가깝다는 diagnostic evidence일 뿐 full-model
+correctness, cached KV correctness, selector 승격, serving performance 또는 vLLM
+우위의 근거가 아니다. GPU observed memory는 시작/종료 모두 335 MiB, utilization은
+0%였다. I/O PSI `some/full avg10`은 시작 `4.30/3.84`, 종료 `8.74/8.44`로 함께
+기록했으며 공유 host 상태를 설명하는 값일 뿐 결과를 filter·weight·보정하지 않는다.
 
 ## hardware scope
 
@@ -104,6 +145,13 @@ Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU
 
 ## 다음 PR과 롤백
 
-이 PR이 native quality와 operator AB gate를 통과해도 serving default를 바꾸지 않는다. 다음 PR만 `LlamaProjectionBiasMode::{StrictStagedV1, CublasLtBiasEpilogueExperimentalV1}`로 Q/K/V prefill·decode dispatch에 제한적으로 연결하고, graph capture는 또 다른 PR로 분리한다. 동일 모델·revision·workload·concurrency로 ABBA serving 반복을 수행해 throughput, TTFT, TPOT, P95/P99, failure rate, quality를 vLLM과 함께 기록한 뒤에만 승격한다.
+다음 PR은 corrected HF teacher-forced cache-on/cache-off artifact와 raw-logit
+sidecar를 만들고, Rust scheduler trace가 그 schema만 읽도록 바꾼다. 그 뒤 동일
+model·revision·workload·concurrency에서 profile-specific quality gate를 통과한
+후에만 N06-A의 AB/BA 반복으로 throughput, TTFT, TPOT, P95/P99, failure rate와
+quality를 vLLM과 함께 기록한다. graph capture는 여전히 별도 PR로 분리한다.
 
-fused gate 또는 operator AB가 실패하면 plan/feature를 비활성으로 남긴다. strict path는 무변경이므로 rollback은 selector 연결을 하지 않는 것으로 끝난다. strict arithmetic을 보존한 launch/host overhead 후보는 GEMM→row-bias composite CUDA Graph 경로로 새 PR에서 평가한다.
+corrected quality gate 또는 operator AB가 실패하면 fused plan/feature는 opt-in으로
+남긴다. strict path는 무변경이므로 rollback은 experimental selector를 비활성으로
+두는 것으로 끝난다. strict arithmetic을 보존한 launch/host overhead 후보는
+GEMM→row-bias composite CUDA Graph 경로로 새 PR에서 평가한다.
