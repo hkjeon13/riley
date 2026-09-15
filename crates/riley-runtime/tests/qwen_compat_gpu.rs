@@ -799,13 +799,15 @@ fn qwen3b_p2048_serving_oracle_reference_prefix_matches_first_eight_tokens() -> 
     let mut paged_logits = vec![0_u8; logits_row_bytes()?];
     decode.download_last_logits(&mut paged_logits, &mut stream)?;
     let paged_first_token = top1(addressable_logits(&paged_logits));
+    let cache_free_prefill_sha256 = sha256_hex(&cache_free_prefill_logits);
+    let paged_prefill_sha256 = sha256_hex(&paged_logits);
     assert!(
         cache_free_prefill_logits == paged_logits,
         "case={} cache-free/reference-paged prefill raw BF16 rows differ \\
 cache_free_sha256={} paged_sha256={} cache_free_argmax={} paged_argmax={}",
         workload.case,
-        sha256_hex(&cache_free_prefill_logits),
-        sha256_hex(&paged_logits),
+        cache_free_prefill_sha256,
+        paged_prefill_sha256,
         cache_free_first_token,
         paged_first_token,
     );
@@ -813,6 +815,17 @@ cache_free_sha256={} paged_sha256={} cache_free_argmax={} paged_argmax={}",
         paged_first_token, cache_free_first_token,
         "case={} cache-free/reference-paged prefill argmax differs paged={} cache_free={}",
         workload.case, paged_first_token, cache_free_first_token
+    );
+    println!(
+        concat!(
+            "QWEN3B_REFERENCE_PREFILL case={} cache_free_sha256={} paged_sha256={} ",
+            "cache_free_argmax={} paged_argmax={}"
+        ),
+        workload.case,
+        cache_free_prefill_sha256,
+        paged_prefill_sha256,
+        cache_free_first_token,
+        paged_first_token,
     );
     let expected_first_token = workload.output_token_ids[0];
     assert_eq!(
