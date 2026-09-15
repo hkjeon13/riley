@@ -43,3 +43,8 @@ required-features = ["bench", "cuda"]
 name = "api_gpu"
 path = "tests/api_gpu.rs"
 required-features = ["server", "cuda"]
+
+[[test]]
+name = "qwen3b_native_d128_trace_gpu"
+path = "tests/qwen3b_native_d128_trace_gpu.rs"
+required-features = ["server", "cuda"]
