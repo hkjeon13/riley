@@ -208,6 +208,61 @@ const QWEN_CASES: &[GemmCase] = &[
     },
 ];
 
+// These are the two fused-projection candidate shapes for the immutable
+// Qwen2.5-3B descriptor. They exercise the native BF16 control only: the
+// production forward still owns separate Q/K/V and gate/up projections, so a
+// successful result here is not evidence of a fused full-model serving path.
+const QWEN2_5_3B_NATIVE_CONTROL_CASES: &[GemmCase] = &[
+    GemmCase {
+        label: "qwen2_5_3b-qkv-decode-m1",
+        m: 1,
+        n: 2_560,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-qkv-decode-m8",
+        m: 8,
+        n: 2_560,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-qkv-decode-m32",
+        m: 32,
+        n: 2_560,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-qkv-prefill-m128",
+        m: 128,
+        n: 2_560,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-gate-up-decode-m1",
+        m: 1,
+        n: 22_016,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-gate-up-decode-m8",
+        m: 8,
+        n: 22_016,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-gate-up-decode-m32",
+        m: 32,
+        n: 22_016,
+        k: 2_048,
+    },
+    GemmCase {
+        label: "qwen2_5_3b-gate-up-prefill-m128",
+        m: 128,
+        n: 22_016,
+        k: 2_048,
+    },
+];
+
 fn first_device() -> TestResult<(CudaRuntime, CudaDevice)> {
     let runtime = CudaRuntime::initialize()?;
     assert!(
@@ -784,6 +839,53 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
     assert!(context.allocation_stats()?.is_zero());
     context.synchronize()?;
     context.close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn qwen2_5_3b_shape_synthetic_bf16_projection_control_is_deterministic_and_allocation_stable(
+) -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let expected_compute_capability = device.properties().compute_capability();
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut upload_staging = context.allocate_pinned_host_buffer(UPLOAD_STAGING_BYTES)?;
+
+    // This intentionally runs an operator control rather than pretending that
+    // fused QKV/gate-up weights already exist in the full Qwen forward path.
+    // `run_case` verifies BF16 inputs/outputs with F32 accumulation, sampled
+    // F32-reference agreement, deterministic repeated bytes, no repeated
+    // allocation, and reports the complete prepared cuBLASLt identity.
+    for (case_index, &case) in QWEN2_5_3B_NATIVE_CONTROL_CASES.iter().enumerate() {
+        let case_seed = 30_000_u64
+            .checked_add(u64::try_from(case_index)?)
+            .ok_or("case index overflow")?;
+        let metadata = run_case(
+            &context,
+            &mut stream,
+            &mut upload_staging,
+            expected_compute_capability,
+            case,
+            case_seed,
+            PRODUCTION_MAX_WORKSPACE_BYTES,
+            CudaGemmReductionPolicy::StrictNoSplitV1,
+        )?;
+        assert!(
+            metadata.split_k() <= 1 && metadata.reduction_scheme() == 0,
+            "{} must retain the native strict-BF16 control reduction contract",
+            case.label
+        );
+    }
+
+    upload_staging.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    context.synchronize()?;
+    context.close()?;
+    println!(
+        "riley-cuda-qwen2_5-3b-native-control schema_version=1 input_weight_fixture=deterministic-synthetic cases=qkv:1,8,32,128;gate-up:1,8,32,128 reduction_policy=strict-no-split-v1 full_model_fusion=false full_model_serving=false status=passed"
+    );
     Ok(())
 }
 

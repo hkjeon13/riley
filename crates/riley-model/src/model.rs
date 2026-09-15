@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use crate::artifact::VerifiedArtifactSession;
 use crate::{
-    CheckpointProvenance, LoadLimits, LoadedWeights, ModelConfig, ModelError, ModelFamily,
-    ModelResult, ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
+    CheckpointProvenance, LoadLimits, LoadedWeights, ModelConfig, ModelError, ModelResult,
+    ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
 };
 
 /// Required Hugging Face configuration filename.
@@ -65,16 +65,16 @@ impl LoadedModel {
         let (tokenizer, qwen2_tokenizer_config): (
             Box<dyn Tokenizer>,
             Option<Qwen2TokenizerConfig>,
-        ) = match config.family() {
-            ModelFamily::Llama => {
+        ) = match &config {
+            ModelConfig::Llama(llama_config) => {
                 let tokenizer = SmolLm2Tokenizer::from_json_slice_with_limits(
                     tokenizer_artifact.bytes(),
                     limits,
                 )?;
-                validate_dense_tokenizer_coherence(&spec, &tokenizer)?;
+                validate_dense_tokenizer_coherence(&spec, &tokenizer, llama_config.pad_token_id())?;
                 (Box::new(tokenizer), None)
             }
-            ModelFamily::Qwen2 => {
+            ModelConfig::Qwen2(_) => {
                 let tokenizer = Qwen2Tokenizer::from_json_slice_with_limits(
                     tokenizer_artifact.bytes(),
                     limits,
@@ -168,6 +168,7 @@ fn validate_manifest_dtype(provenance: &CheckpointProvenance, spec: &ModelSpec) 
 fn validate_dense_tokenizer_coherence(
     spec: &ModelSpec,
     tokenizer: &SmolLm2Tokenizer,
+    pad_token_id: Option<u32>,
 ) -> ModelResult<()> {
     let expected_vocabulary = spec.embedding().vocabulary_size();
     let actual_vocabulary = tokenizer.addressable_token_count();
@@ -185,6 +186,9 @@ fn validate_dense_tokenizer_coherence(
     }
     for &eos in spec.special_tokens().eos() {
         validate_smol_special_token(tokenizer, "eos_token_id", eos)?;
+    }
+    if let Some(pad) = pad_token_id {
+        validate_smol_special_token(tokenizer, "pad_token_id", pad)?;
     }
     Ok(())
 }

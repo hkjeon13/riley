@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use riley_model::{
     DecodeOptions, EncodeOptions, LoadLimits, LoadedModel, ModelError, Tokenizer, WeightSlot,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -242,11 +242,9 @@ fn aggregate_rejects_unconsumed_or_undeclared_manifest_payloads() {
         "a consumed payload absent from provenance must fail",
     );
     assert!(error.to_string().contains("tokenizer.json"));
-    assert!(
-        error
-            .to_string()
-            .contains("absent from provenance manifest")
-    );
+    assert!(error
+        .to_string()
+        .contains("absent from provenance manifest"));
 }
 
 #[test]
@@ -282,11 +280,23 @@ fn aggregate_cross_checks_dtype_vocabulary_and_special_tokens() {
     let config = serde_json::to_vec(&config).expect("serialize special-token mismatch");
     replace_payload_and_assertion(special.root(), "config.json", &config);
     let error = expect_load_error(special.root(), "a non-special BOS tokenizer ID must fail");
-    assert!(
-        error
-            .to_string()
-            .contains("bos_token_id 7 is not declared as a special added token")
+    assert!(error
+        .to_string()
+        .contains("bos_token_id 7 is not declared as a special added token"));
+
+    let padding = TempCheckpoint::new();
+    write_complete_checkpoint(padding.root());
+    let mut config: Value = serde_json::from_slice(&config_json()).expect("fixture config JSON");
+    config["pad_token_id"] = Value::from(7);
+    let config = serde_json::to_vec(&config).expect("serialize padding-token mismatch");
+    replace_payload_and_assertion(padding.root(), "config.json", &config);
+    let error = expect_load_error(
+        padding.root(),
+        "a non-special padding tokenizer ID must fail",
     );
+    assert!(error
+        .to_string()
+        .contains("pad_token_id 7 is not declared as a special added token"));
 }
 
 #[cfg(unix)]

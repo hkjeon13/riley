@@ -8,7 +8,7 @@ use crate::ir::{
     Activation, AttentionBiasSpec, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec,
     LmHeadSpec, ModelSpec, NormSpec, RopeSpec, SpecialTokenSpec,
 };
-use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
+use crate::{strict_json, ArtifactKind, LoadLimits, ModelError, ModelResult};
 
 /// Supported source-model families recognized at the cold configuration boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,6 +143,7 @@ pub struct LlamaConfig {
     tied_embeddings: bool,
     bos_token_id: Option<u32>,
     eos_token_ids: Vec<u32>,
+    pad_token_id: Option<u32>,
     source_architecture: String,
     warnings: Vec<ConfigWarning>,
 }
@@ -229,6 +230,16 @@ impl LlamaConfig {
         self.dtype
     }
 
+    /// Returns the configured padding token when the source artifact declares one.
+    ///
+    /// Riley carries sequence lengths and masks separately, so this does not
+    /// select a runtime padding strategy. It remains part of the cold artifact
+    /// contract and is cross-checked against the tokenizer before loading.
+    #[must_use]
+    pub const fn pad_token_id(&self) -> Option<u32> {
+        self.pad_token_id
+    }
+
     fn from_raw(raw: RawLlamaConfig, limits: LoadLimits) -> ModelResult<Self> {
         if let Some((field, value)) = raw.unknown.iter().next() {
             return Err(ModelError::UnsupportedConfig {
@@ -239,6 +250,7 @@ impl LlamaConfig {
         let (source_architecture, dtype) = validate_identity(&raw)?;
         let dimensions = ValidatedDimensions::from_raw(&raw, limits)?;
         let rope_theta = validate_execution_values(&raw)?;
+        validate_transformers_js_config(raw.transformers_js_config.as_ref())?;
         let warnings = collect_warnings(&raw);
         let (bos_token_id, eos_token_ids) = validated_special_tokens(
             raw.bos_token_id,
@@ -246,6 +258,10 @@ impl LlamaConfig {
             dimensions.vocabulary_size,
             limits.added_tokens(),
         )?;
+        let pad_token_id = raw
+            .pad_token_id
+            .map(|id| checked_token_id("pad_token_id", id, dimensions.vocabulary_size))
+            .transpose()?;
 
         Ok(Self {
             dtype,
@@ -264,6 +280,7 @@ impl LlamaConfig {
             tied_embeddings: raw.tie_word_embeddings.unwrap_or(false),
             bos_token_id,
             eos_token_ids,
+            pad_token_id,
             source_architecture,
             warnings,
         })
@@ -445,6 +462,7 @@ struct RawLlamaConfig {
     num_attention_heads: u64,
     num_hidden_layers: u64,
     num_key_value_heads: Option<u64>,
+    pad_token_id: Option<u64>,
     partial_rotary_factor: Option<f64>,
     pretraining_tp: Option<u64>,
     rms_norm_eps: f64,
@@ -454,6 +472,8 @@ struct RawLlamaConfig {
     sliding_window: Option<u64>,
     tie_word_embeddings: Option<bool>,
     torch_dtype: String,
+    #[serde(rename = "transformers.js_config")]
+    transformers_js_config: Option<TransformersJsConfig>,
     transformers_version: Option<String>,
     use_cache: Option<bool>,
     vocab_size: u64,
@@ -461,6 +481,17 @@ struct RawLlamaConfig {
     name_or_path: Option<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, Value>,
+}
+
+/// Export metadata consumed by the Transformers.js frontend, not by Riley's
+/// native model execution. The schema remains closed so a future export-only
+/// field cannot silently change the accepted artifact surface.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TransformersJsConfig {
+    dtype: Option<String>,
+    kv_cache_dtype: Option<BTreeMap<String, String>>,
+    use_external_data_format: Option<BTreeMap<String, bool>>,
 }
 
 #[derive(Deserialize)]
@@ -708,6 +739,53 @@ fn validate_execution_values(raw: &RawLlamaConfig) -> ModelResult<f64> {
     Ok(rope_theta)
 }
 
+fn validate_transformers_js_config(config: Option<&TransformersJsConfig>) -> ModelResult<()> {
+    let Some(config) = config else {
+        return Ok(());
+    };
+
+    if config.dtype.is_none()
+        && config.kv_cache_dtype.is_none()
+        && config.use_external_data_format.is_none()
+    {
+        return invalid(
+            "transformers.js_config",
+            "must contain at least one recognized export-metadata field",
+        );
+    }
+    if let Some(dtype) = &config.dtype {
+        if dtype != "q4" {
+            return invalid(
+                "transformers.js_config.dtype",
+                "must equal the pinned q4 export dtype",
+            );
+        }
+    }
+    if let Some(cache_dtypes) = &config.kv_cache_dtype {
+        if cache_dtypes.len() != 2
+            || cache_dtypes.get("q4f16").map(String::as_str) != Some("float16")
+            || cache_dtypes.get("fp16").map(String::as_str) != Some("float16")
+        {
+            return invalid(
+                "transformers.js_config.kv_cache_dtype",
+                "must equal the pinned q4f16/fp16 float16 export entries",
+            );
+        }
+    }
+    if let Some(external_data) = &config.use_external_data_format {
+        if external_data.len() != 2
+            || external_data.get("model.onnx") != Some(&true)
+            || external_data.get("model_fp16.onnx") != Some(&true)
+        {
+            return invalid(
+                "transformers.js_config.use_external_data_format",
+                "must equal the pinned model.onnx/model_fp16.onnx true export entries",
+            );
+        }
+    }
+    Ok(())
+}
+
 fn validate_qwen2_execution_values(raw: &RawQwen2Config) -> ModelResult<f64> {
     if raw.rope_scaling.is_some() {
         return unsupported("rope_scaling", "non-null");
@@ -800,6 +878,18 @@ fn collect_warnings(raw: &RawLlamaConfig) -> Vec<ConfigWarning> {
         raw.pretraining_tp.is_some(),
         "pretraining_tp",
         "training tensor parallelism does not alter serialized weight semantics",
+    );
+    push_warning(
+        &mut warnings,
+        raw.pad_token_id.is_some(),
+        "pad_token_id",
+        "Riley carries ragged sequence lengths and masks separately",
+    );
+    push_warning(
+        &mut warnings,
+        raw.transformers_js_config.is_some(),
+        "transformers.js_config",
+        "frontend export metadata does not select native execution",
     );
     push_warning(
         &mut warnings,
@@ -1002,6 +1092,48 @@ mod tests {
       "vocab_size": 49152
     }"#;
 
+    // HuggingFaceTB/SmolLM2-1.7B-Instruct config.json at the pinned
+    // Transformers.js metadata revision. Keep the export-only map intact:
+    // accepting its known fields must not make unknown nested fields inert.
+    const SMOL_1_7B_CONFIG: &str = r#"{
+      "architectures": ["LlamaForCausalLM"],
+      "attention_bias": false,
+      "attention_dropout": 0.0,
+      "bos_token_id": 1,
+      "eos_token_id": 2,
+      "hidden_act": "silu",
+      "hidden_size": 2048,
+      "initializer_range": 0.02,
+      "intermediate_size": 8192,
+      "max_position_embeddings": 8192,
+      "mlp_bias": false,
+      "model_type": "llama",
+      "num_attention_heads": 32,
+      "num_hidden_layers": 24,
+      "num_key_value_heads": 32,
+      "pad_token_id": 2,
+      "pretraining_tp": 1,
+      "rms_norm_eps": 1e-5,
+      "rope_scaling": null,
+      "rope_theta": 130000,
+      "tie_word_embeddings": true,
+      "torch_dtype": "bfloat16",
+      "transformers_version": "4.42.3",
+      "transformers.js_config": {
+        "dtype": "q4",
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        },
+        "use_external_data_format": {
+          "model.onnx": true,
+          "model_fp16.onnx": true
+        }
+      },
+      "use_cache": true,
+      "vocab_size": 49152
+    }"#;
+
     const QWEN2_5_CONFIG: &str = r#"{
       "architectures": ["Qwen2ForCausalLM"],
       "attention_dropout": 0.0,
@@ -1176,6 +1308,45 @@ mod tests {
     }
 
     #[test]
+    fn pinned_smollm2_1_7b_export_metadata_is_accepted_but_remains_inert() {
+        let dispatched = ModelConfig::from_json_slice(SMOL_1_7B_CONFIG.as_bytes()).unwrap();
+        assert_eq!(dispatched.family(), ModelFamily::Llama);
+        let ModelConfig::Llama(config) = dispatched else {
+            panic!("SmolLM2-1.7B must dispatch through the Llama adapter");
+        };
+        let spec = config.to_model_spec();
+        let attention = spec.blocks()[0].attention();
+
+        assert_eq!(config.pad_token_id(), Some(2));
+        assert_eq!(spec.embedding().vocabulary_size(), 49_152);
+        assert_eq!(spec.embedding().hidden_size(), 2_048);
+        assert_eq!(spec.blocks().len(), 24);
+        assert_eq!(spec.max_sequence_length(), 8_192);
+        assert_eq!(attention.query_heads(), 32);
+        assert_eq!(attention.key_value_heads(), 32);
+        assert_eq!(attention.head_dimension(), 64);
+        assert_eq!(spec.special_tokens().bos(), Some(1));
+        assert_eq!(spec.special_tokens().eos(), [2]);
+        assert!(spec.lm_head().tied_to_embedding());
+        assert_eq!(
+            config
+                .warnings()
+                .iter()
+                .map(|warning| warning.field())
+                .collect::<Vec<_>>(),
+            [
+                "attention_dropout",
+                "initializer_range",
+                "pretraining_tp",
+                "pad_token_id",
+                "transformers.js_config",
+                "transformers_version",
+                "use_cache",
+            ]
+        );
+    }
+
+    #[test]
     fn pinned_qwen2_5_config_becomes_shared_canonical_ir() {
         let dispatched = ModelConfig::from_json_slice(QWEN2_5_CONFIG.as_bytes()).unwrap();
         assert_eq!(dispatched.family(), ModelFamily::Qwen2);
@@ -1281,6 +1452,65 @@ mod tests {
         assert!(
             matches!(error, ModelError::UnsupportedConfig { field, .. } if field == "mystery_mode")
         );
+    }
+
+    #[test]
+    fn rejects_out_of_vocabulary_padding_token() {
+        let changed = SMOL_1_7B_CONFIG.replace("\"pad_token_id\": 2", "\"pad_token_id\": 49152");
+        let error = LlamaConfig::from_json_slice(changed.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::InvalidConfig { field, .. } if field == "pad_token_id"
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_transformers_js_export_metadata() {
+        let changed = SMOL_1_7B_CONFIG.replace(
+            "\"dtype\": \"q4\",",
+            "\"dtype\": \"q4\", \"future_export_mode\": true,",
+        );
+        let error = LlamaConfig::from_json_slice(changed.as_bytes()).unwrap_err();
+        assert!(matches!(error, ModelError::InvalidJson { .. }));
+        assert!(error.to_string().contains("future_export_mode"));
+    }
+
+    #[test]
+    fn rejects_unknown_transformers_js_export_map_entries() {
+        let changed_cache_dtype =
+            SMOL_1_7B_CONFIG.replace("\"q4f16\": \"float16\"", "\"q4f16-future\": \"float16\"");
+        let error = LlamaConfig::from_json_slice(changed_cache_dtype.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::InvalidConfig { field, .. }
+                if field == "transformers.js_config.kv_cache_dtype"
+        ));
+
+        let changed_external_data =
+            SMOL_1_7B_CONFIG.replace("\"model.onnx\": true", "\"model-future.onnx\": true");
+        let error = LlamaConfig::from_json_slice(changed_external_data.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::InvalidConfig { field, .. }
+                if field == "transformers.js_config.use_external_data_format"
+        ));
+
+        let changed_cache_subset =
+            SMOL_1_7B_CONFIG.replace(",\n          \"fp16\": \"float16\"", "");
+        let error = LlamaConfig::from_json_slice(changed_cache_subset.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::InvalidConfig { field, .. }
+                if field == "transformers.js_config.kv_cache_dtype"
+        ));
+
+        let changed_dtype = SMOL_1_7B_CONFIG.replace("\"dtype\": \"q4\"", "\"dtype\": \"bf16\"");
+        let error = LlamaConfig::from_json_slice(changed_dtype.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::InvalidConfig { field, .. }
+                if field == "transformers.js_config.dtype"
+        ));
     }
 
     #[test]

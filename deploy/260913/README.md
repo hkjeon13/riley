@@ -1,6 +1,6 @@
 # 260913 — 연구 기반 serving 최적화 PR 계획
 
-상태: **계획만 작성**. 이 요청으로 application 구현·commit·배포·새 serving 측정을 수행하지 않는다. 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
+상태: 01~19의 본문은 연구 기반 계획이다. N01 계약·lifecycle 기반과 N02의 첫 synthetic BF16 projection control은 로컬 구현·검증을 추가했지만, 원격 GPU receipt·full-model·serving 평가는 아직 없다. 기존 deploy 계획의 완료 여부를 소급 변경하지 않는다.
 
 ## 목표와 현재 증거
 
@@ -59,7 +59,7 @@ multi-GPU에서는 GPU 총수·SKU·memory·peer access·NVLink/PCIe/network top
 - PR 결과는 구현 여부, hardware validation, correctness, performance promotion을 별도 기록한다. 검증 대기는 pass가 아니다. 성능 향상이 없으면 원인을 분석하고 not-promoted/rejected로 남긴다. 원본 raw와 revision·binary hash·argv를 보존한다.
 - 최종 판정은 16의 serving 평가다. microbenchmark·모의 실행·compile 성공·논문 배수로 목표를 완료 처리하지 않는다.
 
-Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. 이번 산출물은 계획이며 구현 승격 증거가 아니다.
+Blender는 사용자 지시에 따라 내려둔 상태를 유지하고 이후 복구하지 않는다. GUI 및 다른 작업을 건드리지 않으며 기존 unrelated dirty 변경과 live data를 보존한다. 이전 문서의 별도 승인 문구를 이 계획에 재도입하지 않는다. N01/N02의 로컬 구현은 serving 승격 증거가 아니다.
 
 ## 연구와 PR 연결
 
@@ -79,3 +79,9 @@ Blender는 사용자 지시에 따라 내려둔 상태를 유지한다. GUI 및 
 17~19는 후속 구조 PR이다. MoE 모델 지원은 17의 명시적 선행이며 현재 dense 모델 범위와 구별한다. 18은 고정 worker pool의 신규 요청 routing, 19는 iteration 단위 persistent 실행으로 제한한다. 전체 GPU serving scheduler나 클러스터 autoscaler를 한 PR에 넣지 않는다. Fast-TurboQuant는 초록 수준 선별이므로 본문·구현 검토 이후 적용 계획을 정한다.
 
 상세 근거는 [전체 연구](../../benchmarks/results/20260912-serving-optimization/RESEARCH_20260913.md), [HBM·CUDA 연구](../../benchmarks/results/20260912-serving-optimization/HBM_CUDA_RESEARCH_20260913.md), [현재 코드 접점](../../benchmarks/results/20260912-serving-optimization/RESEARCH_CODE_FIT_20260913.md)을 참조한다. 각 PR은 위 연구의 Riley 적용 제안이며 논문 주장을 현재 구현의 사실로 취급하지 않는다.
+
+## N01/N02 현재 구현 — 2026-09-15
+
+[다음 단계 실행 계획](next-stage/README.md)은 N01의 versioned model·numerical contract, 20GB GPU budget validator, five-phase lifecycle receipt controller와 schema/unit test를 추가한다. controller의 GPU peak는 `nvidia-smi` sampled observation이며 연속 high-water 또는 serving 성능·정확성 검증이 아니다.
+
+N02에는 Qwen2.5-3B projection shape의 deterministic synthetic BF16 prepared-GEMM control을 추가했다. 이는 full Qwen model, attention, HTTP serving 또는 vLLM 비교가 아니다. 원격 GPU receipt와 native-BF16 수치 기준을 고정한 뒤 선택한 경로만 1.7B/3B serving으로 확장한다.

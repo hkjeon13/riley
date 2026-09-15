@@ -1,0 +1,197 @@
+{
+  "schema_version": "n01-numerical-profiles-v1",
+  "profiles": [
+    {
+      "id": "strict-smollm2-135m-e0-v3",
+      "applies_to": [
+        "smollm2-135m-strict-regression"
+      ],
+      "status": "locked",
+      "performance_eligibility": "baseline-only",
+      "execution": {
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16",
+        "activation_dtype": "bf16",
+        "semantics_status": "frozen",
+        "accumulator_dtype": "preserve-existing-strict-operator-contract",
+        "reduction_order": "canonical-v1",
+        "softmax_policy": "existing-strict-attention-and-log-softmax-contract",
+        "cast_boundaries": "existing-strict-operator-contract",
+        "rmsnorm_policy": "existing-strict-rmsnorm-and-residual-contract",
+        "bias_placement": "existing-strict-qkv-mlp-output-bias-contract",
+        "rope_placement": "existing-strict-q-and-k-pre-attention-contract"
+      },
+      "correctness_gate": {
+        "status": "frozen",
+        "gate_binding": {
+          "status": "frozen",
+          "gate_id": "smollm2-fp32-bf16-native-e0-v3",
+          "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json"
+        },
+        "reference_corpus": {
+          "status": "frozen",
+          "source": "benchmarks/prompts.jsonl",
+          "expected_prompt_count": 31,
+          "binding": "ordered-id-text-category-language-target-boundary-behavior"
+        },
+        "seed_policy": {
+          "status": "frozen",
+          "mode": "deterministic-greedy",
+          "seed": null,
+          "stochastic_policy": "a new gate must freeze seed and sampling parameters before a stochastic result can qualify"
+        },
+        "replay_policy": {
+          "status": "frozen",
+          "policy": "raw-evidence-bundle-replay-required",
+          "candidate_bindings": [
+            "bundled-executable-sha256",
+            "clean-git-revision",
+            "cargo-lock-sha256",
+            "build-argv",
+            "capture-argv"
+          ]
+        },
+        "tensor_accuracy": {
+          "status": "frozen",
+          "relative_error_denominator": "max(abs(fp32),1)",
+          "aggregation": "worst-prompt-metric-and-all-prompts-must-pass",
+          "tensors": {
+            "first_layer_hidden": {
+              "max_abs_max": 0.3884272575378418,
+              "max_relative_max": 0.13578447438776492,
+              "mean_abs_max": 0.008509292567237658,
+              "mean_relative_max": 0.005414661057131772,
+              "cosine_min": 0.999983706829855
+            },
+            "final_logits": {
+              "max_abs_max": 5.852936458587647,
+              "max_relative_max": 1.1707394897937775,
+              "mean_abs_max": 1.151280319263363,
+              "mean_relative_max": 0.13616598220459955,
+              "cosine_min": 0.9979035305495393
+            },
+            "final_log_probs": {
+              "max_abs_max": 4.998420619964599,
+              "max_relative_max": 0.5767027348279953,
+              "mean_abs_max": 0.6007178144163239,
+              "mean_relative_max": 0.04668832837569344,
+              "cosine_min": 0.9987779663298298
+            }
+          }
+        },
+        "teacher_forced": {
+          "status": "frozen",
+          "logits": "full-vocabulary-last-valid-position-logits",
+          "distribution": "full-vocabulary-fp32-log-softmax-of-final-logits",
+          "cache_paths": [
+            "off",
+            "on"
+          ]
+        },
+        "perplexity": {
+          "status": "not-gated-in-e0-v3",
+          "threshold": null,
+          "evaluation_tokens": null,
+          "reason": "the locked E0 gate has no perplexity acceptance threshold"
+        },
+        "workload_quality": {
+          "status": "not-gated-in-e0-v3",
+          "threshold": null,
+          "evaluation_tokens": null,
+          "reason": "the locked E0 gate has no workload-quality acceptance threshold"
+        },
+        "free_generation": {
+          "status": "frozen",
+          "generation_steps": 32,
+          "generated_token_ids": "ordered-exact",
+          "top_1": "ordered-exact",
+          "top_k": {
+            "k": 10,
+            "comparison": "set-exact"
+          },
+          "cross_cache_exact_window": 16
+        }
+      }
+    },
+    {
+      "id": "native-bf16-r0-v1",
+      "applies_to": [
+        "smollm2-135m-strict-regression",
+        "smollm2-1.7b-instruct-connection",
+        "qwen2.5-3b-instruct-primary"
+      ],
+      "status": "criteria-pending",
+      "performance_eligibility": "blocked_on_reference",
+      "execution": {
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16",
+        "activation_dtype": "bf16",
+        "semantics_status": "criteria-pending",
+        "accumulator_dtype": null,
+        "reduction_order": null,
+        "softmax_policy": null,
+        "cast_boundaries": null,
+        "rmsnorm_policy": null,
+        "bias_placement": null,
+        "rope_placement": null
+      },
+      "correctness_gate": {
+        "status": "criteria-pending",
+        "gate_binding": {
+          "status": "criteria-pending",
+          "gate_id": null,
+          "path": null
+        },
+        "reference_corpus": {
+          "status": "criteria-pending",
+          "source": null,
+          "expected_prompt_count": null,
+          "binding": null
+        },
+        "seed_policy": {
+          "status": "criteria-pending",
+          "mode": null,
+          "seed": null,
+          "stochastic_policy": null
+        },
+        "replay_policy": {
+          "status": "criteria-pending",
+          "policy": null,
+          "candidate_bindings": null
+        },
+        "tensor_accuracy": {
+          "status": "criteria-pending",
+          "relative_error_denominator": null,
+          "aggregation": null,
+          "tensors": null
+        },
+        "teacher_forced": {
+          "status": "criteria-pending",
+          "logits": null,
+          "distribution": null,
+          "cache_paths": null
+        },
+        "perplexity": {
+          "status": "criteria-pending",
+          "threshold": null,
+          "evaluation_tokens": null,
+          "reason": "reference corpus and acceptance threshold must be frozen before any performance comparison can qualify"
+        },
+        "workload_quality": {
+          "status": "criteria-pending",
+          "threshold": null,
+          "evaluation_tokens": null,
+          "reason": "representative workload and acceptance threshold must be frozen before any performance comparison can qualify"
+        },
+        "free_generation": {
+          "status": "criteria-pending",
+          "generation_steps": null,
+          "generated_token_ids": null,
+          "top_1": null,
+          "top_k": null,
+          "cross_cache_exact_window": null
+        }
+      }
+    }
+  ]
+}
