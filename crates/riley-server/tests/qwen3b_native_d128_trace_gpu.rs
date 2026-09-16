@@ -182,7 +182,7 @@ impl TraceShapePolicy {
         }
     }
 
-    const fn expected_dense_rows(self, kind: &str) -> usize {
+    fn expected_dense_rows(self, kind: &str) -> usize {
         match (self, kind) {
             (Self::FixedMaximum, "prefill" | "decode") => SERVER_BATCH_TOKEN_BUDGET,
             (Self::ActiveRowBuckets, "prefill") => SERVER_PREFILL_CHUNK_TOKENS,
