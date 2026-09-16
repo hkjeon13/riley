@@ -23,18 +23,21 @@ shared-host I/O PSI는 각 run의 공변량으로 함께 남긴다. PSI는 sampl
 재시도 결과를 선택하는 데 절대 쓰지 않는다. quality gate를 통과하지 못한 profile은
 성능 비교 대상이 아니며 빈 칸을 추정값으로 채우지 않는다.
 
-현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate에서
-strict와 cuBLASLt candidate 모두 layer 0 Q/K/V BF16 exactness를 만족하지 못했기
-때문이다. 아래의 이전 operator AB receipt는 end-to-end serving AB/BA가 아니므로
-throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
+현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate와
+full-sequence direct projection-boundary gate에서 strict와 cuBLASLt candidate 모두
+layer 0 Q/K/V BF16 exactness를 만족하지 못했기 때문이다. 아래의 이전 operator AB
+receipt는 end-to-end serving AB/BA가 아니므로 throughput·TTFT·TPOT·tail latency
+수치로 옮기지 않는다.
 
 | Batch | Quality gate | Riley baseline | Riley candidate | vLLM throughput | TTFT | TPOT | P95 | P99 | Failure rate | Decision |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P6: P2051 layer-stage discriminator | Blocked — strict/fused 모두 `layer0.q_proj.last`부터 non-exact | strict staged: serving eligible 아님 | cuBLASLt BIAS: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P2051 projection-boundary exactness를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
+| P7: P2051 full-sequence projection-boundary | Blocked — strict raw Q가 HF no-bias shadow부터 non-exact이고, strict+row-bias/fused Q/K/V의 다섯 endpoint 모두 non-exact | strict raw/row-bias: serving eligible 아님 | cuBLASLt BIAS Q/K/V: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | M=2051 geometry/alignment discriminator를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
 
-P2051 projection-boundary batch와 그 뒤의 각 material batch는 quality gate 결과와
-동일 조건의 Riley baseline/candidate/vLLM AB/BA receipt가 모두 갖춰진 경우에만 이
-행을 수치로 갱신한다.
+P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
+그 뒤의 각 material batch는 quality gate 결과와 동일 조건의 Riley
+baseline/candidate/vLLM AB/BA receipt가 모두 갖춰진 경우에만 이 행을 수치로
+갱신한다.
 
 ## 변경 묶음
 
@@ -368,6 +371,54 @@ I/O PSI `some/full avg10`은 시작 `61.91/57.54`, 종료 `34.31/30.54`였다. �
 상태를 설명하는 공변량일 뿐 어떤 결과도 filter·weight·보정·재시도 선택에 사용하지
 않았다.
 
+## P7 결과: P2051 full-sequence projection-boundary discriminator
+
+P7은 P6의 마지막-row 관측을 full `M=2051` projection boundary로 확장했다. offline
+HF eager BF16 oracle은 `layer0.input_norm` 전체와 actual Q/K/V module output, 그리고
+Q weight만 적용한 no-bias shadow endpoint를 고정했다. Rust는 같은 pinned checkpoint의
+weight/bias를 binding한 뒤 strict raw GEMM, strict GEMM 뒤 row-bias, cuBLASLt BIAS
+Q/K/V를 직접 실행했다. Python은 이 immutable oracle artifact의 producer/validator에만
+쓰였고 serving hot path에는 들어가지 않았다.
+
+정상 create-only artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-projection-boundary-r1-20260916T043652Z/`다.
+source revision은 `3e4f6f1ead8727cd01e52a30e4673d1c83953606`, HF manifest
+SHA-256은 `d469e6fc0695e5fc8ec21c0c94bc7665d0d79c447f4d60e58c38ddf72fcd60f7`,
+HF BF16 sidecar SHA-256은
+`fffdebe4123a434ce572a6201b1d81c0bdb146aaad355db56342fc299acd6f96`다. Rust
+comparison SHA-256은
+`e4a6c2f5110965580d09d82f0539b391d8a2140eb48c4880466f9a425282a727`, run
+receipt SHA-256은
+`91ac94338ec973a986e471cfd14c174d74731627a5bdb426218e629fc6e0d5da`다. artifact의
+모든 checksum entry를 재검증했다.
+
+| Direct endpoint | HF BF16 reference | Unequal / total | Max abs | BF16 exact |
+|---|---|---:|---:|---|
+| strict raw Q | `q_proj` no-bias shadow | 1,087,133 / 4,200,448 | 0.0625 | no |
+| strict Q + row-bias | actual `q_proj` module output | 1,959,078 / 4,200,448 | 0.125 | no |
+| cuBLASLt BIAS Q | actual `q_proj` module output | 1,809,317 / 4,200,448 | 0.125 | no |
+| cuBLASLt BIAS K | actual `k_proj` module output | 166,116 / 525,056 | 0.25 | no |
+| cuBLASLt BIAS V | actual `v_proj` module output | 203,242 / 525,056 | 0.0078125 | no |
+
+다섯 endpoint 모두 non-exact이고, 첫 불일치는 bias를 적용하기 전 strict raw Q에서
+나왔다. 따라서 이번 artifact가 관측한 차이는 row-bias, RoPE, attention 이전의
+projection arithmetic boundary에 이미 있다. 이것은 projection 내부의 단일 원인을
+확정하거나 성능 개선을 뜻하지 않으며, paged KV·scheduler·attention을 이 결과만으로
+원인에서 제외하는 주장도 아니다.
+
+모든 endpoint는 repeated output이 deterministic했고 hot repeat 중 allocation invariant를
+지켰다. receipt는 RTX 4090 (SM89), CUDA runtime `12.8.0`, cuBLASLt `12.8.4`, selected
+algorithm id `21`, tile `15`, stages `12`, `split_k=1`, reduction scheme `0`, workspace
+`0 B`를 기록한다. I/O PSI `some/full avg10`은 시작 `26.37/24.01`, 종료
+`26.27/24.04`였다. 이 값은 공유 host 상태의 공변량일 뿐 결과를 filter·weight·보정하거나
+재시도 선택에 사용하지 않았다.
+
+P7은 vLLM serving result가 아니며 throughput, TTFT, TPOT, P95/P99 또는 vLLM 대비
+수치를 제공하지 않는다. 다음 discriminator는 동일 prefix arithmetic에 대해 `M=2051`과
+selected padded `M` shape를 비교하고, GEMM heuristic geometry/alignment가 결과를
+바꾸는지를 판정한다. 이는 geometry가 prefix arithmetic에 미치는 영향을 확인하는
+correctness 진단이며 serving optimization이나 성능 향상 주장으로 취급하지 않는다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
@@ -375,22 +426,23 @@ Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU
 ## 다음 PR과 롤백
 
 corrected HF teacher-forced artifact, scheduler trace schema binding, M32/M1 shape
-control, cache-free dense outer control, P2051 layer-stage discriminator는 P3–P6에서
-완료했다. 다음 PR은 **P2051 Q/K/V projection-boundary qualification**이다. offline HF
-oracle이 layer 0 actual-module Q/K/V의 bias-boundary BF16 last row를 고정하고, Rust는
-동일 M=2051 geometry, layout, workspace와 cuBLASLt algorithm/descriptor receipt로 strict와
-candidate를 비교한다. candidate가 Q/K/V의 BF16 exact를 만족할 때에만 RoPE·attention
-trace를 다음 단계로 확장한다. Python은 artifact producer/validator에만 남기며 serving
-hot path에 Python, persistent copy 또는 scheduler fallback을 넣지 않는다.
+control, cache-free dense outer control, P2051 layer-stage discriminator, full-sequence
+projection-boundary qualification은 P3–P7에서 완료했다. P7의 다음 PR은 **P2051
+geometry/alignment discriminator**다. 같은 immutable HF full-sequence endpoint와
+prefix input을 유지한 채 `M=2051`과 selected padded `M` shape를 비교하고, strict/fused
+plan의 heuristic identity, alignment, BF16 endpoint를 함께 기록한다. 목적은 GEMM
+heuristic geometry가 prefix arithmetic을 바꾸는지를 판정하는 것이며, selector 변경이나
+성능 최적화 claim은 포함하지 않는다. Python은 artifact producer/validator에만 남기며
+serving hot path에 Python, persistent copy 또는 scheduler fallback을 넣지 않는다.
 
-P2051 Q/K/V가 exact가 된 뒤에도 cache-free dense stage와 scheduler trace가 다를 때에만
-`PackedBatchV1`을 `PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도
-PR로 평가한다. 이 순서는 scheduler native D128 path를 dense reference attention으로
-임의 교체하지 않는다.
+geometry/alignment gate가 projection endpoint를 설명하거나 BF16 exact profile을 만든 뒤에도
+cache-free dense stage와 scheduler trace가 다를 때에만 `PackedBatchV1`을
+`PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도 PR로 평가한다. 이
+순서는 scheduler native D128 path를 dense reference attention으로 임의 교체하지 않는다.
 
-그 discriminator로 원인을 판정하고 correction 뒤 profile-specific quality gate를
-통과하기 전까지 N06-A의 AB/BA throughput, TTFT, TPOT, P95/P99, failure rate 및 vLLM
-비교는 blocked다. graph capture는 여전히 별도 PR로 분리한다.
+그 discriminator와 필요한 correction 뒤 profile-specific quality gate를 통과하기 전까지
+N06-A의 AB/BA throughput, TTFT, TPOT, P95/P99, failure rate 및 vLLM 비교는 blocked다.
+graph capture는 여전히 별도 PR로 분리한다.
 
 corrected quality gate 또는 operator AB가 실패하면 fused plan/feature는 opt-in으로
 남긴다. strict path는 무변경이므로 rollback은 experimental selector를 비활성으로
