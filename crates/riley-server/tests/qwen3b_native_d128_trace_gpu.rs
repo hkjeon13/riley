@@ -1653,7 +1653,7 @@ fn trace_mode(
 
 fn close_dense_reference_resources(
     forward: Option<PreparedLlamaForward>,
-    mut stream: CudaStream,
+    stream: CudaStream,
     context: CudaContext,
 ) -> TestResult {
     let mut failures = Vec::new();

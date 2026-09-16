@@ -233,21 +233,93 @@ TTFT, TPOT, throughput으로 해석할 수 없다. vLLM diagnostic의 I/O PSI
 filter·weight·보정·선별 재시도에는 사용하지 않았다. 이 절에는 performance table이나
 vLLM 대비 성능 claim이 없다.
 
+## P5 decode shape 및 cache-free outer control — 2026-09-16
+
+P4의 strict step 3 selected-token 불일치가 inactive decode row padding 또는 paged
+KV/scheduler에만 국한되는지 확인하기 위해, 서로 다른 두 correctness discriminator를
+실행했다. 둘 다 serving benchmark가 아니라 pinned checkpoint와 canonical P2048
+teacher-forced input을 쓰는 ignored GPU diagnostic이다. checkpoint load, artifact
+검증, 초기화가 포함된 실행 시간은 latency·TTFT·TPOT·throughput으로 해석하지 않으며,
+이 절에는 vLLM 성능 비교가 없다.
+
+shape discriminator의 create-only artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-native-d128-shape-discriminator-r2-20260916T015601Z/`다.
+source revision은 `c5126749e631762427ec1f73c8015d73c8bca8a1`, canonical
+`trace-artifact.json` SHA-256은
+`c0053dfb6d3fec720fc681d3302407230136f268571aa9820cf0e4574dfcb5fa`,
+`run.json` SHA-256은
+`0d3def7f6da95556fe52de7af86e0d890c8e794a49ad5503d0a1e9f08d6d5d06`다.
+`SHA256SUMS` closure를 다시 검증했고 ignored test는 403.55초에 통과했다.
+
+fixed policy는 prefill과 decode를 모두 `M=32`로 유지하고, active-row policy는
+prefill만 `M=32`, single-request decode를 실제 `M=1`로 실행한다. 두 정책의 strict
+selected token은 모두 `304, 279, 198, 16, 41233, 13874, 3989, 16, 17`이며, step 3은
+HF cache-off teacher `13`과 다르다. strict M32와 strict M1은 9개 row 모두 raw BF16
+logit hash, BF16 top-32, selected token이 정확히 같았다. 따라서 이 P2048/C8
+single-request trace에서 inactive-row padding 또는 dense GEMM row shape는 step 3
+불일치의 주된 설명으로 우선순위를 낮춘다. 이것이 모든 shape 또는 concurrency에서
+padding 영향이 없다는 일반화는 아니다.
+
+cache-free outer control의 create-only artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-native-d128-dense-control-r1-20260916T021256Z/`다.
+source revision은 `3bf886de7e81ec46b5ce97a1d478193de1775463`, canonical
+`trace-artifact.json` SHA-256은
+`3c8f0ff13617f91e298e12eb88b5447fea8dbd2854b0b6f679bf8891f2d2b8d7`,
+`run.json` SHA-256은
+`9b03ec6d15140a287409ffcb789e3bd98d554871be1d5841c931caec55ae522a`, retained
+source stdout log SHA-256은
+`e4ddabc988691bc08f18c16fa047570e393ec928165a8d7dbff5859f21a12f09`다.
+모든 `SHA256SUMS` 항목을 재검증했고 test는 425.54초에 통과했다.
+
+outer control은 scheduler replay가 아닌 별도 materialized GQA prefill backend
+`riley.cuda.materialized-gqa-prefill.bf16`를 사용했다. strict staged projection과
+cache-free `PreparedLlamaForward::with_reference_attention()`으로 step 3의 정확한
+입력 `P2048 + teacher[:3]` (S2051, input SHA-256
+`850a1cb46f8fa5e98af1445a95d77af6621705afc14cb740ec6cb24a638f9c2c`)을 한 번
+실행했다. receipt는 `scheduler_executor_replay=false`, `use_cache=false`,
+`same_scheduler_engine=false`를 명시한다.
+
+| correctness control | 실행 경로 | step 3 selected / HF cache-off | 관측된 범위 |
+|---|---|---:|---|
+| strict fixed M32 | native D128 paged scheduler, decode M32 | `16 / 13` | mismatch 유지 |
+| strict active M1 | native D128 paged scheduler, decode M1 | `16 / 13` | M32와 raw BF16/top-32/selected 9 / 9 exact |
+| strict dense cache-free outer control | materialized GQA prefill, cache 없음, scheduler와 별도 engine | `16 / 13` | raw hash false, top-32 exact false, top-32 set overlap 22 |
+| fused M32 scheduler trace | native D128 paged scheduler, decode M32 | step 3 `13 / 13`; step 8 `15 / 17` | profile-specific mismatch는 별도로 유지 |
+
+dense control의 Riley raw argmax와 selected는 모두 `16` (selected logit `10.3125`)이고
+top-5는 `16, 271, 13, 198, 382`였다. HF cache-off의 raw argmax와 selected는 `13`이다.
+그러므로 step 3 불일치는 paged KV, cache state, scheduler replay 또는 inactive-row
+shape에만 배타적으로 존재한다고 볼 수 없다. 반면 materialized dense path와 scheduler
+path는 서로 다른 engine이므로, 이 결과만으로 하나의 CUDA primitive나 layer를 원인으로
+확정하지 않는다.
+
+shape run의 I/O PSI `some/full avg10`은 시작 `27.23/24.85`, 종료 `32.24/27.16`이고,
+dense control은 시작 `56.95/50.02`, 종료 `66.24/60.38`이었다. 모두 공유 host 상태를
+설명하기 위해 기록한 공변량이며 sample filter·weight·보정·재시도 선택에는 사용하지
+않았다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
 
 ## 다음 PR과 롤백
 
-corrected HF teacher-forced artifact와 Rust scheduler trace schema binding은 P3/P4에서
-완료했다. 다음 PR은 성능 최적화가 아니라 **divergence discriminator**다. strict staged
-Q/K/V와 P2048, 32-token prefill, teacher forcing, native D128 paged attention은 고정하고,
-decode dense shape만 fixed `M=32`와 active-bucket `M=1`로 바꾼 두 scheduler replay를
-나란히 수집한다. prefill은 양쪽 모두 `M=32`이며 receipt는 variant와 실제 선택된
-prefill/decode dense-row 수를 bind한다. M1에서도 strict step 3 불일치가 유지되면
-inactive-row padding/GEMM shape를 주 원인에서 낮추고 paged KV/attention 또는 공통
-primitive로 다음 범위를 좁힌다. 필요한 HF intermediate sidecar는 offline artifact로
-만들고, serving hot path에 Python이나 persistent copy를 넣지 않는다.
+corrected HF teacher-forced artifact, scheduler trace schema binding, M32/M1 shape
+control, cache-free dense outer control은 P3–P5에서 완료했다. 다음 PR도 성능
+최적화가 아니라 **cache-free P2051 layer-stage divergence discriminator**다. offline
+HF cache-off sidecar가 exact input `P2048 + teacher[:3]`의 layer checkpoint를
+고정하고, Rust의 같은 cache-free materialized reference control이 같은 checkpoint를
+수집한다. 우선 post-attention residual, layer output, final norm 및 logits처럼 first
+divergence layer를 결정할 수 있는 BF16 stage를 bind한다. sidecar 생성의 Python은
+offline oracle에만 쓰며 serving hot path에는 Python, persistent copy 또는 scheduler
+fallback을 넣지 않는다.
+
+공통 cache-free forward에서 first divergence가 확인되면 그 projection/normalization,
+RoPE, attention, residual 또는 MLP stage를 profile별 contract와 함께 수정·재검증한다.
+반대로 dense stage가 HF와 일치하면서 scheduler trace만 다를 때에만 `PackedBatchV1`을
+`PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도 PR로 평가한다.
+이 순서는 scheduler native D128 path를 dense reference attention으로 임의 교체하지
+않는다.
 
 그 discriminator로 원인을 판정하고 correction 뒤 profile-specific quality gate를
 통과하기 전까지 N06-A의 AB/BA throughput, TTFT, TPOT, P95/P99, failure rate 및 vLLM
