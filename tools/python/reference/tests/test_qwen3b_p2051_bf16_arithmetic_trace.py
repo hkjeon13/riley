@@ -57,6 +57,9 @@ def _policies(raw_by_name: dict[str, bytes] | None = None) -> list[dict[str, obj
                 "preferred_blas_actual": policy.preferred_blas,
                 "allow_bf16_reduced_precision_reduction_actual": policy.allow_reduced_precision_reduction,
                 "allow_bf16_reduced_precision_reduction_split_k_actual": policy.allow_split_k,
+                "matmul_tf32_actual": False,
+                "cudnn_tf32_actual": False,
+                "runtime_status": "captured",
                 "repeated_bf16_exact": True,
                 "output_tensor": tensor_name,
                 "output_bf16_le_sha256": hashlib.sha256(raw).hexdigest(),
@@ -66,6 +69,7 @@ def _policies(raw_by_name: dict[str, bytes] | None = None) -> list[dict[str, obj
                     "total_elements": trace.M * trace.N,
                     "max_abs": 0.0 if index == 0 else 0.03125,
                 },
+                "error": None,
             }
         )
         policies.append(value)
@@ -97,6 +101,7 @@ def _manifest(
         "performance_claim_eligible": False,
         "vllm_comparison_eligible": False,
         "serving_selector_changed": False,
+        "capture_status": "captured",
         "quality_pass": True,
         "created_at": FIXED_TIME,
         "scope": {
@@ -115,6 +120,7 @@ def _manifest(
             "runtime_cuda_version": "12.9",
             "model_loader": {},
             "tf32_enabled": False,
+            "cudnn_tf32_enabled": False,
         },
         "p7_binding": {
             "manifest_filename": "p7.json",
@@ -125,6 +131,10 @@ def _manifest(
             "source_revision": "1" * 40,
             "input_tensor_key": trace.P7_INPUT_KEY,
             "raw_q_tensor_key": trace.P7_RAW_Q_KEY,
+            "input_bf16_le_sha256": _sha("a"),
+            "raw_q_bf16_le_sha256": _sha("b"),
+            "checkpoint_q_weight_key": trace.CHECKPOINT_Q_WEIGHT_KEY,
+            "checkpoint_q_weight_bf16_le_sha256": _sha("c"),
         },
         "model": {
             "checkpoint_path": "/checkpoint",
@@ -169,6 +179,54 @@ def _write_safetensors_sidecar(path: Path, raw_by_name: dict[str, bytes]) -> Non
     path.write_bytes(len(encoded).to_bytes(8, "little") + encoded + payload)
 
 
+class _FakeMatmul:
+    def __init__(self) -> None:
+        self._reduced = True
+        self._split_k = True
+        self.allow_tf32 = True
+
+    @property
+    def allow_bf16_reduced_precision_reduction(self) -> bool:
+        return self._reduced
+
+    @allow_bf16_reduced_precision_reduction.setter
+    def allow_bf16_reduced_precision_reduction(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise AssertionError("P9 must assign the reduced-precision flag as a scalar bool")
+        self._reduced = value
+
+    @property
+    def allow_bf16_reduced_precision_reduction_split_k(self) -> bool:
+        return self._split_k
+
+    @allow_bf16_reduced_precision_reduction_split_k.setter
+    def allow_bf16_reduced_precision_reduction_split_k(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise AssertionError("P9 must assign the split-K flag as a scalar bool")
+        self._split_k = value
+
+
+class _FakeCuda:
+    def __init__(self) -> None:
+        self.matmul = _FakeMatmul()
+        self._preferred = "cublas"
+
+    def preferred_blas_library(self, requested: str | None = None) -> str:
+        if requested is not None:
+            self._preferred = requested
+        return "_BlasBackend.Cublaslt" if self._preferred == "cublaslt" else "_BlasBackend.Cublas"
+
+
+class _FakeCudnn:
+    def __init__(self) -> None:
+        self.allow_tf32 = True
+
+
+class _FakeTorch:
+    def __init__(self) -> None:
+        self.backends = type("Backends", (), {"cuda": _FakeCuda(), "cudnn": _FakeCudnn()})()
+
+
 class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
     def test_import_keeps_ml_dependencies_lazy(self) -> None:
         package_root = Path(__file__).resolve().parents[1]
@@ -199,6 +257,19 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
         self.assertEqual(trace._expected_shapes()[trace.P7_RAW_Q_NAME], (2_051, 2_048))
         self.assertEqual(trace.TRACE_TENSORS[-1], "raw_q/cublaslt_reduced_off_splitk_off")
 
+    def test_policy_uses_scalar_flags_for_readback_and_restores_tf32(self) -> None:
+        fake = _FakeTorch()
+        actual = trace._apply_policy(fake, trace.POLICIES[2])
+        self.assertEqual(actual["preferred_blas_actual"], "cublaslt")
+        self.assertFalse(actual["allow_bf16_reduced_precision_reduction_actual"])
+        self.assertFalse(actual["allow_bf16_reduced_precision_reduction_split_k_actual"])
+        self.assertFalse(actual["matmul_tf32_actual"])
+        self.assertFalse(actual["cudnn_tf32_actual"])
+        trace._restore_policy(fake, "cublas", (True, True), (True, True))
+        self.assertEqual(trace._backend_name(fake), "cublas")
+        self.assertEqual(trace._policy_readback(fake), (True, True))
+        self.assertEqual(trace._tf32_readback(fake), (True, True))
+
     def test_manifest_accepts_fixed_offline_contract(self) -> None:
         document = _manifest()
         trace.validate_manifest(document)
@@ -228,6 +299,30 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
         with self.assertRaisesRegex(trace.Qwen3BP2051Bf16ArithmeticTraceError, "comparison"):
             trace.validate_manifest(document)
 
+    def test_manifest_records_an_unsupported_policy_without_a_serving_claim(self) -> None:
+        document = _manifest()
+        policy = document["policies"][2]
+        policy.update(
+            {
+                "runtime_status": "unsupported",
+                "preferred_blas_actual": None,
+                "allow_bf16_reduced_precision_reduction_actual": None,
+                "allow_bf16_reduced_precision_reduction_split_k_actual": None,
+                "matmul_tf32_actual": None,
+                "cudnn_tf32_actual": None,
+                "repeated_bf16_exact": None,
+                "output_tensor": None,
+                "output_bf16_le_sha256": None,
+                "p7_default_comparison": None,
+                "error": {"type": "RuntimeError", "message": "backend unavailable"},
+            }
+        )
+        del document["tensors"]["raw_q/cublaslt_reduced_off_splitk_off"]
+        document["sidecar"]["tensor_count"] = len(document["tensors"])
+        document["capture_status"] = "unsupported"
+        document["quality_pass"] = False
+        trace.validate_manifest(document)
+
     def test_sidecar_validator_replays_full_bf16_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             sidecar = Path(directory) / "p9.safetensors"
@@ -244,6 +339,31 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
             tampered["tensors"][trace.P7_RAW_Q_NAME]["bf16_le_sha256"] = _sha("0")
             with self.assertRaisesRegex(trace.Qwen3BP2051Bf16ArithmeticTraceError, "raw BF16 hash"):
                 trace.validate_sidecar_against_manifest(tampered, sidecar)
+
+    def test_checkpoint_q_weight_reader_binds_the_indexed_bf16_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shard = root / "model-00001-of-00001.safetensors"
+            raw = b"\x00\x00" * (trace.N * trace.K)
+            header = {
+                trace.CHECKPOINT_Q_WEIGHT_KEY: {
+                    "dtype": "BF16",
+                    "shape": [trace.N, trace.K],
+                    "data_offsets": [0, len(raw)],
+                }
+            }
+            encoded = json.dumps(header, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            shard.write_bytes(len(encoded).to_bytes(8, "little") + encoded + raw)
+            (root / "model.safetensors.index.json").write_text(
+                json.dumps({"weight_map": {trace.CHECKPOINT_Q_WEIGHT_KEY: shard.name}}),
+                encoding="utf-8",
+            )
+            checkpoint = oracle.CheckpointManifest(
+                root=root,
+                receipt=oracle.FileRecord("riley-checkpoint.json", 1, _sha("d")),
+                files=(),
+            )
+            self.assertEqual(trace._checkpoint_q_weight_raw(checkpoint), raw)
 
     def test_output_paths_are_create_only_and_outside_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

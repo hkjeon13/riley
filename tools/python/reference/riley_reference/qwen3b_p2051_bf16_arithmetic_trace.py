@@ -46,6 +46,7 @@ P7_RAW_Q_KEY = "trace/layer0/q_proj/unbiased_linear"
 P7_INPUT_NAME = "p7_input_norm"
 P7_RAW_Q_NAME = "p7_shadow_raw_q"
 Q_WEIGHT_NAME = "layer0_q_proj_weight"
+CHECKPOINT_Q_WEIGHT_KEY = "model.layers.0.self_attn.q_proj.weight"
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ TRACE_TENSORS = (
     P7_RAW_Q_NAME,
     *(f"raw_q/{policy.identifier}" for policy in POLICIES),
 )
+BASE_TRACE_TENSORS = (P7_INPUT_NAME, Q_WEIGHT_NAME, P7_RAW_Q_NAME)
 
 SOURCE_PATHS = {
     "p9_bf16_arithmetic_trace": "tools/python/reference/riley_reference/qwen3b_p2051_bf16_arithmetic_trace.py",
@@ -208,15 +210,28 @@ def _policy_document(policy: ArithmeticPolicy) -> dict[str, object]:
         "preferred_blas_requested": policy.preferred_blas,
         "allow_bf16_reduced_precision_reduction_requested": policy.allow_reduced_precision_reduction,
         "allow_bf16_reduced_precision_reduction_split_k_requested": policy.allow_split_k,
+        "matmul_tf32_requested": False,
+        "cudnn_tf32_requested": False,
         "operator": "torch.nn.functional.linear",
         "bias": False,
         "operand_shape": {"m": M, "n": N, "k": K},
-        "runtime_status": "captured",
     }
 
 
 def _policy_documents() -> list[dict[str, object]]:
     return [_policy_document(policy) for policy in POLICIES]
+
+
+def _artifact_tensor_names(policy_observations: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
+    names = list(BASE_TRACE_TENSORS)
+    for observation, policy in zip(policy_observations, POLICIES, strict=True):
+        if observation.get("runtime_status") == "captured":
+            name = observation.get("output_tensor")
+            expected = f"raw_q/{policy.identifier}"
+            if name != expected:
+                raise Qwen3BP2051Bf16ArithmeticTraceError("P9 captured policy output name differs")
+            names.append(expected)
+    return tuple(names)
 
 
 def _source_record(root: Path, relative: str) -> dict[str, object]:
@@ -283,7 +298,7 @@ def _output_paths(manifest_path: Path, sidecar_path: Path, repo_root: Path) -> t
 
 def _canonical_bf16_le_bytes(tensor: object, torch: Any, label: str) -> bytes:
     try:
-        raw = bytes(tensor.detach().contiguous().view(torch.uint8).cpu().tolist())
+        raw = tensor.detach().contiguous().view(torch.uint8).cpu().numpy().tobytes()
     except (AttributeError, RuntimeError, TypeError) as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError(f"cannot read {label} as BF16") from error
     if sys.byteorder == "little":
@@ -350,37 +365,68 @@ def _policy_readback(torch: Any) -> tuple[bool, bool]:
     return reduced, split_k
 
 
+def _tf32_readback(torch: Any) -> tuple[bool, bool]:
+    try:
+        return (
+            bool(torch.backends.cuda.matmul.allow_tf32),
+            bool(torch.backends.cudnn.allow_tf32),
+        )
+    except (AttributeError, RuntimeError, TypeError) as error:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("PyTorch TF32 policy API is unavailable") from error
+
+
 def _apply_policy(torch: Any, policy: ArithmeticPolicy) -> dict[str, object]:
     try:
         torch.backends.cuda.preferred_blas_library(policy.preferred_blas)
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = (
-            policy.allow_reduced_precision_reduction,
-            policy.allow_split_k,
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = bool(
+            policy.allow_reduced_precision_reduction
         )
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction_split_k = bool(
+            policy.allow_split_k
+        )
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
     except (AttributeError, RuntimeError, TypeError) as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError(f"cannot configure P9 policy {policy.identifier}") from error
     backend = _backend_name(torch)
     reduced, split_k = _policy_readback(torch)
+    matmul_tf32, cudnn_tf32 = _tf32_readback(torch)
     if (
         backend != policy.preferred_blas
         or reduced != policy.allow_reduced_precision_reduction
         or split_k != policy.allow_split_k
+        or matmul_tf32
+        or cudnn_tf32
     ):
         raise Qwen3BP2051Bf16ArithmeticTraceError(f"P9 policy readback differs: {policy.identifier}")
     return {
         "preferred_blas_actual": backend,
         "allow_bf16_reduced_precision_reduction_actual": reduced,
         "allow_bf16_reduced_precision_reduction_split_k_actual": split_k,
+        "matmul_tf32_actual": matmul_tf32,
+        "cudnn_tf32_actual": cudnn_tf32,
     }
 
 
-def _restore_policy(torch: Any, backend: str, flags: tuple[bool, bool]) -> None:
+def _restore_policy(
+    torch: Any,
+    backend: str,
+    flags: tuple[bool, bool],
+    tf32_flags: tuple[bool, bool],
+) -> None:
     try:
         torch.backends.cuda.preferred_blas_library(backend)
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = flags
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = bool(flags[0])
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction_split_k = bool(flags[1])
+        torch.backends.cuda.matmul.allow_tf32 = bool(tf32_flags[0])
+        torch.backends.cudnn.allow_tf32 = bool(tf32_flags[1])
     except (AttributeError, RuntimeError, TypeError) as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError("cannot restore PyTorch BF16 policy") from error
-    if _backend_name(torch) != backend or _policy_readback(torch) != flags:
+    if (
+        _backend_name(torch) != backend
+        or _policy_readback(torch) != flags
+        or _tf32_readback(torch) != tf32_flags
+    ):
         raise Qwen3BP2051Bf16ArithmeticTraceError("restored PyTorch BF16 policy differs")
 
 
@@ -399,6 +445,56 @@ def _load_p7_artifact(p7_manifest_path: Path, p7_sidecar_path: Path) -> tuple[di
     return document, manifest_path, sidecar_path
 
 
+def _checkpoint_q_weight_raw(checkpoint: oracle.CheckpointManifest) -> bytes:
+    """Read the checkpoint's layer-zero Q weight as canonical BF16 bytes without CUDA."""
+
+    index_path = _regular_file(
+        checkpoint.root / "model.safetensors.index.json", "checkpoint safetensors index"
+    )
+    try:
+        index = _require_mapping(
+            json.loads(index_path.read_text(encoding="utf-8"), object_pairs_hook=_duplicate_key),
+            "checkpoint safetensors index",
+        )
+        weight_map = _require_mapping(index["weight_map"], "checkpoint weight map")
+        shard_name = _require_string(
+            weight_map[CHECKPOINT_Q_WEIGHT_KEY], "checkpoint Q weight shard"
+        )
+    except (KeyError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("cannot resolve checkpoint Q weight shard") from error
+    if Path(shard_name).name != shard_name or not shard_name.endswith(".safetensors"):
+        raise Qwen3BP2051Bf16ArithmeticTraceError("checkpoint Q weight shard name differs")
+    shard = _regular_file(checkpoint.root / shard_name, "checkpoint Q weight shard")
+    try:
+        header, payload_offset, file_size = projection._read_safetensors_header(shard)
+        metadata = _require_mapping(header[CHECKPOINT_Q_WEIGHT_KEY], "checkpoint Q weight")
+        _require_exact_keys(metadata, {"dtype", "shape", "data_offsets"}, "checkpoint Q weight")
+        offsets = metadata["data_offsets"]
+        if (
+            metadata["dtype"] != "BF16"
+            or metadata["shape"] != [N, K]
+            or not isinstance(offsets, list)
+            or len(offsets) != 2
+            or any(isinstance(offset, bool) or not isinstance(offset, int) for offset in offsets)
+            or offsets[0] < 0
+            or offsets[1] != offsets[0] + N * K * BF16_BYTES
+            or payload_offset + offsets[1] > file_size
+        ):
+            raise Qwen3BP2051Bf16ArithmeticTraceError("checkpoint Q weight layout differs")
+        with shard.open("rb") as stream:
+            stream.seek(payload_offset + offsets[0])
+            raw = stream.read(N * K * BF16_BYTES)
+    except (OSError, KeyError, projection.Qwen3BP2051ProjectionTraceError) as error:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("cannot read checkpoint Q weight") from error
+    if len(raw) != N * K * BF16_BYTES:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("checkpoint Q weight byte length differs")
+    try:
+        projection._validate_finite_bf16(raw, "checkpoint Q weight")
+    except projection.Qwen3BP2051ProjectionTraceError as error:
+        raise Qwen3BP2051Bf16ArithmeticTraceError(str(error)) from error
+    return raw
+
+
 def _load_p7_tensors(sidecar: Path, torch: Any) -> tuple[object, object]:
     try:
         from safetensors import safe_open
@@ -415,9 +511,11 @@ def _load_p7_tensors(sidecar: Path, torch: Any) -> tuple[object, object]:
     return input_norm, raw_q
 
 
-def _tensor_manifest(tensors: Mapping[str, object], torch: Any) -> dict[str, object]:
+def _tensor_manifest(
+    tensors: Mapping[str, object], names: Sequence[str], torch: Any
+) -> dict[str, object]:
     records: dict[str, object] = {}
-    for name in TRACE_TENSORS:
+    for name in names:
         shape = _expected_shapes()[name]
         raw = _validate_tensor(tensors[name], shape, torch, name)
         records[name] = {
@@ -440,13 +538,24 @@ def _producer_document(backend: oracle.HuggingFaceQwen3BBackend, torch: Any) -> 
         "runtime_cuda_version": str(torch.version.cuda or "unknown"),
         "model_loader": metadata,
         "tf32_enabled": bool(torch.backends.cuda.matmul.allow_tf32),
+        "cudnn_tf32_enabled": bool(torch.backends.cudnn.allow_tf32),
     }
 
 
-def _p7_binding_document(p7_document: Mapping[str, object], p7_manifest: Path, p7_sidecar: Path) -> dict[str, object]:
+def _p7_binding_document(
+    p7_document: Mapping[str, object],
+    p7_manifest: Path,
+    p7_sidecar: Path,
+    checkpoint_q_weight_sha256: str,
+) -> dict[str, object]:
     p7_model = _require_mapping(p7_document["model"], "P7 model")
     p7_provenance = _require_mapping(p7_document["provenance"], "P7 provenance")
     source = _require_mapping(p7_provenance["source_repository"], "P7 source provenance")
+    p7_tensors = _require_mapping(p7_document["tensors"], "P7 tensors")
+    p7_input = _require_mapping(p7_tensors["layer0.input_norm"], "P7 input tensor")
+    p7_raw_q = _require_mapping(
+        p7_tensors["layer0.q_proj.unbiased_linear"], "P7 raw-Q tensor"
+    )
     return {
         "manifest_filename": p7_manifest.name,
         "manifest_sha256": _sha256_file(p7_manifest),
@@ -456,6 +565,10 @@ def _p7_binding_document(p7_document: Mapping[str, object], p7_manifest: Path, p
         "source_revision": source["git_revision"],
         "input_tensor_key": P7_INPUT_KEY,
         "raw_q_tensor_key": P7_RAW_Q_KEY,
+        "input_bf16_le_sha256": p7_input["bf16_le_sha256"],
+        "raw_q_bf16_le_sha256": p7_raw_q["bf16_le_sha256"],
+        "checkpoint_q_weight_key": CHECKPOINT_Q_WEIGHT_KEY,
+        "checkpoint_q_weight_bf16_le_sha256": checkpoint_q_weight_sha256,
     }
 
 
@@ -470,15 +583,26 @@ def build_manifest(
     torch: Any,
     producer: Mapping[str, object],
     policy_observations: list[dict[str, object]],
+    checkpoint_q_weight_sha256: str,
     source_provenance: Mapping[str, object],
     created_at: datetime,
 ) -> dict[str, object]:
+    tensor_names = _artifact_tensor_names(policy_observations)
     p7_raw = _canonical_bf16_le_bytes(tensors[P7_RAW_Q_NAME], torch, P7_RAW_Q_NAME)
-    default_raw = _canonical_bf16_le_bytes(
-        tensors[f"raw_q/{POLICIES[0].identifier}"], torch, POLICIES[0].identifier
+    default_name = f"raw_q/{POLICIES[0].identifier}"
+    if default_name in tensors:
+        default_raw = _canonical_bf16_le_bytes(tensors[default_name], torch, POLICIES[0].identifier)
+        p7_match: dict[str, object] | None = _metrics(p7_raw, default_raw, torch)
+    else:
+        p7_match = None
+    all_captured = all(
+        observation["runtime_status"] == "captured" for observation in policy_observations
     )
-    repeats_pass = all(bool(observation["repeated_bf16_exact"]) for observation in policy_observations)
-    p7_match = _metrics(p7_raw, default_raw, torch)
+    repeats_pass = all(
+        observation["runtime_status"] == "captured"
+        and observation["repeated_bf16_exact"] is True
+        for observation in policy_observations
+    )
     document = {
         "schema_version": SCHEMA_VERSION,
         "artifact_kind": ARTIFACT_KIND,
@@ -486,7 +610,10 @@ def build_manifest(
         "performance_claim_eligible": False,
         "vllm_comparison_eligible": False,
         "serving_selector_changed": False,
-        "quality_pass": bool(repeats_pass and p7_match["bf16_exact"]),
+        "capture_status": "captured" if all_captured else "unsupported",
+        "quality_pass": bool(
+            all_captured and repeats_pass and p7_match is not None and p7_match["bf16_exact"]
+        ),
         "created_at": _utc_text(created_at),
         "scope": {
             "endpoint": "layer0.q_proj.raw_no_bias",
@@ -498,7 +625,9 @@ def build_manifest(
             "serving_path": False,
         },
         "producer": dict(producer),
-        "p7_binding": _p7_binding_document(p7_document, p7_manifest, p7_sidecar),
+        "p7_binding": _p7_binding_document(
+            p7_document, p7_manifest, p7_sidecar, checkpoint_q_weight_sha256
+        ),
         "model": {
             "checkpoint_path": str(checkpoint.root),
             "checkpoint_receipt_filename": checkpoint.receipt.path,
@@ -514,9 +643,9 @@ def build_manifest(
             "path": sidecar.name,
             "sha256": _sha256_file(sidecar),
             "format": "safetensors",
-            "tensor_count": len(TRACE_TENSORS),
+            "tensor_count": len(tensor_names),
         },
-        "tensors": _tensor_manifest(tensors, torch),
+        "tensors": _tensor_manifest(tensors, tensor_names, torch),
     }
     validate_manifest(document)
     return document
@@ -555,10 +684,12 @@ def _validate_policies(value: object) -> None:
             record,
             {
                 "id", "role", "preferred_blas_requested", "allow_bf16_reduced_precision_reduction_requested",
-                "allow_bf16_reduced_precision_reduction_split_k_requested", "operator", "bias", "operand_shape",
-                "runtime_status", "preferred_blas_actual", "allow_bf16_reduced_precision_reduction_actual",
-                "allow_bf16_reduced_precision_reduction_split_k_actual", "repeated_bf16_exact",
-                "output_tensor", "output_bf16_le_sha256", "p7_default_comparison",
+                "allow_bf16_reduced_precision_reduction_split_k_requested", "matmul_tf32_requested",
+                "cudnn_tf32_requested", "operator", "bias", "operand_shape", "runtime_status",
+                "preferred_blas_actual", "allow_bf16_reduced_precision_reduction_actual",
+                "allow_bf16_reduced_precision_reduction_split_k_actual", "matmul_tf32_actual",
+                "cudnn_tf32_actual", "repeated_bf16_exact", "output_tensor", "output_bf16_le_sha256",
+                "p7_default_comparison", "error",
             },
             "P9 policy",
         )
@@ -566,19 +697,48 @@ def _validate_policies(value: object) -> None:
         for key, expected_value in expected.items():
             if record.get(key) != expected_value:
                 raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy request differs")
-        if (
-            record["preferred_blas_actual"] != policy.preferred_blas
-            or record["allow_bf16_reduced_precision_reduction_actual"] != policy.allow_reduced_precision_reduction
-            or record["allow_bf16_reduced_precision_reduction_split_k_actual"] != policy.allow_split_k
-            or not isinstance(record["repeated_bf16_exact"], bool)
-            or record["output_tensor"] != f"raw_q/{policy.identifier}"
-        ):
-            raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy observation differs")
-        _require_sha256(record["output_bf16_le_sha256"], "P9 policy output SHA-256")
-        comparison = _require_mapping(record["p7_default_comparison"], "P9 policy comparison")
-        _require_exact_keys(comparison, {"bf16_exact", "unequal_elements", "total_elements", "max_abs"}, "P9 policy comparison")
-        if not isinstance(comparison["bf16_exact"], bool) or comparison["total_elements"] != M * N:
-            raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy comparison differs")
+        status = record["runtime_status"]
+        if status == "captured":
+            if (
+                record["preferred_blas_actual"] != policy.preferred_blas
+                or record["allow_bf16_reduced_precision_reduction_actual"]
+                != policy.allow_reduced_precision_reduction
+                or record["allow_bf16_reduced_precision_reduction_split_k_actual"]
+                != policy.allow_split_k
+                or record["matmul_tf32_actual"] is not False
+                or record["cudnn_tf32_actual"] is not False
+                or not isinstance(record["repeated_bf16_exact"], bool)
+                or record["output_tensor"] != f"raw_q/{policy.identifier}"
+                or record["error"] is not None
+            ):
+                raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy observation differs")
+            _require_sha256(record["output_bf16_le_sha256"], "P9 policy output SHA-256")
+            comparison = _require_mapping(record["p7_default_comparison"], "P9 policy comparison")
+            _require_exact_keys(comparison, {"bf16_exact", "unequal_elements", "total_elements", "max_abs"}, "P9 policy comparison")
+            if not isinstance(comparison["bf16_exact"], bool) or comparison["total_elements"] != M * N:
+                raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy comparison differs")
+        elif status == "unsupported":
+            if any(
+                record[field] is not None
+                for field in (
+                    "preferred_blas_actual",
+                    "allow_bf16_reduced_precision_reduction_actual",
+                    "allow_bf16_reduced_precision_reduction_split_k_actual",
+                    "matmul_tf32_actual",
+                    "cudnn_tf32_actual",
+                    "repeated_bf16_exact",
+                    "output_tensor",
+                    "output_bf16_le_sha256",
+                    "p7_default_comparison",
+                )
+            ):
+                raise Qwen3BP2051Bf16ArithmeticTraceError("unsupported P9 policy fields differ")
+            error = _require_mapping(record["error"], "unsupported P9 policy error")
+            _require_exact_keys(error, {"type", "message"}, "unsupported P9 policy error")
+            _require_string(error["type"], "unsupported P9 policy error type")
+            _require_string(error["message"], "unsupported P9 policy error message")
+        else:
+            raise Qwen3BP2051Bf16ArithmeticTraceError("P9 policy runtime status differs")
 
 
 def validate_manifest(document: Mapping[str, object]) -> None:
@@ -586,7 +746,7 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         document,
         {
             "schema_version", "artifact_kind", "trace_id", "performance_claim_eligible", "vllm_comparison_eligible",
-            "serving_selector_changed", "quality_pass", "created_at", "scope", "producer", "p7_binding", "model",
+            "serving_selector_changed", "capture_status", "quality_pass", "created_at", "scope", "producer", "p7_binding", "model",
             "policies", "comparisons", "provenance", "sidecar", "tensors",
         },
         "P9 manifest",
@@ -598,6 +758,7 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         or document["performance_claim_eligible"] is not False
         or document["vllm_comparison_eligible"] is not False
         or document["serving_selector_changed"] is not False
+        or document["capture_status"] not in {"captured", "unsupported"}
         or not isinstance(document["quality_pass"], bool)
     ):
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 manifest identity differs")
@@ -613,17 +774,17 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     }:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 scope differs")
     producer = _require_mapping(document["producer"], "P9 producer")
-    _require_exact_keys(producer, {"implementation_id", "runtime_dependency_class", "torch_version", "runtime_cuda_version", "model_loader", "tf32_enabled"}, "P9 producer")
-    if producer["implementation_id"] != IMPLEMENTATION_ID or producer["runtime_dependency_class"] != "offline-python-reference" or producer["tf32_enabled"] is not False:
+    _require_exact_keys(producer, {"implementation_id", "runtime_dependency_class", "torch_version", "runtime_cuda_version", "model_loader", "tf32_enabled", "cudnn_tf32_enabled"}, "P9 producer")
+    if producer["implementation_id"] != IMPLEMENTATION_ID or producer["runtime_dependency_class"] != "offline-python-reference" or producer["tf32_enabled"] is not False or producer["cudnn_tf32_enabled"] is not False:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 producer differs")
     _require_string(producer["torch_version"], "P9 torch version")
     _require_string(producer["runtime_cuda_version"], "P9 CUDA runtime version")
     _require_mapping(producer["model_loader"], "P9 model loader")
     binding = _require_mapping(document["p7_binding"], "P9 P7 binding")
-    _require_exact_keys(binding, {"manifest_filename", "manifest_sha256", "sidecar_filename", "sidecar_sha256", "checkpoint_receipt_sha256", "source_revision", "input_tensor_key", "raw_q_tensor_key"}, "P9 P7 binding")
-    if binding["input_tensor_key"] != P7_INPUT_KEY or binding["raw_q_tensor_key"] != P7_RAW_Q_KEY:
+    _require_exact_keys(binding, {"manifest_filename", "manifest_sha256", "sidecar_filename", "sidecar_sha256", "checkpoint_receipt_sha256", "source_revision", "input_tensor_key", "raw_q_tensor_key", "input_bf16_le_sha256", "raw_q_bf16_le_sha256", "checkpoint_q_weight_key", "checkpoint_q_weight_bf16_le_sha256"}, "P9 P7 binding")
+    if binding["input_tensor_key"] != P7_INPUT_KEY or binding["raw_q_tensor_key"] != P7_RAW_Q_KEY or binding["checkpoint_q_weight_key"] != CHECKPOINT_Q_WEIGHT_KEY:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 P7 tensor binding differs")
-    for key in ("manifest_sha256", "sidecar_sha256", "checkpoint_receipt_sha256"):
+    for key in ("manifest_sha256", "sidecar_sha256", "checkpoint_receipt_sha256", "input_bf16_le_sha256", "raw_q_bf16_le_sha256", "checkpoint_q_weight_bf16_le_sha256"):
         _require_sha256(binding[key], f"P9 P7 {key}")
     _require_string(binding["manifest_filename"], "P9 P7 manifest filename")
     _require_string(binding["sidecar_filename"], "P9 P7 sidecar filename")
@@ -635,11 +796,27 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 checkpoint receipt filename differs")
     _require_sha256(model["checkpoint_receipt_sha256"], "P9 checkpoint receipt SHA-256")
     _validate_policies(document["policies"])
+    policy_records = _require_mapping({str(index): value for index, value in enumerate(document["policies"])}, "P9 policies")
+    all_captured = all(
+        _require_mapping(value, "P9 policy")["runtime_status"] == "captured"
+        for value in policy_records.values()
+    )
+    if (document["capture_status"] == "captured") != all_captured:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("P9 capture status differs")
+    if document["capture_status"] == "unsupported" and document["quality_pass"] is not False:
+        raise Qwen3BP2051Bf16ArithmeticTraceError("unsupported P9 trace cannot pass quality")
     comparisons = _require_mapping(document["comparisons"], "P9 comparisons")
     _require_exact_keys(comparisons, {"p7_default_vs_p7_shadow_raw_q", "policy_outputs_are_not_riley_results"}, "P9 comparisons")
-    comparison = _require_mapping(comparisons["p7_default_vs_p7_shadow_raw_q"], "P9 P7 comparison")
-    _require_exact_keys(comparison, {"bf16_exact", "unequal_elements", "total_elements", "max_abs"}, "P9 P7 comparison")
-    if not isinstance(comparison["bf16_exact"], bool) or comparison["total_elements"] != M * N or comparisons["policy_outputs_are_not_riley_results"] is not True:
+    comparison_value = comparisons["p7_default_vs_p7_shadow_raw_q"]
+    if comparison_value is None:
+        if document["capture_status"] != "unsupported":
+            raise Qwen3BP2051Bf16ArithmeticTraceError("P9 default comparison is missing")
+    else:
+        comparison = _require_mapping(comparison_value, "P9 P7 comparison")
+        _require_exact_keys(comparison, {"bf16_exact", "unequal_elements", "total_elements", "max_abs"}, "P9 P7 comparison")
+        if not isinstance(comparison["bf16_exact"], bool) or comparison["total_elements"] != M * N:
+            raise Qwen3BP2051Bf16ArithmeticTraceError("P9 comparison contract differs")
+    if comparisons["policy_outputs_are_not_riley_results"] is not True:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 comparison contract differs")
     provenance = _require_mapping(document["provenance"], "P9 provenance")
     _require_exact_keys(provenance, {"source_repository"}, "P9 provenance")
@@ -658,13 +835,15 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         _require_sha256(record.get("sha256"), "P9 source SHA-256")
     sidecar = _require_mapping(document["sidecar"], "P9 sidecar")
     _require_exact_keys(sidecar, {"path", "sha256", "format", "tensor_count"}, "P9 sidecar")
-    if Path(_require_string(sidecar["path"], "P9 sidecar path")).name != sidecar["path"] or sidecar["format"] != "safetensors" or sidecar["tensor_count"] != len(TRACE_TENSORS):
+    expected_tensor_names = _artifact_tensor_names(document["policies"])
+    if Path(_require_string(sidecar["path"], "P9 sidecar path")).name != sidecar["path"] or sidecar["format"] != "safetensors" or sidecar["tensor_count"] != len(expected_tensor_names):
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 sidecar metadata differs")
     _require_sha256(sidecar["sha256"], "P9 sidecar SHA-256")
     tensors = _require_mapping(document["tensors"], "P9 tensors")
-    if tuple(tensors) != TRACE_TENSORS:
+    if tuple(tensors) != expected_tensor_names:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 tensor ordering differs")
-    for name, shape in _expected_shapes().items():
+    for name in expected_tensor_names:
+        shape = _expected_shapes()[name]
         record = _require_mapping(tensors[name], f"P9 tensor {name}")
         _require_exact_keys(record, {"key", "shape", "dtype", "canonical_byte_order", "bf16_le_bytes", "bf16_le_sha256"}, f"P9 tensor {name}")
         if record["key"] != _sidecar_key(name) or record["shape"] != list(shape) or record["dtype"] != "bfloat16" or record["canonical_byte_order"] != "little-endian-u16" or record["bf16_le_bytes"] != _element_count(shape) * BF16_BYTES:
@@ -682,12 +861,13 @@ def validate_sidecar_against_manifest(document: Mapping[str, object], sidecar_pa
     except projection.Qwen3BP2051ProjectionTraceError as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError(str(error)) from error
     tensors = _require_mapping(document["tensors"], "P9 tensors")
-    if set(header) != {_sidecar_key(name) for name in TRACE_TENSORS}:
+    names = tuple(tensors)
+    if set(header) != {_sidecar_key(name) for name in names}:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 sidecar keys differ")
     expected_offset = 0
     try:
         with sidecar.open("rb") as stream:
-            for name in TRACE_TENSORS:
+            for name in names:
                 meta = _require_mapping(header[_sidecar_key(name)], f"P9 sidecar tensor {name}")
                 _require_exact_keys(meta, {"dtype", "shape", "data_offsets"}, f"P9 sidecar tensor {name}")
                 record = _require_mapping(tensors[name], f"P9 tensor {name}")
@@ -738,12 +918,14 @@ def produce_hf_trace(
     except oracle.Qwen3BServingOracleError as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError(str(error)) from error
     _validate_p7_checkpoint_binding(p7_document, checkpoint)
+    checkpoint_q_weight_raw = _checkpoint_q_weight_raw(checkpoint)
     provenance = source_provenance_factory(repo_root)
     backend = backend_factory(checkpoint=checkpoint, device=device)
     sidecar_written = False
     torch = backend._torch
     original_backend = _backend_name(torch)
     original_flags = _policy_readback(torch)
+    original_tf32_flags = _tf32_readback(torch)
     try:
         if original_backend != "cublas" or original_flags != (True, True):
             raise Qwen3BP2051Bf16ArithmeticTraceError("P9 must start from P7 Cublas/(true,true) policy")
@@ -757,31 +939,53 @@ def produce_hf_trace(
             P7_RAW_Q_NAME: p7_raw_q.contiguous(),
         }
         _validate_tensor(tensors[P7_INPUT_NAME], (M, K), torch, P7_INPUT_NAME)
-        _validate_tensor(tensors[Q_WEIGHT_NAME], (N, K), torch, Q_WEIGHT_NAME)
+        weight_raw = _validate_tensor(tensors[Q_WEIGHT_NAME], (N, K), torch, Q_WEIGHT_NAME)
+        if weight_raw != checkpoint_q_weight_raw:
+            raise Qwen3BP2051Bf16ArithmeticTraceError("loaded layer0 Q weight differs from checkpoint bytes")
         p7_raw_bytes = _validate_tensor(tensors[P7_RAW_Q_NAME], (M, N), torch, P7_RAW_Q_NAME)
         observations: list[dict[str, object]] = []
         for policy in POLICIES:
-            actual = _apply_policy(torch, policy)
-            with torch.inference_mode():
-                output = torch.nn.functional.linear(input_norm, weight, bias=None).contiguous()
-                repeated = torch.nn.functional.linear(input_norm, weight, bias=None).contiguous()
-            torch.cuda.synchronize(backend._device)
-            output_raw = _validate_tensor(output, (M, N), torch, f"P9 {policy.identifier}")
-            repeated_raw = _validate_tensor(repeated, (M, N), torch, f"P9 repeat {policy.identifier}")
-            tensor_name = f"raw_q/{policy.identifier}"
-            tensors[tensor_name] = output.cpu().contiguous()
             observation = _policy_document(policy)
-            observation.update(actual)
-            observation.update(
-                {
-                    "repeated_bf16_exact": output_raw == repeated_raw,
-                    "output_tensor": tensor_name,
-                    "output_bf16_le_sha256": _sha256_bytes(output_raw),
-                    "p7_default_comparison": _metrics(p7_raw_bytes, output_raw, torch),
-                }
-            )
+            try:
+                actual = _apply_policy(torch, policy)
+                with torch.inference_mode():
+                    output = torch.nn.functional.linear(input_norm, weight, bias=None).contiguous()
+                    repeated = torch.nn.functional.linear(input_norm, weight, bias=None).contiguous()
+                torch.cuda.synchronize(backend._device)
+                output_raw = _validate_tensor(output, (M, N), torch, f"P9 {policy.identifier}")
+                repeated_raw = _validate_tensor(repeated, (M, N), torch, f"P9 repeat {policy.identifier}")
+                tensor_name = f"raw_q/{policy.identifier}"
+                tensors[tensor_name] = output.cpu().contiguous()
+                observation.update(actual)
+                observation.update(
+                    {
+                        "runtime_status": "captured",
+                        "repeated_bf16_exact": output_raw == repeated_raw,
+                        "output_tensor": tensor_name,
+                        "output_bf16_le_sha256": _sha256_bytes(output_raw),
+                        "p7_default_comparison": _metrics(p7_raw_bytes, output_raw, torch),
+                        "error": None,
+                    }
+                )
+            except (RuntimeError, Qwen3BP2051Bf16ArithmeticTraceError) as error:
+                observation.update(
+                    {
+                        "runtime_status": "unsupported",
+                        "preferred_blas_actual": None,
+                        "allow_bf16_reduced_precision_reduction_actual": None,
+                        "allow_bf16_reduced_precision_reduction_split_k_actual": None,
+                        "matmul_tf32_actual": None,
+                        "cudnn_tf32_actual": None,
+                        "repeated_bf16_exact": None,
+                        "output_tensor": None,
+                        "output_bf16_le_sha256": None,
+                        "p7_default_comparison": None,
+                        "error": {"type": type(error).__name__, "message": str(error)},
+                    }
+                )
             observations.append(observation)
-        _write_sidecar_exclusive(sidecar, {_sidecar_key(name): tensors[name] for name in TRACE_TENSORS}, sidecar_writer)
+        tensor_names = _artifact_tensor_names(observations)
+        _write_sidecar_exclusive(sidecar, {_sidecar_key(name): tensors[name] for name in tensor_names}, sidecar_writer)
         sidecar_written = True
         document = build_manifest(
             checkpoint=checkpoint,
@@ -793,6 +997,7 @@ def produce_hf_trace(
             torch=torch,
             producer=_producer_document(backend, torch),
             policy_observations=observations,
+            checkpoint_q_weight_sha256=_sha256_bytes(checkpoint_q_weight_raw),
             source_provenance=provenance,
             created_at=created_at or datetime.now(timezone.utc),
         )
@@ -812,7 +1017,7 @@ def produce_hf_trace(
         raise
     finally:
         try:
-            _restore_policy(torch, original_backend, original_flags)
+            _restore_policy(torch, original_backend, original_flags, original_tf32_flags)
         finally:
             backend.close()
 
@@ -840,6 +1045,23 @@ def validate_bindings(
         or binding["sidecar_filename"] != p7_sidecar.name
     ):
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 P7 artifact binding differs")
+    p7_model = _require_mapping(p7_document["model"], "P7 model")
+    p7_source = _require_mapping(
+        _require_mapping(p7_document["provenance"], "P7 provenance")["source_repository"],
+        "P7 source provenance",
+    )
+    p7_tensors = _require_mapping(p7_document["tensors"], "P7 tensors")
+    p7_input = _require_mapping(p7_tensors["layer0.input_norm"], "P7 input tensor")
+    p7_raw_q = _require_mapping(
+        p7_tensors["layer0.q_proj.unbiased_linear"], "P7 raw-Q tensor"
+    )
+    if (
+        binding["checkpoint_receipt_sha256"] != p7_model["checkpoint_receipt_sha256"]
+        or binding["source_revision"] != p7_source["git_revision"]
+        or binding["input_bf16_le_sha256"] != p7_input["bf16_le_sha256"]
+        or binding["raw_q_bf16_le_sha256"] != p7_raw_q["bf16_le_sha256"]
+    ):
+        raise Qwen3BP2051Bf16ArithmeticTraceError("P9 P7 manifest tensor binding differs")
     try:
         checkpoint = oracle.inspect_checkpoint(checkpoint_path)
     except oracle.Qwen3BServingOracleError as error:
@@ -848,6 +1070,18 @@ def validate_bindings(
     model = _require_mapping(document["model"], "P9 model")
     if model["checkpoint_receipt_sha256"] != checkpoint.receipt.sha256:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 checkpoint receipt differs")
+    checkpoint_q_weight_raw = _checkpoint_q_weight_raw(checkpoint)
+    tensors = _require_mapping(document["tensors"], "P9 tensors")
+    p9_input = _require_mapping(tensors[P7_INPUT_NAME], "P9 input tensor")
+    p9_raw_q = _require_mapping(tensors[P7_RAW_Q_NAME], "P9 raw-Q tensor")
+    p9_weight = _require_mapping(tensors[Q_WEIGHT_NAME], "P9 Q weight tensor")
+    if (
+        p9_input["bf16_le_sha256"] != binding["input_bf16_le_sha256"]
+        or p9_raw_q["bf16_le_sha256"] != binding["raw_q_bf16_le_sha256"]
+        or p9_weight["bf16_le_sha256"] != _sha256_bytes(checkpoint_q_weight_raw)
+        or binding["checkpoint_q_weight_bf16_le_sha256"] != _sha256_bytes(checkpoint_q_weight_raw)
+    ):
+        raise Qwen3BP2051Bf16ArithmeticTraceError("P9 operand byte binding differs")
     expected_sources = collect_source_provenance(_regular_directory(repo_root.expanduser(), "repository root"))
     observed_sources = _require_mapping(_require_mapping(document["provenance"], "P9 provenance")["source_repository"], "P9 source provenance")
     if observed_sources != expected_sources:
