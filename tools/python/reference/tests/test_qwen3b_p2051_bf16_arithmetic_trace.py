@@ -190,21 +190,18 @@ class _FakeMatmul:
         return self._reduced
 
     @allow_bf16_reduced_precision_reduction.setter
-    def allow_bf16_reduced_precision_reduction(self, value: bool) -> None:
-        if not isinstance(value, bool):
-            raise AssertionError("P9 must assign the reduced-precision flag as a scalar bool")
-        self._reduced = value
+    def allow_bf16_reduced_precision_reduction(self, value: tuple[bool, bool]) -> None:
+        if (
+            not isinstance(value, tuple)
+            or len(value) != 2
+            or not all(isinstance(item, bool) for item in value)
+        ):
+            raise AssertionError("P9 must assign the PyTorch BF16 policy as a bool tuple")
+        self._reduced, self._split_k = value
 
     @property
     def allow_bf16_reduced_precision_reduction_split_k(self) -> bool:
         return self._split_k
-
-    @allow_bf16_reduced_precision_reduction_split_k.setter
-    def allow_bf16_reduced_precision_reduction_split_k(self, value: bool) -> None:
-        if not isinstance(value, bool):
-            raise AssertionError("P9 must assign the split-K flag as a scalar bool")
-        self._split_k = value
-
 
 class _FakeCuda:
     def __init__(self) -> None:
@@ -257,7 +254,7 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
         self.assertEqual(trace._expected_shapes()[trace.P7_RAW_Q_NAME], (2_051, 2_048))
         self.assertEqual(trace.TRACE_TENSORS[-1], "raw_q/cublaslt_reduced_off_splitk_off")
 
-    def test_policy_uses_scalar_flags_for_readback_and_restores_tf32(self) -> None:
+    def test_policy_uses_tuple_flags_for_readback_and_restores_tf32(self) -> None:
         fake = _FakeTorch()
         actual = trace._apply_policy(fake, trace.POLICIES[2])
         self.assertEqual(actual["preferred_blas_actual"], "cublaslt")

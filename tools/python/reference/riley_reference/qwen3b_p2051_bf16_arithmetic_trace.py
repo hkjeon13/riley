@@ -378,11 +378,11 @@ def _tf32_readback(torch: Any) -> tuple[bool, bool]:
 def _apply_policy(torch: Any, policy: ArithmeticPolicy) -> dict[str, object]:
     try:
         torch.backends.cuda.preferred_blas_library(policy.preferred_blas)
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = bool(
-            policy.allow_reduced_precision_reduction
-        )
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction_split_k = bool(
-            policy.allow_split_k
+        # PyTorch 2.13 exposes reduced-precision and split-K as one writable
+        # tuple.  The split-K attribute itself is a readback-only property.
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = (
+            bool(policy.allow_reduced_precision_reduction),
+            bool(policy.allow_split_k),
         )
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
@@ -416,8 +416,10 @@ def _restore_policy(
 ) -> None:
     try:
         torch.backends.cuda.preferred_blas_library(backend)
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = bool(flags[0])
-        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction_split_k = bool(flags[1])
+        torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = (
+            bool(flags[0]),
+            bool(flags[1]),
+        )
         torch.backends.cuda.matmul.allow_tf32 = bool(tf32_flags[0])
         torch.backends.cudnn.allow_tf32 = bool(tf32_flags[1])
     except (AttributeError, RuntimeError, TypeError) as error:
