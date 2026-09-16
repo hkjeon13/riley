@@ -123,16 +123,19 @@ fn required_path(variable: &str) -> TestResult<PathBuf> {
     Ok(path)
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    digest.iter().fold(
-        String::with_capacity(digest.len() * 2),
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().fold(
+        String::with_capacity(bytes.len() * 2),
         |mut output, byte| {
             use std::fmt::Write as _;
             write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
             output
         },
     )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex_encode(&Sha256::digest(bytes))
 }
 
 fn sha256_file(path: &Path) -> TestResult<String> {
@@ -147,7 +150,7 @@ fn sha256_file(path: &Path) -> TestResult<String> {
         digest.update(&buffer[..read]);
     }
     let digest = digest.finalize();
-    Ok(sha256_hex(&digest))
+    Ok(hex_encode(&digest))
 }
 
 fn regular_file(path: &Path, label: &str) -> TestResult<PathBuf> {
