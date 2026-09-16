@@ -5,7 +5,13 @@
 //! execution path. Its elapsed time is intentionally not a performance metric.
 
 #![cfg(feature = "cuda-cublas-gemm-probe")]
-#![allow(clippy::cast_precision_loss, clippy::float_cmp, clippy::too_many_lines)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::too_many_lines,
+    dead_code,
+    unused_imports
+)]
 
 mod p2051_cublas_probe_contract {
     include!("support/qwen3b_p2051_projection_p7_contract.rs");

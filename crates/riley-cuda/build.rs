@@ -27,6 +27,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_native_cuda(architectures: &str) -> Result<(), String> {
     for variable in [
         "CUDAToolkit_ROOT",
