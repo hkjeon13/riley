@@ -272,6 +272,10 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
     def test_manifest_accepts_fixed_offline_contract(self) -> None:
         document = _manifest()
         trace.validate_manifest(document)
+        document["tensors"] = {
+            name: document["tensors"][name] for name in sorted(document["tensors"])
+        }
+        trace.validate_manifest(document)
         self.assertFalse(document["performance_claim_eligible"])
         self.assertFalse(document["vllm_comparison_eligible"])
         self.assertFalse(document["serving_selector_changed"])

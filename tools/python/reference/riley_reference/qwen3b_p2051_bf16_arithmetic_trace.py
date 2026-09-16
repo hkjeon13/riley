@@ -842,8 +842,8 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 sidecar metadata differs")
     _require_sha256(sidecar["sha256"], "P9 sidecar SHA-256")
     tensors = _require_mapping(document["tensors"], "P9 tensors")
-    if tuple(tensors) != expected_tensor_names:
-        raise Qwen3BP2051Bf16ArithmeticTraceError("P9 tensor ordering differs")
+    if set(tensors) != set(expected_tensor_names):
+        raise Qwen3BP2051Bf16ArithmeticTraceError("P9 tensor set differs")
     for name in expected_tensor_names:
         shape = _expected_shapes()[name]
         record = _require_mapping(tensors[name], f"P9 tensor {name}")
