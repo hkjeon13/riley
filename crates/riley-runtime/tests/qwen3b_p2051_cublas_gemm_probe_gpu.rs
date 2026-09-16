@@ -204,7 +204,7 @@ mod p2051_cublas_probe_contract {
         })
     }
 
-    fn validate_metadata(
+    fn validate_probe_metadata(
         metadata: CublasGemmProbeMetadata,
         config: CudaGemmConfig,
         compute_capability: (u32, u32),
@@ -282,7 +282,7 @@ mod p2051_cublas_probe_contract {
             if plan.config() != config {
                 return Err("direct-cuBLAS plan config differs after prepare".into());
             }
-            validate_metadata(metadata, config, properties.compute_capability())?;
+            validate_probe_metadata(metadata, config, properties.compute_capability())?;
             let allocations_before = context.allocation_stats()?;
             execute_probe(&mut plan, config, &input, &weight, &mut output, &mut stream)?;
             let mut first_native = vec![0_u8; usize::try_from(config.output_bytes())?];
