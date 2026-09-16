@@ -37,6 +37,7 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P8 r2: P2051 raw-Q geometry | Blocked — F2048/F2051/F2052/F2080/F2176/F2304의 raw Q prefix가 모두 HF no-bias shadow와 non-exact | strict raw-Q geometry: serving eligible 아님 | cuBLASLt BIAS: P7 기준 serving eligible 아님; P8의 대상 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 테스트한 M/padding/anchor 범위의 geometry 가설은 refuted; input/weight/layout/arithmetic을 다음에 판별하고 selector 변경·vLLM 성능 비교는 보류 |
 | P9: P2051 raw-Q BF16 arithmetic policy | Diagnostic pass — current strict raw Q가 두 `reduced_precision_reduction=false` control과 exact, P7 default control과 non-exact | strict raw-Q: full-forward/serving eligible 아님 | 없음 — selector 변경 없음 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P7 default의 reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 full-sequence·full-forward에 qualification한 뒤에만 vLLM AB/BA를 실행 |
 | P10 r2: P2051 direct cuBLAS BF16 feasibility | Diagnostic pass — direct cuBLAS default가 P7 default와 exact이고, disallow-reduced control이 Riley/P9 reduced-off와 exact; repeat exact | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: P7 default exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 native arithmetic candidate를 Q/K/V·full-forward quality gate로 확장한 뒤에만 serving selector와 vLLM AB/BA를 평가 |
+| P10 r3: Riley native direct cuBLAS raw-Q | Diagnostic pass — feature-gated native/Rust probe가 P7 default raw-Q와 BF16 exact `0 / 4,200,448`; repeat·allocation accounting pass | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: Riley native/Rust boundary까지 exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 profile을 raw Q/K/V, bias boundary, full-forward quality gate에 순차 확장한 뒤에만 selector integration과 vLLM AB/BA를 실행 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
@@ -103,6 +104,41 @@ P95/P99, failure rate 또는 vLLM 우위를 검증하지 않았다. 따라서
 `performance_claim_eligible=false`와 `vllm_comparison_eligible=false`를 유지하며, 표의
 vLLM 열은 matched same-model/hardware/workload/concurrency AB/BA serving receipt가 생길
 때까지 수치로 채우지 않는다.
+
+## P10 r3 Riley native direct-cuBLAS raw-Q result — 2026-09-16
+
+P10 r3는 P10 r2의 standalone feasibility 결과를 Riley의 feature-gated native C ABI와
+Rust ownership boundary에서 재현한 one-shot quality diagnostic이다. `cuda-cublas-gemm-probe`
+feature가 켜진 build에만 direct `cublasGemmEx` plan과 `libcublas` link를 넣었다. 기본 CUDA
+archive, serving selector, CUDA Graph, command batch, scheduler, HTTP path에는 연결하지 않았다.
+native plan은 `OP_T(Wc)`, `OP_N(Xc)`, BF16 I/O, FP32 compute,
+`CUBLAS_DEFAULT_MATH`, host scalar pointers, atomics disabled로 실행하고 매 call을 같은 stream에서
+synchronize한다.
+
+원격 RTX 4090/SM89, CUDA runtime `12080`, cuBLAS `120804`에서
+`451687a6bf61c6f1f0535069a42856bcb0ef9a82`를 빌드하고 immutable P9 manifest/sidecar를
+입력으로 실행했다. receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cublas-rust-consumer-r1-20260916T074841Z/`에
+있다. receipt SHA-256은
+`60fcd6661ecdf2e4354c203da4daf36362f7752d0838996c45ac503c86883a1e`, integrity manifest는
+`0817a769cfa237651e2a363108351512f11554378bf9b787c54692a4430c0ab0`이며, 생성 뒤
+`SHA256SUMS`의 모든 입력 파일을 재검증했다.
+
+| Gate | 결과 |
+|---|---|
+| P7 default raw-Q BF16 comparison | exact: `0 / 4,200,448`; output SHA-256 `9353470bc0d4110218b9c4584ea782257d5a59888db5a3c0479131e5ba46ec8f` |
+| repeated output | byte-exact |
+| allocation accounting | unchanged, plan/context close 뒤 zero |
+| native metadata | backend `3`, `(M,N,K)=(2051,2048,2048)`, math/pointer/atomics modes 모두 `(0,0)` |
+| GPU memory | 시작/종료 모두 `335 MiB` |
+
+I/O PSI `some/full avg10`은 시작 `42.76/37.35`, 종료 `32.16/29.28`로 같이 남겼다. 이는 shared-host
+상태의 공변량이며 test 실행·결과 선택·보정·재시도에 사용하지 않았다. ignored test의 9.14초에는
+artifact validation과 transfer가 포함되므로 throughput, TTFT, TPOT, P95/P99로 해석하지 않는다.
+
+따라서 P10 r3는 **pinned raw-Q arithmetic correspondence만** 확정한다. raw K/V, bias,
+full-forward, model output quality, selector integration, concurrency stability와 vLLM serving 성능은
+아직 검증되지 않았고, 이 표의 vLLM 성능 칸은 의도적으로 비워 둔다.
 
 ## 변경 묶음
 
