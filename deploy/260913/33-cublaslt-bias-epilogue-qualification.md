@@ -23,10 +23,10 @@ shared-host I/O PSI는 각 run의 공변량으로 함께 남긴다. PSI는 sampl
 재시도 결과를 선택하는 데 절대 쓰지 않는다. quality gate를 통과하지 못한 profile은
 성능 비교 대상이 아니며 빈 칸을 추정값으로 채우지 않는다.
 
-현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate,
-full-sequence direct projection-boundary gate, 그리고 raw-Q geometry r2 gate에서
-strict raw-Q의 serving-eligible BF16 exactness를 확보하지 못했고, cuBLASLt candidate도
-P7에서 같은 eligibility를 얻지 못했기 때문이다. 아래의 이전 operator AB receipt는
+현재는 **유효한 vLLM 수치 비교가 없다.** P9는 strict raw-Q가 PyTorch의
+`reduced_precision_reduction=false` control과 byte-exact함을 분리해 보였지만,
+full-sequence projection·full-forward·serving quality gate를 통과시키지는 않는다.
+cuBLASLt candidate도 P7에서 같은 eligibility를 얻지 못했다. 아래의 이전 operator AB receipt는
 end-to-end serving AB/BA가 아니므로
 throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 
@@ -35,11 +35,46 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P6: P2051 layer-stage discriminator | Blocked — strict/fused 모두 `layer0.q_proj.last`부터 non-exact | strict staged: serving eligible 아님 | cuBLASLt BIAS: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P2051 projection-boundary exactness를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
 | P7: P2051 full-sequence projection-boundary | Blocked — strict raw Q가 HF no-bias shadow부터 non-exact이고, strict+row-bias/fused Q/K/V의 다섯 endpoint 모두 non-exact | strict raw/row-bias: serving eligible 아님 | cuBLASLt BIAS Q/K/V: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | M=2051 geometry/alignment discriminator를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
 | P8 r2: P2051 raw-Q geometry | Blocked — F2048/F2051/F2052/F2080/F2176/F2304의 raw Q prefix가 모두 HF no-bias shadow와 non-exact | strict raw-Q geometry: serving eligible 아님 | cuBLASLt BIAS: P7 기준 serving eligible 아님; P8의 대상 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 테스트한 M/padding/anchor 범위의 geometry 가설은 refuted; input/weight/layout/arithmetic을 다음에 판별하고 selector 변경·vLLM 성능 비교는 보류 |
+| P9: P2051 raw-Q BF16 arithmetic policy | Diagnostic pass — current strict raw Q가 두 `reduced_precision_reduction=false` control과 exact, P7 default control과 non-exact | strict raw-Q: full-forward/serving eligible 아님 | 없음 — selector 변경 없음 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P7 default의 reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 full-sequence·full-forward에 qualification한 뒤에만 vLLM AB/BA를 실행 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
 baseline/candidate/vLLM AB/BA receipt가 모두 갖춰진 경우에만 이 행을 수치로
 갱신한다.
+
+## P9 raw-Q BF16 arithmetic-policy result — 2026-09-16
+
+P9는 serving path 밖에서 같은 P7 `layer0.input_norm`, checkpoint의
+`layer0.q_proj.weight`, `M=2051/N=2048/K=2048` raw no-bias Q projection만 묶었다.
+Python은 immutable offline oracle artifact를 만들고 재검증하는 데만 사용했다. Rust
+consumer는 같은 bytes를 `CudaPreparedGemm`으로 두 번 실행해 반복 BF16 hash, allocation
+accounting, P7 binding, checkpoint Q-weight binding을 검증한 뒤 세 PyTorch policy output과
+bytewise 대조했다. 기본 serving selector, CUDA Graph, scheduler, HTTP path는 바꾸지 않았다.
+
+최종 Rust receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-bf16-arithmetic-rust-consumer-r3-20260916T065628Z/`에 있다.
+source revision은 `7aa5744afccde53cf5141b1e98702db43d49bfa0`, receipt SHA-256은
+`8fff47dc65fe966eb368fd0dab574fb83f24204b7751b6df18ca7c5ff6ad2642`다. P9 oracle manifest와
+sidecar는 각각 `3079d4b1e6e3e654b92431d69cc0378ece76e87f50bb736710f95c487d61c0ed`,
+`11fe03272a5cbfcf2aed5ea7adee3232641aa181d1eb92f10736897c15d3ac08`로 고정했다.
+`SHA256SUMS`의 모든 파일을 재검증했다. single ignored test는 249.29초였지만 checkpoint
+load와 artifact validation을 포함한 correctness diagnostic이므로 throughput·TTFT·TPOT으로
+해석하지 않는다.
+
+| P9 oracle policy | PyTorch backend / flags | Riley strict raw-Q BF16 comparison | Strict output SHA-256 |
+|---|---|---|---|
+| P7 default | Cublas, reduced reduction on, split-K on | non-exact: 1,087,133 / 4,200,448; max abs 0.0625 | `5ddaf741ef847ffb997041b2b4cfed9811fdacc64d7fcca9a3ca27dd48166eb5` |
+| reduced control | Cublas, reduced reduction off, split-K on | exact: 0 / 4,200,448 | `5ddaf741ef847ffb997041b2b4cfed9811fdacc64d7fcca9a3ca27dd48166eb5` |
+| full-reduction control | CublasLt, reduced reduction off, split-K off | exact: 0 / 4,200,448 | `5ddaf741ef847ffb997041b2b4cfed9811fdacc64d7fcca9a3ca27dd48166eb5` |
+
+RTX 4090/SM89에서 strict plan은 deterministic algorithm id 21, tile 15, stages 12,
+`split_k=1`, `reduction_scheme=0`, workspace 0 B였다. P9가 보이는 범위는 **이 raw-Q
+operand와 이 GPU에서 strict output이 reduced-off oracle과 대응한다**는 사실이다. 이는
+global root cause, full-forward numerical correctness, fused selector 승격, serving stability,
+또는 Riley-vLLM 성능 우위를 뜻하지 않는다. 따라서 다음 meaningful batch는 P7 default의
+reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 strict default와 분리해
+full-sequence projection과 full-forward quality gate까지 확장하는 것이다. 그 batch가 통과하면 동일 model/checkpoint/workload로
+Riley baseline·candidate·vLLM AB/BA serving receipt를 만들어 위 표의 빈 성능 열을 갱신한다.
 
 ## 변경 묶음
 
