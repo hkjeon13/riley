@@ -147,6 +147,14 @@ mod p2051_projection_contract {
         })
     }
 
+    fn p9_bf16_exact(metrics: &Value, label: &str) -> TestResult<bool> {
+        metrics
+            .get("bf16_exact")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| format!("{label} metric lacks bf16_exact"))
+            .map_err(Into::into)
+    }
+
     fn p9_source_hashes(root: &Path) -> TestResult<Value> {
         let sources = [
             "crates/riley-runtime/tests/qwen3b_p2051_bf16_arithmetic_gpu.rs",
@@ -655,6 +663,7 @@ mod p2051_projection_contract {
         p9_policy_record(
             policy("cublaslt_reduced_off_splitk_off")?,
             "cublaslt_reduced_off_splitk_off",
+            "cublaslt",
             false,
             false,
             "explicit_cublaslt_full_reduction_control",
@@ -1005,16 +1014,16 @@ mod p2051_projection_contract {
         let strict_vs_cublaslt_reduced_off = policy_comparisons
             .get("raw_q/cublaslt_reduced_off_splitk_off")
             .ok_or("P9 CublasLt reduced-off comparison is missing")?;
-        let strict_matches_cublas_reduced_off = bf16_exact(
+        let strict_matches_cublas_reduced_off = p9_bf16_exact(
             strict_vs_cublas_reduced_off,
             "P9 strict vs Cublas reduced-off",
         )?;
-        let strict_matches_cublaslt_reduced_off = bf16_exact(
+        let strict_matches_cublaslt_reduced_off = p9_bf16_exact(
             strict_vs_cublaslt_reduced_off,
             "P9 strict vs CublasLt reduced-off",
         )?;
         let strict_differs_from_p7_default =
-            !bf16_exact(strict_vs_p7_default, "P9 strict vs P7 default")?;
+            !p9_bf16_exact(strict_vs_p7_default, "P9 strict vs P7 default")?;
         let policy_correspondence_observed = execution.reference_compute_capability_matches
             && execution.repeated_output_bf16_exact
             && execution.allocation_accounting_unchanged
