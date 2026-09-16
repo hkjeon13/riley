@@ -298,6 +298,48 @@ dense control은 시작 `56.95/50.02`, 종료 `66.24/60.38`이었다. 모두 공
 설명하기 위해 기록한 공변량이며 sample filter·weight·보정·재시도 선택에는 사용하지
 않았다.
 
+## P6 결과: cache-free P2051 layer-stage discriminator
+
+P6는 완료했다. offline HF eager cache-off oracle과 Rust의 cache-free materialized
+reference attention이 동일한 `P2048 + teacher[:3]` 입력(S2051)을 실행했고, 각
+decoder layer의 마지막 token row를 비교했다. 이 run은 scheduler, paged KV, continuous
+batching과 분리된 correctness control이며 성능 claim에는 사용할 수 없다.
+
+정상 artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-layer-stage-r2-20260916T033748Z/`다.
+source revision은 `8b657f6f0dce76a15190a195ae5defe7c0767495`, HF manifest SHA-256은
+`5c83bf794a50a554f87dc227ed12f6baa3cd567f401cd81cf7a364a9ec4b7577`, HF BF16
+sidecar SHA-256은 `9ada5579bc8a3eeaadc67aef07e306bee8cf736533be127adad317321c74cb5f`다.
+Rust comparison SHA-256은
+`f948429b51f590299e11b607cf76686b87f2648d75f0e3c4d81747801917e2cb`이고, 전체
+artifact integrity manifest SHA-256은
+`020c22b47c5a0117ca1850bad2398b4f904ac999b1d1048369c53de8b8db6c7f`다. 21개
+`P2051_INTEGRITY_SHA256SUMS` 항목을 재검증했다.
+
+초기 wrapper는 Docker가 sidecar를 `root:root 0600`으로 만들어 Rust consumer가 읽지
+못해 실패했다. 파일 내용은 SHA-256으로 검증한 뒤 Docker root에서 `a+r`만 추가했고,
+동일 HF artifact를 대상으로 Rust-only rerun을 수행했다. rerun receipt는
+`rust-p2051-layer-stage-permission-rerun-v2.json`이며 exit 0, test duration은
+211.38초다. 이는 수치 결과를 고르기 위한 retry가 아니라 artifact 접근 권한 결함을
+수정한 실행 기록이다.
+
+| projection profile | exact stage / 52 | first non-exact stage | Q / K / V unequal elements | final norm max abs | logits max abs |
+|---|---:|---|---|---:|---:|
+| strict staged | 2 | `layer0.q_proj.last` | `1122 / 2048`, `94 / 256`, `179 / 256` | `9.25` | `4.4921875` |
+| cuBLASLt bias epilogue | 2 | `layer0.q_proj.last` | `1028 / 2048`, `80 / 256`, `171 / 256` | `2.5625` | `1.8984375` |
+
+두 profile에서 `embedding.last`와 `layer0.input_norm.last`만 BF16 exact였다. fused
+profile은 downstream error magnitude를 줄였지만 P2051에서 Q/K/V 어느 것도 exact로
+만들지 못했으며, RoPE와 attention 이전인 `layer0.q_proj.last`가 첫 관측 불일치다.
+따라서 paged KV, cache, scheduler, attention softmax, MLP를 다음 병목으로 삼을 근거는
+아직 없다. 다음 판별은 M=2051의 actual HF Q/K/V bias-boundary output과 cuBLASLt
+algorithm/descriptor receipt를 직접 대응시켜 projection geometry·epilogue contract를
+분리해야 한다.
+
+I/O PSI `some/full avg10`은 시작 `61.91/57.54`, 종료 `34.31/30.54`였다. 공유 host
+상태를 설명하는 공변량일 뿐 어떤 결과도 filter·weight·보정·재시도 선택에 사용하지
+않았다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
@@ -305,21 +347,18 @@ Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU
 ## 다음 PR과 롤백
 
 corrected HF teacher-forced artifact, scheduler trace schema binding, M32/M1 shape
-control, cache-free dense outer control은 P3–P5에서 완료했다. 다음 PR도 성능
-최적화가 아니라 **cache-free P2051 layer-stage divergence discriminator**다. offline
-HF cache-off sidecar가 exact input `P2048 + teacher[:3]`의 layer checkpoint를
-고정하고, Rust의 같은 cache-free materialized reference control이 같은 checkpoint를
-수집한다. 우선 post-attention residual, layer output, final norm 및 logits처럼 first
-divergence layer를 결정할 수 있는 BF16 stage를 bind한다. sidecar 생성의 Python은
-offline oracle에만 쓰며 serving hot path에는 Python, persistent copy 또는 scheduler
-fallback을 넣지 않는다.
+control, cache-free dense outer control, P2051 layer-stage discriminator는 P3–P6에서
+완료했다. 다음 PR은 **P2051 Q/K/V projection-boundary qualification**이다. offline HF
+oracle이 layer 0 actual-module Q/K/V의 bias-boundary BF16 last row를 고정하고, Rust는
+동일 M=2051 geometry, layout, workspace와 cuBLASLt algorithm/descriptor receipt로 strict와
+candidate를 비교한다. candidate가 Q/K/V의 BF16 exact를 만족할 때에만 RoPE·attention
+trace를 다음 단계로 확장한다. Python은 artifact producer/validator에만 남기며 serving
+hot path에 Python, persistent copy 또는 scheduler fallback을 넣지 않는다.
 
-공통 cache-free forward에서 first divergence가 확인되면 그 projection/normalization,
-RoPE, attention, residual 또는 MLP stage를 profile별 contract와 함께 수정·재검증한다.
-반대로 dense stage가 HF와 일치하면서 scheduler trace만 다를 때에만 `PackedBatchV1`을
-`PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도 PR로 평가한다.
-이 순서는 scheduler native D128 path를 dense reference attention으로 임의 교체하지
-않는다.
+P2051 Q/K/V가 exact가 된 뒤에도 cache-free dense stage와 scheduler trace가 다를 때에만
+`PackedBatchV1`을 `PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도
+PR로 평가한다. 이 순서는 scheduler native D128 path를 dense reference attention으로
+임의 교체하지 않는다.
 
 그 discriminator로 원인을 판정하고 correction 뒤 profile-specific quality gate를
 통과하기 전까지 N06-A의 AB/BA throughput, TTFT, TPOT, P95/P99, failure rate 및 vLLM
