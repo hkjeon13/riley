@@ -494,7 +494,8 @@ fn shape_byte_len(shape: &[u64]) -> TestResult<usize> {
 }
 
 fn repository_root() -> TestResult<PathBuf> {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let manifest_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = manifest_directory
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| std::io::Error::other("workspace root is unavailable"))?;
