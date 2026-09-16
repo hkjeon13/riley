@@ -36,6 +36,7 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P7: P2051 full-sequence projection-boundary | Blocked — strict raw Q가 HF no-bias shadow부터 non-exact이고, strict+row-bias/fused Q/K/V의 다섯 endpoint 모두 non-exact | strict raw/row-bias: serving eligible 아님 | cuBLASLt BIAS Q/K/V: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | M=2051 geometry/alignment discriminator를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
 | P8 r2: P2051 raw-Q geometry | Blocked — F2048/F2051/F2052/F2080/F2176/F2304의 raw Q prefix가 모두 HF no-bias shadow와 non-exact | strict raw-Q geometry: serving eligible 아님 | cuBLASLt BIAS: P7 기준 serving eligible 아님; P8의 대상 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 테스트한 M/padding/anchor 범위의 geometry 가설은 refuted; input/weight/layout/arithmetic을 다음에 판별하고 selector 변경·vLLM 성능 비교는 보류 |
 | P9: P2051 raw-Q BF16 arithmetic policy | Diagnostic pass — current strict raw Q가 두 `reduced_precision_reduction=false` control과 exact, P7 default control과 non-exact | strict raw-Q: full-forward/serving eligible 아님 | 없음 — selector 변경 없음 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P7 default의 reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 full-sequence·full-forward에 qualification한 뒤에만 vLLM AB/BA를 실행 |
+| P10 r2: P2051 direct cuBLAS BF16 feasibility | Diagnostic pass — direct cuBLAS default가 P7 default와 exact이고, disallow-reduced control이 Riley/P9 reduced-off와 exact; repeat exact | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: P7 default exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 native arithmetic candidate를 Q/K/V·full-forward quality gate로 확장한 뒤에만 serving selector와 vLLM AB/BA를 평가 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
@@ -75,6 +76,33 @@ global root cause, full-forward numerical correctness, fused selector 승격, se
 reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 strict default와 분리해
 full-sequence projection과 full-forward quality gate까지 확장하는 것이다. 그 batch가 통과하면 동일 model/checkpoint/workload로
 Riley baseline·candidate·vLLM AB/BA serving receipt를 만들어 위 표의 빈 성능 열을 갱신한다.
+
+## P10 r2 direct cuBLAS BF16 feasibility result — 2026-09-16
+
+P10 r2는 P9와 동일한 immutable P2051 raw no-bias Q operand만 사용해 direct cuBLAS의
+두 arithmetic policy를 분리한 diagnostic이다. artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cublas-bf16-feasibility-r2-20260916T071002Z/`에
+있다. P9 sidecar SHA-256은
+`11fe03272a5cbfcf2aed5ea7adee3232641aa181d1eb92f10736897c15d3ac08`로 다시 고정했고,
+probe output SHA-256은
+`fe43ba8e447e430b971ea7c49962db5f9c84ad05ec02d58c03d7a6d0aff935f6`다. source와 runner
+SHA-256은 각각
+`498a8f7d3911729bfc3f1ac76f2da5d4c50b4c9e6097426d4ff6b203abe8fb65`,
+`c91e3c414eeb75fa1de121a0f9d336b99f0954f098b0dec28f2312ab10001595`로 기록했다.
+
+| direct cuBLAS policy | Reference endpoint | BF16 byte comparison | 반복 실행 |
+|---|---|---:|---|
+| default reduced-precision-reduction on | P7 default raw-Q | exact: `0 / 4,200,448` unequal | exact |
+| disallow reduced-precision reduction | Riley strict / P9 reduced-off raw-Q | exact: `0 / 4,200,448` unequal | exact |
+| crossed controls | 반대 policy endpoint | non-exact: `1,087,133 / 4,200,448`; max abs `0.0625` | 해당 policy의 반복 hash는 exact |
+
+이 결과는 native direct cuBLAS policy가 이 pinned raw-Q endpoint에서 P7 default와
+P9 reduced-off control을 구분해 재현할 수 있음을 보이는 **diagnostic**이다. Q/K/V 전체,
+bias, full-forward, CUDA Graph, scheduler, selector 승격, 안정성, throughput, TTFT, TPOT,
+P95/P99, failure rate 또는 vLLM 우위를 검증하지 않았다. 따라서
+`performance_claim_eligible=false`와 `vllm_comparison_eligible=false`를 유지하며, 표의
+vLLM 열은 matched same-model/hardware/workload/concurrency AB/BA serving receipt가 생길
+때까지 수치로 채우지 않는다.
 
 ## 변경 묶음
 
