@@ -8,6 +8,34 @@ Q/K/V projection의 `GEMM → row_bias_add` 두 GPU launch와 BF16 output read/w
 
 이 연산은 strict `BF16 GEMM → BF16-to-FP32 add → BF16 RNE`와 다른 rounding을 할 수 있다. strict path를 교체하거나 fused result를 strict-equivalent라고 표시하지 않는다.
 
+## Serving 비교표 보고 계약
+
+material batch가 끝날 때마다 아래 표를 갱신한다. 표에는 실제 serving의 matched
+comparison만 넣는다. 즉 Riley baseline, Riley candidate, vLLM이 **같은 model
+revision·checkpoint, GPU/driver/toolkit, workload, prompt/output distribution,
+concurrency, server option과 warmup 정책**에서 실행되고, backend 순서를 AB/BA로
+교차한 반복 run이어야 한다. 각 수치는 반복 run의 median과 dispersion (IQR 또는
+사전 선언한 95% bootstrap interval)을 함께 기록한다. operator event, checkpoint
+load를 포함한 ignored test, correctness diagnostic의 wall time은 이 표의 성능 수치가
+아니다.
+
+shared-host I/O PSI는 각 run의 공변량으로 함께 남긴다. PSI는 sample을 filter·weight·보정하거나
+재시도 결과를 선택하는 데 절대 쓰지 않는다. quality gate를 통과하지 못한 profile은
+성능 비교 대상이 아니며 빈 칸을 추정값으로 채우지 않는다.
+
+현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate에서
+strict와 cuBLASLt candidate 모두 layer 0 Q/K/V BF16 exactness를 만족하지 못했기
+때문이다. 아래의 이전 operator AB receipt는 end-to-end serving AB/BA가 아니므로
+throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
+
+| Batch | Quality gate | Riley baseline | Riley candidate | vLLM throughput | TTFT | TPOT | P95 | P99 | Failure rate | Decision |
+|---|---|---|---|---|---|---|---|---|---|---|
+| P6: P2051 layer-stage discriminator | Blocked — strict/fused 모두 `layer0.q_proj.last`부터 non-exact | strict staged: serving eligible 아님 | cuBLASLt BIAS: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P2051 projection-boundary exactness를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
+
+P2051 projection-boundary batch와 그 뒤의 각 material batch는 quality gate 결과와
+동일 조건의 Riley baseline/candidate/vLLM AB/BA receipt가 모두 갖춰진 경우에만 이
+행을 수치로 갱신한다.
+
 ## 변경 묶음
 
 1. native C ABI에 기존 `RileyCudaGemmPlan`과 분리된 `RileyCudaBiasGemmPlan`을 추가한다. create는 `epilogue=BIAS`만 받아 cold phase에서 descriptor, deterministic heuristic, `cublasLtMatmulAlgoCheck`, bounded workspace를 준비한다. current strict GEMM ABI는 `epilogue=NONE`만 계속 허용한다.
