@@ -494,11 +494,11 @@ fn shape_byte_len(shape: &[u64]) -> TestResult<usize> {
 }
 
 fn repository_root() -> TestResult<PathBuf> {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .ok_or("workspace root is unavailable")
-        .and_then(|path| path.canonicalize().map_err(Into::into))
+        .ok_or_else(|| std::io::Error::other("workspace root is unavailable"))?;
+    Ok(workspace.canonicalize()?)
 }
 
 fn validate_source_record(root: &Path, value: &Value, label: &str) -> TestResult {
@@ -546,8 +546,7 @@ fn parse_stage_sidecar(
         .ok_or("HF P2051 stage sidecar basename is invalid")?;
     if sidecar.get("path").and_then(Value::as_str) != Some(expected_name)
         || sidecar.get("format").and_then(Value::as_str) != Some("safetensors")
-        || sidecar.get("tensor_count").and_then(Value::as_u64())
-            != Some(u64::try_from(specs.len())?)
+        || sidecar.get("tensor_count").and_then(Value::as_u64) != Some(u64::try_from(specs.len())?)
         || sha256_hex(&bytes)
             != json_sha256(
                 sidecar
@@ -580,7 +579,7 @@ fn parse_stage_sidecar(
     let actual_keys: BTreeSet<_> = header
         .keys()
         .filter(|key| key.as_str() != "__metadata__")
-        .map(String::as_str)
+        .cloned()
         .collect();
     if actual_keys != expected_keys {
         return Err("HF P2051 stage sidecar tensor key set differs".into());
@@ -613,7 +612,7 @@ fn parse_stage_sidecar(
                 })
                 .collect::<Result<Vec<_>, _>>()?
                 != spec.shape
-            || reference.get("bf16_le_bytes").and_then(Value::as_u64())
+            || reference.get("bf16_le_bytes").and_then(Value::as_u64)
                 != Some(u64::try_from(shape_byte_len(&spec.shape)?)?)
         {
             return Err(format!("HF P2051 stage tensor {} metadata differs", spec.name).into());
@@ -755,7 +754,7 @@ fn load_hf_stage_artifact(
         != Some(QWEN3B_WORKLOAD_SHA256)
         || workload_contract
             .get("prompt_token_count")
-            .and_then(Value::as_u64())
+            .and_then(Value::as_u64)
             != Some(u64::try_from(workload.prompt_token_ids.len())?)
         || workload_contract
             .get("prompt_token_ids_le_u32_sha256")
@@ -777,13 +776,13 @@ fn load_hf_stage_artifact(
     let input_token_ids_le_sha256 = token_ids_sha256(&expected_input);
     if input.get("construction").and_then(Value::as_str)
         != Some("workload.prompt_token_ids+verified_hf_cache_off.teacher_token_ids[:3]")
-        || input.get("context_token_count").and_then(Value::as_u64())
+        || input.get("context_token_count").and_then(Value::as_u64)
             != Some(u64::try_from(CONTEXT_TOKEN_COUNT)?)
-        || input.get("prompt_token_count").and_then(Value::as_u64())
+        || input.get("prompt_token_count").and_then(Value::as_u64)
             != Some(u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT)?)
         || input
             .get("teacher_prefix_token_count")
-            .and_then(Value::as_u64())
+            .and_then(Value::as_u64)
             != Some(u64::try_from(TEACHER_PREFIX_TOKEN_COUNT)?)
         || input
             .get("input_token_ids_le_u32_sha256")
