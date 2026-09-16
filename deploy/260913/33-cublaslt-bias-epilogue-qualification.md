@@ -139,6 +139,52 @@ correctness, cached KV correctness, selector 승격, serving performance 또는 
 0%였다. I/O PSI `some/full avg10`은 시작 `4.30/3.84`, 종료 `8.74/8.44`로 함께
 기록했으며 공유 host 상태를 설명하는 값일 뿐 결과를 filter·weight·보정하지 않는다.
 
+## P3 corrected HF cache-on/cache-off teacher-forced artifact — 2026-09-16
+
+`6cfb27b234cee1515431f002f55f6c533caab8dc`에서 기존 cache-on의 off-by-one
+position을 제거한 offline HF eager BF16 artifact를 만들었다. artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-hf-eager-teacher-forced-r1-20260916T002940Z/`에
+create-only로 보존한다. manifest
+`teacher-forced-oracle.json` SHA-256은
+`35d5d9b153d73b4badc67e5eedf2e8226ca2b55c7e30eb0970cfb741031edd35`이다.
+이 경로는 serving hot path가 아니다. Python은 immutable checkpoint로 numerical
+sidecar를 만드는 offline oracle에만 쓰고, artifact를 만든 뒤 validator는 GPU 없이
+source·workload·safetensors binding을 다시 확인한다.
+
+producer의 post-write sidecar 검증과 별도 GPU-free validator replay가 모두
+통과했고, `SHA256SUMS` closure도 재검증했다. 두 sidecar는 각각 BF16
+`[128, 151936]`, raw payload `38,895,616 B`이며 full-file SHA-256은 다음과 같다.
+
+| reference | file | full-file SHA-256 |
+|---|---|---|
+| full-prefix cache-off control | `cache-off-logits.safetensors` | `4ecc126c122f040e5a92068ab471f57fad2c7a76977e72d3b69ca51382bc5d4b` |
+| DynamicCache cache-on scheduler reference | `cache-on-logits.safetensors` | `d1c649d126d494b5d902fa14ff22fbab46f13feeed46df380b9f55f4e5ab4c39` |
+
+teacher token stream은 cache-off addressable greedy selection에서만 유도되며,
+SHA-256은 `6030daf20e588f490e0d37ab69c93df8e19851d5c8114499e8388968c9347496`이다.
+첫 16 ID는 `304, 279, 198, 13, 41233, 13874, 3989, 16, 17, 13, 715, 220, 220, 16, 17, 13`이다.
+기존 workload에 고정되어 있던 vLLM 첫 ID `374`와 다르므로, 그 workload를 Riley/HF
+quality golden으로 쓰거나 N06-A serving 비교를 시작할 수는 없다.
+
+| 비교 | selected token 일치 / 128 | raw BF16 row hash 일치 / 128 | 해석 |
+|---|---:|---:|---|
+| cache-off vs cache-off teacher | 128 / 128 | 해당 없음 | teacher stream의 유일한 생성 근거 |
+| corrected cache-on vs cache-off teacher | 128 / 128 | 1 / 128 | cached trajectory token은 일치하지만 raw logits exact parity를 뜻하지 않음 |
+
+cache-on row 0은 P2048 prefill (`cache 0 → 2048`, position `0..2047`)이고,
+row 1은 teacher `304` 한 token을 position `2048`에서 소비한다. 마지막 row 127은
+teacher `220`을 position `2174`에서 소비해 cache length `2175`가 된다. 따라서
+Riley scheduler trace의 primary reference는 cache-on이고, cache-off는 같은 logical
+context의 full-prefix control로 남긴다. cache-on selected token이 미래 artifact에서
+teacher와 달라도 그 사실을 기록하며, scheduler는 여전히 teacher stream을 입력으로
+사용해야 한다.
+
+GPU observed memory는 생성 시작/종료 모두 335 MiB였다. shared host I/O PSI
+`some/full avg10`은 시작 `20.99/16.97`, 종료 `25.91/23.51`로 남겼다. 이는 artifact
+생성의 host 상태 설명일 뿐 selected-token 결과를 filter·weight·보정·재시도하는
+근거가 아니다. artifact 자체도 `performance_claim_eligible=false`이므로
+throughput, TTFT, TPOT, P95/P99 또는 vLLM 우위를 주장하지 않는다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).

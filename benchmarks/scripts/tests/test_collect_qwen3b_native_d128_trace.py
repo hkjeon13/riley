@@ -1,4 +1,4 @@
-"""Focused hostile-input tests for the native-D128 trace collector."""
+"""Focused hostile-input tests for the native-D128 trace collector v2."""
 
 from __future__ import annotations
 
@@ -37,33 +37,88 @@ def top_values() -> list[float]:
 
 
 def hf_row(
-    step: int, native: dict[str, object], teacher_token_id: int
+    *,
+    mode: str,
+    step: int,
+    native: dict[str, object],
+    teacher_token_id: int,
+    previous_teacher_token_id: int | None,
+    selected_token_id: int | None = None,
 ) -> dict[str, object]:
-    ids = top_ids(teacher_token_id)
+    selected = teacher_token_id if selected_token_id is None else selected_token_id
+    ids = top_ids(selected)
     values = top_values()
-    hf_hash = str(native["row_bf16_le_sha256"])
+    context = collector.PROMPT_TOKEN_COUNT + step
+    if mode == "cache-off":
+        plan = {
+            "call_input_token_count": context,
+            "context_token_count": context,
+            "attention_mask_token_count": context,
+            "position_start": 0,
+            "position_end": context - 1,
+            "teacher_input_token_id": None,
+            "cache_length_before": None,
+            "cache_length_after": None,
+        }
+    elif step == 0:
+        plan = {
+            "call_input_token_count": collector.PROMPT_TOKEN_COUNT,
+            "context_token_count": collector.PROMPT_TOKEN_COUNT,
+            "attention_mask_token_count": collector.PROMPT_TOKEN_COUNT,
+            "position_start": 0,
+            "position_end": collector.PROMPT_TOKEN_COUNT - 1,
+            "teacher_input_token_id": None,
+            "cache_length_before": 0,
+            "cache_length_after": collector.PROMPT_TOKEN_COUNT,
+        }
+    else:
+        assert previous_teacher_token_id is not None
+        plan = {
+            "call_input_token_count": 1,
+            "context_token_count": context,
+            "attention_mask_token_count": context,
+            "position_start": context - 1,
+            "position_end": context - 1,
+            "teacher_input_token_id": previous_teacher_token_id,
+            "cache_length_before": context - 1,
+            "cache_length_after": context,
+        }
+    call_input_hash = (
+        collector._u32_le_sha256([previous_teacher_token_id])
+        if mode == "cache-on" and step > 0
+        else digest(f"{mode}-input-{step}")
+    )
     return {
+        "mode": mode,
         "step": step,
-        "input_token_count": collector.PROMPT_TOKEN_COUNT + step,
-        "attention_mask_token_count": collector.PROMPT_TOKEN_COUNT + step,
-        "position_start": 0,
-        "position_end": collector.PROMPT_TOKEN_COUNT - 1 + step,
-        "logits_bf16_le_sha256": hf_hash,
+        "call_input_token_ids_le_u32_sha256": call_input_hash,
+        **plan,
+        "logits_bf16_le_sha256": str(native["row_bf16_le_sha256"]),
+        "addressable_bf16_le_sha256": str(native["addressable_bf16_le_sha256"]),
         "raw_argmax_token_id": int(native["raw_argmax_token_id"]),
-        "selected_token_id": teacher_token_id,
+        "selected_token_id": selected,
+        "cache_off_teacher_token_id": teacher_token_id,
+        "selection_matches_cache_off_teacher": selected == teacher_token_id,
         "selected_logit_bf16_as_f32": values[0],
         "top_token_ids": ids,
-        "top_values_f32": values,
+        "top_values_bf16_as_f32": values,
         "raw_hash_matches": True,
-        "selected_token_matches": int(native["selected_token_id"]) == teacher_token_id,
+        "selected_token_matches": int(native["selected_token_id"]) == selected,
         "raw_argmax_matches": True,
-        "top32_order_matches_tie_sensitive": list(native["top_token_ids"]) == ids,
+        "top32_order_matches_bf16_numeric_tie_break": list(native["top_token_ids"])
+        == ids,
         "top32_set_overlap": len(set(native["top_token_ids"]).intersection(ids)),
     }
 
 
-def trace_row(step: int, *, selected_token_id: int) -> dict[str, object]:
-    ids = top_ids(selected_token_id)
+def trace_row(
+    step: int,
+    *,
+    teacher_token_ids: list[int],
+    cache_on_selected_token_id: int | None = None,
+) -> dict[str, object]:
+    selected = teacher_token_ids[step]
+    ids = top_ids(selected)
     values = top_values()
     native: dict[str, object] = {
         "step": step,
@@ -73,31 +128,59 @@ def trace_row(step: int, *, selected_token_id: int) -> dict[str, object]:
         "target_logical_length": collector.PROMPT_TOKEN_COUNT + step,
         "row_bf16_le_sha256": digest(f"native-{step}"),
         "addressable_bf16_le_sha256": digest(f"addressable-{step}"),
-        "raw_argmax_token_id": selected_token_id,
-        "selected_token_id": selected_token_id,
+        "raw_argmax_token_id": selected,
+        "selected_token_id": selected,
         "selected_logit_bf16_as_f32": values[0],
         "top_token_ids": ids,
-        "top_values_f32": values,
+        "top_values_bf16_as_f32": values,
     }
-    native["hf_cache_off"] = hf_row(step, native, selected_token_id)
+    native["hf_cache_off"] = hf_row(
+        mode="cache-off",
+        step=step,
+        native=native,
+        teacher_token_id=selected,
+        previous_teacher_token_id=None,
+    )
+    native["hf_cache_on"] = hf_row(
+        mode="cache-on",
+        step=step,
+        native=native,
+        teacher_token_id=selected,
+        previous_teacher_token_id=(None if step == 0 else teacher_token_ids[step - 1]),
+        selected_token_id=cache_on_selected_token_id,
+    )
     return native
 
 
-def mode(backend: str, selected_token_ids: list[int]) -> dict[str, object]:
+def mode(
+    backend: str,
+    teacher_token_ids: list[int],
+    *,
+    cache_on_divergence_step: int | None = None,
+) -> dict[str, object]:
     rows = [
-        trace_row(step, selected_token_id=token)
-        for step, token in enumerate(selected_token_ids)
+        trace_row(
+            step,
+            teacher_token_ids=teacher_token_ids,
+            cache_on_selected_token_id=(
+                teacher_token_ids[step] + 200
+                if step == cache_on_divergence_step
+                else None
+            ),
+        )
+        for step in range(collector.TRACE_OUTPUT_ROWS)
     ]
     return {
         "projection_bias_backend": backend,
         "prefill_iteration_count": 64,
         "decode_iteration_count": collector.TRACE_OUTPUT_ROWS - 1,
         "first_hf_cache_off_selected_token_mismatch": None,
+        "first_hf_cache_on_selected_token_mismatch": cache_on_divergence_step,
         "rows": rows,
     }
 
 
-def valid_trace() -> dict[str, object]:
+def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, object]:
     teacher_token_ids = [100 + step * 40 for step in range(collector.TRACE_OUTPUT_ROWS)]
     return {
         "schema_version": collector.TRACE_SCHEMA_VERSION,
@@ -106,8 +189,9 @@ def valid_trace() -> dict[str, object]:
         "trace_contract": {
             "scheduler_executor_replay": True,
             "http_transport_replayed": False,
-            "sampling": "teacher-forced-hf-cache-off-selected-token-after-scheduler-commit",
-            "hf_reference": "full-prefix-cache-off; cache-on excluded because its recorded decode position starts at 2049",
+            "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
+            "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
+            "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
             "projection_bias_modes": [
                 collector.STRICT_PROJECTION_BIAS_BACKEND,
                 collector.FUSED_PROJECTION_BIAS_BACKEND,
@@ -129,7 +213,7 @@ def valid_trace() -> dict[str, object]:
             "metadata_transport": "synchronous",
             "batch_shape_policy": "fixed-maximum",
             "reduction_profile": "canonical-v1",
-            "top32_order_comparison": "observational-tie-sensitive",
+            "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
         },
         "model": {
             "id": collector.QWEN3B_MODEL_ID,
@@ -139,16 +223,36 @@ def valid_trace() -> dict[str, object]:
             "sha256": collector.QWEN3B_WORKLOAD_SHA256,
             "case": collector.QWEN3B_WORKLOAD_CASE,
             "prompt_token_count": collector.PROMPT_TOKEN_COUNT,
-            "hf_teacher_token_ids": teacher_token_ids,
+            "teacher_token_ids": teacher_token_ids,
+            "teacher_token_ids_le_u32_sha256": collector._u32_le_sha256(
+                teacher_token_ids
+            ),
         },
-        "hf_generation_oracle": {
-            "schema_version": collector.HF_GENERATION_ORACLE_SCHEMA,
-            "artifact_sha256": digest("hf-generation-oracle"),
-            "mode": "cache-off",
+        "hf_teacher_forced_oracle": {
+            "schema_version": collector.HF_TEACHER_FORCED_ORACLE_SCHEMA,
+            "artifact_kind": collector.HF_TEACHER_FORCED_ARTIFACT_KIND,
+            "artifact_sha256": digest("hf-teacher-forced-oracle"),
+            "teacher_token_ids_le_u32_sha256": digest("all-128-teacher-tokens"),
+            "cache_off_sidecar": {
+                "basename": "cache-off-logits.safetensors",
+                "sha256": digest("cache-off-sidecar"),
+            },
+            "cache_on_sidecar": {
+                "basename": "cache-on-logits.safetensors",
+                "sha256": digest("cache-on-sidecar"),
+            },
         },
         "modes": [
-            mode(collector.STRICT_PROJECTION_BIAS_BACKEND, teacher_token_ids),
-            mode(collector.FUSED_PROJECTION_BIAS_BACKEND, teacher_token_ids),
+            mode(
+                collector.STRICT_PROJECTION_BIAS_BACKEND,
+                teacher_token_ids,
+                cache_on_divergence_step=cache_on_divergence_step,
+            ),
+            mode(
+                collector.FUSED_PROJECTION_BIAS_BACKEND,
+                teacher_token_ids,
+                cache_on_divergence_step=cache_on_divergence_step,
+            ),
         ],
     }
 
@@ -212,6 +316,83 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
         self.assertIn("source_log_sha256=", result.stdout)
         self.assertFalse(document["performance_claim_eligible"])
 
+    def test_allows_cache_on_selected_token_to_differ_from_teacher(self) -> None:
+        trace = valid_trace(cache_on_divergence_step=3)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            result = collector.collect_trace(
+                test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                output_path=root / "trace.json",
+            )
+        self.assertEqual(
+            result["trace"]["modes"][0]["first_hf_cache_on_selected_token_mismatch"],
+            3,
+        )
+        self.assertFalse(
+            result["trace"]["modes"][0]["rows"][3]["hf_cache_on"][
+                "selection_matches_cache_off_teacher"
+            ]
+        )
+
+    def test_rejects_cache_off_non_teacher_selection_and_bad_cache_on_schedule(
+        self,
+    ) -> None:
+        non_teacher = valid_trace()
+        hf_off = non_teacher["modes"][0]["rows"][1]["hf_cache_off"]
+        hf_off["selected_token_id"] = 777
+        hf_off["selection_matches_cache_off_teacher"] = False
+        hf_off["top_token_ids"] = top_ids(777)
+        hf_off["top32_order_matches_bf16_numeric_tie_break"] = False
+        hf_off["top32_set_overlap"] = 0
+        schedule = valid_trace()
+        schedule["modes"][0]["rows"][1]["hf_cache_on"]["position_start"] = 2_049
+        for label, trace, expected in (
+            ("cache-off", non_teacher, "selected_token_id"),
+            ("cache-on", schedule, "position_start"),
+        ):
+            with self.subTest(
+                label=label
+            ), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                with self.assertRaisesRegex(collector.TraceCollectorError, expected):
+                    collector.collect_trace(
+                        test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                        output_path=root / "trace.json",
+                    )
+
+    def test_rejects_cache_on_decode_input_hash_not_derived_from_teacher(self) -> None:
+        trace = valid_trace()
+        trace["modes"][0]["rows"][1]["hf_cache_on"][
+            "call_input_token_ids_le_u32_sha256"
+        ] = digest("wrong-cache-on-decode-input")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            with self.assertRaisesRegex(
+                collector.TraceCollectorError, "call_input_token_ids_le_u32_sha256"
+            ):
+                collector.collect_trace(
+                    test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                    output_path=root / "trace.json",
+                )
+
+    def test_rejects_equal_bf16_top_k_values_with_descending_token_ids(self) -> None:
+        trace = valid_trace()
+        row = trace["modes"][0]["rows"][0]
+        row["top_values_bf16_as_f32"][1] = row["top_values_bf16_as_f32"][0]
+        row["top_token_ids"][0], row["top_token_ids"][1] = (
+            row["top_token_ids"][1],
+            row["top_token_ids"][0],
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            with self.assertRaisesRegex(
+                collector.TraceCollectorError, "ascending token ID"
+            ):
+                collector.collect_trace(
+                    test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                    output_path=root / "trace.json",
+                )
+
     def test_rejects_missing_or_duplicate_markers_without_writing_output(self) -> None:
         cases = {
             "missing": "test result: ok\n",
@@ -232,30 +413,26 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                     )
                 self.assertFalse(output.exists())
 
-    def test_rejects_performance_eligible_and_inconsistent_comparison_bindings(
-        self,
-    ) -> None:
+    def test_rejects_performance_eligible_and_invalid_sidecar_binding(self) -> None:
         performance = valid_trace()
         performance["performance_claim_eligible"] = True
-        inconsistent = valid_trace()
-        inconsistent["modes"][0]["rows"][0]["hf_cache_off"][
-            "selected_token_matches"
-        ] = False
+        binding = valid_trace()
+        binding["hf_teacher_forced_oracle"]["cache_on_sidecar"][
+            "basename"
+        ] = "../bad.safetensors"
         for label, trace, expected in (
             ("performance", performance, "must be false"),
-            ("comparison", inconsistent, "selected_token_matches"),
+            ("binding", binding, "must be a safetensors basename"),
         ):
             with self.subTest(
                 label=label
             ), tempfile.TemporaryDirectory() as temporary_directory:
                 root = Path(temporary_directory)
-                log_path = self.write_log(root, marker(trace) + "\n")
-                output = root / "trace.json"
                 with self.assertRaisesRegex(collector.TraceCollectorError, expected):
                     collector.collect_trace(
-                        test_stdout_path=log_path, output_path=output
+                        test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                        output_path=root / "trace.json",
                     )
-                self.assertFalse(output.exists())
 
     def test_rejects_duplicate_json_keys_and_existing_output_without_replacement(
         self,
@@ -280,7 +457,7 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                 collector.collect_trace(test_stdout_path=valid_log, output_path=output)
             self.assertEqual(output.read_bytes(), b"do not replace")
 
-    def test_rejects_unknown_or_missing_capacity_and_provenance_contract_fields(
+    def test_rejects_unknown_or_missing_contract_fields_and_noncompact_marker(
         self,
     ) -> None:
         unknown = valid_trace()
@@ -292,25 +469,27 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                 label=label
             ), tempfile.TemporaryDirectory() as temporary_directory:
                 root = Path(temporary_directory)
-                log_path = self.write_log(root, marker(trace) + "\n")
                 with self.assertRaisesRegex(
                     collector.TraceCollectorError, "unexpected|missing"
                 ):
                     collector.collect_trace(
-                        test_stdout_path=log_path, output_path=root / "trace.json"
+                        test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                        output_path=root / "trace.json",
                     )
-
-    def test_rejects_noncompact_marker_outer_whitespace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            log_path = self.write_log(
-                root, collector.MARKER_PREFIX + " " + json.dumps(valid_trace()) + "\n"
-            )
             with self.assertRaisesRegex(
                 collector.TraceCollectorError, "outer whitespace"
             ):
                 collector.collect_trace(
-                    test_stdout_path=log_path, output_path=root / "trace.json"
+                    test_stdout_path=self.write_log(
+                        root,
+                        collector.MARKER_PREFIX
+                        + " "
+                        + json.dumps(valid_trace())
+                        + "\n",
+                    ),
+                    output_path=root / "trace.json",
                 )
 
 

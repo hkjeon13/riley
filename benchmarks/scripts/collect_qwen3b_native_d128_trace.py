@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Collect one Qwen2.5-3B native-D128 numerical trace from Rust test stdout.
 
-This is an offline diagnostic collector. It accepts exactly one compact marker,
-requires the trace to remain non-performance-eligible, and writes a
-create-only canonical envelope bound to the complete source-log SHA-256.
+The marker is an offline numerical diagnostic. It is bound to a cache-on
+teacher-forced Hugging Face reference and its cache-off control, but it never
+represents a serving-performance result.
 """
 
 from __future__ import annotations
@@ -22,15 +22,18 @@ from typing import Any, NoReturn
 
 MAX_TEST_STDOUT_BYTES = 64 * 1024 * 1024
 MARKER_PREFIX = "RILEY_QWEN3B_NATIVE_D128_LOGIT_TRACE="
-TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v1"
+TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v2"
 COLLECTED_SCHEMA_VERSION = (
-    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v1"
+    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v2"
 )
 TRACE_ARTIFACT_KIND = (
     "qwen2.5-3b-native-d128-scheduler-committed-teacher-forced-logit-trace"
 )
 COLLECTED_ARTIFACT_KIND = f"{TRACE_ARTIFACT_KIND}-artifact"
-HF_GENERATION_ORACLE_SCHEMA = "riley.qwen3b-hf-eager-generation.v1"
+HF_TEACHER_FORCED_ORACLE_SCHEMA = "riley.qwen3b-hf-eager-teacher-forced-generation.v1"
+HF_TEACHER_FORCED_ARTIFACT_KIND = (
+    "qwen2.5-3b-hf-eager-bf16-p2048-teacher-forced-generation"
+)
 QWEN3B_MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 QWEN3B_MODEL_REVISION = "aa8e72537993ba99e69dfaafa59ed015b17504d1"
 QWEN3B_WORKLOAD_SHA256 = (
@@ -54,14 +57,15 @@ TRACE_KEYS = {
     "trace_contract",
     "model",
     "workload",
-    "hf_generation_oracle",
+    "hf_teacher_forced_oracle",
     "modes",
 }
 CONTRACT_KEYS = {
     "scheduler_executor_replay",
     "http_transport_replayed",
     "sampling",
-    "hf_reference",
+    "cache_on_scheduler_reference",
+    "cache_off_control_reference",
     "projection_bias_modes",
     "native_d128_backend",
     "max_active_sequences",
@@ -82,11 +86,28 @@ CONTRACT_KEYS = {
     "reduction_profile",
     "top32_order_comparison",
 }
+WORKLOAD_KEYS = {
+    "sha256",
+    "case",
+    "prompt_token_count",
+    "teacher_token_ids",
+    "teacher_token_ids_le_u32_sha256",
+}
+ORACLE_KEYS = {
+    "schema_version",
+    "artifact_kind",
+    "artifact_sha256",
+    "teacher_token_ids_le_u32_sha256",
+    "cache_off_sidecar",
+    "cache_on_sidecar",
+}
+SIDECAR_BINDING_KEYS = {"basename", "sha256"}
 MODE_KEYS = {
     "projection_bias_backend",
     "prefill_iteration_count",
     "decode_iteration_count",
     "first_hf_cache_off_selected_token_mismatch",
+    "first_hf_cache_on_selected_token_mismatch",
     "rows",
 }
 ROW_KEYS = {
@@ -101,25 +122,35 @@ ROW_KEYS = {
     "selected_token_id",
     "selected_logit_bf16_as_f32",
     "top_token_ids",
-    "top_values_f32",
+    "top_values_bf16_as_f32",
     "hf_cache_off",
+    "hf_cache_on",
 }
 HF_ROW_KEYS = {
+    "mode",
     "step",
-    "input_token_count",
+    "call_input_token_count",
+    "call_input_token_ids_le_u32_sha256",
+    "context_token_count",
     "attention_mask_token_count",
     "position_start",
     "position_end",
+    "teacher_input_token_id",
+    "cache_length_before",
+    "cache_length_after",
     "logits_bf16_le_sha256",
+    "addressable_bf16_le_sha256",
     "raw_argmax_token_id",
     "selected_token_id",
+    "cache_off_teacher_token_id",
+    "selection_matches_cache_off_teacher",
     "selected_logit_bf16_as_f32",
     "top_token_ids",
-    "top_values_f32",
+    "top_values_bf16_as_f32",
     "raw_hash_matches",
     "selected_token_matches",
     "raw_argmax_matches",
-    "top32_order_matches_tie_sensitive",
+    "top32_order_matches_bf16_numeric_tie_break",
     "top32_set_overlap",
 }
 
@@ -188,6 +219,14 @@ def _integer(value: Any, path: str, *, maximum: int | None = None) -> int:
     return value
 
 
+def _optional_integer(
+    value: Any, path: str, *, maximum: int | None = None
+) -> int | None:
+    if value is None:
+        return None
+    return _integer(value, path, maximum=maximum)
+
+
 def _number(value: Any, path: str) -> float:
     if (
         isinstance(value, bool)
@@ -203,6 +242,11 @@ def _equal(value: Any, expected: Any, path: str) -> None:
         _fail(path, f"must equal {expected!r}")
 
 
+def _u32_le_sha256(token_ids: list[int]) -> str:
+    payload = b"".join(token_id.to_bytes(4, "little") for token_id in token_ids)
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _top_k(
     ids_value: Any, values_value: Any, path: str, *, upper_bound: int
 ) -> tuple[list[int], list[float]]:
@@ -215,29 +259,124 @@ def _top_k(
     if len(set(ids)) != TOP_K:
         _fail(f"{path}.top_token_ids", "must be unique")
     if not isinstance(values_value, list) or len(values_value) != TOP_K:
-        _fail(f"{path}.top_values_f32", f"must contain exactly {TOP_K} values")
+        _fail(f"{path}.top_values_bf16_as_f32", f"must contain exactly {TOP_K} values")
     values = [
-        _number(value, f"{path}.top_values_f32[{index}]")
+        _number(value, f"{path}.top_values_bf16_as_f32[{index}]")
         for index, value in enumerate(values_value)
     ]
     if any(left < right for left, right in zip(values, values[1:])):
-        _fail(f"{path}.top_values_f32", "must be descending")
+        _fail(f"{path}.top_values_bf16_as_f32", "must be descending")
+    if any(
+        left_value == right_value and left_id >= right_id
+        for (left_id, left_value), (right_id, right_value) in zip(
+            zip(ids, values), zip(ids[1:], values[1:])
+        )
+    ):
+        _fail(
+            f"{path}.top_token_ids",
+            "must order equal BF16 numeric values by ascending token ID",
+        )
     return ids, values
 
 
+def _validate_sidecar_binding(value: Any, path: str) -> None:
+    binding = _object(value, SIDECAR_BINDING_KEYS, path)
+    basename = _string(binding["basename"], f"{path}.basename")
+    if Path(basename).name != basename or not basename.endswith(".safetensors"):
+        _fail(f"{path}.basename", "must be a safetensors basename")
+    _sha256(binding["sha256"], f"{path}.sha256")
+
+
 def _validate_hf_row(
-    hf_value: Any, native: dict[str, Any], step: int, teacher_token: int, path: str
-) -> None:
+    hf_value: Any,
+    native: dict[str, Any],
+    step: int,
+    teacher_token: int,
+    previous_teacher_token: int | None,
+    expected_mode: str,
+    path: str,
+) -> int:
     hf = _object(hf_value, HF_ROW_KEYS, path)
-    for key, expected in {
-        "step": step,
-        "input_token_count": PROMPT_TOKEN_COUNT + step,
-        "attention_mask_token_count": PROMPT_TOKEN_COUNT + step,
-        "position_start": 0,
-        "position_end": PROMPT_TOKEN_COUNT - 1 + step,
-    }.items():
-        _equal(_integer(hf[key], f"{path}.{key}"), expected, f"{path}.{key}")
+    _equal(_string(hf["mode"], f"{path}.mode"), expected_mode, f"{path}.mode")
+    _equal(_integer(hf["step"], f"{path}.step"), step, f"{path}.step")
+    context = PROMPT_TOKEN_COUNT + step
+    if expected_mode == "cache-off":
+        expected = {
+            "call_input_token_count": context,
+            "context_token_count": context,
+            "attention_mask_token_count": context,
+            "position_start": 0,
+            "position_end": context - 1,
+            "teacher_input_token_id": None,
+            "cache_length_before": None,
+            "cache_length_after": None,
+        }
+    else:
+        if step == 0:
+            expected = {
+                "call_input_token_count": PROMPT_TOKEN_COUNT,
+                "context_token_count": PROMPT_TOKEN_COUNT,
+                "attention_mask_token_count": PROMPT_TOKEN_COUNT,
+                "position_start": 0,
+                "position_end": PROMPT_TOKEN_COUNT - 1,
+                "teacher_input_token_id": None,
+                "cache_length_before": 0,
+                "cache_length_after": PROMPT_TOKEN_COUNT,
+            }
+        else:
+            expected = {
+                "call_input_token_count": 1,
+                "context_token_count": context,
+                "attention_mask_token_count": context,
+                "position_start": context - 1,
+                "position_end": context - 1,
+                "teacher_input_token_id": previous_teacher_token,
+                "cache_length_before": context - 1,
+                "cache_length_after": context,
+            }
+            if previous_teacher_token is None:
+                _fail(path, "cache-on decode lacks a prior teacher token")
+    for key in (
+        "call_input_token_count",
+        "context_token_count",
+        "attention_mask_token_count",
+        "position_start",
+        "position_end",
+    ):
+        _equal(_integer(hf[key], f"{path}.{key}"), expected[key], f"{path}.{key}")
+    call_input_token_ids_sha256 = _sha256(
+        hf["call_input_token_ids_le_u32_sha256"],
+        f"{path}.call_input_token_ids_le_u32_sha256",
+    )
+    if expected_mode == "cache-on" and step > 0:
+        if previous_teacher_token is None:
+            _fail(path, "cache-on decode lacks a prior teacher token")
+        _equal(
+            call_input_token_ids_sha256,
+            _u32_le_sha256([previous_teacher_token]),
+            f"{path}.call_input_token_ids_le_u32_sha256",
+        )
+    _equal(
+        _optional_integer(
+            hf["teacher_input_token_id"],
+            f"{path}.teacher_input_token_id",
+            maximum=ADDRESSABLE_TOKEN_COUNT - 1,
+        ),
+        expected["teacher_input_token_id"],
+        f"{path}.teacher_input_token_id",
+    )
+    _equal(
+        _optional_integer(hf["cache_length_before"], f"{path}.cache_length_before"),
+        expected["cache_length_before"],
+        f"{path}.cache_length_before",
+    )
+    _equal(
+        _optional_integer(hf["cache_length_after"], f"{path}.cache_length_after"),
+        expected["cache_length_after"],
+        f"{path}.cache_length_after",
+    )
     hf_hash = _sha256(hf["logits_bf16_le_sha256"], f"{path}.logits_bf16_le_sha256")
+    _sha256(hf["addressable_bf16_le_sha256"], f"{path}.addressable_bf16_le_sha256")
     hf_raw_argmax = _integer(
         hf["raw_argmax_token_id"],
         f"{path}.raw_argmax_token_id",
@@ -248,32 +387,52 @@ def _validate_hf_row(
         f"{path}.selected_token_id",
         maximum=ADDRESSABLE_TOKEN_COUNT - 1,
     )
+    _equal(
+        _integer(
+            hf["cache_off_teacher_token_id"],
+            f"{path}.cache_off_teacher_token_id",
+            maximum=ADDRESSABLE_TOKEN_COUNT - 1,
+        ),
+        teacher_token,
+        f"{path}.cache_off_teacher_token_id",
+    )
+    selected_matches_teacher = _bool(
+        hf["selection_matches_cache_off_teacher"],
+        f"{path}.selection_matches_cache_off_teacher",
+    )
+    _equal(
+        selected_matches_teacher,
+        hf_selected == teacher_token,
+        f"{path}.selection_matches_cache_off_teacher",
+    )
+    if expected_mode == "cache-off":
+        _equal(hf_selected, teacher_token, f"{path}.selected_token_id")
     hf_logit = _number(
         hf["selected_logit_bf16_as_f32"], f"{path}.selected_logit_bf16_as_f32"
     )
     hf_ids, hf_values = _top_k(
         hf["top_token_ids"],
-        hf["top_values_f32"],
+        hf["top_values_bf16_as_f32"],
         path,
         upper_bound=ADDRESSABLE_TOKEN_COUNT,
     )
     _equal(hf_selected, hf_ids[0], f"{path}.selected_token_id")
     _equal(hf_logit, hf_values[0], f"{path}.selected_logit_bf16_as_f32")
-    _equal(hf_selected, teacher_token, f"{path}.selected_token_id")
     expected_flags = {
         "raw_hash_matches": native["row_bf16_le_sha256"] == hf_hash,
         "selected_token_matches": native["selected_token_id"] == hf_selected,
         "raw_argmax_matches": native["raw_argmax_token_id"] == hf_raw_argmax,
-        "top32_order_matches_tie_sensitive": native["top_token_ids"] == hf_ids,
+        "top32_order_matches_bf16_numeric_tie_break": native["top_token_ids"] == hf_ids,
         "top32_set_overlap": len(set(native["top_token_ids"]) & set(hf_ids)),
     }
-    for key, expected in expected_flags.items():
+    for key, expected_value in expected_flags.items():
         actual = (
             _integer(hf[key], f"{path}.{key}", maximum=TOP_K)
             if key == "top32_set_overlap"
             else _bool(hf[key], f"{path}.{key}")
         )
-        _equal(actual, expected, f"{path}.{key}")
+        _equal(actual, expected_value, f"{path}.{key}")
+    return hf_selected
 
 
 def _validate_mode(
@@ -298,7 +457,8 @@ def _validate_mode(
     rows = mode["rows"]
     if not isinstance(rows, list) or len(rows) != TRACE_OUTPUT_ROWS:
         _fail(f"{path}.rows", f"must contain exactly {TRACE_OUTPUT_ROWS} rows")
-    mismatch: int | None = None
+    cache_off_mismatch: int | None = None
+    cache_on_mismatch: int | None = None
     last_iteration_id = 0
     for step, value in enumerate(rows):
         row_path = f"{path}.rows[{step}]"
@@ -347,33 +507,49 @@ def _validate_mode(
         )
         ids, values = _top_k(
             row["top_token_ids"],
-            row["top_values_f32"],
+            row["top_values_bf16_as_f32"],
             row_path,
             upper_bound=ADDRESSABLE_TOKEN_COUNT,
         )
         _equal(selected, ids[0], f"{row_path}.selected_token_id")
         _equal(selected_logit, values[0], f"{row_path}.selected_logit_bf16_as_f32")
-        _validate_hf_row(
+        cache_off_selected = _validate_hf_row(
             row["hf_cache_off"],
             row,
             step,
             teacher_tokens[step],
+            None,
+            "cache-off",
             f"{row_path}.hf_cache_off",
         )
-        if mismatch is None and selected != row["hf_cache_off"]["selected_token_id"]:
-            mismatch = step
-    reported = mode["first_hf_cache_off_selected_token_mismatch"]
-    if reported is not None:
-        reported = _integer(
-            reported,
-            f"{path}.first_hf_cache_off_selected_token_mismatch",
-            maximum=TRACE_OUTPUT_ROWS - 1,
+        cache_on_selected = _validate_hf_row(
+            row["hf_cache_on"],
+            row,
+            step,
+            teacher_tokens[step],
+            None if step == 0 else teacher_tokens[step - 1],
+            "cache-on",
+            f"{row_path}.hf_cache_on",
         )
-    _equal(reported, mismatch, f"{path}.first_hf_cache_off_selected_token_mismatch")
+        if cache_off_mismatch is None and selected != cache_off_selected:
+            cache_off_mismatch = step
+        if cache_on_mismatch is None and selected != cache_on_selected:
+            cache_on_mismatch = step
+    for field, expected in (
+        ("first_hf_cache_off_selected_token_mismatch", cache_off_mismatch),
+        ("first_hf_cache_on_selected_token_mismatch", cache_on_mismatch),
+    ):
+        reported = mode[field]
+        if reported is not None:
+            reported = _integer(
+                reported, f"{path}.{field}", maximum=TRACE_OUTPUT_ROWS - 1
+            )
+        _equal(reported, expected, f"{path}.{field}")
 
 
 def validate_trace(document: Any) -> dict[str, Any]:
     """Validate the non-performance numerical trace marker without mutation."""
+
     trace = _object(document, TRACE_KEYS, "trace")
     _equal(
         _string(trace["schema_version"], "trace.schema_version"),
@@ -394,8 +570,9 @@ def validate_trace(document: Any) -> dict[str, Any]:
     expected_contract: dict[str, Any] = {
         "scheduler_executor_replay": True,
         "http_transport_replayed": False,
-        "sampling": "teacher-forced-hf-cache-off-selected-token-after-scheduler-commit",
-        "hf_reference": "full-prefix-cache-off; cache-on excluded because its recorded decode position starts at 2049",
+        "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
+        "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
+        "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
         "projection_bias_modes": [
             STRICT_PROJECTION_BIAS_BACKEND,
             FUSED_PROJECTION_BIAS_BACKEND,
@@ -417,7 +594,7 @@ def validate_trace(document: Any) -> dict[str, Any]:
         "metadata_transport": "synchronous",
         "batch_shape_policy": "fixed-maximum",
         "reduction_profile": "canonical-v1",
-        "top32_order_comparison": "observational-tie-sensitive",
+        "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
     }
     for key, expected in expected_contract.items():
         field_path = f"trace.trace_contract.{key}"
@@ -437,11 +614,7 @@ def validate_trace(document: Any) -> dict[str, Any]:
         QWEN3B_MODEL_REVISION,
         "trace.model.revision",
     )
-    workload = _object(
-        trace["workload"],
-        {"sha256", "case", "prompt_token_count", "hf_teacher_token_ids"},
-        "trace.workload",
-    )
+    workload = _object(trace["workload"], WORKLOAD_KEYS, "trace.workload")
     _equal(
         _sha256(workload["sha256"], "trace.workload.sha256"),
         QWEN3B_WORKLOAD_SHA256,
@@ -457,35 +630,55 @@ def validate_trace(document: Any) -> dict[str, Any]:
         PROMPT_TOKEN_COUNT,
         "trace.workload.prompt_token_count",
     )
-    tokens = workload["hf_teacher_token_ids"]
-    if not isinstance(tokens, list) or len(tokens) != TRACE_OUTPUT_ROWS:
+    tokens_value = workload["teacher_token_ids"]
+    if not isinstance(tokens_value, list) or len(tokens_value) != TRACE_OUTPUT_ROWS:
         _fail(
-            "trace.workload.hf_teacher_token_ids",
+            "trace.workload.teacher_token_ids",
             f"must contain exactly {TRACE_OUTPUT_ROWS} IDs",
         )
     teacher_tokens = [
         _integer(
             token,
-            f"trace.workload.hf_teacher_token_ids[{index}]",
+            f"trace.workload.teacher_token_ids[{index}]",
             maximum=ADDRESSABLE_TOKEN_COUNT - 1,
         )
-        for index, token in enumerate(tokens)
+        for index, token in enumerate(tokens_value)
     ]
+    _equal(
+        _sha256(
+            workload["teacher_token_ids_le_u32_sha256"],
+            "trace.workload.teacher_token_ids_le_u32_sha256",
+        ),
+        _u32_le_sha256(teacher_tokens),
+        "trace.workload.teacher_token_ids_le_u32_sha256",
+    )
     oracle = _object(
-        trace["hf_generation_oracle"],
-        {"schema_version", "artifact_sha256", "mode"},
-        "trace.hf_generation_oracle",
+        trace["hf_teacher_forced_oracle"], ORACLE_KEYS, "trace.hf_teacher_forced_oracle"
     )
     _equal(
-        _string(oracle["schema_version"], "trace.hf_generation_oracle.schema_version"),
-        HF_GENERATION_ORACLE_SCHEMA,
-        "trace.hf_generation_oracle.schema_version",
+        _string(
+            oracle["schema_version"], "trace.hf_teacher_forced_oracle.schema_version"
+        ),
+        HF_TEACHER_FORCED_ORACLE_SCHEMA,
+        "trace.hf_teacher_forced_oracle.schema_version",
     )
-    _sha256(oracle["artifact_sha256"], "trace.hf_generation_oracle.artifact_sha256")
     _equal(
-        _string(oracle["mode"], "trace.hf_generation_oracle.mode"),
-        "cache-off",
-        "trace.hf_generation_oracle.mode",
+        _string(
+            oracle["artifact_kind"], "trace.hf_teacher_forced_oracle.artifact_kind"
+        ),
+        HF_TEACHER_FORCED_ARTIFACT_KIND,
+        "trace.hf_teacher_forced_oracle.artifact_kind",
+    )
+    _sha256(oracle["artifact_sha256"], "trace.hf_teacher_forced_oracle.artifact_sha256")
+    _sha256(
+        oracle["teacher_token_ids_le_u32_sha256"],
+        "trace.hf_teacher_forced_oracle.teacher_token_ids_le_u32_sha256",
+    )
+    _validate_sidecar_binding(
+        oracle["cache_off_sidecar"], "trace.hf_teacher_forced_oracle.cache_off_sidecar"
+    )
+    _validate_sidecar_binding(
+        oracle["cache_on_sidecar"], "trace.hf_teacher_forced_oracle.cache_on_sidecar"
     )
     modes = trace["modes"]
     if not isinstance(modes, list) or len(modes) != 2:
