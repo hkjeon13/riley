@@ -51,3 +51,8 @@ required-features = ["server", "cuda"]
 name = "qwen3b_native_d128_trace_gpu"
 path = "tests/qwen3b_native_d128_trace_gpu.rs"
 required-features = ["server", "cuda"]
+
+[[test]]
+name = "qwen3b_p2051_layer_stage_gpu"
+path = "tests/qwen3b_p2051_layer_stage_gpu.rs"
+required-features = ["server", "cuda"]

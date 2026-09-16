@@ -153,7 +153,7 @@ pub use forward::LlamaProjectionBiasMode;
 pub use forward::{
     LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaTracePoint,
     PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig,
-    PreparedLlamaTrace,
+    PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
 };
 
 #[cfg(feature = "cuda")]
@@ -508,7 +508,7 @@ mod source_contract_tests {
             "hot execute must use the backend fixed during cold preparation"
         );
         assert!(
-            source.contains("self.execute_inner(stream, None, None)"),
+            source.contains("self.execute_inner::<false>(stream, None, None, None)"),
             "public cache-free execute must not attach a PR09 cache sink"
         );
     }

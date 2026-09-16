@@ -330,6 +330,196 @@ impl PreparedLlamaTrace {
     }
 }
 
+/// Caller-owned storage for the last BF16 residual row from selected decoder
+/// layers of one diagnostic forward.
+///
+/// Unlike [`PreparedLlamaTrace`], this type intentionally has no stable
+/// artifact-point names. It is a bounded, caller-selected layer probe used to
+/// localize a numerical divergence without downloading whole `[S, H]` tensors.
+/// The requested layer indices are sorted and deduplicated during preparation.
+/// A production [`PreparedLlamaForward::execute`] neither allocates this owner
+/// nor executes its capture path; callers must explicitly prepare it and use
+/// [`PreparedLlamaForward::execute_last_token_layer_traced`].
+pub struct PreparedLlamaLastTokenLayerTrace {
+    contract: LlamaTraceContract,
+    layer_indices: Box<[usize]>,
+    residual_outputs: Box<[Box<[u8]>]>,
+    captured_layers: Box<[bool]>,
+    final_norm_output: Option<Box<[u8]>>,
+    final_norm_output_captured: bool,
+    row_byte_len: usize,
+}
+
+impl fmt::Debug for PreparedLlamaLastTokenLayerTrace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedLlamaLastTokenLayerTrace")
+            .field("requested_layer_indices", &self.layer_indices)
+            .field("captured_layers", &self.captured_layer_count())
+            .field(
+                "requests_final_norm_output",
+                &self.requests_final_norm_output(),
+            )
+            .field(
+                "final_norm_output_captured",
+                &self.final_norm_output_captured,
+            )
+            .field("row_byte_len", &self.row_byte_len)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PreparedLlamaLastTokenLayerTrace {
+    fn prepare(
+        plan: &LlamaExecutionPlan,
+        layer_indices: &[usize],
+        capture_final_norm_output: bool,
+    ) -> LlamaForwardResult<Self> {
+        let layer_indices = normalize_last_token_layer_indices(layer_indices, plan.layers().len())?;
+        let row_byte_len = last_token_hidden_row_byte_len(plan)?;
+        let total_capture_bytes = last_token_trace_total_bytes(
+            layer_indices.len(),
+            row_byte_len,
+            capture_final_norm_output,
+        )?;
+
+        let mut residual_outputs = Vec::new();
+        residual_outputs
+            .try_reserve_exact(layer_indices.len())
+            .map_err(|_| LlamaForwardError::HostAllocation {
+                resource: LlamaForwardResource::TraceCapture,
+                requested_bytes: total_capture_bytes,
+            })?;
+        for _ in &layer_indices {
+            residual_outputs.push(allocate_host_bytes(
+                row_byte_len,
+                LlamaForwardResource::TraceCapture,
+            )?);
+        }
+
+        let mut captured_layers = Vec::new();
+        captured_layers
+            .try_reserve_exact(layer_indices.len())
+            .map_err(|_| LlamaForwardError::HostAllocation {
+                resource: LlamaForwardResource::TraceCapture,
+                requested_bytes: total_capture_bytes,
+            })?;
+        captured_layers.resize(layer_indices.len(), false);
+
+        let final_norm_output = if capture_final_norm_output {
+            Some(allocate_host_bytes(
+                row_byte_len,
+                LlamaForwardResource::TraceCapture,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            contract: trace_contract(plan),
+            layer_indices: layer_indices.into_boxed_slice(),
+            residual_outputs: residual_outputs.into_boxed_slice(),
+            captured_layers: captured_layers.into_boxed_slice(),
+            final_norm_output,
+            final_norm_output_captured: false,
+            row_byte_len: usize::try_from(row_byte_len).map_err(|_| {
+                LlamaForwardError::ArithmeticOverflow {
+                    resource: LlamaForwardResource::TraceCapture,
+                }
+            })?,
+        })
+    }
+
+    /// Sorted, duplicate-free decoder layer indices selected by the caller.
+    #[must_use]
+    pub fn requested_layer_indices(&self) -> &[usize] {
+        &self.layer_indices
+    }
+
+    /// Number of selected decoder layers.
+    #[must_use]
+    pub const fn requested_layer_count(&self) -> usize {
+        self.layer_indices.len()
+    }
+
+    /// Number of selected layer residual rows captured by the latest run.
+    #[must_use]
+    pub fn captured_layer_count(&self) -> usize {
+        self.captured_layers
+            .iter()
+            .filter(|&&captured| captured)
+            .count()
+    }
+
+    /// Exact BF16 byte length of each captured `[hidden_size]` last-token row.
+    #[must_use]
+    pub const fn row_byte_len(&self) -> usize {
+        self.row_byte_len
+    }
+
+    /// Whether this owner reserved the final RMS-norm output row.
+    #[must_use]
+    pub const fn requests_final_norm_output(&self) -> bool {
+        self.final_norm_output.is_some()
+    }
+
+    /// Returns a selected layer's captured MLP residual output row.
+    ///
+    /// The result is little-endian BF16 storage for the final token only. It
+    /// returns `None` when the layer was not selected or has not completed in
+    /// the latest diagnostic execution.
+    #[must_use]
+    pub fn layer_residual_output(&self, layer_index: usize) -> Option<&[u8]> {
+        let ordinal = self.layer_ordinal(layer_index)?;
+        self.captured_layers[ordinal].then(|| self.residual_outputs[ordinal].as_ref())
+    }
+
+    /// Returns the captured final RMS-norm output row for the final token.
+    ///
+    /// The result is little-endian BF16 storage and is absent until a
+    /// successful diagnostic run reaches final normalization.
+    #[must_use]
+    pub fn final_norm_output(&self) -> Option<&[u8]> {
+        self.final_norm_output_captured
+            .then(|| self.final_norm_output.as_deref())
+            .flatten()
+    }
+
+    fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
+        if self.contract != trace_contract(plan) {
+            return Err(LlamaForwardError::TracePlanMismatch);
+        }
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        for captured in &mut *self.captured_layers {
+            *captured = false;
+        }
+        self.final_norm_output_captured = false;
+    }
+
+    fn layer_ordinal(&self, layer_index: usize) -> Option<usize> {
+        self.layer_indices.binary_search(&layer_index).ok()
+    }
+
+    fn layer_destination(&mut self, ordinal: usize) -> &mut [u8] {
+        self.residual_outputs[ordinal].as_mut()
+    }
+
+    fn mark_layer_captured(&mut self, ordinal: usize) {
+        self.captured_layers[ordinal] = true;
+    }
+
+    fn final_norm_destination(&mut self) -> Option<&mut [u8]> {
+        self.final_norm_output.as_deref_mut()
+    }
+
+    fn mark_final_norm_output_captured(&mut self) {
+        self.final_norm_output_captured = true;
+    }
+}
+
 const fn trace_bit(point: LlamaTracePoint) -> u32 {
     1_u32 << point.index()
 }
@@ -883,6 +1073,78 @@ fn trace_total_bytes(plan: &LlamaExecutionPlan, requested: u32) -> LlamaForwardR
         })
 }
 
+fn normalize_last_token_layer_indices(
+    layer_indices: &[usize],
+    layer_count: usize,
+) -> LlamaForwardResult<Vec<usize>> {
+    let mut normalized = Vec::new();
+    normalized
+        .try_reserve_exact(layer_indices.len())
+        .map_err(|_| LlamaForwardError::HostAllocation {
+            resource: LlamaForwardResource::TraceCapture,
+            requested_bytes: 0,
+        })?;
+    normalized.extend_from_slice(layer_indices);
+    normalized.sort_unstable();
+    normalized.dedup();
+    if let Some(&layer_index) = normalized.iter().find(|&&index| index >= layer_count) {
+        return Err(LlamaForwardError::LastTokenTraceLayerUnavailable {
+            layer_index,
+            actual_layers: layer_count,
+        });
+    }
+    Ok(normalized)
+}
+
+fn last_token_hidden_row_byte_len(plan: &LlamaExecutionPlan) -> LlamaForwardResult<u64> {
+    to_u64(
+        plan.dimensions().hidden_size(),
+        LlamaForwardResource::TraceCapture,
+    )?
+    .checked_mul(BF16_BYTES)
+    .ok_or(LlamaForwardError::ArithmeticOverflow {
+        resource: LlamaForwardResource::TraceCapture,
+    })
+}
+
+fn last_token_hidden_row_offset(plan: &LlamaExecutionPlan) -> LlamaForwardResult<u64> {
+    let sequence_minus_one =
+        plan.sequence_length()
+            .checked_sub(1)
+            .ok_or(LlamaForwardError::ArithmeticOverflow {
+                resource: LlamaForwardResource::TraceCapture,
+            })?;
+    to_u64(sequence_minus_one, LlamaForwardResource::TraceCapture)?
+        .checked_mul(to_u64(
+            plan.dimensions().hidden_size(),
+            LlamaForwardResource::TraceCapture,
+        )?)
+        .and_then(|elements| elements.checked_mul(BF16_BYTES))
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::TraceCapture,
+        })
+}
+
+fn last_token_trace_total_bytes(
+    layer_count: usize,
+    row_byte_len: u64,
+    capture_final_norm_output: bool,
+) -> LlamaForwardResult<u64> {
+    let output_count = u64::try_from(layer_count)
+        .map_err(|_| LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::TraceCapture,
+        })?
+        .checked_add(u64::from(capture_final_norm_output))
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::TraceCapture,
+        })?;
+    output_count
+        .checked_mul(row_byte_len)
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::TraceCapture,
+        })
+}
+
 fn capture_trace(
     trace: &mut Option<&mut PreparedLlamaTrace>,
     point: LlamaTracePoint,
@@ -905,6 +1167,52 @@ fn capture_trace(
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
     }
     trace.mark_captured(point);
+    Ok(())
+}
+
+fn capture_last_token_layer_residual(
+    trace: &mut Option<&mut PreparedLlamaLastTokenLayerTrace>,
+    layer_index: usize,
+    buffer: &mut CudaDeviceBuffer,
+    source_offset: u64,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    let Some(ordinal) = trace.layer_ordinal(layer_index) else {
+        return Ok(());
+    };
+    {
+        let destination = trace.layer_destination(ordinal);
+        buffer
+            .download_to_slice(source_offset, destination, io_staging, stream)
+            .map_err(|source| LlamaForwardError::cuda(site, source))?;
+    }
+    trace.mark_layer_captured(ordinal);
+    Ok(())
+}
+
+fn capture_last_token_final_norm_output(
+    trace: &mut Option<&mut PreparedLlamaLastTokenLayerTrace>,
+    buffer: &mut CudaDeviceBuffer,
+    source_offset: u64,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    let Some(destination) = trace.final_norm_destination() else {
+        return Ok(());
+    };
+    buffer
+        .download_to_slice(source_offset, destination, io_staging, stream)
+        .map_err(|source| LlamaForwardError::cuda(site, source))?;
+    trace.mark_final_norm_output_captured();
     Ok(())
 }
 
@@ -1012,6 +1320,10 @@ pub enum LlamaForwardError {
         required_layers: usize,
         actual_layers: usize,
     },
+    LastTokenTraceLayerUnavailable {
+        layer_index: usize,
+        actual_layers: usize,
+    },
     Cleanup {
         resource: LlamaForwardResource,
         source: CudaError,
@@ -1105,6 +1417,13 @@ impl fmt::Display for LlamaForwardError {
             } => write!(
                 formatter,
                 "PR07 trace requires at least {required_layers} decoder layers, found {actual_layers}"
+            ),
+            Self::LastTokenTraceLayerUnavailable {
+                layer_index,
+                actual_layers,
+            } => write!(
+                formatter,
+                "last-token layer trace requested layer {layer_index}, but the forward has {actual_layers} decoder layers"
             ),
             Self::Cleanup { resource, source } => {
                 write!(formatter, "could not close {resource}: {source}")
@@ -1957,6 +2276,31 @@ impl PreparedLlamaForward {
         PreparedLlamaTrace::prepare(&self.plan, points)
     }
 
+    /// Allocates reusable host rows for selected decoder-layer residuals at
+    /// the final token position.
+    ///
+    /// This diagnostic owner is deliberately independent from the immutable
+    /// PR07 artifact checkpoints. Indices must name existing decoder layers;
+    /// duplicates are coalesced and the retained order is ascending. When
+    /// `capture_final_norm_output` is true, one additional BF16
+    /// `[hidden_size]` row is reserved for the final RMS-norm output.
+    ///
+    /// # Errors
+    ///
+    /// Returns when an index is outside `0..layer_count`, or host byte
+    /// arithmetic/reservation fails.
+    pub fn prepare_last_token_layer_trace(
+        &self,
+        layer_indices: &[usize],
+        capture_final_norm_output: bool,
+    ) -> LlamaForwardResult<PreparedLlamaLastTokenLayerTrace> {
+        PreparedLlamaLastTokenLayerTrace::prepare(
+            &self.plan,
+            layer_indices,
+            capture_final_norm_output,
+        )
+    }
+
     /// Whether one valid exact-length token vector has been uploaded.
     #[must_use]
     pub const fn tokens_ready(&self) -> bool {
@@ -2061,7 +2405,7 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         self.output_ready = false;
-        let result = self.execute_inner(stream, None, None);
+        let result = self.execute_inner::<false>(stream, None, None, None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -2093,7 +2437,7 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         self.output_ready = false;
-        let result = self.execute_inner(stream, None, Some(cache));
+        let result = self.execute_inner::<false>(stream, None, None, Some(cache));
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -2144,7 +2488,47 @@ impl PreparedLlamaForward {
         trace.validate(&self.plan)?;
         trace.reset();
         self.output_ready = false;
-        let result = self.execute_inner(stream, Some(trace), None);
+        let result = self.execute_inner::<false>(stream, Some(trace), None, None);
+        match result {
+            Ok(()) => {
+                self.output_ready = true;
+                Ok(())
+            }
+            Err(error) => {
+                poison_for_forward_error(&mut self.poisoned, &error);
+                self.poisoned |= self.gemms.any_poisoned();
+                Err(error)
+            }
+        }
+    }
+
+    /// Executes the graph while downloading the final BF16 row after each
+    /// caller-selected MLP residual and, optionally, final RMS normalization.
+    ///
+    /// The capture happens after the residual kernel and before the next
+    /// layer's hidden-buffer swap. It is intentionally diagnostic: each
+    /// selected row transfer synchronizes the stream. The normal
+    /// [`Self::execute`] instantiation does not execute this capture branch.
+    ///
+    /// # Errors
+    ///
+    /// Returns for missing tokens, poisoned state, an incompatible trace, or
+    /// any layer/op-qualified execution or trace-copy failure.
+    pub fn execute_last_token_layer_traced(
+        &mut self,
+        stream: &mut CudaStream,
+        trace: &mut PreparedLlamaLastTokenLayerTrace,
+    ) -> LlamaForwardResult<()> {
+        if self.poisoned {
+            return Err(LlamaForwardError::Poisoned);
+        }
+        if !self.tokens_ready {
+            return Err(LlamaForwardError::TokensNotUploaded);
+        }
+        trace.validate(&self.plan)?;
+        trace.reset();
+        self.output_ready = false;
+        let result = self.execute_inner::<true>(stream, None, Some(trace), None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -2281,10 +2665,11 @@ impl PreparedLlamaForward {
         clippy::cast_precision_loss,
         clippy::similar_names
     )]
-    fn execute_inner(
+    fn execute_inner<const LAST_TOKEN_TRACE: bool>(
         &mut self,
         stream: &mut CudaStream,
         mut trace: Option<&mut PreparedLlamaTrace>,
+        mut last_token_layer_trace: Option<&mut PreparedLlamaLastTokenLayerTrace>,
         mut cache: Option<PrefillKvCacheSink<'_>>,
     ) -> LlamaForwardResult<()> {
         let plan = &self.plan;
@@ -2300,6 +2685,11 @@ impl PreparedLlamaForward {
             dimensions.hidden_size(),
             LlamaForwardResource::HiddenCurrent,
         )?;
+        let last_token_hidden_offset = if LAST_TOKEN_TRACE {
+            last_token_hidden_row_offset(plan)?
+        } else {
+            0
+        };
         let key_value_width = to_u64(dimensions.key_value_width(), LlamaForwardResource::KeyRaw)?;
         let query_heads = to_u64(dimensions.query_heads(), LlamaForwardResource::Attention)?;
         let key_value_heads = to_u64(dimensions.key_value_heads(), LlamaForwardResource::KeyRaw)?;
@@ -3026,6 +3416,17 @@ impl PreparedLlamaForward {
                     mlp_residual_site,
                 )?;
             }
+            if LAST_TOKEN_TRACE {
+                capture_last_token_layer_residual(
+                    &mut last_token_layer_trace,
+                    layer_index,
+                    &mut buffers.hidden_projection,
+                    last_token_hidden_offset,
+                    io_staging,
+                    stream,
+                    mlp_residual_site,
+                )?;
+            }
             mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
         }
 
@@ -3071,6 +3472,16 @@ impl PreparedLlamaForward {
             stream,
             final_norm_site,
         )?;
+        if LAST_TOKEN_TRACE {
+            capture_last_token_final_norm_output(
+                &mut last_token_layer_trace,
+                &mut buffers.hidden_norm,
+                last_token_hidden_offset,
+                io_staging,
+                stream,
+                final_norm_site,
+            )?;
+        }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
         let lm_head_weight = weight_span(weights, plan.lm_head_weight(), lm_head_site)?;
         execute_gemm(
@@ -3514,6 +3925,27 @@ fn to_u64(value: usize, resource: LlamaForwardResource) -> LlamaForwardResult<u6
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn last_token_layer_trace_normalizes_indices_and_rejects_out_of_range_layers() {
+        assert_eq!(
+            normalize_last_token_layer_indices(&[5, 0, 5, 3, 0, 1], 6)
+                .expect("all requested layers are in range"),
+            vec![0, 1, 3, 5]
+        );
+        assert_eq!(
+            normalize_last_token_layer_indices(&[], 0)
+                .expect("empty last-token layer selection is valid"),
+            Vec::<usize>::new()
+        );
+        assert!(matches!(
+            normalize_last_token_layer_indices(&[0, 6, 6], 6),
+            Err(LlamaForwardError::LastTokenTraceLayerUnavailable {
+                layer_index: 6,
+                actual_layers: 6,
+            })
+        ));
+    }
 
     #[test]
     fn projection_bias_mode_is_strict_by_default_and_fused_is_canonical_only() {
