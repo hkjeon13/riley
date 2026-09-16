@@ -23,16 +23,18 @@ shared-host I/O PSI는 각 run의 공변량으로 함께 남긴다. PSI는 sampl
 재시도 결과를 선택하는 데 절대 쓰지 않는다. quality gate를 통과하지 못한 profile은
 성능 비교 대상이 아니며 빈 칸을 추정값으로 채우지 않는다.
 
-현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate와
-full-sequence direct projection-boundary gate에서 strict와 cuBLASLt candidate 모두
-layer 0 Q/K/V BF16 exactness를 만족하지 못했기 때문이다. 아래의 이전 operator AB
-receipt는 end-to-end serving AB/BA가 아니므로 throughput·TTFT·TPOT·tail latency
-수치로 옮기지 않는다.
+현재는 **유효한 vLLM 수치 비교가 없다.** P2051 cache-free layer-stage gate,
+full-sequence direct projection-boundary gate, 그리고 raw-Q geometry r2 gate에서
+strict raw-Q의 serving-eligible BF16 exactness를 확보하지 못했고, cuBLASLt candidate도
+P7에서 같은 eligibility를 얻지 못했기 때문이다. 아래의 이전 operator AB receipt는
+end-to-end serving AB/BA가 아니므로
+throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 
 | Batch | Quality gate | Riley baseline | Riley candidate | vLLM throughput | TTFT | TPOT | P95 | P99 | Failure rate | Decision |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P6: P2051 layer-stage discriminator | Blocked — strict/fused 모두 `layer0.q_proj.last`부터 non-exact | strict staged: serving eligible 아님 | cuBLASLt BIAS: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P2051 projection-boundary exactness를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
 | P7: P2051 full-sequence projection-boundary | Blocked — strict raw Q가 HF no-bias shadow부터 non-exact이고, strict+row-bias/fused Q/K/V의 다섯 endpoint 모두 non-exact | strict raw/row-bias: serving eligible 아님 | cuBLASLt BIAS Q/K/V: serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | M=2051 geometry/alignment discriminator를 먼저 판정; 통과 전 vLLM 성능 비교 보류 |
+| P8 r2: P2051 raw-Q geometry | Blocked — F2048/F2051/F2052/F2080/F2176/F2304의 raw Q prefix가 모두 HF no-bias shadow와 non-exact | strict raw-Q geometry: serving eligible 아님 | cuBLASLt BIAS: P7 기준 serving eligible 아님; P8의 대상 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 테스트한 M/padding/anchor 범위의 geometry 가설은 refuted; input/weight/layout/arithmetic을 다음에 판별하고 selector 변경·vLLM 성능 비교는 보류 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 material batch는 quality gate 결과와 동일 조건의 Riley
@@ -414,10 +416,44 @@ algorithm id `21`, tile `15`, stages `12`, `split_k=1`, reduction scheme `0`, wo
 재시도 선택에 사용하지 않았다.
 
 P7은 vLLM serving result가 아니며 throughput, TTFT, TPOT, P95/P99 또는 vLLM 대비
-수치를 제공하지 않는다. 다음 discriminator는 동일 prefix arithmetic에 대해 `M=2051`과
-selected padded `M` shape를 비교하고, GEMM heuristic geometry/alignment가 결과를
-바꾸는지를 판정한다. 이는 geometry가 prefix arithmetic에 미치는 영향을 확인하는
-correctness 진단이며 serving optimization이나 성능 향상 주장으로 취급하지 않는다.
+수치를 제공하지 않는다. P8이 이 다음 geometry discriminator의 결과를 기록한다.
+
+## P8 r2 결과: P2051 raw-Q geometry discriminator
+
+P8 r2는 P7의 immutable full-sequence raw-Q no-bias shadow를 재사용해 strict
+cuBLASLt BF16 raw-Q GEMM의 physical `M`, explicit BF16-zero padding, tail data,
+256-byte span offset, 그리고 heuristic anchor를 분리했다. 이 실행은 serving hot
+path에 Python을 넣지 않은 correctness diagnostic이며 selector를 바꾸지 않았다.
+
+artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-raw-q-geometry-r2-20260916T064500Z/`에
+보존되어 있다. source revision은 `19d40a2a`이고, P7 manifest/sidecar와 checkpoint
+binding의 provenance도 다시 검증했다. `SHA256SUMS`의 모든 entry가 재검증을 통과했다.
+그 closure에는 artifact receipt, run script, Rust log, GPU snapshot, CPU/I/O/memory PSI
+snapshot이 포함되며, 별도 run receipt도 해당 source revision과 Rust trace exit `0`을
+기록한다.
+
+| Fresh case | Physical M | Compared prefix | Unequal / total | Max abs | BF16 exact |
+|---|---:|---:|---:|---:|---|
+| F2048 | 2048 | 2048 rows | 1,085,440 / 4,194,304 | 0.03125 | no |
+| F2051 | 2051 | 2051 rows | 1,087,133 / 4,200,448 | 0.0625 | no |
+| F2052 | 2052 | first 2051 rows | 1,087,133 / 4,200,448 | 0.0625 | no |
+| F2080 | 2080 | first 2051 rows | 1,087,133 / 4,200,448 | 0.0625 | no |
+| F2176 | 2176 | first 2051 rows | 1,087,133 / 4,200,448 | 0.0625 | no |
+| F2304 | 2304 | first 2051 rows | 1,087,133 / 4,200,448 | 0.0625 | no |
+
+F2080의 explicit-zero tail과 repeated-last-row tail, O2051의 256-byte
+input/weight/output span offset, 그리고 `A2051←F2048` 및
+`A2052/A2080/A2176/A2304←F2051` anchored-plan identity control은 모두 invariant를
+만족했다. 따라서 이번 결과는 **이 여섯 M, 해당 padding, tail/offset,
+anchor controls에서만** geometry/alignment 가설이 raw-Q BF16 exactness를 회복시키지
+못했다는 반증이다. 다른 shape, device, toolkit, weight layout 또는 arithmetic
+implementation 전체에 대한 일반화는 하지 않는다.
+
+P8도 vLLM serving result가 아니며 Riley/vLLM throughput, TTFT, TPOT, P95/P99를
+제공하지 않는다. quality gate가 막혀 있으므로 다음 diagnostic은 serving selector나
+benchmark가 아니라 pinned input/weight byte binding, logical/physical layout, 그리고
+BF16 GEMM arithmetic/accumulation contract를 직접 분리해 조사해야 한다.
 
 ## hardware scope
 
@@ -427,16 +463,17 @@ Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU
 
 corrected HF teacher-forced artifact, scheduler trace schema binding, M32/M1 shape
 control, cache-free dense outer control, P2051 layer-stage discriminator, full-sequence
-projection-boundary qualification은 P3–P7에서 완료했다. P7의 다음 PR은 **P2051
-geometry/alignment discriminator**다. 같은 immutable HF full-sequence endpoint와
-prefix input을 유지한 채 `M=2051`과 selected padded `M` shape를 비교하고, strict/fused
-plan의 heuristic identity, alignment, BF16 endpoint를 함께 기록한다. 목적은 GEMM
-heuristic geometry가 prefix arithmetic을 바꾸는지를 판정하는 것이며, selector 변경이나
-성능 최적화 claim은 포함하지 않는다. Python은 artifact producer/validator에만 남기며
-serving hot path에 Python, persistent copy 또는 scheduler fallback을 넣지 않는다.
+projection-boundary qualification, raw-Q geometry r2 qualification은 P3–P8에서 완료했다.
+P8의 다음 PR은 **projection input/weight/layout/arithmetic discriminator**다. 같은
+immutable HF full-sequence endpoint를 유지하고 pinned input/weight byte binding,
+logical/physical matrix layout, BF16 GEMM compute/accumulation contract를 독립적으로
+대조한다. 목적은 raw-Q mismatch가 입력·weight·layout·arithmetic 중 어느 boundary에서
+처음 생기는지 좁히는 것이며, selector 변경이나 성능 최적화 claim은 포함하지 않는다.
+Python은 artifact producer/validator에만 남기며 serving hot path에 Python, persistent
+copy 또는 scheduler fallback을 넣지 않는다.
 
-geometry/alignment gate가 projection endpoint를 설명하거나 BF16 exact profile을 만든 뒤에도
-cache-free dense stage와 scheduler trace가 다를 때에만 `PackedBatchV1`을
+input/weight/layout/arithmetic gate가 projection endpoint를 설명하거나 BF16 exact profile을
+만든 뒤에도 cache-free dense stage와 scheduler trace가 다를 때에만 `PackedBatchV1`을
 `PagedKvBlockTableV1`로 연결하는 paged-KV reference adapter를 별도 PR로 평가한다. 이
 순서는 scheduler native D128 path를 dense reference attention으로 임의 교체하지 않는다.
 
