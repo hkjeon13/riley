@@ -41,6 +41,7 @@ def hf_row(
     mode: str,
     step: int,
     native: dict[str, object],
+    teacher_token_ids: list[int],
     teacher_token_id: int,
     previous_teacher_token_id: int | None,
     selected_token_id: int | None = None,
@@ -83,10 +84,8 @@ def hf_row(
             "cache_length_before": context - 1,
             "cache_length_after": context,
         }
-    call_input_hash = (
-        collector._u32_le_sha256([previous_teacher_token_id])
-        if mode == "cache-on" and step > 0
-        else digest(f"{mode}-input-{step}")
+    call_input_hash = collector._expected_hf_call_input_sha256(
+        mode, step, teacher_token_ids
     )
     return {
         "mode": mode,
@@ -138,6 +137,7 @@ def trace_row(
         mode="cache-off",
         step=step,
         native=native,
+        teacher_token_ids=teacher_token_ids,
         teacher_token_id=selected,
         previous_teacher_token_id=None,
     )
@@ -145,6 +145,7 @@ def trace_row(
         mode="cache-on",
         step=step,
         native=native,
+        teacher_token_ids=teacher_token_ids,
         teacher_token_id=selected,
         previous_teacher_token_id=(None if step == 0 else teacher_token_ids[step - 1]),
         selected_token_id=cache_on_selected_token_id,
@@ -223,6 +224,7 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
             "sha256": collector.QWEN3B_WORKLOAD_SHA256,
             "case": collector.QWEN3B_WORKLOAD_CASE,
             "prompt_token_count": collector.PROMPT_TOKEN_COUNT,
+            "prompt_token_ids_le_u32_sha256": collector.QWEN3B_PROMPT_TOKEN_IDS_SHA256,
             "teacher_token_ids": teacher_token_ids,
             "teacher_token_ids_le_u32_sha256": collector._u32_le_sha256(
                 teacher_token_ids
@@ -374,6 +376,37 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                     test_stdout_path=self.write_log(root, marker(trace) + "\n"),
                     output_path=root / "trace.json",
                 )
+
+    def test_rejects_forged_pinned_prompt_input_hashes(self) -> None:
+        cache_off = valid_trace()
+        cache_off["modes"][0]["rows"][4]["hf_cache_off"][
+            "call_input_token_ids_le_u32_sha256"
+        ] = digest("wrong-cache-off-full-prefix-input")
+        cache_on_prefill = valid_trace()
+        cache_on_prefill["modes"][0]["rows"][0]["hf_cache_on"][
+            "call_input_token_ids_le_u32_sha256"
+        ] = digest("wrong-cache-on-prompt-prefill-input")
+        workload = valid_trace()
+        workload["workload"]["prompt_token_ids_le_u32_sha256"] = digest(
+            "wrong-pinned-prompt-binding"
+        )
+        for label, trace in (
+            ("cache-off", cache_off),
+            ("cache-on-prefill", cache_on_prefill),
+            ("workload", workload),
+        ):
+            with self.subTest(
+                label=label
+            ), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                with self.assertRaisesRegex(
+                    collector.TraceCollectorError,
+                    "call_input_token_ids_le_u32_sha256|prompt_token_ids_le_u32_sha256",
+                ):
+                    collector.collect_trace(
+                        test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                        output_path=root / "trace.json",
+                    )
 
     def test_rejects_equal_bf16_top_k_values_with_descending_token_ids(self) -> None:
         trace = valid_trace()

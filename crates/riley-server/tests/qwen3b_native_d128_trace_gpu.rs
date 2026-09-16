@@ -46,6 +46,9 @@ const QWEN3B_WORKLOAD_SCHEMA: &str = "riley.n06a-d128-serving-workload.v1";
 const QWEN3B_WORKLOAD_CASE: &str = "qwen3b-c8-p2048-o128";
 const QWEN3B_SERVING_WORKLOAD_SHA256: &str =
     "7a0a8fec31d45e397e1ec57335fa1c9de2d3da7daa9a32e9002a62763c05261e";
+const QWEN3B_PROMPT_TOKEN_IDS_SHA256: &str =
+    "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9";
+const QWEN3B_PROMPT_TOKEN_ID: u32 = 3_409;
 const HF_TEACHER_FORCED_ORACLE_SCHEMA: &str = "riley.qwen3b-hf-eager-teacher-forced-generation.v1";
 const HF_TEACHER_FORCED_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-teacher-forced-generation";
@@ -239,6 +242,15 @@ fn load_workload() -> TestResult<ServingWorkload> {
     let prompt_token_ids = json_u32_array(&document["prompt_token_ids"], "prompt_token_ids")?;
     let output_token_ids = json_u32_array(&document["output_token_ids"], "output_token_ids")?;
     assert_eq!(prompt_token_ids.len(), 2_048);
+    assert_eq!(
+        token_ids_sha256(&prompt_token_ids),
+        QWEN3B_PROMPT_TOKEN_IDS_SHA256
+    );
+    assert!(
+        prompt_token_ids
+            .iter()
+            .all(|&token_id| token_id == QWEN3B_PROMPT_TOKEN_ID)
+    );
     assert_eq!(output_token_ids.len(), SERVER_MAX_OUTPUT_TOKENS);
     assert!(
         prompt_token_ids
@@ -746,7 +758,28 @@ fn load_hf_teacher_forced_oracle(workload: &ServingWorkload) -> TestResult<HfTea
     )?;
     assert_eq!(contract["model_id"].as_str(), Some(QWEN3B_MODEL_ID));
     assert_eq!(contract["model_revision"].as_str(), Some(QWEN3B_REVISION));
-    assert!(contract["execution"].is_object());
+    assert_eq!(
+        contract["execution"],
+        json!({
+            "attention_implementation": "eager",
+            "batch_size": 1,
+            "cublas_workspace_config": ":4096:8",
+            "deterministic_algorithms": true,
+            "dtype": "bfloat16",
+            "explicit_attention_mask": true,
+            "explicit_input_ids": true,
+            "explicit_position_ids": true,
+            "hf_hub_offline": true,
+            "inference_mode": true,
+            "local_files_only": true,
+            "logits_to_keep": 1,
+            "return_dict": true,
+            "sampling_applied": false,
+            "tf32_enabled": false,
+            "transformers_offline": true,
+            "trust_remote_code": false,
+        })
+    );
     assert_eq!(
         contract["workload"],
         json!({
@@ -754,7 +787,7 @@ fn load_hf_teacher_forced_oracle(workload: &ServingWorkload) -> TestResult<HfTea
             "case": QWEN3B_WORKLOAD_CASE,
             "source_sha256": QWEN3B_SERVING_WORKLOAD_SHA256,
             "prompt_token_count": workload.prompt_token_ids.len(),
-            "prompt_token_ids_le_u32_sha256": token_ids_sha256(&workload.prompt_token_ids),
+            "prompt_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_IDS_SHA256,
             "workload_output_token_count": workload.output_token_ids.len(),
             "workload_output_token_ids_le_u32_sha256": token_ids_sha256(&workload.output_token_ids),
             "workload_output_token_ids_used_as_teacher": false,
@@ -1645,6 +1678,7 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
             "sha256": QWEN3B_SERVING_WORKLOAD_SHA256,
             "case": QWEN3B_WORKLOAD_CASE,
             "prompt_token_count": workload.prompt_token_ids.len(),
+            "prompt_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_IDS_SHA256,
             "teacher_token_ids": trace_teacher_tokens,
             "teacher_token_ids_le_u32_sha256": token_ids_sha256(trace_teacher_tokens),
         },

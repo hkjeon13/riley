@@ -40,6 +40,10 @@ QWEN3B_WORKLOAD_SHA256 = (
     "7a0a8fec31d45e397e1ec57335fa1c9de2d3da7daa9a32e9002a62763c05261e"
 )
 QWEN3B_WORKLOAD_CASE = "qwen3b-c8-p2048-o128"
+QWEN3B_PROMPT_TOKEN_ID = 3_409
+QWEN3B_PROMPT_TOKEN_IDS_SHA256 = (
+    "56619bc156fb385345c12e523c71604fa9ef8ad3c52d9c913d0f6ff09f1c1fd9"
+)
 NATIVE_D128_BACKEND_ID = (
     "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa."
     "qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2"
@@ -90,6 +94,7 @@ WORKLOAD_KEYS = {
     "sha256",
     "case",
     "prompt_token_count",
+    "prompt_token_ids_le_u32_sha256",
     "teacher_token_ids",
     "teacher_token_ids_le_u32_sha256",
 }
@@ -247,6 +252,23 @@ def _u32_le_sha256(token_ids: list[int]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+PINNED_PROMPT_TOKEN_IDS = [QWEN3B_PROMPT_TOKEN_ID] * PROMPT_TOKEN_COUNT
+if _u32_le_sha256(PINNED_PROMPT_TOKEN_IDS) != QWEN3B_PROMPT_TOKEN_IDS_SHA256:
+    raise RuntimeError("pinned Qwen3B P2048 prompt token hash differs")
+
+
+def _expected_hf_call_input_sha256(
+    expected_mode: str, step: int, teacher_tokens: list[int]
+) -> str:
+    if expected_mode == "cache-off":
+        return _u32_le_sha256(PINNED_PROMPT_TOKEN_IDS + teacher_tokens[:step])
+    if expected_mode == "cache-on":
+        if step == 0:
+            return QWEN3B_PROMPT_TOKEN_IDS_SHA256
+        return _u32_le_sha256([teacher_tokens[step - 1]])
+    raise RuntimeError(f"unsupported HF reference mode {expected_mode!r}")
+
+
 def _top_k(
     ids_value: Any, values_value: Any, path: str, *, upper_bound: int
 ) -> tuple[list[int], list[float]]:
@@ -291,14 +313,15 @@ def _validate_hf_row(
     hf_value: Any,
     native: dict[str, Any],
     step: int,
-    teacher_token: int,
-    previous_teacher_token: int | None,
+    teacher_tokens: list[int],
     expected_mode: str,
     path: str,
 ) -> int:
     hf = _object(hf_value, HF_ROW_KEYS, path)
     _equal(_string(hf["mode"], f"{path}.mode"), expected_mode, f"{path}.mode")
     _equal(_integer(hf["step"], f"{path}.step"), step, f"{path}.step")
+    teacher_token = teacher_tokens[step]
+    previous_teacher_token = teacher_tokens[step - 1] if step > 0 else None
     context = PROMPT_TOKEN_COUNT + step
     if expected_mode == "cache-off":
         expected = {
@@ -348,14 +371,11 @@ def _validate_hf_row(
         hf["call_input_token_ids_le_u32_sha256"],
         f"{path}.call_input_token_ids_le_u32_sha256",
     )
-    if expected_mode == "cache-on" and step > 0:
-        if previous_teacher_token is None:
-            _fail(path, "cache-on decode lacks a prior teacher token")
-        _equal(
-            call_input_token_ids_sha256,
-            _u32_le_sha256([previous_teacher_token]),
-            f"{path}.call_input_token_ids_le_u32_sha256",
-        )
+    _equal(
+        call_input_token_ids_sha256,
+        _expected_hf_call_input_sha256(expected_mode, step, teacher_tokens),
+        f"{path}.call_input_token_ids_le_u32_sha256",
+    )
     _equal(
         _optional_integer(
             hf["teacher_input_token_id"],
@@ -517,8 +537,7 @@ def _validate_mode(
             row["hf_cache_off"],
             row,
             step,
-            teacher_tokens[step],
-            None,
+            teacher_tokens,
             "cache-off",
             f"{row_path}.hf_cache_off",
         )
@@ -526,8 +545,7 @@ def _validate_mode(
             row["hf_cache_on"],
             row,
             step,
-            teacher_tokens[step],
-            None if step == 0 else teacher_tokens[step - 1],
+            teacher_tokens,
             "cache-on",
             f"{row_path}.hf_cache_on",
         )
@@ -629,6 +647,14 @@ def validate_trace(document: Any) -> dict[str, Any]:
         _integer(workload["prompt_token_count"], "trace.workload.prompt_token_count"),
         PROMPT_TOKEN_COUNT,
         "trace.workload.prompt_token_count",
+    )
+    _equal(
+        _sha256(
+            workload["prompt_token_ids_le_u32_sha256"],
+            "trace.workload.prompt_token_ids_le_u32_sha256",
+        ),
+        QWEN3B_PROMPT_TOKEN_IDS_SHA256,
+        "trace.workload.prompt_token_ids_le_u32_sha256",
     )
     tokens_value = workload["teacher_token_ids"]
     if not isinstance(tokens_value, list) or len(tokens_value) != TRACE_OUTPUT_ROWS:
