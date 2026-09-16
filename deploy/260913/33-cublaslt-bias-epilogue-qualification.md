@@ -10,7 +10,7 @@ Q/K/V projection의 `GEMM → row_bias_add` 두 GPU launch와 BF16 output read/w
 
 ## Serving 비교표 보고 계약
 
-material batch가 끝날 때마다 아래 표를 갱신한다. 표에는 실제 serving의 matched
+의미 있는 최적화 batch가 끝날 때마다 아래 표를 갱신한다. 표에는 실제 serving의 matched
 comparison만 넣는다. 즉 Riley baseline, Riley candidate, vLLM이 **같은 model
 revision·checkpoint, GPU/driver/toolkit, workload, prompt/output distribution,
 concurrency, server option과 warmup 정책**에서 실행되고, backend 순서를 AB/BA로
@@ -37,7 +37,7 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P8 r2: P2051 raw-Q geometry | Blocked — F2048/F2051/F2052/F2080/F2176/F2304의 raw Q prefix가 모두 HF no-bias shadow와 non-exact | strict raw-Q geometry: serving eligible 아님 | cuBLASLt BIAS: P7 기준 serving eligible 아님; P8의 대상 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 테스트한 M/padding/anchor 범위의 geometry 가설은 refuted; input/weight/layout/arithmetic을 다음에 판별하고 selector 변경·vLLM 성능 비교는 보류 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
-그 뒤의 각 material batch는 quality gate 결과와 동일 조건의 Riley
+그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
 baseline/candidate/vLLM AB/BA receipt가 모두 갖춰진 경우에만 이 행을 수치로
 갱신한다.
 
