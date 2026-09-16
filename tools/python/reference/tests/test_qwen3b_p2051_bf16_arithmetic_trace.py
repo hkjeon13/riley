@@ -162,11 +162,13 @@ def _manifest(
     }
 
 
-def _write_safetensors_sidecar(path: Path, raw_by_name: dict[str, bytes]) -> None:
+def _write_safetensors_sidecar(
+    path: Path, raw_by_name: dict[str, bytes], order: tuple[str, ...] = trace.TRACE_TENSORS
+) -> None:
     header: dict[str, object] = {}
     payload = bytearray()
     offset = 0
-    for name in trace.TRACE_TENSORS:
+    for name in order:
         raw = raw_by_name[name]
         header[trace._sidecar_key(name)] = {
             "dtype": "BF16",
@@ -332,7 +334,17 @@ class Qwen3BP2051Bf16ArithmeticTraceTests(unittest.TestCase):
             )
             trace.validate_sidecar_against_manifest(document, sidecar)
 
-            tampered = copy.deepcopy(document)
+            _write_safetensors_sidecar(
+                sidecar, raw_by_name, tuple(reversed(trace.TRACE_TENSORS))
+            )
+            reordered = _manifest(
+                raw_by_name=raw_by_name,
+                sidecar_name=sidecar.name,
+                sidecar_sha256=hashlib.sha256(sidecar.read_bytes()).hexdigest(),
+            )
+            trace.validate_sidecar_against_manifest(reordered, sidecar)
+
+            tampered = copy.deepcopy(reordered)
             tampered["tensors"][trace.P7_RAW_Q_NAME]["bf16_le_sha256"] = _sha("0")
             with self.assertRaisesRegex(trace.Qwen3BP2051Bf16ArithmeticTraceError, "raw BF16 hash"):
                 trace.validate_sidecar_against_manifest(tampered, sidecar)

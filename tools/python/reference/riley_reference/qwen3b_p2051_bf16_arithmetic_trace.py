@@ -866,7 +866,7 @@ def validate_sidecar_against_manifest(document: Mapping[str, object], sidecar_pa
     names = tuple(tensors)
     if set(header) != {_sidecar_key(name) for name in names}:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 sidecar keys differ")
-    expected_offset = 0
+    spans: list[tuple[int, int, str]] = []
     try:
         with sidecar.open("rb") as stream:
             for name in names:
@@ -874,7 +874,15 @@ def validate_sidecar_against_manifest(document: Mapping[str, object], sidecar_pa
                 _require_exact_keys(meta, {"dtype", "shape", "data_offsets"}, f"P9 sidecar tensor {name}")
                 record = _require_mapping(tensors[name], f"P9 tensor {name}")
                 offsets = meta["data_offsets"]
-                if meta["dtype"] != "BF16" or meta["shape"] != record["shape"] or not isinstance(offsets, list) or len(offsets) != 2 or offsets[0] != expected_offset or offsets[1] != expected_offset + record["bf16_le_bytes"]:
+                if (
+                    meta["dtype"] != "BF16"
+                    or meta["shape"] != record["shape"]
+                    or not isinstance(offsets, list)
+                    or len(offsets) != 2
+                    or any(isinstance(offset, bool) or not isinstance(offset, int) for offset in offsets)
+                    or offsets[0] < 0
+                    or offsets[1] != offsets[0] + record["bf16_le_bytes"]
+                ):
                     raise Qwen3BP2051Bf16ArithmeticTraceError(f"P9 sidecar tensor {name} layout differs")
                 stream.seek(payload_offset + offsets[0])
                 raw = stream.read(record["bf16_le_bytes"])
@@ -884,9 +892,16 @@ def validate_sidecar_against_manifest(document: Mapping[str, object], sidecar_pa
                     projection._validate_finite_bf16(raw, f"P9 sidecar tensor {name}")
                 except projection.Qwen3BP2051ProjectionTraceError as error:
                     raise Qwen3BP2051Bf16ArithmeticTraceError(str(error)) from error
-                expected_offset = offsets[1]
+                spans.append((offsets[0], offsets[1], name))
     except OSError as error:
         raise Qwen3BP2051Bf16ArithmeticTraceError("cannot read P9 sidecar") from error
+    expected_offset = 0
+    for start, end, name in sorted(spans):
+        if start != expected_offset:
+            raise Qwen3BP2051Bf16ArithmeticTraceError(
+                f"P9 sidecar tensor {name} ranges are not contiguous"
+            )
+        expected_offset = end
     if payload_offset + expected_offset != file_size:
         raise Qwen3BP2051Bf16ArithmeticTraceError("P9 sidecar payload size differs")
 
