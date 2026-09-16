@@ -76,9 +76,7 @@ struct Workload {
 
 #[derive(Debug)]
 struct TeacherPrefix {
-    artifact_path: PathBuf,
     artifact_sha256: String,
-    cache_off_sidecar_path: PathBuf,
     cache_off_sidecar_sha256: String,
     full_teacher_token_ids_sha256: String,
     token_ids: Vec<u32>,
@@ -87,7 +85,7 @@ struct TeacherPrefix {
 #[derive(Clone, Copy, Debug)]
 enum StageSource {
     Static(LlamaTracePoint, usize),
-    LayerOutput(usize),
+    LayerOutput,
     FinalNormOutput,
     LastLogits,
 }
@@ -366,9 +364,7 @@ fn load_teacher_prefix() -> TestResult<TeacherPrefix> {
         .ok_or("HF teacher token prefix is too short")?
         .to_vec();
     Ok(TeacherPrefix {
-        artifact_path,
         artifact_sha256,
-        cache_off_sidecar_path,
         cache_off_sidecar_sha256,
         full_teacher_token_ids_sha256: token_ids_sha256(&teacher_ids),
         token_ids,
@@ -462,7 +458,7 @@ fn expected_stage_specs() -> Vec<StageSpec> {
         stages.push(StageSpec {
             name: format!("layer{layer_index}.output.last"),
             shape: vec![hidden],
-            source: StageSource::LayerOutput(layer_index),
+            source: StageSource::LayerOutput,
         });
     }
     stages.push(StageSpec {
