@@ -79,10 +79,16 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         .arg(format!("-DCUDAToolkit_ROOT={}", toolkit.root.display()))
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
     configure_fault_injection(&mut configure);
+    configure_cublas_gemm_probe(&mut configure);
     configure_nvml_probe(&mut configure);
     run(&mut configure, "configure the native CUDA library")?;
 
     let cublaslt_link_dir = discover_dynamic_cublaslt(&build_dir, profile, &toolkit)?;
+    let cublas_link_dir = if cublas_gemm_probe_enabled() {
+        Some(discover_dynamic_cublas(&build_dir, profile, &toolkit)?)
+    } else {
+        None
+    };
     let cudart_link_dir = discover_dynamic_cudart(&build_dir, profile, &toolkit)?;
     let cuda_driver_link_dir = discover_cuda_driver(&build_dir, profile)?;
     let nvml_link_dir = if nvml_probe_enabled() {
@@ -121,6 +127,9 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
 
     emit_native_link_search(&native_lib_dir);
     emit_native_link_search(&cublaslt_link_dir);
+    if let Some(link_dir) = cublas_link_dir {
+        emit_native_link_search(&link_dir);
+    }
     emit_native_link_search(&cudart_link_dir);
     emit_native_link_search(&cuda_driver_link_dir);
     if let Some(link_dir) = nvml_link_dir {
@@ -132,6 +141,12 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     // resolved without accidentally accepting a driver stub or another CUDA
     // installation found earlier on the host search path.
     println!("cargo:rustc-link-lib=dylib=cublasLt");
+    // The test-only cuBLAS descriptor probe is absent from ordinary CUDA
+    // archives. When enabled, link the exact toolkit-selected shared library
+    // after the static adapter for its retained probe symbols.
+    if cublas_gemm_probe_enabled() {
+        println!("cargo:rustc-link-lib=dylib=cublas");
+    }
     // nvcc emits fatbinary registration calls for the AOT CUDA translation
     // units. Use the selected toolkit's shared CUDA Runtime to satisfy those
     // symbols; the release environment must provide cudart.
@@ -169,6 +184,17 @@ fn configure_fault_injection(configure: &mut Command) {
     ));
 }
 
+fn configure_cublas_gemm_probe(configure: &mut Command) {
+    let enabled = if cublas_gemm_probe_enabled() {
+        "ON"
+    } else {
+        "OFF"
+    };
+    // Always overwrite a reused CMake cache: a prior test-only probe build
+    // must never add cuBLAS or its symbols to an ordinary CUDA archive.
+    configure.arg(format!("-DRILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE={enabled}"));
+}
+
 fn configure_nvml_probe(configure: &mut Command) {
     let enabled = if nvml_probe_enabled() { "ON" } else { "OFF" };
     // Always overwrite a reused CMake cache so ordinary CUDA builds cannot
@@ -178,6 +204,10 @@ fn configure_nvml_probe(configure: &mut Command) {
 
 fn nvml_probe_enabled() -> bool {
     env::var_os("CARGO_FEATURE_NVML").is_some()
+}
+
+fn cublas_gemm_probe_enabled() -> bool {
+    env::var_os("CARGO_FEATURE_CUDA_CUBLAS_GEMM_PROBE").is_some()
 }
 
 fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
@@ -190,6 +220,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/attention_cublaslt.cu"),
         kernels_dir.join("src/attention_reference.cu"),
         kernels_dir.join("src/batch_primitives.cu"),
+        kernels_dir.join("src/cublas_gemm_probe.cu"),
         kernels_dir.join("src/decode_attention.cu"),
         kernels_dir.join("src/fixed37_gemm.cu"),
         kernels_dir.join("src/fixed37_attention.cu"),
@@ -295,6 +326,127 @@ fn discover_dynamic_cublaslt(
         expected_linker.display()
     );
     Ok(link_dir.to_path_buf())
+}
+
+fn discover_dynamic_cublas(
+    build_dir: &Path,
+    profile: &str,
+    toolkit: &CudaToolkit,
+) -> Result<PathBuf, String> {
+    let metadata = build_dir.join(format!("riley-cuda-cublas-{profile}.path"));
+    let contents = fs::read_to_string(&metadata).map_err(|error| {
+        format!(
+            "CMake did not produce cuBLAS link metadata at {}: {error}; ensure the selected toolkit includes the shared cuBLAS development library",
+            metadata.display()
+        )
+    })?;
+    let linker_path = contents.trim();
+    if linker_path.is_empty() || linker_path.lines().count() != 1 {
+        return Err(format!(
+            "invalid cuBLAS link metadata in {}: expected one non-empty path",
+            metadata.display()
+        ));
+    }
+
+    let linker_path = PathBuf::from(linker_path);
+    if !linker_path.is_absolute() || !linker_path.is_file() {
+        return Err(format!(
+            "CMake selected cuBLAS linker file {}, but it is not an absolute existing file",
+            linker_path.display()
+        ));
+    }
+    if !is_dynamic_cublas_path(&linker_path) {
+        return Err(format!(
+            "CMake selected {}, which is not a shared cuBLAS linker file; static cuBLAS is unsupported by this Cargo link contract",
+            linker_path.display()
+        ));
+    }
+    if linker_path
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+    {
+        return Err(format!(
+            "CMake selected cuBLAS linker file {} from a stubs directory; select the real shared cuBLAS library",
+            linker_path.display()
+        ));
+    }
+
+    let canonical_linker = linker_path.canonicalize().map_err(|error| {
+        format!(
+            "cannot resolve cuBLAS linker file {}: {error}",
+            linker_path.display()
+        )
+    })?;
+    if canonical_linker
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+    {
+        return Err(format!(
+            "CMake selected cuBLAS linker file {} that resolves through a stubs directory",
+            linker_path.display()
+        ));
+    }
+    if !canonical_linker.starts_with(&toolkit.root) {
+        return Err(format!(
+            "CMake selected cuBLAS {} outside the nvcc toolkit root {}; clear the CMake cache and select one CUDA toolkit",
+            canonical_linker.display(),
+            toolkit.root.display()
+        ));
+    }
+
+    let link_dir = linker_path.parent().ok_or_else(|| {
+        format!(
+            "cuBLAS linker file {} has no parent directory",
+            linker_path.display()
+        )
+    })?;
+    let expected_linker = link_dir.join(dynamic_cublas_filename());
+    if !expected_linker.is_file() {
+        return Err(format!(
+            "cuBLAS shared development linker file {} is missing; install the complete CUDA toolkit rather than a static- or runtime-only package",
+            expected_linker.display()
+        ));
+    }
+    validate_cublas_development_linker(&expected_linker, &canonical_linker, toolkit)?;
+
+    println!(
+        "cargo:warning=riley-cuda: cuBLAS strategy=shared linker={}",
+        expected_linker.display()
+    );
+    Ok(link_dir.to_path_buf())
+}
+
+fn validate_cublas_development_linker(
+    linker: &Path,
+    cmake_selection: &Path,
+    toolkit: &CudaToolkit,
+) -> Result<(), String> {
+    let canonical = linker.canonicalize().map_err(|error| {
+        format!(
+            "cannot resolve cuBLAS development linker file {}: {error}",
+            linker.display()
+        )
+    })?;
+    if canonical
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+        || !canonical.starts_with(&toolkit.root)
+    {
+        return Err(format!(
+            "cuBLAS development linker {} resolves outside the selected real toolkit {}",
+            linker.display(),
+            toolkit.root.display()
+        ));
+    }
+    if canonical != cmake_selection {
+        return Err(format!(
+            "cuBLAS development linker {} resolves to {}, but CMake selected {}; refusing mixed libraries",
+            linker.display(),
+            canonical.display(),
+            cmake_selection.display()
+        ));
+    }
+    Ok(())
 }
 
 fn validate_cublaslt_development_linker(
@@ -756,6 +908,16 @@ fn dynamic_cublaslt_filename() -> &'static str {
     }
 }
 
+fn dynamic_cublas_filename() -> &'static str {
+    if cfg!(windows) {
+        "cublas.lib"
+    } else if cfg!(target_os = "macos") {
+        "libcublas.dylib"
+    } else {
+        "libcublas.so"
+    }
+}
+
 fn is_dynamic_cublaslt_path(path: &Path) -> bool {
     let Some(filename) = path.file_name().and_then(OsStr::to_str) else {
         return false;
@@ -770,6 +932,24 @@ fn is_dynamic_cublaslt_path(path: &Path) -> bool {
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("dylib"))
     } else {
         filename == "libcublasLt.so" || filename.starts_with("libcublasLt.so.")
+    }
+}
+
+fn is_dynamic_cublas_path(path: &Path) -> bool {
+    let Some(filename) = path.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    if cfg!(windows) {
+        filename.eq_ignore_ascii_case("cublas.lib")
+    } else if cfg!(target_os = "macos") {
+        filename == "libcublas.dylib"
+            || (filename.starts_with("libcublas.")
+                && path
+                    .extension()
+                    .and_then(OsStr::to_str)
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("dylib")))
+    } else {
+        filename == "libcublas.so" || filename.starts_with("libcublas.so.")
     }
 }
 

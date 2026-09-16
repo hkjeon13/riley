@@ -12,6 +12,10 @@ description = "Model and backend orchestration boundary for Riley"
 [features]
 default = []
 cuda = ["dep:riley-cuda", "riley-cuda/cuda", "riley-tensor/cuda"]
+# Diagnostic-only direct cuBLAS raw-projection qualifier. This forwards the
+# isolated native probe feature and is deliberately not part of ordinary CUDA
+# serving builds.
+cuda-cublas-gemm-probe = ["cuda", "riley-cuda/cuda-cublas-gemm-probe"]
 
 [dependencies]
 riley-core = { path = "../riley-core" }

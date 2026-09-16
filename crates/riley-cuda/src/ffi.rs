@@ -100,6 +100,8 @@ const FIXED37_RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 600;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 const FIXED37_GEMM_PLAN_INFO_SIZE: u32 = 96;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const CUBLAS_GEMM_PROBE_INFO_SIZE: u32 = 96;
 
 pub(super) const DTYPE_F32: i32 = 1;
 pub(super) const DTYPE_BF16: i32 = 2;
@@ -434,6 +436,13 @@ struct RawBiasGemmPlan {
 
 #[repr(C)]
 struct RawFixed37GemmPlan {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[repr(C)]
+struct RawCublasGemmProbePlan {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
 }
@@ -1309,6 +1318,53 @@ struct RawFixed37GemmPlanInfo {
     reserved: [u64; 3],
 }
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[repr(C)]
+struct RawCublasGemmProbeInfo {
+    struct_size: u32,
+    backend: u32,
+    requested_math_mode: i32,
+    actual_math_mode: i32,
+    requested_pointer_mode: i32,
+    actual_pointer_mode: i32,
+    requested_atomics_mode: i32,
+    actual_atomics_mode: i32,
+    runtime_version: i32,
+    cublas_version: i32,
+    compute_capability_major: u32,
+    compute_capability_minor: u32,
+    m: u64,
+    n: u64,
+    k: u64,
+    workspace_bytes: u64,
+    reserved: [u64; 2],
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl RawCublasGemmProbeInfo {
+    const fn new() -> Self {
+        Self {
+            struct_size: CUBLAS_GEMM_PROBE_INFO_SIZE,
+            backend: 0,
+            requested_math_mode: 0,
+            actual_math_mode: 0,
+            requested_pointer_mode: 0,
+            actual_pointer_mode: 0,
+            requested_atomics_mode: 0,
+            actual_atomics_mode: 0,
+            runtime_version: 0,
+            cublas_version: 0,
+            compute_capability_major: 0,
+            compute_capability_minor: 0,
+            m: 0,
+            n: 0,
+            k: 0,
+            workspace_bytes: 0,
+            reserved: [0; 2],
+        }
+    }
+}
+
 impl RawFixed37GemmPlanInfo {
     const fn new() -> Self {
         Self {
@@ -1366,6 +1422,26 @@ pub(super) struct NativeFixed37GemmPlanInfo {
     pub(super) m: u64,
     pub(super) n: u64,
     pub(super) k: u64,
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeCublasGemmProbeInfo {
+    pub(super) backend: u32,
+    pub(super) requested_math_mode: i32,
+    pub(super) actual_math_mode: i32,
+    pub(super) requested_pointer_mode: i32,
+    pub(super) actual_pointer_mode: i32,
+    pub(super) requested_atomics_mode: i32,
+    pub(super) actual_atomics_mode: i32,
+    pub(super) runtime_version: i32,
+    pub(super) cublas_version: i32,
+    pub(super) compute_capability_major: u32,
+    pub(super) compute_capability_minor: u32,
+    pub(super) m: u64,
+    pub(super) n: u64,
+    pub(super) k: u64,
+    pub(super) workspace_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -2417,6 +2493,33 @@ unsafe extern "C" {
     ) -> i32;
     fn riley_cuda_fixed37_gemm_plan_close(
         plan: *mut *mut RawFixed37GemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        out_plan: *mut *mut RawCublasGemmProbePlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_info(
+        plan: *mut RawCublasGemmProbePlan,
+        out_info: *mut RawCublasGemmProbeInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_execute(
+        plan: *mut RawCublasGemmProbePlan,
+        input: *const RawBufferSpan,
+        weight: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_cublas_gemm_probe_plan_close(
+        plan: *mut *mut RawCublasGemmProbePlan,
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_smoke_buffer_create(
@@ -9191,6 +9294,141 @@ impl Drop for Fixed37GemmPlanHandle {
     }
 }
 
+/// Opaque owner for the isolated direct-cuBLAS BF16 arithmetic qualifier.
+///
+/// This handle exists only with `cuda-cublas-gemm-probe`. It must not be
+/// passed to graph resources or the canonical prepared-GEMM selector.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub(super) struct CublasGemmProbePlanHandle {
+    pointer: Option<NonNull<RawCublasGemmProbePlan>>,
+}
+
+// SAFETY: native restores the retained CUDA context around each call. The
+// public owner is !Sync and requires exclusive `&mut self` execution.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+unsafe impl Send for CublasGemmProbePlanHandle {}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl CublasGemmProbePlanHandle {
+    pub(super) fn create(
+        context: &ContextHandle,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+    ) -> CudaResult<Self> {
+        let config = RawGemmConfig::new(0, m, n, k, max_workspace_bytes);
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: native retains the context on success and either initializes
+        // the independent owner or leaves the output null on failure.
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_create(
+                context.as_ptr(),
+                &config,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare direct cuBLAS GEMM probe", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "prepare direct cuBLAS GEMM probe",
+                "native direct-cuBLAS GEMM probe handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawCublasGemmProbePlan {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn info(&self) -> CudaResult<NativeCublasGemmProbeInfo> {
+        let mut info = RawCublasGemmProbeInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the owner and fixed-size output record remain live for the
+        // synchronous metadata query, which native serializes with execute
+        // and close.
+        let status =
+            unsafe { riley_cuda_cublas_gemm_probe_plan_info(self.as_ptr(), &mut info, &mut error) };
+        status_result(status, "query direct cuBLAS GEMM probe metadata", &error)?;
+        if info.struct_size != CUBLAS_GEMM_PROBE_INFO_SIZE || info.reserved != [0; 2] {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "query direct cuBLAS GEMM probe metadata",
+                "native direct-cuBLAS metadata has an incompatible struct_size or reserved tail",
+            ));
+        }
+        Ok(NativeCublasGemmProbeInfo {
+            backend: info.backend,
+            requested_math_mode: info.requested_math_mode,
+            actual_math_mode: info.actual_math_mode,
+            requested_pointer_mode: info.requested_pointer_mode,
+            actual_pointer_mode: info.actual_pointer_mode,
+            requested_atomics_mode: info.requested_atomics_mode,
+            actual_atomics_mode: info.actual_atomics_mode,
+            runtime_version: info.runtime_version,
+            cublas_version: info.cublas_version,
+            compute_capability_major: info.compute_capability_major,
+            compute_capability_minor: info.compute_capability_minor,
+            m: info.m,
+            n: info.n,
+            k: info.k,
+            workspace_bytes: info.workspace_bytes,
+        })
+    }
+
+    pub(super) fn execute(
+        &mut self,
+        input: RawBufferSpan,
+        weight: RawBufferSpan,
+        output: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe owner retains exclusive plan, output, and stream
+        // borrows while inputs remain live. Native rejects command batches and
+        // synchronizes this explicit stream before releasing guards.
+        let status = unsafe {
+            riley_cuda_cublas_gemm_probe_plan_execute(
+                self.as_ptr(),
+                &input,
+                &weight,
+                &output,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "execute direct cuBLAS GEMM probe", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw is uniquely owned. Native consumes and nulls only after
+        // destroying the handle and safely releasing the context child lease.
+        let status = unsafe { riley_cuda_cublas_gemm_probe_plan_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close direct cuBLAS GEMM probe", &error)
+    }
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl Drop for CublasGemmProbePlanHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct SmokeHandle {
     pointer: Option<NonNull<RawSmokeBuffer>>,
 }
@@ -9808,6 +10046,16 @@ const _: () = assert!(size_of::<RawFixed37GemmPlanInfo>() == 96);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, dynamic_shared_memory_bytes) == 32);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, m) == 48);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, reserved) == 72);
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const _: () = assert!(size_of::<RawCublasGemmProbeInfo>() == 96);
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const _: () = assert!(offset_of!(RawCublasGemmProbeInfo, requested_math_mode) == 8);
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const _: () = assert!(offset_of!(RawCublasGemmProbeInfo, runtime_version) == 32);
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const _: () = assert!(offset_of!(RawCublasGemmProbeInfo, m) == 48);
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const _: () = assert!(offset_of!(RawCublasGemmProbeInfo, reserved) == 80);
 
 #[cfg(test)]
 mod tests {

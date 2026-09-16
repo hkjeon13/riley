@@ -32,8 +32,16 @@ pub const FIXED37_MAX_REDUCTION_ELEMENTS: u64 =
 const NATIVE_CUBLASLT_BACKEND_ID: u32 = 1;
 #[cfg(feature = "cuda")]
 const NATIVE_FIXED37_BACKEND_ID: u32 = 2;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const NATIVE_CUBLAS_GEMM_PROBE_BACKEND_ID: u32 = 3;
 #[cfg(feature = "cuda")]
 const DETERMINISTIC_REQUIRED: u32 = 1;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const CUBLAS_DEFAULT_MATH_MODE: i32 = 0;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const CUBLAS_POINTER_MODE_HOST: i32 = 0;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const CUBLAS_ATOMICS_NOT_ALLOWED: i32 = 0;
 #[cfg(any(feature = "cuda", test))]
 const REDUCTION_SCHEME_NONE: u32 = 0;
 #[cfg(any(feature = "cuda", test))]
@@ -512,6 +520,50 @@ impl fmt::Debug for CudaPreparedBiasEpilogueGemm {
             .field("algorithm", &self.algorithm)
             .field("poisoned", &self.poisoned)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl CudaContext {
+    /// Prepares the isolated direct-cuBLAS BF16 arithmetic qualifier.
+    ///
+    /// The probe accepts only the strict no-split config surface, owns no
+    /// caller workspace, rejects command batches/graphs natively, and is not
+    /// wired into model dispatch. It is available solely in test builds that
+    /// opt into `cuda-cublas-gemm-probe`.
+    ///
+    /// # Errors
+    ///
+    /// Returns not-supported for a non-strict reduction policy or any native
+    /// device/library capability failure. A successful prepare is not a
+    /// full-forward, serving, or performance qualification.
+    pub fn prepare_cublas_gemm_probe(
+        &self,
+        config: CudaGemmConfig,
+    ) -> CudaResult<CudaPreparedCublasGemmProbe> {
+        const OPERATION: &str = "CudaContext::prepare_cublas_gemm_probe";
+        if config.reduction_policy != CudaGemmReductionPolicy::StrictNoSplitV1 {
+            return Err(fixed37_not_supported(
+                OPERATION,
+                "the direct-cuBLAS qualifier accepts only strict-no-split-v1 policy",
+            ));
+        }
+        let native = ffi::CublasGemmProbePlanHandle::create(
+            &self.inner.native,
+            config.m,
+            config.n,
+            config.k,
+            config.max_workspace_bytes,
+        )?;
+        let metadata = CublasGemmProbeMetadata::from_native(config, native.info()?)?;
+        Ok(CudaPreparedCublasGemmProbe {
+            native,
+            context: Arc::clone(&self.inner),
+            config,
+            metadata,
+            poisoned: false,
+            _not_sync: PhantomData,
+        })
     }
 }
 
@@ -1474,6 +1526,127 @@ pub struct Fixed37GemmParams<'a> {
     pub output: CudaBufferSpanMut<'a>,
 }
 
+/// Immutable provenance for the isolated direct-cuBLAS BF16 qualifier.
+///
+/// This metadata reports the exact handle modes observed at native prepare
+/// time. It is diagnostic-only: repeat exactness is a GPU test gate rather
+/// than a general cuBLAS determinism claim.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CublasGemmProbeMetadata {
+    backend_id: u32,
+    requested_math_mode: i32,
+    actual_math_mode: i32,
+    requested_pointer_mode: i32,
+    actual_pointer_mode: i32,
+    requested_atomics_mode: i32,
+    actual_atomics_mode: i32,
+    runtime_version: i32,
+    cublas_version: i32,
+    compute_capability_major: u32,
+    compute_capability_minor: u32,
+    m: u64,
+    n: u64,
+    k: u64,
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl CublasGemmProbeMetadata {
+    /// Stable native backend identifier for the direct-cuBLAS diagnostic.
+    pub const BACKEND_ID: u32 = 3;
+
+    /// Native backend identifier.
+    #[must_use]
+    pub const fn backend_id(self) -> u32 {
+        self.backend_id
+    }
+
+    /// Requested and observed cuBLAS math-mode enum values.
+    #[must_use]
+    pub const fn math_modes(self) -> (i32, i32) {
+        (self.requested_math_mode, self.actual_math_mode)
+    }
+
+    /// Requested and observed cuBLAS scalar-pointer-mode enum values.
+    #[must_use]
+    pub const fn pointer_modes(self) -> (i32, i32) {
+        (self.requested_pointer_mode, self.actual_pointer_mode)
+    }
+
+    /// Requested and observed cuBLAS atomics-mode enum values.
+    #[must_use]
+    pub const fn atomics_modes(self) -> (i32, i32) {
+        (self.requested_atomics_mode, self.actual_atomics_mode)
+    }
+
+    /// CUDA Runtime version observed at plan preparation.
+    #[must_use]
+    pub const fn runtime_version(self) -> i32 {
+        self.runtime_version
+    }
+
+    /// cuBLAS library version observed at plan preparation.
+    #[must_use]
+    pub const fn cublas_version(self) -> i32 {
+        self.cublas_version
+    }
+
+    /// Compute capability observed at plan preparation.
+    #[must_use]
+    pub const fn compute_capability(self) -> (u32, u32) {
+        (self.compute_capability_major, self.compute_capability_minor)
+    }
+
+    /// Prepared logical `(M, N, K)` dimensions.
+    #[must_use]
+    pub const fn dimensions(self) -> (u64, u64, u64) {
+        (self.m, self.n, self.k)
+    }
+}
+
+/// Borrowed buffers for one synchronous direct-cuBLAS diagnostic execution.
+///
+/// This deliberately has no caller workspace, graph, or canonical fallback.
+/// It exists only with the `cuda-cublas-gemm-probe` test feature.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[derive(Debug)]
+pub struct CublasGemmProbeParams<'a> {
+    /// Row-major BF16 `X[M, K]`.
+    pub input: CudaBufferSpan<'a>,
+    /// Row-major BF16 `W[N, K]` consumed logically transposed.
+    pub weight: CudaBufferSpan<'a>,
+    /// Row-major BF16 `Y[M, N]`.
+    pub output: CudaBufferSpanMut<'a>,
+}
+
+/// Owning direct-cuBLAS raw-projection qualifier.
+///
+/// This is a test-only sibling of [`CudaPreparedGemm`], never a serving
+/// selector. It binds direct `cublasGemmEx` default math to the immutable P9
+/// arithmetic trace before any full-forward integration is considered.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub struct CudaPreparedCublasGemmProbe {
+    native: ffi::CublasGemmProbePlanHandle,
+    context: Arc<ContextInner>,
+    config: CudaGemmConfig,
+    metadata: CublasGemmProbeMetadata,
+    poisoned: bool,
+    _not_sync: PhantomData<Cell<()>>,
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl fmt::Debug for CudaPreparedCublasGemmProbe {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CudaPreparedCublasGemmProbe")
+            .field("device_ordinal", &self.context.ordinal)
+            .field("config", &self.config)
+            .field("metadata", &self.metadata)
+            .field("poisoned", &self.poisoned)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Owning custom fixed-contiguous-37-balanced-v1 GEMM plan.
 ///
 /// This is deliberately a sibling of [`CudaPreparedGemm`], not a runtime
@@ -1691,6 +1864,180 @@ impl CudaPreparedFixed37Gemm {
             ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
         }
         ensure_distinct_buffers(&buffers, OPERATION)
+    }
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl CudaPreparedCublasGemmProbe {
+    /// Exact logical/storage contract fixed at cold prepare time.
+    #[must_use]
+    pub const fn config(&self) -> CudaGemmConfig {
+        self.config
+    }
+
+    /// Immutable native cuBLAS handle provenance.
+    #[must_use]
+    pub const fn metadata(&self) -> CublasGemmProbeMetadata {
+        self.metadata
+    }
+
+    /// Device ordinal retained by this diagnostic plan.
+    #[must_use]
+    pub fn device_ordinal(&self) -> u32 {
+        self.context.ordinal
+    }
+
+    /// Whether a prior native execution failure disabled safe reuse.
+    #[must_use]
+    pub const fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+
+    /// Executes one direct `cublasGemmEx` raw projection and synchronizes the
+    /// supplied stream before returning.
+    ///
+    /// Any native execution failure poisons the safe owner. The native plan
+    /// rejects active graph capture and command batches so this diagnostic
+    /// cannot accidentally become part of a replay or serving batch.
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut CublasGemmProbeParams<'_>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedCublasGemmProbe::execute";
+        let stream = execution_stream_mut(stream);
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the direct-cuBLAS GEMM probe was poisoned by a prior native execution failure",
+            ));
+        }
+        self.validate_execution(params, stream)?;
+        let result = self.native.execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            &mut stream.native,
+        );
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
+    }
+
+    /// Explicitly closes the independent native diagnostic owner.
+    ///
+    /// # Errors
+    ///
+    /// A poisoned plan cannot be reported as cleanly closed. Drop retains the
+    /// existing fail-closed best-effort native close semantics.
+    pub fn close(self) -> CudaResult<()> {
+        let mut this = self;
+        if this.poisoned {
+            return Err(CudaError::invalid_state(
+                "CudaPreparedCublasGemmProbe::close",
+                "a poisoned direct-cuBLAS GEMM probe cannot be reported as cleanly closed",
+            ));
+        }
+        this.native.close()
+    }
+
+    fn validate_execution(
+        &self,
+        params: &CublasGemmProbeParams<'_>,
+        stream: &CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedCublasGemmProbe::execute";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_span(
+            OPERATION,
+            params.input.buffer(),
+            params.input.dtype(),
+            params.input.byte_offset(),
+            params.input.byte_len(),
+            CudaDType::BF16,
+            self.config.input_bytes,
+            "input",
+        )?;
+        validate_span(
+            OPERATION,
+            params.weight.buffer(),
+            params.weight.dtype(),
+            params.weight.byte_offset(),
+            params.weight.byte_len(),
+            CudaDType::BF16,
+            self.config.weight_bytes,
+            "weight",
+        )?;
+        validate_span(
+            OPERATION,
+            params.output.buffer(),
+            params.output.dtype(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+            CudaDType::BF16,
+            self.config.output_bytes,
+            "output",
+        )?;
+        let buffers = [
+            ("input", params.input.buffer()),
+            ("weight", params.weight.buffer()),
+            ("output", params.output.buffer()),
+        ];
+        for (_, buffer) in buffers {
+            ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
+        }
+        ensure_distinct_buffers(&buffers, OPERATION)
+    }
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+impl CublasGemmProbeMetadata {
+    fn from_native(
+        config: CudaGemmConfig,
+        native: ffi::NativeCublasGemmProbeInfo,
+    ) -> CudaResult<Self> {
+        const OPERATION: &str = "CudaContext::prepare_cublas_gemm_probe";
+        if native.backend != NATIVE_CUBLAS_GEMM_PROBE_BACKEND_ID
+            || native.requested_math_mode != CUBLAS_DEFAULT_MATH_MODE
+            || native.actual_math_mode != CUBLAS_DEFAULT_MATH_MODE
+            || native.requested_pointer_mode != CUBLAS_POINTER_MODE_HOST
+            || native.actual_pointer_mode != CUBLAS_POINTER_MODE_HOST
+            || native.requested_atomics_mode != CUBLAS_ATOMICS_NOT_ALLOWED
+            || native.actual_atomics_mode != CUBLAS_ATOMICS_NOT_ALLOWED
+            || native.runtime_version <= 0
+            || native.cublas_version <= 0
+            || native.compute_capability_major == 0
+            || native.workspace_bytes != 0
+            || (native.m, native.n, native.k) != (config.m, config.n, config.k)
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                OPERATION,
+                format!(
+                    "native direct-cuBLAS metadata violates the diagnostic contract: {native:?}"
+                ),
+            ));
+        }
+        Ok(Self {
+            backend_id: native.backend,
+            requested_math_mode: native.requested_math_mode,
+            actual_math_mode: native.actual_math_mode,
+            requested_pointer_mode: native.requested_pointer_mode,
+            actual_pointer_mode: native.actual_pointer_mode,
+            requested_atomics_mode: native.requested_atomics_mode,
+            actual_atomics_mode: native.actual_atomics_mode,
+            runtime_version: native.runtime_version,
+            cublas_version: native.cublas_version,
+            compute_capability_major: native.compute_capability_major,
+            compute_capability_minor: native.compute_capability_minor,
+            m: native.m,
+            n: native.n,
+            k: native.k,
+        })
     }
 }
 

@@ -71,6 +71,8 @@ pub use gemm::{
     CudaPreparedGemm, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
 };
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub use gemm::{CublasGemmProbeMetadata, CublasGemmProbeParams, CudaPreparedCublasGemmProbe};
 pub use graph::{
     AttentionParentLayer, Bf16EmbeddingStatusD2HStatus, BorrowedArgmaxGraph,
     BorrowedArgmaxResources, BorrowedEmbeddingGraph, BorrowedEmbeddingResources, BorrowedGemmGraph,

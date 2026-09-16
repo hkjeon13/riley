@@ -154,6 +154,11 @@ typedef struct RileyCudaCopy RileyCudaCopy;
 typedef struct RileyCudaGemmPlan RileyCudaGemmPlan;
 typedef struct RileyCudaBiasGemmPlan RileyCudaBiasGemmPlan;
 typedef struct RileyCudaFixed37GemmPlan RileyCudaFixed37GemmPlan;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// Test-only direct-cuBLAS owner. This declaration and all matching symbols
+// are absent from ordinary Riley CUDA archives.
+typedef struct RileyCudaCublasGemmProbePlan RileyCudaCublasGemmProbePlan;
+#endif
 typedef struct RileyCudaHfPrefillAttentionPlan
     RileyCudaHfPrefillAttentionPlan;
 typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;
@@ -1241,6 +1246,34 @@ typedef struct RileyCudaFixed37GemmPlanInfo {
   uint64_t k;
   uint64_t reserved[3];
 } RileyCudaFixed37GemmPlanInfo;
+
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// The direct-cuBLAS P10 probe uses a separate opaque plan and deliberately
+// does not change RileyCudaGemmConfig or RileyCudaGemmAlgorithmInfo. The
+// numeric mode fields below are the captured cublas_v2.h enum values, kept as
+// int32_t so this public C header does not depend on CUDA headers.
+#define RILEY_CUDA_CUBLAS_GEMM_PROBE_BACKEND_CUBLAS 3u
+typedef struct RileyCudaCublasGemmProbeInfo {
+  uint32_t struct_size;
+  uint32_t backend;
+  int32_t requested_math_mode;
+  int32_t actual_math_mode;
+  int32_t requested_pointer_mode;
+  int32_t actual_pointer_mode;
+  int32_t requested_atomics_mode;
+  int32_t actual_atomics_mode;
+  int32_t runtime_version;
+  int32_t cublas_version;
+  uint32_t compute_capability_major;
+  uint32_t compute_capability_minor;
+  uint64_t m;
+  uint64_t n;
+  uint64_t k;
+  // Direct cuBLAS owns no caller workspace through this ABI.
+  uint64_t workspace_bytes;
+  uint64_t reserved[2];
+} RileyCudaCublasGemmProbeInfo;
+#endif
 
 #ifdef __cplusplus
 #define RILEY_CUDA_NOEXCEPT noexcept
@@ -2719,6 +2752,48 @@ RileyCudaStatus riley_cuda_fixed37_gemm_plan_execute(
 RileyCudaStatus riley_cuda_fixed37_gemm_plan_close(
     RileyCudaFixed37GemmPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// Test-only P10 direct-cuBLAS lane. It admits only the strict zero-flags
+// RileyCudaGemmConfig contract: row-major BF16 X[M,K], W[N,K], and Y[M,N],
+// F32 compute, N/T logical transposes, epilogue-none, and deterministic
+// required. It calls cublasGemmEx with CUBLAS_DEFAULT_MATH, host scalar
+// pointers, atomics disallowed, and CUBLAS_GEMM_DEFAULT_TENSOR_OP. The
+// operation is not a Riley serving selector and has no CUDA Graph or command
+// batch admission. max_workspace_bytes is accepted only for shared config
+// compatibility; this API accepts no workspace span and reports zero caller
+// workspace bytes.
+//
+// cuBLAS failures use RILEY_CUDA_STATUS_CUBLASLT_ERROR and
+// RILEY_CUDA_ERROR_DOMAIN_CUBLASLT as the existing math-library error surface;
+// native_code is the original cublasStatus_t. The test-only probe deliberately
+// does not add a new global status or error-domain ABI discriminant.
+RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_create(
+    RileyCudaContext* context,
+    const RileyCudaGemmConfig* config,
+    RileyCudaCublasGemmProbePlan** out_plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_info(
+    RileyCudaCublasGemmProbePlan* plan,
+    RileyCudaCublasGemmProbeInfo* out_info,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Executes the same row-major logical operation by reinterpreting storage as
+// column-major TN(W, X, Y): cublasGemmEx receives OP_T/OP_N with m=N, n=M,
+// k=K. Every span must exactly match the prepared byte length, use BF16 and a
+// 256-byte-aligned offset, belong to the plan context, and not overlap. A
+// direct probe call synchronizes its stream before returning; active command
+// batches and CUDA Graph capture are rejected.
+RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_execute(
+    RileyCudaCublasGemmProbePlan* plan,
+    const RileyCudaBufferSpan* input,
+    const RileyCudaBufferSpan* weight,
+    const RileyCudaBufferSpan* output,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_cublas_gemm_probe_plan_close(
+    RileyCudaCublasGemmProbePlan** plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+#endif
 
 // Diagnostic-only storage keeps generic tensor allocation outside PR 03.
 RileyCudaStatus riley_cuda_smoke_buffer_create(

@@ -6,6 +6,8 @@ find_package(CUDAToolkit REQUIRED)
 
 option(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION
     "Build destructive test-only CUDA memory fault injection hooks" OFF)
+option(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE
+    "Build the test-only native cuBLAS BF16 GEMM descriptor probe" OFF)
 option(RILEY_CUDA_ENABLE_NVML_PROBE
     "Build the development-only in-process NVML environment probe" OFF)
 
@@ -62,6 +64,18 @@ if(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
         RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION=1)
 endif()
 
+if(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+    if(NOT TARGET CUDA::cublas)
+        message(FATAL_ERROR
+            "The selected CUDA toolkit does not provide the shared CUDA::cublas target")
+    endif()
+    target_sources(riley_cuda_native PRIVATE src/cublas_gemm_probe.cu)
+    target_compile_definitions(riley_cuda_native PRIVATE
+        RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE=1)
+    target_compile_definitions(riley_cuda_abi_checks PRIVATE
+        RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE=1)
+endif()
+
 if(RILEY_CUDA_ENABLE_NVML_PROBE)
     if(NOT TARGET CUDA::nvml)
         message(FATAL_ERROR
@@ -81,6 +95,9 @@ target_link_libraries(riley_cuda_native PRIVATE
     CUDA::cudart
     CUDA::cuda_driver
 )
+if(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+    target_link_libraries(riley_cuda_native PRIVATE CUDA::cublas)
+endif()
 if(RILEY_CUDA_ENABLE_NVML_PROBE)
     target_link_libraries(riley_cuda_native PRIVATE CUDA::nvml)
 endif()
@@ -117,6 +134,12 @@ file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/riley-cuda-cublaslt-$<CONFIG>.path"
     CONTENT "$<TARGET_FILE:CUDA::cublasLt>\n"
 )
+if(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+    file(GENERATE
+        OUTPUT "${CMAKE_BINARY_DIR}/riley-cuda-cublas-$<CONFIG>.path"
+        CONTENT "$<TARGET_FILE:CUDA::cublas>\n"
+    )
+endif()
 if(RILEY_CUDA_ENABLE_NVML_PROBE)
     file(GENERATE
         OUTPUT "${CMAKE_BINARY_DIR}/riley-cuda-nvml-$<CONFIG>.path"

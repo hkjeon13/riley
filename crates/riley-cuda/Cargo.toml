@@ -21,6 +21,9 @@ nvml = ["cuda"]
 # Test infrastructure only. This deliberately changes the native archive and
 # must never be enabled in a production build.
 cuda-test-fault-injection = ["cuda"]
+# Test-only native cuBLAS BF16 GEMM descriptor probe. Ordinary CUDA builds
+# intentionally do not link libcuBLAS.
+cuda-cublas-gemm-probe = ["cuda"]
 
 [dependencies]
 riley-core = { path = "../riley-core" }

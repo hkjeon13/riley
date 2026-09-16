@@ -684,6 +684,20 @@ _Static_assert(offsetof(RileyCudaGemmAlgorithmInfo, reserved) == 96,
                "GEMM algorithm-info reserved tail changed");
 _Static_assert(sizeof(RileyCudaFixed37GemmPlanInfo) == 96,
                "fixed37 GEMM plan-info ABI size changed");
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+_Static_assert(RILEY_CUDA_CUBLAS_GEMM_PROBE_BACKEND_CUBLAS == 3,
+               "direct-cuBLAS probe backend discriminant changed");
+_Static_assert(sizeof(RileyCudaCublasGemmProbeInfo) == 96,
+               "direct-cuBLAS probe-info ABI size changed");
+_Static_assert(offsetof(RileyCudaCublasGemmProbeInfo, requested_math_mode) == 8,
+               "direct-cuBLAS probe math-mode offset changed");
+_Static_assert(offsetof(RileyCudaCublasGemmProbeInfo, runtime_version) == 32,
+               "direct-cuBLAS probe runtime-version offset changed");
+_Static_assert(offsetof(RileyCudaCublasGemmProbeInfo, m) == 48,
+               "direct-cuBLAS probe dimensions offset changed");
+_Static_assert(offsetof(RileyCudaCublasGemmProbeInfo, reserved) == 80,
+               "direct-cuBLAS probe reserved tail changed");
+#endif
 _Static_assert(
     offsetof(RileyCudaFixed37GemmPlanInfo,
              dynamic_shared_memory_bytes) == 32,
