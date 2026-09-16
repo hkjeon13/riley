@@ -607,6 +607,11 @@ fn parse_projection_sidecar(
     let sidecar = manifest["sidecar"]
         .as_object()
         .ok_or("HF P2051 projection sidecar record is missing")?;
+    require_exact_fields(
+        &manifest["sidecar"],
+        &["path", "sha256", "format", "tensor_count"],
+        "HF P2051 projection sidecar record",
+    )?;
     let expected_name = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -655,6 +660,11 @@ fn parse_projection_sidecar(
     let manifest_tensors = manifest["tensors"]
         .as_object()
         .ok_or("HF P2051 projection manifest tensors are missing")?;
+    let expected_tensor_names: BTreeSet<_> = PROJECTION_TENSOR_NAMES.iter().copied().collect();
+    let actual_tensor_names: BTreeSet<_> = manifest_tensors.keys().map(String::as_str).collect();
+    if actual_tensor_names != expected_tensor_names {
+        return Err("HF P2051 projection manifest tensor set differs".into());
+    }
     let mut ranges = Vec::with_capacity(PROJECTION_TENSOR_NAMES.len());
     let mut output = BTreeMap::new();
     for name in PROJECTION_TENSOR_NAMES {
@@ -792,6 +802,11 @@ fn load_hf_projection_artifact(
     let trace_profile = manifest["trace_profile"]
         .as_object()
         .ok_or("HF P2051 projection trace profile is missing")?;
+    require_exact_fields(
+        &manifest["trace_profile"],
+        &["capture_domain", "id", "tensor_count", "rust_consumer"],
+        "HF P2051 projection trace profile",
+    )?;
     if trace_profile.get("capture_domain").and_then(Value::as_str)
         != Some("cache-free-p2051-layer0-full-projection-boundaries")
         || trace_profile.get("id").and_then(Value::as_str) != Some(PROJECTION_TRACE_ID)
