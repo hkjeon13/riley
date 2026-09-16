@@ -22,9 +22,9 @@ from typing import Any, NoReturn
 
 MAX_TEST_STDOUT_BYTES = 64 * 1024 * 1024
 MARKER_PREFIX = "RILEY_QWEN3B_NATIVE_D128_LOGIT_TRACE="
-TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v3"
+TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v4"
 COLLECTED_SCHEMA_VERSION = (
-    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v3"
+    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v4"
 )
 TRACE_ARTIFACT_KIND = (
     "qwen2.5-3b-native-d128-scheduler-committed-teacher-forced-logit-trace"
@@ -75,6 +75,15 @@ TRACE_VARIANTS = (
 )
 TRACE_OUTPUT_ROWS, TOP_K = 9, 32
 PROMPT_TOKEN_COUNT, ADDRESSABLE_TOKEN_COUNT, VOCABULARY_SIZE = 2_048, 151_665, 151_936
+DENSE_CACHE_FREE_REFERENCE_CONTROL_STEP = 3
+DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE = {
+    "step": DENSE_CACHE_FREE_REFERENCE_CONTROL_STEP,
+    "scheduler_executor_replay": False,
+    "use_cache": False,
+    "same_scheduler_engine": False,
+    "projection_bias_backend": STRICT_PROJECTION_BIAS_BACKEND,
+    "attention_backend": "riley.cuda.materialized-gqa-prefill.bf16",
+}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 TRACE_KEYS = {
@@ -86,6 +95,7 @@ TRACE_KEYS = {
     "workload",
     "hf_teacher_forced_oracle",
     "modes",
+    "dense_cache_free_reference_control",
 }
 CONTRACT_KEYS = {
     "scheduler_executor_replay",
@@ -111,6 +121,7 @@ CONTRACT_KEYS = {
     "metadata_transport",
     "reduction_profile",
     "top32_order_comparison",
+    "dense_cache_free_reference_control",
 }
 WORKLOAD_KEYS = {
     "sha256",
@@ -185,6 +196,36 @@ HF_ROW_KEYS = {
     "selected_logit_bf16_as_f32",
     "top_token_ids",
     "top_values_bf16_as_f32",
+    "raw_hash_matches",
+    "selected_token_matches",
+    "raw_argmax_matches",
+    "top32_order_matches_bf16_numeric_tie_break",
+    "top32_set_overlap",
+}
+DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE_KEYS = set(
+    DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE
+)
+DENSE_CACHE_FREE_REFERENCE_CONTROL_KEYS = {
+    *DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE_KEYS,
+    "input_token_count",
+    "input_token_ids_le_u32_sha256",
+    "row_bf16_le_sha256",
+    "addressable_bf16_le_sha256",
+    "raw_argmax_token_id",
+    "selected_token_id",
+    "selected_logit_bf16_as_f32",
+    "top_token_ids",
+    "top_values_bf16_as_f32",
+    "hf_cache_off",
+}
+DENSE_CACHE_FREE_HF_CACHE_OFF_KEYS = {
+    "step",
+    "call_input_token_count",
+    "call_input_token_ids_le_u32_sha256",
+    "row_bf16_le_sha256",
+    "addressable_bf16_le_sha256",
+    "raw_argmax_token_id",
+    "selected_token_id",
     "raw_hash_matches",
     "selected_token_matches",
     "raw_argmax_matches",
@@ -488,6 +529,196 @@ def _validate_hf_row(
     return hf_selected
 
 
+def _validate_dense_cache_free_reference_control_scope(
+    value: Any, path: str
+) -> dict[str, Any]:
+    scope = _object(value, DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE_KEYS, path)
+    for key, expected in DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE.items():
+        field_path = f"{path}.{key}"
+        if isinstance(expected, bool):
+            actual = _bool(scope[key], field_path)
+        elif isinstance(expected, int):
+            actual = _integer(scope[key], field_path)
+        else:
+            actual = _string(scope[key], field_path)
+        _equal(actual, expected, field_path)
+    return scope
+
+
+def _validate_dense_cache_free_reference_control(
+    value: Any,
+    scope: dict[str, Any],
+    strict_fixed_hf_cache_off: dict[str, Any],
+    teacher_tokens: list[int],
+    path: str,
+) -> None:
+    """Bind the cache-free materialized control to the strict scheduler row."""
+
+    control = _object(value, DENSE_CACHE_FREE_REFERENCE_CONTROL_KEYS, path)
+    for key in DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE:
+        field_path = f"{path}.{key}"
+        expected = scope[key]
+        if isinstance(expected, bool):
+            actual = _bool(control[key], field_path)
+        elif isinstance(expected, int):
+            actual = _integer(control[key], field_path)
+        else:
+            actual = _string(control[key], field_path)
+        _equal(actual, expected, field_path)
+
+    step = DENSE_CACHE_FREE_REFERENCE_CONTROL_STEP
+    expected_input_token_count = PROMPT_TOKEN_COUNT + step
+    _equal(
+        _integer(control["input_token_count"], f"{path}.input_token_count"),
+        expected_input_token_count,
+        f"{path}.input_token_count",
+    )
+    expected_input_sha256 = _expected_hf_call_input_sha256(
+        "cache-off", step, teacher_tokens
+    )
+    _equal(
+        _sha256(
+            control["input_token_ids_le_u32_sha256"],
+            f"{path}.input_token_ids_le_u32_sha256",
+        ),
+        expected_input_sha256,
+        f"{path}.input_token_ids_le_u32_sha256",
+    )
+    row_hash = _sha256(control["row_bf16_le_sha256"], f"{path}.row_bf16_le_sha256")
+    addressable_hash = _sha256(
+        control["addressable_bf16_le_sha256"], f"{path}.addressable_bf16_le_sha256"
+    )
+    raw_argmax = _integer(
+        control["raw_argmax_token_id"],
+        f"{path}.raw_argmax_token_id",
+        maximum=VOCABULARY_SIZE - 1,
+    )
+    selected = _integer(
+        control["selected_token_id"],
+        f"{path}.selected_token_id",
+        maximum=ADDRESSABLE_TOKEN_COUNT - 1,
+    )
+    selected_logit = _number(
+        control["selected_logit_bf16_as_f32"],
+        f"{path}.selected_logit_bf16_as_f32",
+    )
+    ids, values = _top_k(
+        control["top_token_ids"],
+        control["top_values_bf16_as_f32"],
+        path,
+        upper_bound=ADDRESSABLE_TOKEN_COUNT,
+    )
+    _equal(selected, ids[0], f"{path}.selected_token_id")
+    _equal(selected_logit, values[0], f"{path}.selected_logit_bf16_as_f32")
+
+    reference_path = f"{path}.hf_cache_off"
+    reference = _object(
+        control["hf_cache_off"], DENSE_CACHE_FREE_HF_CACHE_OFF_KEYS, reference_path
+    )
+    _equal(
+        _integer(reference["step"], f"{reference_path}.step"),
+        step,
+        f"{reference_path}.step",
+    )
+    _equal(
+        reference["step"],
+        strict_fixed_hf_cache_off["step"],
+        f"{reference_path}.step",
+    )
+    _equal(
+        _integer(
+            reference["call_input_token_count"],
+            f"{reference_path}.call_input_token_count",
+        ),
+        expected_input_token_count,
+        f"{reference_path}.call_input_token_count",
+    )
+    _equal(
+        reference["call_input_token_count"],
+        strict_fixed_hf_cache_off["call_input_token_count"],
+        f"{reference_path}.call_input_token_count",
+    )
+    _equal(
+        _sha256(
+            reference["call_input_token_ids_le_u32_sha256"],
+            f"{reference_path}.call_input_token_ids_le_u32_sha256",
+        ),
+        expected_input_sha256,
+        f"{reference_path}.call_input_token_ids_le_u32_sha256",
+    )
+    _equal(
+        reference["call_input_token_ids_le_u32_sha256"],
+        strict_fixed_hf_cache_off["call_input_token_ids_le_u32_sha256"],
+        f"{reference_path}.call_input_token_ids_le_u32_sha256",
+    )
+    _equal(
+        _sha256(
+            reference["row_bf16_le_sha256"], f"{reference_path}.row_bf16_le_sha256"
+        ),
+        strict_fixed_hf_cache_off["logits_bf16_le_sha256"],
+        f"{reference_path}.row_bf16_le_sha256",
+    )
+    _equal(
+        _sha256(
+            reference["addressable_bf16_le_sha256"],
+            f"{reference_path}.addressable_bf16_le_sha256",
+        ),
+        strict_fixed_hf_cache_off["addressable_bf16_le_sha256"],
+        f"{reference_path}.addressable_bf16_le_sha256",
+    )
+    _equal(
+        _integer(
+            reference["raw_argmax_token_id"],
+            f"{reference_path}.raw_argmax_token_id",
+            maximum=VOCABULARY_SIZE - 1,
+        ),
+        strict_fixed_hf_cache_off["raw_argmax_token_id"],
+        f"{reference_path}.raw_argmax_token_id",
+    )
+    _equal(
+        _integer(
+            reference["selected_token_id"],
+            f"{reference_path}.selected_token_id",
+            maximum=ADDRESSABLE_TOKEN_COUNT - 1,
+        ),
+        strict_fixed_hf_cache_off["selected_token_id"],
+        f"{reference_path}.selected_token_id",
+    )
+    _equal(
+        _sha256(
+            strict_fixed_hf_cache_off["call_input_token_ids_le_u32_sha256"],
+            "trace.modes[0].rows[3].hf_cache_off.call_input_token_ids_le_u32_sha256",
+        ),
+        expected_input_sha256,
+        "trace.modes[0].rows[3].hf_cache_off.call_input_token_ids_le_u32_sha256",
+    )
+    _equal(
+        strict_fixed_hf_cache_off["call_input_token_count"],
+        expected_input_token_count,
+        "trace.modes[0].rows[3].hf_cache_off.call_input_token_count",
+    )
+
+    strict_ids = strict_fixed_hf_cache_off["top_token_ids"]
+    expected_flags = {
+        "raw_hash_matches": row_hash
+        == strict_fixed_hf_cache_off["logits_bf16_le_sha256"],
+        "selected_token_matches": selected
+        == strict_fixed_hf_cache_off["selected_token_id"],
+        "raw_argmax_matches": raw_argmax
+        == strict_fixed_hf_cache_off["raw_argmax_token_id"],
+        "top32_order_matches_bf16_numeric_tie_break": ids == strict_ids,
+        "top32_set_overlap": len(set(ids) & set(strict_ids)),
+    }
+    for key, expected in expected_flags.items():
+        field_path = f"{reference_path}.{key}"
+        actual = (
+            _integer(reference[key], field_path, maximum=TOP_K)
+            if key == "top32_set_overlap"
+            else _bool(reference[key], field_path)
+        )
+        _equal(actual, expected, field_path)
+
+
 def _validate_trace_variants(value: Any, path: str) -> None:
     if not isinstance(value, list) or len(value) != len(TRACE_VARIANTS):
         _fail(path, f"must contain exactly {len(TRACE_VARIANTS)} trace variants")
@@ -652,6 +883,12 @@ def validate_trace(document: Any) -> dict[str, Any]:
             "must be false for a numerical diagnostic",
         )
     contract = _object(trace["trace_contract"], CONTRACT_KEYS, "trace.trace_contract")
+    dense_cache_free_reference_control_scope = (
+        _validate_dense_cache_free_reference_control_scope(
+            contract["dense_cache_free_reference_control"],
+            "trace.trace_contract.dense_cache_free_reference_control",
+        )
+    )
     expected_contract: dict[str, Any] = {
         "scheduler_executor_replay": True,
         "http_transport_replayed": False,
@@ -779,6 +1016,13 @@ def validate_trace(document: Any) -> dict[str, Any]:
         _validate_mode(
             modes[index], expected_variant, teacher_tokens, f"trace.modes[{index}]"
         )
+    _validate_dense_cache_free_reference_control(
+        trace["dense_cache_free_reference_control"],
+        dense_cache_free_reference_control_scope,
+        modes[0]["rows"][DENSE_CACHE_FREE_REFERENCE_CONTROL_STEP]["hf_cache_off"],
+        teacher_tokens,
+        "trace.dense_cache_free_reference_control",
+    )
     return trace
 
 

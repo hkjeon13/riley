@@ -12,6 +12,11 @@
 //! from canonical little-endian BF16 before it emits one compact JSON receipt.
 //! The receipt is a numerical diagnostic, never a serving performance result
 //! or a C02 generation-audit record.
+//!
+//! It also emits one separately owned cache-free materialized-reference outer
+//! control at teacher-forced step three. That control is deliberately marked
+//! as outside the scheduler/KV engine, so it cannot be mistaken for a
+//! scheduler-attention implementation switch.
 
 #![cfg(feature = "cuda")]
 #![allow(clippy::float_cmp, clippy::similar_names, clippy::too_many_lines)]
@@ -24,7 +29,8 @@ use std::path::{Path, PathBuf};
 use riley_model::{LoadLimits, LoadedModel, ModelArchitecture, ModelFamily};
 use riley_runtime::llama::{
     LlamaBatchMetadataConfig, LlamaProjectionBiasMode, LlamaReductionProfile,
-    PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, PreparedLlamaForwardConfig,
+    PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, PreparedLlamaForward,
+    PreparedLlamaForwardConfig,
 };
 use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
 use riley_scheduler::{
@@ -75,7 +81,9 @@ const SERVER_PREFILL_CHUNK_TOKENS: usize = 32;
 const SERVER_PHYSICAL_KV_BLOCKS: usize = 1_088;
 const TRACE_OUTPUT_ROWS: usize = 9;
 const TOP_K: usize = 32;
+const DENSE_REFERENCE_CONTROL_STEP: usize = 3;
 const NATIVE_D128_BACKEND_ID: &str = "riley.cuda.ragged-paged-attention.native-bf16-paged-split-gqa.qwen2.5-3b.d128.qh16.kvh2.block16.transition-v2";
+const DENSE_REFERENCE_ATTENTION_BACKEND_ID: &str = "riley.cuda.materialized-gqa-prefill.bf16";
 
 #[derive(Debug)]
 struct ServingWorkload {
@@ -159,6 +167,21 @@ struct ModeTrace {
     rows: Vec<TraceRow>,
     prefill_iteration_count: usize,
     decode_iteration_count: usize,
+}
+
+#[derive(Debug)]
+struct DenseReferenceControl {
+    step: usize,
+    input_token_count: usize,
+    input_token_ids_le_sha256: String,
+    row_bf16_le_sha256: String,
+    addressable_bf16_le_sha256: String,
+    raw_argmax_token_id: u32,
+    selected_token_id: u32,
+    selected_logit: f32,
+    top_token_ids: Vec<u32>,
+    top_values: Vec<f32>,
+    hf_cache_off: HfStep,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1628,6 +1651,141 @@ fn trace_mode(
     }
 }
 
+fn close_dense_reference_resources(
+    forward: Option<PreparedLlamaForward>,
+    mut stream: CudaStream,
+    context: CudaContext,
+) -> TestResult {
+    let mut failures = Vec::new();
+    if let Some(forward) = forward {
+        if let Err(error) = forward.close() {
+            failures.push(format!("dense reference forward close failed: {error}"));
+        }
+    }
+    if let Err(error) = stream.close() {
+        failures.push(format!("dense reference stream close failed: {error}"));
+    }
+    if let Err(error) = close_context(context) {
+        failures.push(format!("dense reference context close failed: {error}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; ").into())
+    }
+}
+
+fn dense_cache_free_reference_control(
+    model: &LoadedModel,
+    workload: &ServingWorkload,
+    hf: &HfTeacherForcedOracle,
+) -> TestResult<DenseReferenceControl> {
+    let step = DENSE_REFERENCE_CONTROL_STEP;
+    let hf_cache_off = hf
+        .cache_off_steps
+        .get(step)
+        .ok_or("HF cache-off trace has no dense-reference control step")?;
+    let teacher_prefix = hf
+        .teacher_token_ids
+        .get(..step)
+        .ok_or("HF teacher trace has no dense-reference control prefix")?;
+    let mut input = Vec::with_capacity(
+        workload
+            .prompt_token_ids
+            .len()
+            .checked_add(teacher_prefix.len())
+            .ok_or("dense-reference input capacity overflows")?,
+    );
+    input.extend_from_slice(&workload.prompt_token_ids);
+    input.extend_from_slice(teacher_prefix);
+    let input_token_ids_le_sha256 = token_ids_sha256(&input);
+    assert_eq!(input.len(), 2_048 + step);
+    assert_eq!(hf_cache_off.step, step);
+    assert_eq!(hf_cache_off.call_input_token_count, input.len());
+    assert_eq!(
+        hf_cache_off.call_input_token_ids_le_sha256,
+        input_token_ids_le_sha256
+    );
+    assert_eq!(hf_cache_off.context_token_count, input.len());
+    assert_eq!(hf_cache_off.attention_mask_token_count, input.len());
+    assert_eq!(hf_cache_off.position_start, 0);
+    assert_eq!(hf_cache_off.position_end, input.len() - 1);
+    assert_eq!(hf_cache_off.teacher_input_token_id, None);
+    assert_eq!(hf_cache_off.cache_length_before, None);
+    assert_eq!(hf_cache_off.cache_length_after, None);
+
+    let (context, mut stream) = first_context()?;
+    let config = PreparedLlamaForwardConfig::default()
+        .with_projection_bias_mode(LlamaProjectionBiasMode::StrictStagedV1)
+        .with_reference_attention();
+    let mut forward = match PreparedLlamaForward::prepare(
+        model,
+        &context,
+        &mut stream,
+        input.len(),
+        config,
+    ) {
+        Ok(forward) => forward,
+        Err(error) => {
+            let cleanup = close_dense_reference_resources(None, stream, context);
+            return match cleanup {
+                Ok(()) => Err(error.into()),
+                Err(cleanup_error) => Err(format!(
+                    "dense reference preparation failed: {error}; cleanup also failed: {cleanup_error}"
+                )
+                .into()),
+            };
+        }
+    };
+    assert_eq!(
+        forward.projection_bias_mode(),
+        LlamaProjectionBiasMode::StrictStagedV1
+    );
+    assert_eq!(
+        forward.reduction_profile(),
+        LlamaReductionProfile::CanonicalV1
+    );
+    assert_eq!(
+        forward.attention_selection().implementation_id(),
+        DENSE_REFERENCE_ATTENTION_BACKEND_ID
+    );
+
+    let run = (|| -> TestResult<DenseReferenceControl> {
+        forward.forward(&input, &mut stream)?;
+        let mut native = vec![0_u8; EXPECTED_VOCABULARY_SIZE * BF16_BYTES];
+        forward.download_last_logits(&mut native, &mut stream)?;
+        let addressable_bytes = EXPECTED_ADDRESSABLE_TOKEN_COUNT * BF16_BYTES;
+        let addressable = &native[..addressable_bytes];
+        let top_token_ids = top_k(addressable, TOP_K)?;
+        let top_values = top_token_ids
+            .iter()
+            .map(|&token| logit_at(addressable, token))
+            .collect::<TestResult<Vec<_>>>()?;
+        Ok(DenseReferenceControl {
+            step,
+            input_token_count: input.len(),
+            input_token_ids_le_sha256: input_token_ids_le_sha256.clone(),
+            row_bf16_le_sha256: sha256_hex(&bf16_le_bytes(&native)?),
+            addressable_bf16_le_sha256: sha256_hex(&bf16_le_bytes(addressable)?),
+            raw_argmax_token_id: top_k(&native, 1)?[0],
+            selected_token_id: top_token_ids[0],
+            selected_logit: top_values[0],
+            top_token_ids,
+            top_values,
+            hf_cache_off: hf_cache_off.clone(),
+        })
+    })();
+    let cleanup = close_dense_reference_resources(Some(forward), stream, context);
+    match (run, cleanup) {
+        (Ok(control), Ok(())) => Ok(control),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "dense reference execution failed: {run_error}; cleanup also failed: {cleanup_error}"
+        )
+        .into()),
+    }
+}
+
 fn hf_step_json(step: &HfStep, mode: &'static str, row: &TraceRow) -> Value {
     let logits = &step.logits;
     json!({
@@ -1702,6 +1860,42 @@ fn trace_json(mode: &ModeTrace) -> Value {
     })
 }
 
+fn dense_cache_free_reference_control_json(control: &DenseReferenceControl) -> Value {
+    let hf_cache_off = &control.hf_cache_off;
+    let logits = &hf_cache_off.logits;
+    json!({
+        "step": control.step,
+        "scheduler_executor_replay": false,
+        "use_cache": false,
+        "same_scheduler_engine": false,
+        "projection_bias_backend": LlamaProjectionBiasMode::StrictStagedV1.id(),
+        "attention_backend": DENSE_REFERENCE_ATTENTION_BACKEND_ID,
+        "input_token_count": control.input_token_count,
+        "input_token_ids_le_u32_sha256": control.input_token_ids_le_sha256,
+        "row_bf16_le_sha256": control.row_bf16_le_sha256,
+        "addressable_bf16_le_sha256": control.addressable_bf16_le_sha256,
+        "raw_argmax_token_id": control.raw_argmax_token_id,
+        "selected_token_id": control.selected_token_id,
+        "selected_logit_bf16_as_f32": control.selected_logit,
+        "top_token_ids": control.top_token_ids,
+        "top_values_bf16_as_f32": control.top_values,
+        "hf_cache_off": {
+            "step": hf_cache_off.step,
+            "call_input_token_count": hf_cache_off.call_input_token_count,
+            "call_input_token_ids_le_u32_sha256": hf_cache_off.call_input_token_ids_le_sha256,
+            "row_bf16_le_sha256": logits.raw_logit_sha256,
+            "addressable_bf16_le_sha256": logits.addressable_logit_sha256,
+            "raw_argmax_token_id": logits.raw_argmax_token_id,
+            "selected_token_id": logits.selected_token_id,
+            "raw_hash_matches": control.row_bf16_le_sha256 == logits.raw_logit_sha256,
+            "selected_token_matches": control.selected_token_id == logits.selected_token_id,
+            "raw_argmax_matches": control.raw_argmax_token_id == logits.raw_argmax_token_id,
+            "top32_order_matches_bf16_numeric_tie_break": control.top_token_ids == logits.top_token_ids,
+            "top32_set_overlap": overlap_count(&control.top_token_ids, &logits.top_token_ids),
+        },
+    })
+}
+
 #[test]
 #[ignore = "remote-only Qwen2.5-3B C8/M32 native-D128 teacher-forced numerical trace"]
 fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResult {
@@ -1710,6 +1904,7 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
     assert_eq!(workload.output_token_ids.len(), SERVER_MAX_OUTPUT_TOKENS);
     assert_eq!(hf.teacher_token_ids.len(), SERVER_MAX_OUTPUT_TOKENS);
     let model = load_model()?;
+    let dense_reference_control = dense_cache_free_reference_control(&model, &workload, &hf)?;
     let strict = trace_mode(
         &model,
         &workload,
@@ -1736,7 +1931,7 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
     )?;
     let trace_teacher_tokens = &hf.teacher_token_ids[..TRACE_OUTPUT_ROWS];
     let document = json!({
-        "schema_version": "riley.qwen3b-native-d128-teacher-forced-logit-trace.v3",
+        "schema_version": "riley.qwen3b-native-d128-teacher-forced-logit-trace.v4",
         "artifact_kind": "qwen2.5-3b-native-d128-scheduler-committed-teacher-forced-logit-trace",
         "performance_claim_eligible": false,
         "trace_contract": {
@@ -1745,6 +1940,14 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
             "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
             "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
             "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
+            "dense_cache_free_reference_control": {
+                "step": DENSE_REFERENCE_CONTROL_STEP,
+                "scheduler_executor_replay": false,
+                "use_cache": false,
+                "same_scheduler_engine": false,
+                "projection_bias_backend": LlamaProjectionBiasMode::StrictStagedV1.id(),
+                "attention_backend": DENSE_REFERENCE_ATTENTION_BACKEND_ID,
+            },
             "trace_variants": [
                 {
                     "id": strict.variant_id,
@@ -1809,6 +2012,7 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
                 "sha256": hf.cache_on_sidecar.sha256,
             },
         },
+        "dense_cache_free_reference_control": dense_cache_free_reference_control_json(&dense_reference_control),
         "modes": [
             trace_json(&strict),
             trace_json(&strict_active_rows),

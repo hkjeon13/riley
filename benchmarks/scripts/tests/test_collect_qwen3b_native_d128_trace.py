@@ -1,4 +1,4 @@
-"""Focused hostile-input tests for the native-D128 trace collector v3."""
+"""Focused hostile-input tests for the native-D128 trace collector v4."""
 
 from __future__ import annotations
 
@@ -185,8 +185,61 @@ def mode(
     }
 
 
+def dense_cache_free_reference_control(
+    strict_fixed_mode: dict[str, object], teacher_token_ids: list[int]
+) -> dict[str, object]:
+    step = collector.DENSE_CACHE_FREE_REFERENCE_CONTROL_STEP
+    row = strict_fixed_mode["rows"][step]
+    hf_cache_off = row["hf_cache_off"]
+    ids = list(row["top_token_ids"])
+    return {
+        **collector.DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE,
+        "input_token_count": collector.PROMPT_TOKEN_COUNT + step,
+        "input_token_ids_le_u32_sha256": collector._expected_hf_call_input_sha256(
+            "cache-off", step, teacher_token_ids
+        ),
+        "row_bf16_le_sha256": row["row_bf16_le_sha256"],
+        "addressable_bf16_le_sha256": row["addressable_bf16_le_sha256"],
+        "raw_argmax_token_id": row["raw_argmax_token_id"],
+        "selected_token_id": row["selected_token_id"],
+        "selected_logit_bf16_as_f32": row["selected_logit_bf16_as_f32"],
+        "top_token_ids": ids,
+        "top_values_bf16_as_f32": list(row["top_values_bf16_as_f32"]),
+        "hf_cache_off": {
+            "step": hf_cache_off["step"],
+            "call_input_token_count": hf_cache_off["call_input_token_count"],
+            "call_input_token_ids_le_u32_sha256": hf_cache_off[
+                "call_input_token_ids_le_u32_sha256"
+            ],
+            "row_bf16_le_sha256": hf_cache_off["logits_bf16_le_sha256"],
+            "addressable_bf16_le_sha256": hf_cache_off["addressable_bf16_le_sha256"],
+            "raw_argmax_token_id": hf_cache_off["raw_argmax_token_id"],
+            "selected_token_id": hf_cache_off["selected_token_id"],
+            "raw_hash_matches": row["row_bf16_le_sha256"]
+            == hf_cache_off["logits_bf16_le_sha256"],
+            "selected_token_matches": row["selected_token_id"]
+            == hf_cache_off["selected_token_id"],
+            "raw_argmax_matches": row["raw_argmax_token_id"]
+            == hf_cache_off["raw_argmax_token_id"],
+            "top32_order_matches_bf16_numeric_tie_break": ids
+            == hf_cache_off["top_token_ids"],
+            "top32_set_overlap": len(
+                set(ids).intersection(hf_cache_off["top_token_ids"])
+            ),
+        },
+    }
+
+
 def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, object]:
     teacher_token_ids = [100 + step * 40 for step in range(collector.TRACE_OUTPUT_ROWS)]
+    modes = [
+        mode(
+            variant,
+            teacher_token_ids,
+            cache_on_divergence_step=cache_on_divergence_step,
+        )
+        for variant in collector.TRACE_VARIANTS
+    ]
     return {
         "schema_version": collector.TRACE_SCHEMA_VERSION,
         "artifact_kind": collector.TRACE_ARTIFACT_KIND,
@@ -215,6 +268,9 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
             "metadata_transport": "synchronous",
             "reduction_profile": "canonical-v1",
             "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
+            "dense_cache_free_reference_control": dict(
+                collector.DENSE_CACHE_FREE_REFERENCE_CONTROL_SCOPE
+            ),
         },
         "model": {
             "id": collector.QWEN3B_MODEL_ID,
@@ -244,14 +300,10 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
                 "sha256": digest("cache-on-sidecar"),
             },
         },
-        "modes": [
-            mode(
-                variant,
-                teacher_token_ids,
-                cache_on_divergence_step=cache_on_divergence_step,
-            )
-            for variant in collector.TRACE_VARIANTS
-        ],
+        "modes": modes,
+        "dense_cache_free_reference_control": dense_cache_free_reference_control(
+            modes[0], teacher_token_ids
+        ),
     }
 
 
@@ -346,6 +398,39 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                     test_stdout_path=self.write_log(root, marker(trace) + "\n"),
                     output_path=root / "trace.json",
                 )
+
+    def test_rejects_forged_dense_cache_free_control_bindings(self) -> None:
+        altered_input = valid_trace()
+        altered_input["dense_cache_free_reference_control"][
+            "input_token_ids_le_u32_sha256"
+        ] = digest("wrong-dense-cache-free-input")
+        forged_flag = valid_trace()
+        forged_flag["dense_cache_free_reference_control"]["hf_cache_off"][
+            "raw_hash_matches"
+        ] = False
+        altered_reference_fact = valid_trace()
+        altered_reference_fact["dense_cache_free_reference_control"]["hf_cache_off"][
+            "selected_token_id"
+        ] += 1
+        missing_reference_fact = valid_trace()
+        del missing_reference_fact["dense_cache_free_reference_control"][
+            "hf_cache_off"
+        ]["addressable_bf16_le_sha256"]
+        for label, trace, expected in (
+            ("input", altered_input, "input_token_ids_le_u32_sha256"),
+            ("flag", forged_flag, "raw_hash_matches"),
+            ("reference", altered_reference_fact, "selected_token_id"),
+            ("missing", missing_reference_fact, "missing"),
+        ):
+            with self.subTest(
+                label=label
+            ), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                with self.assertRaisesRegex(collector.TraceCollectorError, expected):
+                    collector.collect_trace(
+                        test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                        output_path=root / "trace.json",
+                    )
 
     def test_rejects_cache_off_non_teacher_selection_and_bad_cache_on_schedule(
         self,
