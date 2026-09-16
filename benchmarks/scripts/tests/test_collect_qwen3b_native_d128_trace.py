@@ -1,4 +1,4 @@
-"""Focused hostile-input tests for the native-D128 trace collector v2."""
+"""Focused hostile-input tests for the native-D128 trace collector v3."""
 
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ def trace_row(
 
 
 def mode(
-    backend: str,
+    variant: dict[str, object],
     teacher_token_ids: list[int],
     *,
     cache_on_divergence_step: int | None = None,
@@ -172,7 +172,11 @@ def mode(
         for step in range(collector.TRACE_OUTPUT_ROWS)
     ]
     return {
-        "projection_bias_backend": backend,
+        "variant_id": str(variant["id"]),
+        "projection_bias_backend": str(variant["projection_bias_backend"]),
+        "batch_shape_policy": str(variant["batch_shape_policy"]),
+        "prefill_dense_rows": int(variant["prefill_dense_rows"]),
+        "decode_dense_rows": int(variant["decode_dense_rows"]),
         "prefill_iteration_count": 64,
         "decode_iteration_count": collector.TRACE_OUTPUT_ROWS - 1,
         "first_hf_cache_off_selected_token_mismatch": None,
@@ -193,10 +197,7 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
             "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
             "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
             "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
-            "projection_bias_modes": [
-                collector.STRICT_PROJECTION_BIAS_BACKEND,
-                collector.FUSED_PROJECTION_BIAS_BACKEND,
-            ],
+            "trace_variants": [dict(variant) for variant in collector.TRACE_VARIANTS],
             "native_d128_backend": collector.NATIVE_D128_BACKEND_ID,
             "max_active_sequences": 8,
             "batch_token_budget": 32,
@@ -212,7 +213,6 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
             "residual_rmsnorm": "separate",
             "execution_completion": "iteration-batch",
             "metadata_transport": "synchronous",
-            "batch_shape_policy": "fixed-maximum",
             "reduction_profile": "canonical-v1",
             "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
         },
@@ -246,15 +246,11 @@ def valid_trace(*, cache_on_divergence_step: int | None = None) -> dict[str, obj
         },
         "modes": [
             mode(
-                collector.STRICT_PROJECTION_BIAS_BACKEND,
+                variant,
                 teacher_token_ids,
                 cache_on_divergence_step=cache_on_divergence_step,
-            ),
-            mode(
-                collector.FUSED_PROJECTION_BIAS_BACKEND,
-                teacher_token_ids,
-                cache_on_divergence_step=cache_on_divergence_step,
-            ),
+            )
+            for variant in collector.TRACE_VARIANTS
         ],
     }
 
@@ -335,6 +331,21 @@ class NativeD128TraceCollectorTests(unittest.TestCase):
                 "selection_matches_cache_off_teacher"
             ]
         )
+
+    def test_rejects_active_row_bucket_trace_with_misreported_m1_decode_rows(
+        self,
+    ) -> None:
+        trace = valid_trace()
+        trace["modes"][1]["decode_dense_rows"] = 32
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            with self.assertRaisesRegex(
+                collector.TraceCollectorError, "decode_dense_rows"
+            ):
+                collector.collect_trace(
+                    test_stdout_path=self.write_log(root, marker(trace) + "\n"),
+                    output_path=root / "trace.json",
+                )
 
     def test_rejects_cache_off_non_teacher_selection_and_bad_cache_on_schedule(
         self,

@@ -151,10 +151,45 @@ struct TraceRow {
 
 #[derive(Debug)]
 struct ModeTrace {
+    variant_id: &'static str,
     projection_bias_backend: &'static str,
+    batch_shape_policy: &'static str,
+    prefill_dense_rows: usize,
+    decode_dense_rows: usize,
     rows: Vec<TraceRow>,
     prefill_iteration_count: usize,
     decode_iteration_count: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TraceShapePolicy {
+    FixedMaximum,
+    ActiveRowBuckets,
+}
+
+impl TraceShapePolicy {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::FixedMaximum => "fixed-maximum",
+            Self::ActiveRowBuckets => "active-row-buckets",
+        }
+    }
+
+    const fn executor_policy_id(self) -> &'static str {
+        match self {
+            Self::FixedMaximum => "fixed-max",
+            Self::ActiveRowBuckets => "power-of-two",
+        }
+    }
+
+    const fn expected_dense_rows(self, kind: &str) -> usize {
+        match (self, kind) {
+            (Self::FixedMaximum, "prefill" | "decode") => SERVER_BATCH_TOKEN_BUDGET,
+            (Self::ActiveRowBuckets, "prefill") => SERVER_PREFILL_CHUNK_TOKENS,
+            (Self::ActiveRowBuckets, "decode") => 1,
+            _ => unreachable!("trace only permits prefill or decode iterations"),
+        }
+    }
 }
 
 fn required_path(name: &'static str) -> PathBuf {
@@ -954,7 +989,10 @@ fn scheduler_config() -> SchedulerConfig {
     }
 }
 
-fn executor_config(mode: LlamaProjectionBiasMode) -> TestResult<PreparedLlamaBatchExecutorConfig> {
+fn executor_config(
+    mode: LlamaProjectionBiasMode,
+    shape_policy: TraceShapePolicy,
+) -> TestResult<PreparedLlamaBatchExecutorConfig> {
     let forward = PreparedLlamaForwardConfig::default().with_projection_bias_mode(mode);
     let metadata = LlamaBatchMetadataConfig::new(
         SERVER_MAX_ACTIVE_SEQUENCES,
@@ -963,13 +1001,16 @@ fn executor_config(mode: LlamaProjectionBiasMode) -> TestResult<PreparedLlamaBat
         SERVER_MAX_ACTIVE_SEQUENCES,
         SERVER_PHYSICAL_KV_BLOCKS,
     )?;
-    Ok(PreparedLlamaBatchExecutorConfig::new(metadata, forward)
+    let config = PreparedLlamaBatchExecutorConfig::new(metadata, forward)
         .with_separate_residual_norm()
         .with_iteration_batch_completion()
         .with_synchronous_metadata()
-        .with_fixed_maximum_shape()
         .with_reduction_profile(LlamaReductionProfile::CanonicalV1)
-        .with_native_bf16_paged_split_gqa_d128_two_stage())
+        .with_native_bf16_paged_split_gqa_d128_two_stage();
+    Ok(match shape_policy {
+        TraceShapePolicy::FixedMaximum => config.with_fixed_maximum_shape(),
+        TraceShapePolicy::ActiveRowBuckets => config.with_active_row_buckets(),
+    })
 }
 
 fn decode_bf16_scalar(bytes: &[u8]) -> f32 {
@@ -1336,13 +1377,23 @@ fn trace_mode(
     model: &LoadedModel,
     workload: &ServingWorkload,
     hf: &HfTeacherForcedOracle,
+    variant_id: &'static str,
     mode: LlamaProjectionBiasMode,
+    shape_policy: TraceShapePolicy,
 ) -> TestResult<ModeTrace> {
     let (context, mut stream) = first_context()?;
-    let mut executor =
-        PreparedLlamaBatchExecutor::prepare(model, &context, &mut stream, executor_config(mode)?)?;
+    let mut executor = PreparedLlamaBatchExecutor::prepare(
+        model,
+        &context,
+        &mut stream,
+        executor_config(mode, shape_policy)?,
+    )?;
     assert_eq!(executor.batch_token_budget(), SERVER_BATCH_TOKEN_BUDGET);
     assert_eq!(executor.projection_bias_backend_id(), mode.id());
+    assert_eq!(
+        executor.batch_shape_policy_id(),
+        shape_policy.executor_policy_id()
+    );
     assert_eq!(
         executor.decode_attention_implementation_id(),
         NATIVE_D128_BACKEND_ID
@@ -1363,6 +1414,8 @@ fn trace_mode(
         let mut rows = Vec::with_capacity(TRACE_OUTPUT_ROWS);
         let mut prefill_iteration_count = 0_usize;
         let mut decode_iteration_count = 0_usize;
+        let mut prefill_dense_rows = None;
+        let mut decode_dense_rows = None;
         let mut terminal_token_ids = None;
 
         while rows.len() < TRACE_OUTPUT_ROWS {
@@ -1387,6 +1440,25 @@ fn trace_mode(
                 decode_iteration_count += 1;
                 ("decode", item.target_logical_length())
             };
+            let selected_dense_rows = executor.select_dense_rows(plan.total_tokens())?;
+            assert_eq!(
+                selected_dense_rows,
+                shape_policy.expected_dense_rows(kind),
+                "{variant_id} {kind} shape selection differs from the discriminator contract"
+            );
+            let observed_dense_rows = match kind {
+                "prefill" => &mut prefill_dense_rows,
+                "decode" => &mut decode_dense_rows,
+                _ => unreachable!("trace only permits prefill or decode iterations"),
+            };
+            if let Some(previous) = *observed_dense_rows {
+                assert_eq!(
+                    previous, selected_dense_rows,
+                    "{variant_id} changed dense rows across {kind} iterations"
+                );
+            } else {
+                *observed_dense_rows = Some(selected_dense_rows);
+            }
             let (downloaded, timing) =
                 match execute_llama_iteration_timed(plan, &mut executor, &mut stream, &mut timer) {
                     Ok(execution) => execution,
@@ -1527,7 +1599,11 @@ fn trace_mode(
             Some(&hf.teacher_token_ids[..TRACE_OUTPUT_ROWS])
         );
         Ok(ModeTrace {
+            variant_id,
             projection_bias_backend: mode.id(),
+            batch_shape_policy: shape_policy.id(),
+            prefill_dense_rows: prefill_dense_rows.ok_or("trace had no prefill iterations")?,
+            decode_dense_rows: decode_dense_rows.ok_or("trace had no decode iterations")?,
             rows,
             prefill_iteration_count,
             decode_iteration_count,
@@ -1613,7 +1689,11 @@ fn trace_json(mode: &ModeTrace) -> Value {
         (row.selected_token_id != row.hf_cache_on.logits.selected_token_id).then_some(row.step)
     });
     json!({
+        "variant_id": mode.variant_id,
         "projection_bias_backend": mode.projection_bias_backend,
+        "batch_shape_policy": mode.batch_shape_policy,
+        "prefill_dense_rows": mode.prefill_dense_rows,
+        "decode_dense_rows": mode.decode_dense_rows,
         "prefill_iteration_count": mode.prefill_iteration_count,
         "decode_iteration_count": mode.decode_iteration_count,
         "first_hf_cache_off_selected_token_mismatch": first_cache_off_selected_token_mismatch,
@@ -1634,17 +1714,29 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
         &model,
         &workload,
         &hf,
+        "strict-fixed-maximum",
         LlamaProjectionBiasMode::StrictStagedV1,
+        TraceShapePolicy::FixedMaximum,
+    )?;
+    let strict_active_rows = trace_mode(
+        &model,
+        &workload,
+        &hf,
+        "strict-active-row-buckets",
+        LlamaProjectionBiasMode::StrictStagedV1,
+        TraceShapePolicy::ActiveRowBuckets,
     )?;
     let fused = trace_mode(
         &model,
         &workload,
         &hf,
+        "fused-fixed-maximum",
         LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1,
+        TraceShapePolicy::FixedMaximum,
     )?;
     let trace_teacher_tokens = &hf.teacher_token_ids[..TRACE_OUTPUT_ROWS];
     let document = json!({
-        "schema_version": "riley.qwen3b-native-d128-teacher-forced-logit-trace.v2",
+        "schema_version": "riley.qwen3b-native-d128-teacher-forced-logit-trace.v3",
         "artifact_kind": "qwen2.5-3b-native-d128-scheduler-committed-teacher-forced-logit-trace",
         "performance_claim_eligible": false,
         "trace_contract": {
@@ -1653,7 +1745,29 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
             "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
             "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
             "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
-            "projection_bias_modes": [strict.projection_bias_backend, fused.projection_bias_backend],
+            "trace_variants": [
+                {
+                    "id": strict.variant_id,
+                    "projection_bias_backend": strict.projection_bias_backend,
+                    "batch_shape_policy": strict.batch_shape_policy,
+                    "prefill_dense_rows": strict.prefill_dense_rows,
+                    "decode_dense_rows": strict.decode_dense_rows,
+                },
+                {
+                    "id": strict_active_rows.variant_id,
+                    "projection_bias_backend": strict_active_rows.projection_bias_backend,
+                    "batch_shape_policy": strict_active_rows.batch_shape_policy,
+                    "prefill_dense_rows": strict_active_rows.prefill_dense_rows,
+                    "decode_dense_rows": strict_active_rows.decode_dense_rows,
+                },
+                {
+                    "id": fused.variant_id,
+                    "projection_bias_backend": fused.projection_bias_backend,
+                    "batch_shape_policy": fused.batch_shape_policy,
+                    "prefill_dense_rows": fused.prefill_dense_rows,
+                    "decode_dense_rows": fused.decode_dense_rows,
+                },
+            ],
             "native_d128_backend": NATIVE_D128_BACKEND_ID,
             "max_active_sequences": SERVER_MAX_ACTIVE_SEQUENCES,
             "batch_token_budget": SERVER_BATCH_TOKEN_BUDGET,
@@ -1669,7 +1783,6 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
             "residual_rmsnorm": "separate",
             "execution_completion": "iteration-batch",
             "metadata_transport": "synchronous",
-            "batch_shape_policy": "fixed-maximum",
             "reduction_profile": "canonical-v1",
             "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
         },
@@ -1696,7 +1809,11 @@ fn qwen3b_native_d128_teacher_forced_trace_is_scheduler_committed() -> TestResul
                 "sha256": hf.cache_on_sidecar.sha256,
             },
         },
-        "modes": [trace_json(&strict), trace_json(&fused)],
+        "modes": [
+            trace_json(&strict),
+            trace_json(&strict_active_rows),
+            trace_json(&fused),
+        ],
     });
     println!(
         "RILEY_QWEN3B_NATIVE_D128_LOGIT_TRACE={}",

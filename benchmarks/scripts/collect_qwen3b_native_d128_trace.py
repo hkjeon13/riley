@@ -22,9 +22,9 @@ from typing import Any, NoReturn
 
 MAX_TEST_STDOUT_BYTES = 64 * 1024 * 1024
 MARKER_PREFIX = "RILEY_QWEN3B_NATIVE_D128_LOGIT_TRACE="
-TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v2"
+TRACE_SCHEMA_VERSION = "riley.qwen3b-native-d128-teacher-forced-logit-trace.v3"
 COLLECTED_SCHEMA_VERSION = (
-    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v2"
+    "riley.qwen3b-native-d128-teacher-forced-logit-trace-artifact.v3"
 )
 TRACE_ARTIFACT_KIND = (
     "qwen2.5-3b-native-d128-scheduler-committed-teacher-forced-logit-trace"
@@ -50,6 +50,29 @@ NATIVE_D128_BACKEND_ID = (
 )
 STRICT_PROJECTION_BIAS_BACKEND = "strict-staged-v1"
 FUSED_PROJECTION_BIAS_BACKEND = "cublaslt-bias-epilogue-experimental-v1"
+TRACE_VARIANTS = (
+    {
+        "id": "strict-fixed-maximum",
+        "projection_bias_backend": STRICT_PROJECTION_BIAS_BACKEND,
+        "batch_shape_policy": "fixed-maximum",
+        "prefill_dense_rows": 32,
+        "decode_dense_rows": 32,
+    },
+    {
+        "id": "strict-active-row-buckets",
+        "projection_bias_backend": STRICT_PROJECTION_BIAS_BACKEND,
+        "batch_shape_policy": "active-row-buckets",
+        "prefill_dense_rows": 32,
+        "decode_dense_rows": 1,
+    },
+    {
+        "id": "fused-fixed-maximum",
+        "projection_bias_backend": FUSED_PROJECTION_BIAS_BACKEND,
+        "batch_shape_policy": "fixed-maximum",
+        "prefill_dense_rows": 32,
+        "decode_dense_rows": 32,
+    },
+)
 TRACE_OUTPUT_ROWS, TOP_K = 9, 32
 PROMPT_TOKEN_COUNT, ADDRESSABLE_TOKEN_COUNT, VOCABULARY_SIZE = 2_048, 151_665, 151_936
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -70,7 +93,7 @@ CONTRACT_KEYS = {
     "sampling",
     "cache_on_scheduler_reference",
     "cache_off_control_reference",
-    "projection_bias_modes",
+    "trace_variants",
     "native_d128_backend",
     "max_active_sequences",
     "batch_token_budget",
@@ -86,7 +109,6 @@ CONTRACT_KEYS = {
     "residual_rmsnorm",
     "execution_completion",
     "metadata_transport",
-    "batch_shape_policy",
     "reduction_profile",
     "top32_order_comparison",
 }
@@ -108,12 +130,23 @@ ORACLE_KEYS = {
 }
 SIDECAR_BINDING_KEYS = {"basename", "sha256"}
 MODE_KEYS = {
+    "variant_id",
     "projection_bias_backend",
+    "batch_shape_policy",
+    "prefill_dense_rows",
+    "decode_dense_rows",
     "prefill_iteration_count",
     "decode_iteration_count",
     "first_hf_cache_off_selected_token_mismatch",
     "first_hf_cache_on_selected_token_mismatch",
     "rows",
+}
+TRACE_VARIANT_KEYS = {
+    "id",
+    "projection_bias_backend",
+    "batch_shape_policy",
+    "prefill_dense_rows",
+    "decode_dense_rows",
 }
 ROW_KEYS = {
     "step",
@@ -455,15 +488,49 @@ def _validate_hf_row(
     return hf_selected
 
 
+def _validate_trace_variants(value: Any, path: str) -> None:
+    if not isinstance(value, list) or len(value) != len(TRACE_VARIANTS):
+        _fail(path, f"must contain exactly {len(TRACE_VARIANTS)} trace variants")
+    for index, (value, expected) in enumerate(zip(value, TRACE_VARIANTS)):
+        variant_path = f"{path}[{index}]"
+        variant = _object(value, TRACE_VARIANT_KEYS, variant_path)
+        for key in ("id", "projection_bias_backend", "batch_shape_policy"):
+            _equal(
+                _string(variant[key], f"{variant_path}.{key}"),
+                expected[key],
+                f"{variant_path}.{key}",
+            )
+        for key in ("prefill_dense_rows", "decode_dense_rows"):
+            _equal(
+                _integer(variant[key], f"{variant_path}.{key}"),
+                expected[key],
+                f"{variant_path}.{key}",
+            )
+
+
 def _validate_mode(
-    value: Any, expected_backend: str, teacher_tokens: list[int], path: str
+    value: Any, expected_variant: dict[str, Any], teacher_tokens: list[int], path: str
 ) -> None:
     mode = _object(value, MODE_KEYS, path)
-    _equal(
-        _string(mode["projection_bias_backend"], f"{path}.projection_bias_backend"),
-        expected_backend,
-        f"{path}.projection_bias_backend",
-    )
+    expected_mode_variant = {
+        "variant_id": expected_variant["id"],
+        "projection_bias_backend": expected_variant["projection_bias_backend"],
+        "batch_shape_policy": expected_variant["batch_shape_policy"],
+        "prefill_dense_rows": expected_variant["prefill_dense_rows"],
+        "decode_dense_rows": expected_variant["decode_dense_rows"],
+    }
+    for key in ("variant_id", "projection_bias_backend", "batch_shape_policy"):
+        _equal(
+            _string(mode[key], f"{path}.{key}"),
+            expected_mode_variant[key],
+            f"{path}.{key}",
+        )
+    for key in ("prefill_dense_rows", "decode_dense_rows"):
+        _equal(
+            _integer(mode[key], f"{path}.{key}"),
+            expected_mode_variant[key],
+            f"{path}.{key}",
+        )
     _equal(
         _integer(mode["prefill_iteration_count"], f"{path}.prefill_iteration_count"),
         64,
@@ -591,10 +658,7 @@ def validate_trace(document: Any) -> dict[str, Any]:
         "sampling": "teacher-forced-cache-off-addressable-greedy-argmax-after-scheduler-commit",
         "cache_on_scheduler_reference": "step0-p2048-prefill;step>0-teacher_token_ids[step-1]-at-position-2048+step-1",
         "cache_off_control_reference": "full-prefix-cache-off-at-position-0-through-2047+step",
-        "projection_bias_modes": [
-            STRICT_PROJECTION_BIAS_BACKEND,
-            FUSED_PROJECTION_BIAS_BACKEND,
-        ],
+        "trace_variants": [dict(variant) for variant in TRACE_VARIANTS],
         "native_d128_backend": NATIVE_D128_BACKEND_ID,
         "max_active_sequences": 8,
         "batch_token_budget": 32,
@@ -610,7 +674,6 @@ def validate_trace(document: Any) -> dict[str, Any]:
         "residual_rmsnorm": "separate",
         "execution_completion": "iteration-batch",
         "metadata_transport": "synchronous",
-        "batch_shape_policy": "fixed-maximum",
         "reduction_profile": "canonical-v1",
         "top32_order_comparison": "bf16-numeric-descending-token-id-ascending-tie-break",
     }
@@ -706,15 +769,16 @@ def validate_trace(document: Any) -> dict[str, Any]:
     _validate_sidecar_binding(
         oracle["cache_on_sidecar"], "trace.hf_teacher_forced_oracle.cache_on_sidecar"
     )
+    _validate_trace_variants(
+        contract["trace_variants"], "trace.trace_contract.trace_variants"
+    )
     modes = trace["modes"]
-    if not isinstance(modes, list) or len(modes) != 2:
-        _fail("trace.modes", "must contain strict and fused modes")
-    _validate_mode(
-        modes[0], STRICT_PROJECTION_BIAS_BACKEND, teacher_tokens, "trace.modes[0]"
-    )
-    _validate_mode(
-        modes[1], FUSED_PROJECTION_BIAS_BACKEND, teacher_tokens, "trace.modes[1]"
-    )
+    if not isinstance(modes, list) or len(modes) != len(TRACE_VARIANTS):
+        _fail("trace.modes", "must contain the exact ordered trace variants")
+    for index, expected_variant in enumerate(TRACE_VARIANTS):
+        _validate_mode(
+            modes[index], expected_variant, teacher_tokens, f"trace.modes[{index}]"
+        )
     return trace
 
 

@@ -185,17 +185,73 @@ GPU observed memory는 생성 시작/종료 모두 335 MiB였다. shared host I/
 근거가 아니다. artifact 자체도 `performance_claim_eligible=false`이므로
 throughput, TTFT, TPOT, P95/P99 또는 vLLM 우위를 주장하지 않는다.
 
+## P4 vLLM prefill diagnostic과 scheduler-committed native trace — 2026-09-16
+
+corrected HF artifact를 기준으로 vLLM과 Riley의 첫 prefill 선택 및 Riley의
+teacher-forced scheduler trajectory를 분리해 확인했다. vLLM diagnostic artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-vllm-prefill-diagnostic-r3-20260916T011004Z/`에,
+native trace artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-native-d128-trace-r1-20260916T012534Z/`에
+create-only로 보존한다. 전자의 `run.json` SHA-256은
+`4225a18900ce7c328559ce965b31ef174397f720d68c6c74bc780640f4fd9efe`,
+후자의 `trace-artifact.json` SHA-256은
+`4cdcfbf733b528a42620e03dc07c45cfc8852d753815c003325345288b968bef`이며,
+각 artifact의 `SHA256SUMS` closure를 재검증했다.
+
+vLLM request body는 text 재-tokenization이 아니라 P2048 canonical prompt의 정확한
+`prompt_token_ids` 목록을 직접 전달했다. response에 `prompt_token_ids` echo가 없어
+collector의 `input_ids_match=false`가 되었지만, 이는 mismatch 증거가 아니라 response
+field 부재다. 두 diagnostic response의 `usage.prompt_tokens`는 모두 `2048`이다.
+실제로 prompt를 32-token block으로 나누는 D0은
+`--max-num-batched-tokens 32 --enable-chunked-prefill`과 `max-model-len=2049`를,
+full prefill D1은 `--max-num-batched-tokens 2049 --no-enable-chunked-prefill`을
+사용했다. 따라서 아래 D0/D1 차이는 flag만 바꾼 비교가 아니라 실제 split되는
+prefill budget을 포함한 path diagnostic이다.
+
+| correctness diagnostic | first selected token | teacher-forced rows / raw BF16 full-row hash | 현재 판정 |
+|---|---:|---:|---|
+| HF eager BF16 cache-off/cache-on reference | `304` | canonical reference | baseline |
+| vLLM D0, actual 32-token chunked prefill | `374` | first prefill row만 수집 | HF 첫 선택과 다름 |
+| vLLM D1, 2049-token full prefill | `304` | first prefill row만 수집 | HF 첫 선택과 일치 |
+| Riley `strict-staged-v1` | `304` | selected `8 / 9`; full raw BF16 hash `0 / 9` | step 3에서 `16`, teacher `13` |
+| Riley `cublaslt-bias-epilogue-experimental-v1` | `304` | selected `8 / 9`; full raw BF16 hash `0 / 9` | step 8에서 `15`, teacher `17` |
+
+Riley trace는 source revision
+`0cc873cb80b100031d4c7bc3ab3126f2b00ea3bc`에서 real scheduler와 native D128 paged
+attention으로 P2048을 32-token prefill 64회로 commit한 뒤, HF teacher token을
+강제로 입력한 8개 decode를 commit했다. 그래서 첫 token mismatch 뒤의 error가
+cascade하지 않으며 strict의 step 3과 fused의 step 8을 각각 독립적으로 국소화할 수
+있다. 두 profile 모두 raw BF16 full-row hash가 reference와 `0 / 9`이고 top-32 exact
+row도 `0 / 9`이므로, selected token `8 / 9`만으로 quality gate를 통과했다고 해석하지
+않는다. D0/D1 결과도 vLLM과 Riley의 matched serving 성능 또는 일반적인 chunked-prefill
+correctness 우열을 뜻하지 않는다.
+
+native ignored test의 292.38초에는 checkpoint load와 초기화가 포함돼 latency,
+TTFT, TPOT, throughput으로 해석할 수 없다. vLLM diagnostic의 I/O PSI
+`some/full avg10`은 시작 `38.11/34.39`, 종료 `48.20/36.40`이었고 native trace는
+시작 `4.97/4.77`, 종료 `25.15/23.01`이었다. 공유 host 상태를 기록한 값이며 sample
+filter·weight·보정·선별 재시도에는 사용하지 않았다. 이 절에는 performance table이나
+vLLM 대비 성능 claim이 없다.
+
 ## hardware scope
 
 Ada SM89에서 first qualification을 실행한다. Hopper, Blackwell, multi-GPU는 static architecture allow-list로 자동 enable하지 않는다. device·toolkit·cuBLASLt version·descriptor·shape·alignment·workspace 별 heuristic과 `AlgoCheck` receipt가 있을 때만 candidate가 준비된다. CUDA 12.8.1 release notes의 Blackwell small-`M` fixed issue를 고려해 Blackwell decode `M=1`은 12.8.1 미만에서 skip하고, 지원 toolchain에서도 same artifact gate를 다시 실행한다. [CUDA 12.8.1 release notes](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-toolkit-release-notes/index.html).
 
 ## 다음 PR과 롤백
 
-다음 PR은 corrected HF teacher-forced cache-on/cache-off artifact와 raw-logit
-sidecar를 만들고, Rust scheduler trace가 그 schema만 읽도록 바꾼다. 그 뒤 동일
-model·revision·workload·concurrency에서 profile-specific quality gate를 통과한
-후에만 N06-A의 AB/BA 반복으로 throughput, TTFT, TPOT, P95/P99, failure rate와
-quality를 vLLM과 함께 기록한다. graph capture는 여전히 별도 PR로 분리한다.
+corrected HF teacher-forced artifact와 Rust scheduler trace schema binding은 P3/P4에서
+완료했다. 다음 PR은 성능 최적화가 아니라 **divergence discriminator**다. strict staged
+Q/K/V와 P2048, 32-token prefill, teacher forcing, native D128 paged attention은 고정하고,
+decode dense shape만 fixed `M=32`와 active-bucket `M=1`로 바꾼 두 scheduler replay를
+나란히 수집한다. prefill은 양쪽 모두 `M=32`이며 receipt는 variant와 실제 선택된
+prefill/decode dense-row 수를 bind한다. M1에서도 strict step 3 불일치가 유지되면
+inactive-row padding/GEMM shape를 주 원인에서 낮추고 paged KV/attention 또는 공통
+primitive로 다음 범위를 좁힌다. 필요한 HF intermediate sidecar는 offline artifact로
+만들고, serving hot path에 Python이나 persistent copy를 넣지 않는다.
+
+그 discriminator로 원인을 판정하고 correction 뒤 profile-specific quality gate를
+통과하기 전까지 N06-A의 AB/BA throughput, TTFT, TPOT, P95/P99, failure rate 및 vLLM
+비교는 blocked다. graph capture는 여전히 별도 PR로 분리한다.
 
 corrected quality gate 또는 operator AB가 실패하면 fused plan/feature는 opt-in으로
 남긴다. strict path는 무변경이므로 rollback은 experimental selector를 비활성으로
