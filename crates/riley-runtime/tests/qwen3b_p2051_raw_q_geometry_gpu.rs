@@ -21,7 +21,7 @@ mod p2051_projection_contract {
     // receipt rather than modifying that historical consumer.
     include!("support/qwen3b_p2051_projection_p7_contract.rs");
 
-    const GEOMETRY_SCHEMA_VERSION: &str = "riley.qwen3b-p2051-raw-q-geometry.v1";
+    const GEOMETRY_SCHEMA_VERSION: &str = "riley.qwen3b-p2051-raw-q-geometry.v2";
     const GEOMETRY_ARTIFACT_KIND: &str = "qwen2.5-3b-riley-p2051-raw-q-geometry-discriminator";
     const GEOMETRY_OUTPUT_VARIABLE: &str = "RILEY_QWEN3B_P2051_RAW_Q_GEOMETRY_OUTPUT";
     const P7_MANIFEST_SHA256: &str =
@@ -150,6 +150,7 @@ mod p2051_projection_contract {
         exact_cases: Vec<String>,
         tail_data_invariant: bool,
         admitted_offset_invariant: bool,
+        anchored_algorithm_identity_invariant: bool,
         geometry_hypothesis: &'static str,
     }
 
@@ -170,6 +171,32 @@ mod p2051_projection_contract {
             "runtime_version": metadata.runtime_version(),
             "cublaslt_version": metadata.cublaslt_version(),
         })
+    }
+
+    fn geometry_algorithm_identity_json(metadata: CudaGemmAlgorithmMetadata) -> Value {
+        json!({
+            "backend_id": metadata.backend_id(),
+            "algorithm_id": metadata.algorithm_id(),
+            "tile_id": metadata.tile_id(),
+            "stages_id": metadata.stages_id(),
+            "split_k": metadata.split_k(),
+            "reduction_scheme": metadata.reduction_scheme(),
+            "cta_swizzling": metadata.cta_swizzling(),
+            "custom_option": metadata.custom_option(),
+            "numerical_implementation_flags": metadata.numerical_implementation_flags(),
+            "workspace_bytes": metadata.workspace_bytes(),
+            "deterministic": metadata.deterministic(),
+            "compute_capability": metadata.compute_capability(),
+            "runtime_version": metadata.runtime_version(),
+            "cublaslt_version": metadata.cublaslt_version(),
+        })
+    }
+
+    fn same_geometry_algorithm_identity(
+        anchor: CudaGemmAlgorithmMetadata,
+        child: CudaGemmAlgorithmMetadata,
+    ) -> bool {
+        geometry_algorithm_identity_json(anchor) == geometry_algorithm_identity_json(child)
     }
 
     fn geometry_config(m: usize) -> TestResult<CudaGemmConfig> {
@@ -475,21 +502,26 @@ mod p2051_projection_contract {
         cases: &Map<String, Value>,
         tail_data_invariant: bool,
         admitted_offset_invariant: bool,
+        anchored_algorithm_identity_invariant: bool,
     ) -> TestResult<&'static str> {
-        if !tail_data_invariant || !admitted_offset_invariant {
+        if !tail_data_invariant
+            || !admitted_offset_invariant
+            || !anchored_algorithm_identity_invariant
+        {
             return Ok("inconclusive");
         }
         let f2048 = case_bf16_exact(cases, "F2048")?.unwrap_or(false);
-        let exact_other_fresh = ["F2051", "F2052", "F2080", "F2176", "F2304"]
+        let f2051 = case_bf16_exact(cases, "F2051")?.unwrap_or(false);
+        let exact_padded_fresh = ["F2052", "F2080", "F2176", "F2304"]
             .iter()
             .map(|label| case_bf16_exact(cases, label))
             .collect::<TestResult<Vec<_>>>()?
             .into_iter()
             .flatten()
             .any(|exact| exact);
-        if f2048 && exact_other_fresh {
+        if f2048 && !f2051 && exact_padded_fresh {
             Ok("supported")
-        } else if !f2048 && !exact_other_fresh {
+        } else if !f2048 && !f2051 && !exact_padded_fresh {
             Ok("refuted")
         } else {
             Ok("inconclusive")
@@ -519,6 +551,7 @@ mod p2051_projection_contract {
     fn insert_anchored_not_supported(
         cases: &mut Map<String, Value>,
         case: AnchoredGeometryCase,
+        anchor: CudaGemmAlgorithmMetadata,
         error: &dyn std::fmt::Display,
     ) {
         cases.insert(
@@ -526,10 +559,39 @@ mod p2051_projection_contract {
             json!({
                 "status": "not-supported",
                 "plan_mode": "anchored",
-                "anchor": {"source_case": case.anchor_label, "m": case.anchor_m},
+                "anchor": {
+                    "source_case": case.anchor_label,
+                    "m": case.anchor_m,
+                    "algorithm_identity": geometry_algorithm_identity_json(anchor),
+                },
                 "dimensions": {"m": case.m, "n": QWEN3B_HIDDEN_SIZE, "k": QWEN3B_HIDDEN_SIZE},
+                "algorithm_identity_matches_anchor": Value::Null,
                 "heuristic_fallback_permitted": false,
                 "prepare_error": error.to_string(),
+            }),
+        );
+    }
+
+    fn insert_anchored_identity_mismatch(
+        cases: &mut Map<String, Value>,
+        case: AnchoredGeometryCase,
+        anchor: CudaGemmAlgorithmMetadata,
+        child: CudaGemmAlgorithmMetadata,
+    ) {
+        cases.insert(
+            case.label.to_owned(),
+            json!({
+                "status": "algorithm-identity-mismatch",
+                "plan_mode": "anchored",
+                "anchor": {
+                    "source_case": case.anchor_label,
+                    "m": case.anchor_m,
+                    "algorithm_identity": geometry_algorithm_identity_json(anchor),
+                },
+                "dimensions": {"m": case.m, "n": QWEN3B_HIDDEN_SIZE, "k": QWEN3B_HIDDEN_SIZE},
+                "algorithm": geometry_metadata_json(child),
+                "algorithm_identity_matches_anchor": false,
+                "heuristic_fallback_permitted": false,
             }),
         );
     }
@@ -537,6 +599,7 @@ mod p2051_projection_contract {
     fn geometry_source_hashes(root: &Path) -> TestResult<Value> {
         let sources = [
             "crates/riley-runtime/tests/qwen3b_p2051_raw_q_geometry_gpu.rs",
+            "crates/riley-runtime/tests/support/qwen3b_p2051_projection_p7_contract.rs",
             "crates/riley-runtime/tests/qwen3b_p2051_bias_epilogue_gpu.rs",
             "crates/riley-cuda/src/gemm.rs",
             "kernels/src/gemm.cu",
@@ -654,6 +717,7 @@ mod p2051_projection_contract {
             let mut cases = Map::new();
             let mut exact_cases = Vec::new();
             let mut prefixes = BTreeMap::new();
+            let mut anchored_algorithm_identity_invariant = true;
 
             for case in [f2048, f2051] {
                 let config = geometry_config(case.m)?;
@@ -792,14 +856,13 @@ mod p2051_projection_contract {
                 offset_bytes: SPAN_OFFSET_BYTES,
             };
             let offset_config = geometry_config(offset_case.m)?;
-            let mut offset_plan = context.prepare_gemm(offset_config)?;
             let offset_observation = run_geometry_plan(
                 &context,
                 &mut stream,
                 &mut staging,
-                &mut offset_plan,
+                &mut f2051_plan,
                 offset_config,
-                "fresh-offset-control",
+                "F2051-reused-offset-control",
                 &offset_input,
                 offset_case.offset_bytes,
                 offset_input_allocation_bytes,
@@ -816,6 +879,16 @@ mod p2051_projection_contract {
                 properties.compute_capability(),
                 offset_case.label,
             )?;
+            let prefix_matches_fresh_case = prefixes
+                .get("F2051")
+                .map(|baseline| baseline == &offset_observation.prefix_output_le);
+            let mut offset_record = offset_observation.record;
+            offset_record["reused_fresh_case"] = json!("F2051");
+            offset_record["prefix_matches_fresh_case"] = json!(prefix_matches_fresh_case);
+            let offset_observation = GeometryObservation {
+                record: offset_record,
+                prefix_output_le: offset_observation.prefix_output_le,
+            };
             prefixes.insert(
                 offset_case.label.to_owned(),
                 insert_observation(
@@ -825,7 +898,6 @@ mod p2051_projection_contract {
                     offset_observation,
                 )?,
             );
-            offset_plan.close()?;
 
             for case in ANCHORED_CASES {
                 let config = geometry_config(case.m)?;
@@ -834,13 +906,26 @@ mod p2051_projection_contract {
                 } else {
                     &f2051_plan
                 };
+                let anchor_metadata = anchor.algorithm_metadata();
                 let mut plan = match context.prepare_gemm_anchored(config, anchor) {
                     Ok(plan) => plan,
                     Err(error) => {
-                        insert_anchored_not_supported(&mut cases, case, &error);
+                        insert_anchored_not_supported(&mut cases, case, anchor_metadata, &error);
                         continue;
                     }
                 };
+                let child_metadata = plan.algorithm_metadata();
+                if !same_geometry_algorithm_identity(anchor_metadata, child_metadata) {
+                    anchored_algorithm_identity_invariant = false;
+                    insert_anchored_identity_mismatch(
+                        &mut cases,
+                        case,
+                        anchor_metadata,
+                        child_metadata,
+                    );
+                    plan.close()?;
+                    continue;
+                }
                 let expected_len = geometry_prefix_len(case.m)?;
                 let expected = shadow_hf_le
                     .get(..expected_len)
@@ -880,6 +965,9 @@ mod p2051_projection_contract {
                     .map(|fresh| fresh == &observation.prefix_output_le);
                 let mut record = observation.record;
                 record["prefix_matches_fresh_case"] = json!(prefix_matches_fresh);
+                record["anchor_algorithm_identity"] =
+                    geometry_algorithm_identity_json(anchor_metadata);
+                record["algorithm_identity_matches_anchor"] = json!(true);
                 let anchored = GeometryObservation {
                     record,
                     prefix_output_le: observation.prefix_output_le,
@@ -899,8 +987,12 @@ mod p2051_projection_contract {
                 .get("F2051")
                 .zip(prefixes.get("O2051"))
                 .is_some_and(|(baseline, control)| baseline == control);
-            let geometry_hypothesis =
-                geometry_hypothesis(&cases, tail_data_invariant, admitted_offset_invariant)?;
+            let geometry_hypothesis = geometry_hypothesis(
+                &cases,
+                tail_data_invariant,
+                admitted_offset_invariant,
+                anchored_algorithm_identity_invariant,
+            )?;
 
             f2048_plan.close()?;
             f2051_plan.close()?;
@@ -920,6 +1012,7 @@ mod p2051_projection_contract {
                 exact_cases,
                 tail_data_invariant,
                 admitted_offset_invariant,
+                anchored_algorithm_identity_invariant,
                 geometry_hypothesis,
             })
         })();
@@ -967,6 +1060,9 @@ mod p2051_projection_contract {
                 "sidecar_path": hf.sidecar_path,
                 "sidecar_sha256": hf.sidecar_sha256,
                 "artifact_source_provenance_validated": true,
+                "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+                "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+                "checkpoint_model_binding_validated": true,
             },
             "source_hashes": geometry_source_hashes(&root)?,
             "contract": {
@@ -990,6 +1086,7 @@ mod p2051_projection_contract {
                 "raw_q_prefix_exact_cases": execution.exact_cases,
                 "tail_data_invariant": execution.tail_data_invariant,
                 "admitted_offset_invariant": execution.admitted_offset_invariant,
+                "anchored_algorithm_identity_invariant": execution.anchored_algorithm_identity_invariant,
                 "full_forward_padded_m_required": true,
                 "serving_selector_changed": false,
                 "vllm_comparison_eligible": false,
