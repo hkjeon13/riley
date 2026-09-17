@@ -1,9 +1,9 @@
 # P2051 direct cuBLAS 후보의 품질·serving qualification 계획
 
-상태: **P11 완료, P12 진행 전**. P10 r3의 raw-Q와 P11의 raw Q/K/V correctness work은 완료됐다. 다음 batch는
-`cuda-cublas-gemm-probe` test-only surface를 바로 serving selector로 승격하지 않는다.
-먼저 raw Q/K/V와 full-forward의 사전 선언한 quality gate를 통과시킨 뒤에만 opt-in
-integration과 vLLM AB/BA 측정으로 간다.
+상태: **P12 완료, 현 profile의 promotion은 blocked**. P12의 direct cuBLAS raw +
+`row_bias_add_in_place` primary staged contract는 Q/K/V exact였지만, unmodified HF actual
+module endpoint gate는 non-exact였다. 따라서 이 test-only surface를 serving selector로
+승격하지 않으며, 현 profile의 P13/P14/P15와 vLLM AB/BA 측정은 진행하지 않는다.
 
 현재 근거는 [P11 결과와 비교표](33-cublaslt-bias-epilogue-qualification.md)의 P11이다.
 RTX 4090/SM89에서 direct `cublasGemmEx` default math가 P11 oracle Q/K/V와 각각
@@ -84,9 +84,24 @@ P11을 통과한 경우에만 direct raw output과 bias application의 numerical
 완료 조건은 선택 numerical profile의 Q/K/V full-sequence gate pass다. 실패 시 P11 결과는 arithmetic
 diagnostic으로 보존하고 selector integration을 막는다.
 
+**완료 결과 (2026-09-17).** P12 primary staged profile은 Q/K/V 모두 exact, repeat exact,
+allocation unchanged, close 뒤 zero를 통과했다. 그러나 같은 native staged output과
+unmodified HF actual module의 비교는 Q `2,022,636 / 4,200,448` (max abs `0.125`), K
+`100,533 / 525,056` (max abs `0.5`), V `129,287 / 525,056` (max abs `0.015625`)가
+non-exact였다. 이 차이는 immutable offline oracle과도 일치했다. canonical native receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cublas-qkv-staged-bias-r1-20260917T020034Z/`,
+result SHA-256은 `632eed25f52d2d61722c71516abbe67e9cb824772cc4a0464295baf827ed9763`다.
+
+따라서 `primary_quality_pass=true`이지만 `hf_actual_module_gate_pass=false`이며,
+`projection_boundary_candidate_eligible=false`, `performance_claim_eligible=false`,
+`vllm_comparison_eligible=false`를 유지한다. P12는 staged arithmetic diagnostic으로
+보존하고, P13은 HF module rounding/epilogue를 재현하는 **새** candidate가 그 gate를
+통과한 뒤에만 시작한다. 이번 meaningful batch의 vLLM throughput, TTFT, TPOT, P95/P99,
+failure rate는 모두 **미실행**이다.
+
 ### P13 — cache-off와 corrected cache-on full-forward quality gate
 
-P12 합격 candidate만 실제 Qwen2.5-3B full-forward로 확대한다. 이 batch는 layer-local 성공을
+P12의 HF actual-module gate까지 통과한 candidate만 실제 Qwen2.5-3B full-forward로 확대한다. 이 batch는 layer-local 성공을
 model-level correctness로 과장하지 않기 위한 마지막 numerical gate다.
 
 - cache-off teacher prefix에서 layer boundary, final norm, logits, selected-token sequence를 사전 선언한
@@ -154,6 +169,7 @@ unsupported test를 통과처럼 해석하지 않는다.
 ## Stop conditions and next decision
 
 P11–P13 중 하나가 quality gate에 실패하면 candidate promotion과 vLLM serving runs을 시작하지 않는다.
+P12에서는 primary staged gate와 별개로 HF actual-module gate도 promotion의 필수 조건이다.
 그 artifact의 first divergent endpoint와 reduction/bias/cache profile을 다음 research/profiling input으로
 남긴다. P14가 full-forward를 통과하면 P15가 다음 meaningful batch이며, 그 종료 시점에 처음으로
 Riley/vLLM 수치 비교표를 채운다.

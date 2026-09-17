@@ -39,6 +39,7 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P10 r2: P2051 direct cuBLAS BF16 feasibility | Diagnostic pass — direct cuBLAS default가 P7 default와 exact이고, disallow-reduced control이 Riley/P9 reduced-off와 exact; repeat exact | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: P7 default exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 native arithmetic candidate를 Q/K/V·full-forward quality gate로 확장한 뒤에만 serving selector와 vLLM AB/BA를 평가 |
 | P10 r3: Riley native direct cuBLAS raw-Q | Diagnostic pass — feature-gated native/Rust probe가 P7 default raw-Q와 BF16 exact `0 / 4,200,448`; repeat·allocation accounting pass | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: Riley native/Rust boundary까지 exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 profile을 raw Q/K/V, bias boundary, full-forward quality gate에 순차 확장한 뒤에만 selector integration과 vLLM AB/BA를 실행 |
 | P11: P2051 direct cuBLAS raw Q/K/V | Diagnostic pass — Q `0 / 4,200,448`, K `0 / 525,056`, V `0 / 525,056` BF16 exact; 각 projection repeat·allocation/close pass | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw Q/K/V: native/Rust boundary까지 exact, test-only; bias/full-forward/selector 미검증 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | P12에서 사전 선언한 staged-bias와 HF actual module output을 독립 검증; selector 변경과 vLLM 수치 비교는 그 뒤에도 full-forward gate까지 보류 |
+| P12: P2051 direct cuBLAS + row bias | Blocked — raw·primary staged Q/K/V는 모두 BF16 exact이고 repeat/allocation pass, 그러나 HF actual module endpoint는 Q `2,022,636 / 4,200,448`, K `100,533 / 525,056`, V `129,287 / 525,056` non-exact | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS + `row_bias_add_in_place`: primary staged contract exact이나 HF actual-module gate false; selector 미변경 | 미실행 — candidate selector 없음 | 미실행 — candidate selector 없음 | 미실행 — candidate selector 없음 | 미실행 — candidate selector 없음 | 미실행 — candidate selector 없음 | 미실행 — candidate selector 없음 | 현 profile의 P13/P14/P15와 vLLM AB/BA는 중단; HF module rounding path를 별도 candidate로 재설계한 뒤 새 quality gate부터 시작 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
@@ -177,6 +178,50 @@ vLLM 비교는 검증하지 않았다. 따라서 `performance_claim_eligible=fal
 `vllm_comparison_eligible=false`, `serving_selector_changed=false`를 유지한다. 위 비교표의
 `미실행`은 누락값이 아니라, 같은 model/checkpoint/hardware/workload/concurrency의 matched
 AB/BA serving candidate가 아직 없다는 판정이다.
+
+## P12 Riley native direct-cuBLAS staged-bias result — 2026-09-17
+
+P12는 P11의 direct default `cublasGemmEx` raw Q/K/V 뒤에
+`riley_cuda::row_bias_add_in_place`를 붙인 profile을 별도 수치 계약으로 검증했다. primary
+target은 사전에 고정한 `BF16(raw default-cuBLAS output.to(FP32) + checkpoint
+BF16 bias.to(FP32))`다. unmodified HF `q_proj`/`k_proj`/`v_proj` output은 관측 endpoint로
+독립 비교했으며, 두 profile이 같은 BF16 rounding을 한다고 가정하지 않았다. Rust native
+qualifier는 Python을 serving hot path에 넣지 않았고, serving selector, CUDA Graph, command
+batch, scheduler, HTTP path도 바꾸지 않았다.
+
+offline P12 artifact manifest/sidecar SHA-256은 각각
+`1ebefa8c2a1b5bb361bd070518bac31ec7ff0a31e463e3c3e7518e20d0782baf`,
+`8908ead9a1c05df26dcec5cfe5b31f3587397348be922a85a3031f80837a1ace`다. canonical native
+receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cublas-qkv-staged-bias-r1-20260917T020034Z/`에
+있고 source revision은 `3a699bc6367699dded499a2d51fac56f4d590054`, result JSON SHA-256은
+`632eed25f52d2d61722c71516abbe67e9cb824772cc4a0464295baf827ed9763`다. `SHA256SUMS`의 모든
+artifact file도 생성 뒤 재검증했다.
+
+| Projection | Shape `[M, N, K]` | P11 raw / P12 primary staged | HF actual module과 staged 비교 | Repeat / allocation |
+|---|---:|---:|---:|---|
+| Q | `[2051, 2048, 2048]` | 각각 exact: `0 / 4,200,448` | non-exact: `2,022,636 / 4,200,448`, max abs `0.125` | exact / unchanged, close 뒤 zero |
+| K | `[2051, 256, 2048]` | 각각 exact: `0 / 525,056` | non-exact: `100,533 / 525,056`, max abs `0.5` | exact / unchanged, close 뒤 zero |
+| V | `[2051, 256, 2048]` | 각각 exact: `0 / 525,056` | non-exact: `129,287 / 525,056`, max abs `0.015625` | exact / unchanged, close 뒤 zero |
+
+RTX 4090/SM89, CUDA runtime `12080`, cuBLAS `120804`에서 primary quality와 repeated
+Q/K/V, allocation accounting은 모두 pass했다. HF actual-module mismatch의 element count와
+max-abs는 immutable P12 oracle과도 일치했다. 즉 이 mismatch는 receipt schema 차이나
+재실행 흔들림이 아니라, 이 staged contract와 HF actual module endpoint의 수치 차이다.
+`hf_actual_module_gate_pass=false`이므로
+`projection_boundary_candidate_eligible=false`, `performance_claim_eligible=false`,
+`vllm_comparison_eligible=false`다.
+
+ignored quality test의 5.85초에는 artifact validation과 transfer가 포함되어 throughput,
+TTFT, TPOT, P95/P99로 해석하지 않는다. GPU memory는 시작/종료 `335 MiB`였고 I/O PSI
+`some/full avg10`은 시작 `8.10/7.55`, 종료 `7.16/6.48`로 보존했다. PSI는 공유 host
+상태의 공변량이며 결과 filter·보정·재시도 선택에 사용하지 않았다.
+
+따라서 이번 단계의 Riley-vLLM 비교표는 의도적으로 모두 **미실행**이다. 실제 selector가
+없고, 현재 numerical profile은 HF actual module gate를 통과하지 않았으므로 matched AB/BA
+serving run을 시작할 후보가 없다. 다음 작업은 이 profile을 P13/P14/P15로 밀어 넣는 것이
+아니라 HF module의 rounding/epilogue 경로를 재현하는 새 candidate를 사전 선언한 quality
+gate로 다시 검증하는 것이다.
 
 ## 변경 묶음
 
