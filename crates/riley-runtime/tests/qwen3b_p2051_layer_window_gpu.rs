@@ -1143,7 +1143,8 @@ fn run_candidate(model: &LoadedModel, input: &[u32], hf: &HfWindowArtifact) -> T
     .with_projection_bias_mode(LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1)
     .with_hugging_face_eager_qwen_p2051_probe_attention()
     .with_hf_eager_qwen_p2051_direct_cublas_output_projection_probe()
-    .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe();
+    .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe()
+    .with_hugging_face_cuda_qwen_p2051_rope_table_probe();
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
