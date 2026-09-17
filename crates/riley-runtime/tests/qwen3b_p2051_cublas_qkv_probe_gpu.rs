@@ -64,7 +64,7 @@ mod p2051_cublas_qkv_probe_contract {
         expected_output_sha256: &'static str,
     }
 
-    const PROJECTIONS: [ProjectionSpec; 3] = [
+    const P11_PROJECTIONS: [ProjectionSpec; 3] = [
         ProjectionSpec {
             identifier: "q",
             module_name: "q_proj",
@@ -124,7 +124,7 @@ mod p2051_cublas_qkv_probe_contract {
         reference_compute_capability_matches: bool,
     }
 
-    fn expected_shape(name: &str) -> TestResult<Vec<u64>> {
+    fn p11_expected_shape(name: &str) -> TestResult<Vec<u64>> {
         let sequence = u64::try_from(CONTEXT_TOKEN_COUNT)?;
         let hidden = u64::try_from(QWEN3B_HIDDEN_SIZE)?;
         let kv = u64::try_from(QWEN3B_KEY_VALUE_HEADS * QWEN3B_HEAD_DIMENSION)?;
@@ -146,7 +146,7 @@ mod p2051_cublas_qkv_probe_contract {
         }
     }
 
-    fn require_exact_fields(value: &Value, fields: &[&str], label: &str) -> TestResult {
+    fn p11_require_exact_fields(value: &Value, fields: &[&str], label: &str) -> TestResult {
         let object = value
             .as_object()
             .ok_or_else(|| format!("{label} must be an object"))?;
@@ -165,12 +165,12 @@ mod p2051_cublas_qkv_probe_contract {
         data: &[u8],
         manifest_tensors: &Map<String, Value>,
         name: &str,
-        expected_shape: &[u64],
+        p11_expected_shape: &[u64],
     ) -> TestResult<Vec<u8>> {
         let manifest_record = manifest_tensors
             .get(name)
             .ok_or_else(|| format!("P11 manifest tensor {name} is missing"))?;
-        require_exact_fields(
+        p11_require_exact_fields(
             manifest_record,
             &[
                 "key",
@@ -183,11 +183,15 @@ mod p2051_cublas_qkv_probe_contract {
             "P11 manifest tensor",
         )?;
         let key = format!("trace/{name}");
-        let expected_bytes = shape_byte_len(expected_shape)?;
+        let expected_bytes = shape_byte_len(p11_expected_shape)?;
         if manifest_record.get("key").and_then(Value::as_str) != Some(key.as_str())
             || manifest_record.get("shape")
                 != Some(&Value::Array(
-                    expected_shape.iter().copied().map(Value::from).collect(),
+                    p11_expected_shape
+                        .iter()
+                        .copied()
+                        .map(Value::from)
+                        .collect(),
                 ))
             || manifest_record.get("dtype").and_then(Value::as_str) != Some("bfloat16")
             || manifest_record
@@ -208,7 +212,7 @@ mod p2051_cublas_qkv_probe_contract {
         let record = header
             .get(&key)
             .ok_or_else(|| format!("P11 sidecar does not contain {key}"))?;
-        require_exact_fields(
+        p11_require_exact_fields(
             record,
             &["dtype", "shape", "data_offsets"],
             "P11 sidecar tensor",
@@ -216,7 +220,11 @@ mod p2051_cublas_qkv_probe_contract {
         if record.get("dtype").and_then(Value::as_str) != Some("BF16")
             || record.get("shape")
                 != Some(&Value::Array(
-                    expected_shape.iter().copied().map(Value::from).collect(),
+                    p11_expected_shape
+                        .iter()
+                        .copied()
+                        .map(Value::from)
+                        .collect(),
                 ))
         {
             return Err(format!("P11 sidecar {key} metadata differs").into());
@@ -242,7 +250,7 @@ mod p2051_cublas_qkv_probe_contract {
     }
 
     fn validate_default_policy(policy: &Value) -> TestResult {
-        require_exact_fields(
+        p11_require_exact_fields(
             policy,
             &[
                 "id",
@@ -301,7 +309,7 @@ mod p2051_cublas_qkv_probe_contract {
         let result = results
             .get(projection.identifier)
             .ok_or_else(|| format!("P11 result for {} is missing", projection.identifier))?;
-        require_exact_fields(
+        p11_require_exact_fields(
             result,
             &[
                 "identifier",
@@ -340,7 +348,7 @@ mod p2051_cublas_qkv_probe_contract {
             .get("p7_default_raw_q_comparison")
             .ok_or("P11 projection comparison is missing")?;
         if projection.identifier == "q" {
-            require_exact_fields(
+            p11_require_exact_fields(
                 comparison,
                 &[
                     "bf16_exact",
@@ -381,7 +389,7 @@ mod p2051_cublas_qkv_probe_contract {
             );
         }
         let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
-        require_exact_fields(
+        p11_require_exact_fields(
             &manifest,
             &[
                 "schema_version",
@@ -478,7 +486,7 @@ mod p2051_cublas_qkv_probe_contract {
             .ok_or("P11 tensors are missing")?;
         let result_keys: BTreeSet<_> = results.keys().map(String::as_str).collect();
         let expected_result_keys: BTreeSet<_> =
-            PROJECTIONS.iter().map(|item| item.identifier).collect();
+            P11_PROJECTIONS.iter().map(|item| item.identifier).collect();
         if result_keys != expected_result_keys {
             return Err("P11 projection result keys differ".into());
         }
@@ -487,17 +495,18 @@ mod p2051_cublas_qkv_probe_contract {
         if tensor_keys != expected_tensor_keys {
             return Err("P11 tensor keys differ".into());
         }
-        for projection in PROJECTIONS {
+        for projection in P11_PROJECTIONS {
             validate_projection_result(results, tensors, projection)?;
         }
         let q_comparison = manifest
             .get("comparisons")
             .and_then(|value| value.get("q_default_vs_p7_shadow_raw_q"))
             .ok_or("P11 Q/P7 comparison is missing")?;
-        if q_comparison
-            != results
-                .get("q")
-                .and_then(|value| value.get("p7_default_raw_q_comparison"))
+        let q_result_comparison = results
+            .get("q")
+            .and_then(|value| value.get("p7_default_raw_q_comparison"))
+            .ok_or("P11 Q projection comparison is missing")?;
+        if q_comparison != q_result_comparison
             || manifest
                 .get("comparisons")
                 .and_then(|value| value.get("outputs_are_not_riley_results"))
@@ -543,30 +552,30 @@ mod p2051_cublas_qkv_probe_contract {
             data,
             tensors,
             "p7_input_norm",
-            &expected_shape("p7_input_norm")?,
+            &p11_expected_shape("p7_input_norm")?,
         )?;
         let p7_shadow_raw_q_bf16_le = sidecar_tensor(
             header,
             data,
             tensors,
             "p7_shadow_raw_q",
-            &expected_shape("p7_shadow_raw_q")?,
+            &p11_expected_shape("p7_shadow_raw_q")?,
         )?;
         let mut projections = BTreeMap::new();
-        for projection in PROJECTIONS {
+        for projection in P11_PROJECTIONS {
             let weight_bf16_le = sidecar_tensor(
                 header,
                 data,
                 tensors,
                 projection.weight_name,
-                &expected_shape(projection.weight_name)?,
+                &p11_expected_shape(projection.weight_name)?,
             )?;
             let expected_output_bf16_le = sidecar_tensor(
                 header,
                 data,
                 tensors,
                 projection.output_name,
-                &expected_shape(projection.output_name)?,
+                &p11_expected_shape(projection.output_name)?,
             )?;
             if sha256_hex(&expected_output_bf16_le) != projection.expected_output_sha256 {
                 return Err(format!("P11 {} output hash differs", projection.identifier).into());
@@ -679,7 +688,7 @@ mod p2051_cublas_qkv_probe_contract {
             input.upload_from_slice(0, &input_native, &mut staging, &mut stream)?;
             let base_allocations = context.allocation_stats()?;
             let mut projections = BTreeMap::new();
-            for projection in PROJECTIONS {
+            for projection in P11_PROJECTIONS {
                 let candidate = artifact
                     .projections
                     .get(projection.identifier)
@@ -778,7 +787,7 @@ mod p2051_cublas_qkv_probe_contract {
         let mut all_exact = true;
         let mut all_repeated = true;
         let mut all_allocations_unchanged = true;
-        for projection in PROJECTIONS {
+        for projection in P11_PROJECTIONS {
             let expected = artifact
                 .projections
                 .get(projection.identifier)
