@@ -1,15 +1,16 @@
 # P2051 direct cuBLAS 후보의 품질·serving qualification 계획
 
-상태: **P12 완료, 현 profile의 promotion은 blocked**. P12의 direct cuBLAS raw +
-`row_bias_add_in_place` primary staged contract는 Q/K/V exact였지만, unmodified HF actual
-module endpoint gate는 non-exact였다. 따라서 이 test-only surface를 serving selector로
-승격하지 않으며, 현 profile의 P13/P14/P15와 vLLM AB/BA 측정은 진행하지 않는다.
+상태: **P13 cache-off는 완료했고 corrected cache-on 확장이 진행 중이다.** P12의 direct
+cuBLAS raw + `row_bias_add_in_place` staged contract은 HF actual module endpoint와
+non-exact였지만, 그 결과를 그대로 승격하지 않았다. 별도의 HF BIAS-epilogue, attention,
+RoPE, RMSNorm, direct-cuBLAS projection candidate가 cache-off P2051 full-forward의 52/52
+BF16 stage를 exact하게 통과했다. 이 후보는 아직 P2048 prefill + M1 cache-on 계약이나
+serving selector에 연결되지 않았으므로 P14/P15와 vLLM AB/BA는 계속 blocked다.
 
-현재 근거는 [P11 결과와 비교표](33-cublaslt-bias-epilogue-qualification.md)의 P11이다.
-RTX 4090/SM89에서 direct `cublasGemmEx` default math가 P11 oracle Q/K/V와 각각
-`0 / 4,200,448`, `0 / 525,056`, `0 / 525,056` BF16 byte-exact였고, 반복 실행·allocation
-accounting·close도 통과했다. 이는 no-bias Q/K/V endpoint의 arithmetic correspondence이며
-serving 성능 증거가 아니다.
+현재 근거는 [P11~P13 결과와 비교표](33-cublaslt-bias-epilogue-qualification.md)의
+P11 이후 행이다. P2051 cache-off exactness는 Q/K/V raw correspondence만이 아니라
+실제 52-stage full-forward로 확대되어 통과했지만, P2048/M1 cache-on의 별도 GEMM/attention
+shape와 KV layout은 아직 같은 결과로 간주하지 않는다.
 
 ## 유지할 경계
 
@@ -115,6 +116,31 @@ model-level correctness로 과장하지 않기 위한 마지막 numerical gate�
 
 완료 조건은 full-forward quality, lifecycle, cache-on/off gate 모두 pass다. 실패하면 selector와 serving
 benchmark는 보류하고 첫 divergent boundary만 다음 profiling target으로 기록한다.
+
+**cache-off 완료 결과 (2026-09-17).** source revision
+`6d1f0019c3b7bb94210ed9145415327c2c9b0f6f`의 source-bound receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-hf-compatible-full-forward-lmhead-oracle-r1-20260917T105441Z/`
+에 있다. HF produce/validate, 이전 oracle payload 비교, Rust full-forward가 모두 exit 0이고,
+candidate는 required 52개 stage 전부 BF16 exact와 repeat exact를 기록했다. Q/K/V BIAS,
+HF eager attention, O/MLP direct-cuBLAS, GPU RoPE table, RMSNorm, 마지막-token LM head가
+각각 선택됐으며, 이 receipt의 `corrected_cache_on_eligible=true`는 **다음 cache-on gate를
+시작할 수 있다는 뜻**이지 serving 성능 claim이나 selector admission이 아니다.
+
+**cache-on 기준선 결과 (2026-09-17).** scheduler-committed P2048 prefill + eight M1
+teacher-forced decode rows를 HF cache-on sidecar와 대조한 receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cacheon-baseline-d128-trace-r2-20260917T111001Z/`
+에 있다. `strict-fixed-maximum`과 `strict-active-row-buckets`는 모두 step 3에서 첫 selected-token
+mismatch (`Riley=16`, `HF=13`)가 났다. fused BIAS fixed-maximum은 step 8까지 token을
+유지했으나 step 8에서 mismatch (`Riley=15`, `HF=17`)가 났다. 세 variant 모두 모든 row의 raw
+BF16 logit hash는 HF와 달랐다. 따라서 cache position/teacher input contract는 replay됐지만
+현 native arithmetic은 exact profile이 아니며, 이 receipt는 `performance_claim_eligible=false`다.
+I/O PSI는 시작/종료 observation으로 보존했으며 sample filter, 보정, 재시도 선택에 쓰지 않았다.
+
+다음 구현 묶음은 P2048 prefill과 M1 decode에 대해 직접 profile을 분리한다. Q/K/V BIAS
+epilogue, O/MLP/LM-head direct cuBLAS, M=1 RMSNorm, HF eager M1xK/AV attention, contiguous
+cache layout과 logical position을 함께 cold-prepare하고, 불지원 shape·paged cache·graph/batch에는
+fallback 없이 diagnostic rejection을 낸다. 이 묶음의 source-bound layer oracle과 full-forward
+gate가 통과하기 전에는 selector, HTTP serving, vLLM benchmark를 시작하지 않는다.
 
 ### P14 — opt-in production integration
 
