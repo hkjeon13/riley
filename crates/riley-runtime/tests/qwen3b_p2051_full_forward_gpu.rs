@@ -3188,7 +3188,8 @@ fn run_cache_on_m1_layer_detail_profile(
         &context,
         &mut stream,
         QWEN3B_PROMPT_TOKEN_COUNT,
-        QWEN3B_PROMPT_TOKEN_COUNT + 1,
+        // Keep the source-bound owner's fixed P2048->M1 capacity contract.
+        QWEN3B_PROMPT_TOKEN_COUNT + 2,
         config,
     ) {
         Ok(decode) => decode,
