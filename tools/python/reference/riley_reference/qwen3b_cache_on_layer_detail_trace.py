@@ -499,9 +499,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         handles: list[object] = []
         original_rope = self._module.apply_rotary_pos_emb
         try:
-            attention_functions = self._module.ALL_ATTENTION_FUNCTIONS
             original_eager = self._module.eager_attention_forward
-            original_attention_interface = attention_functions["eager"]
             repeat_kv = original_eager.__globals__["repeat_kv"]
         except (AttributeError, KeyError, TypeError) as error:
             raise Qwen3BCacheOnLayerDetailTraceError(
@@ -571,7 +569,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
             **kwargs: object,
         ) -> object:
             if active is None or module is not attention:
-                return original_attention_interface(
+                return original_eager(
                     module,
                     query,
                     key,
@@ -657,7 +655,6 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         )
         self._module.apply_rotary_pos_emb = traced_rope
         self._module.eager_attention_forward = traced_eager_attention
-        attention_functions["eager"] = traced_eager_attention
         try:
             active = {}
             output: object | None = self._call(
@@ -707,7 +704,6 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
             active = None
             self._module.apply_rotary_pos_emb = original_rope
             self._module.eager_attention_forward = original_eager
-            attention_functions["eager"] = original_attention_interface
             for handle in reversed(handles):
                 handle.remove()
             del past
