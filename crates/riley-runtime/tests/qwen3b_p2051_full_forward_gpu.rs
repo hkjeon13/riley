@@ -657,6 +657,24 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             shape: vec![sequence, key_value_width],
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::ValueProjection),
         },
+        StageSpec {
+            name: "layer1.q_rope.full".to_owned(),
+            shape: vec![
+                sequence,
+                u64::try_from(QWEN3B_QUERY_HEADS).expect("query heads fit"),
+                u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
+            ],
+            source: StageSource::FullSequence(LlamaLastTokenLayerStage::QueryRotary),
+        },
+        StageSpec {
+            name: "layer1.k_rope.full".to_owned(),
+            shape: vec![
+                sequence,
+                u64::try_from(QWEN3B_KEY_VALUE_HEADS).expect("key/value heads fit"),
+                u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
+            ],
+            source: StageSource::FullSequence(LlamaLastTokenLayerStage::KeyRotary),
+        },
         hidden_stage(
             "layer1.attention_context.full",
             LlamaLastTokenLayerStage::AttentionContext,
@@ -1080,7 +1098,7 @@ fn load_hf_full_sequence_stage_artifact(
                 "capture_domain": "cache-free-p2051-full-sequence-layer-boundaries",
                 "id": FULL_SEQUENCE_STAGE_TRACE_ID,
                 "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
-                "tensor_count": 7,
+                "tensor_count": 9,
                 "rust_consumer": {
                     "api": "riley_runtime::llama::PreparedLlamaForward::prepare_full_sequence_layer_stage_trace+execute_full_sequence_layer_stage_traced",
                     "attention_backend": "hf-eager-cublaslt-qwen-p2051-probe",

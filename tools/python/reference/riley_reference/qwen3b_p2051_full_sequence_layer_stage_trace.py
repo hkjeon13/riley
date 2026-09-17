@@ -45,6 +45,8 @@ TRACE_TENSORS = (
     "layer1.q_proj.full",
     "layer1.k_proj.full",
     "layer1.v_proj.full",
+    "layer1.q_rope.full",
+    "layer1.k_rope.full",
     "layer1.attention_context.full",
     "layer1.after_attention_residual.full",
     "layer1.output.full",
@@ -150,11 +152,23 @@ def _sidecar_key(name: str) -> str:
 def _expected_shapes() -> dict[str, tuple[int, ...]]:
     hidden = (CONTEXT_TOKEN_COUNT, MODEL_HIDDEN_SIZE)
     key_value = (CONTEXT_TOKEN_COUNT, MODEL_KEY_VALUE_WIDTH)
+    query_rope = (
+        CONTEXT_TOKEN_COUNT,
+        base.MODEL_QUERY_HEAD_COUNT,
+        base.MODEL_HEAD_DIMENSION,
+    )
+    key_rope = (
+        CONTEXT_TOKEN_COUNT,
+        base.MODEL_KEY_VALUE_HEAD_COUNT,
+        base.MODEL_HEAD_DIMENSION,
+    )
     return {
         "layer1.input_norm.full": hidden,
         "layer1.q_proj.full": hidden,
         "layer1.k_proj.full": key_value,
         "layer1.v_proj.full": key_value,
+        "layer1.q_rope.full": query_rope,
+        "layer1.k_rope.full": key_rope,
         "layer1.attention_context.full": hidden,
         "layer1.after_attention_residual.full": hidden,
         "layer1.output.full": hidden,
@@ -298,6 +312,8 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
         attention = layer.self_attn
         captured: dict[str, object] = {}
         handles: list[object] = []
+        original_rope = self._module.apply_rotary_pos_emb
+        rope_calls = 0
 
         def capture_output(name: str):
             def hook(_module: object, _args: object, output: object) -> None:
@@ -314,6 +330,33 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 self._capture_full(captured, name, args[0])
 
             return hook
+
+        def traced_rope(
+            query: object,
+            key: object,
+            cosine: object,
+            sine: object,
+            unsqueeze_dim: int = 1,
+        ) -> object:
+            nonlocal rope_calls
+            output = original_rope(query, key, cosine, sine, unsqueeze_dim)
+            if rope_calls == LAYER_INDEX:
+                if not isinstance(output, tuple) or len(output) != 2:
+                    raise Qwen3BP2051FullSequenceLayerStageTraceError(
+                        "Qwen rotary hook contract changed"
+                    )
+                rotated_query, rotated_key = output
+                try:
+                    query_token_major = rotated_query.transpose(1, 2)
+                    key_token_major = rotated_key.transpose(1, 2)
+                except (AttributeError, RuntimeError) as error:
+                    raise Qwen3BP2051FullSequenceLayerStageTraceError(
+                        "Qwen rotary outputs cannot be transposed"
+                    ) from error
+                self._capture_full(captured, "layer1.q_rope.full", query_token_major)
+                self._capture_full(captured, "layer1.k_rope.full", key_token_major)
+            rope_calls += 1
+            return output
 
         handles.extend(
             (
@@ -332,6 +375,7 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 layer.register_forward_hook(capture_output("layer1.output.full")),
             )
         )
+        self._module.apply_rotary_pos_emb = traced_rope
         input_ids = torch.tensor(
             [list(input_token_ids)], dtype=torch.long, device=self._device
         )
@@ -353,6 +397,10 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 raise Qwen3BP2051FullSequenceLayerStageTraceError(
                     "cache-free trace returned a KV cache"
                 )
+            if rope_calls != base.MODEL_LAYER_COUNT:
+                raise Qwen3BP2051FullSequenceLayerStageTraceError(
+                    "Qwen rotary invocation count differs"
+                )
             ordered = {name: captured[name] for name in TRACE_TENSORS}
             _validate_tensors(ordered, torch)
             return CapturedTrace(tensors=ordered)
@@ -361,6 +409,7 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 f"trace hook did not capture {error.args[0]}"
             ) from error
         finally:
+            self._module.apply_rotary_pos_emb = original_rope
             for handle in reversed(handles):
                 handle.remove()
             del input_ids, attention_mask, position_ids

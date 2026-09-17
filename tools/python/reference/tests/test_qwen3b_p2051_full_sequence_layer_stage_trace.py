@@ -176,12 +176,15 @@ class Qwen3BP2051FullSequenceLayerStageTraceTests(unittest.TestCase):
 
     def test_schema_is_layer_one_full_sequence_only(self) -> None:
         self.assertEqual(trace.LAYER_INDEX, 1)
-        self.assertEqual(len(trace.TRACE_TENSORS), 7)
+        self.assertEqual(len(trace.TRACE_TENSORS), 9)
         self.assertEqual(
             trace._expected_shapes()["layer1.q_proj.full"], (2_051, 2_048)
         )
         self.assertEqual(
             trace._expected_shapes()["layer1.k_proj.full"], (2_051, 256)
+        )
+        self.assertEqual(
+            trace._expected_shapes()["layer1.q_rope.full"], (2_051, 16, 128)
         )
         self.assertEqual(
             trace._capture_profile_document()["rust_consumer"]["trace_row_layout"],
