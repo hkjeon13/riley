@@ -1551,12 +1551,12 @@ enum LatestOutput {
 /// Caller-owned M1 rows for the source-bound Qwen P2048 cache-on diagnostic.
 ///
 /// The owner records exactly the same one-token boundaries as the offline HF
-/// artifact: the embedding, every layer-zero boundary, every decoder residual
-/// output, final RMSNorm, and logits. Normal decode neither allocates it nor
-/// performs these synchronized D2H copies.
+/// artifact: the embedding, every boundary in one caller-selected decoder
+/// layer, every decoder residual output, final RMSNorm, and logits. Normal
+/// decode neither allocates it nor performs these synchronized D2H copies.
 pub struct PreparedLlamaDecodeM1Trace {
     embedding: Box<[u8]>,
-    layer_zero: PreparedLlamaLastTokenLayerStageTrace,
+    detailed_layer: PreparedLlamaLastTokenLayerStageTrace,
     layer_outputs: PreparedLlamaLastTokenLayerTrace,
     logits: Box<[u8]>,
     embedding_captured: bool,
@@ -1568,9 +1568,10 @@ impl fmt::Debug for PreparedLlamaDecodeM1Trace {
         formatter
             .debug_struct("PreparedLlamaDecodeM1Trace")
             .field("embedding_captured", &self.embedding_captured)
+            .field("detailed_layer_index", &self.detailed_layer.layer_index())
             .field(
-                "layer_zero_captured",
-                &self.layer_zero.captured_stage_count(),
+                "detailed_layer_captured",
+                &self.detailed_layer.captured_stage_count(),
             )
             .field(
                 "layer_outputs_captured",
@@ -1592,10 +1593,28 @@ impl PreparedLlamaDecodeM1Trace {
         self.embedding_captured.then(|| self.embedding.as_ref())
     }
 
-    /// Captured layer-zero M1 boundary named by the source-bound trace schema.
+    /// Captured M1 boundary in the selected decoder layer.
+    #[must_use]
+    pub fn detailed_layer(&self, stage: LlamaLastTokenLayerStage) -> Option<&[u8]> {
+        self.detailed_layer.tensor(stage)
+    }
+
+    /// Decoder layer selected when this diagnostic owner was prepared.
+    #[must_use]
+    pub const fn detailed_layer_index(&self) -> usize {
+        self.detailed_layer.layer_index()
+    }
+
+    /// Captured layer-zero M1 boundary named by the original source-bound
+    /// trace schema.
+    ///
+    /// Returns `None` for a trace that was deliberately prepared for another
+    /// layer through [`PreparedLlamaDecode::prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer`].
     #[must_use]
     pub fn layer_zero(&self, stage: LlamaLastTokenLayerStage) -> Option<&[u8]> {
-        self.layer_zero.tensor(stage)
+        (self.detailed_layer.layer_index() == 0)
+            .then(|| self.detailed_layer.tensor(stage))
+            .flatten()
     }
 
     /// Captured MLP-residual output for one decoder layer at M1.
@@ -1620,14 +1639,17 @@ impl PreparedLlamaDecodeM1Trace {
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.embedding_captured
-            && self.layer_zero.is_complete()
+            && self.detailed_layer.is_complete()
             && self.layer_outputs.final_norm_output().is_some()
             && self.layer_outputs.captured_layer_count()
                 == self.layer_outputs.requested_layer_count()
             && self.logits_captured
     }
 
-    fn prepare(forward: &PreparedLlamaForward) -> LlamaDecodeResult<Self> {
+    fn prepare(
+        forward: &PreparedLlamaForward,
+        detailed_layer_index: usize,
+    ) -> LlamaDecodeResult<Self> {
         let dimensions = forward.plan.dimensions();
         let hidden_bytes = dimensions
             .hidden_size()
@@ -1642,13 +1664,13 @@ impl PreparedLlamaDecodeM1Trace {
                 resource: LlamaDecodeResource::GemmWorkspace,
             })?;
         let layer_indices = (0..forward.plan.layers().len()).collect::<Vec<_>>();
-        let layer_zero = forward
-            .prepare_last_token_layer_stage_trace(0)
+        let detailed_layer = forward
+            .prepare_last_token_layer_stage_trace(detailed_layer_index)
             .map_err(LlamaDecodeError::Forward)?;
         let layer_outputs = forward
             .prepare_last_token_layer_trace(&layer_indices, true)
             .map_err(LlamaDecodeError::Forward)?;
-        if layer_zero.layer_index() != 0
+        if detailed_layer.layer_index() != detailed_layer_index
             || layer_outputs.row_byte_len() != hidden_bytes
             || !layer_outputs.requests_final_norm_output()
         {
@@ -1664,7 +1686,7 @@ impl PreparedLlamaDecodeM1Trace {
                 })?,
                 LlamaDecodeResource::GemmWorkspace,
             )?,
-            layer_zero,
+            detailed_layer,
             layer_outputs,
             logits: allocate_decode_host_bytes(
                 u64::try_from(logits_bytes).map_err(|_| LlamaDecodeError::ArithmeticOverflow {
@@ -1678,7 +1700,7 @@ impl PreparedLlamaDecodeM1Trace {
     }
 
     fn validate(&self, forward: &PreparedLlamaForward) -> LlamaDecodeResult<()> {
-        self.layer_zero
+        self.detailed_layer
             .validate(&forward.plan)
             .map_err(LlamaDecodeError::Forward)?;
         self.layer_outputs
@@ -1689,7 +1711,7 @@ impl PreparedLlamaDecodeM1Trace {
 
     fn reset(&mut self) {
         self.embedding_captured = false;
-        self.layer_zero.reset();
+        self.detailed_layer.reset();
         self.layer_outputs.reset();
         self.logits_captured = false;
     }
@@ -1724,9 +1746,9 @@ fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
     let Some(trace) = trace.as_deref_mut() else {
         return Ok(());
     };
-    let mut layer_zero = Some(&mut trace.layer_zero);
+    let mut detailed_layer = Some(&mut trace.detailed_layer);
     capture_last_token_layer_stage(
-        &mut layer_zero,
+        &mut detailed_layer,
         layer_index,
         stage,
         buffer,
@@ -2199,13 +2221,33 @@ impl PreparedLlamaDecode {
     pub fn prepare_hf_eager_qwen_p2048_cache_on_m1_trace(
         &self,
     ) -> LlamaDecodeResult<PreparedLlamaDecodeM1Trace> {
+        self.prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer(0)
+    }
+
+    /// Allocates one source-bound host trace for every M1 boundary in a
+    /// selected Qwen decoder layer without executing CUDA work.
+    ///
+    /// This is a diagnostic-only extension of the layer-zero trace. It keeps
+    /// layer selection at cold preparation so normal decode performs neither
+    /// trace allocation nor host copies. It cannot opt a serving selector into
+    /// the P2048 candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns if this owner was not prepared through the atomic M1 probe, if
+    /// `detailed_layer_index` is outside the model, or if trace storage cannot
+    /// be allocated.
+    pub fn prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer(
+        &self,
+        detailed_layer_index: usize,
+    ) -> LlamaDecodeResult<PreparedLlamaDecodeM1Trace> {
         if !self.hf_eager_qwen_p2048_cache_on_m1_trace_probe {
             return Err(LlamaDecodeError::InvalidConfiguration {
                 field: "hf_eager_qwen_p2048_cache_on_m1_trace",
                 reason: "requires the source-bound P2048 cache-on M1 trace probe",
             });
         }
-        PreparedLlamaDecodeM1Trace::prepare(&self.forward)
+        PreparedLlamaDecodeM1Trace::prepare(&self.forward, detailed_layer_index)
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.

@@ -111,6 +111,12 @@ const CACHE_ON_STAGE_SCHEMA_VERSION: &str =
 const CACHE_ON_STAGE_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-stage-trace";
 const CACHE_ON_STAGE_TRACE_ID: &str = "qwen3b-p2048-cache-on-prefill-m1-layer-stage-v1";
+const CACHE_ON_LAYER_DETAIL_SCHEMA_VERSION: &str =
+    "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v1";
+const CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace";
+const CACHE_ON_LAYER_DETAIL_TRACE_ID: &str = "qwen3b-p2048-cache-on-m1-layer3-detail-v1";
+const CACHE_ON_LAYER_DETAIL_INDEX: usize = 3;
 const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-comparison.v1";
 const CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND: &str =
@@ -121,6 +127,11 @@ const CACHE_ON_M1_RESULT_SCHEMA_VERSION: &str =
 const CACHE_ON_M1_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-reference-trace";
 const CACHE_ON_M1_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_M1=";
+const CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION: &str =
+    "riley.qwen3b-p2048-hf-compatible-cache-on-m1-layer-detail-comparison.v1";
+const CACHE_ON_LAYER_DETAIL_RESULT_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-layer-detail-comparison";
+const CACHE_ON_LAYER_DETAIL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_M1_LAYER_DETAIL=";
 const HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_ATTENTION_BACKEND_ID: &str =
     "riley.cuda.hf-eager-cublaslt-qwen-p2048-cache-on-probe.bf16";
 const HF_EAGER_QWEN_P2048_CACHE_ON_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID: &str =
@@ -396,6 +407,17 @@ struct HfFullSequenceStageArtifact {
 
 #[derive(Debug)]
 struct HfCacheOnPrefillStageArtifact {
+    manifest_path: PathBuf,
+    manifest_sha256: String,
+    sidecar_path: PathBuf,
+    sidecar_sha256: String,
+    checkpoint_receipt_filename: String,
+    checkpoint_receipt_sha256: String,
+    tensors: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Debug)]
+struct HfCacheOnLayerDetailArtifact {
     manifest_path: PathBuf,
     manifest_sha256: String,
     sidecar_path: PathBuf,
@@ -835,6 +857,26 @@ fn expected_cache_on_prefill_stage_specs() -> Vec<StageSpec> {
         .into_iter()
         .filter(|spec| spec.name.starts_with("prefill."))
         .collect()
+}
+
+fn expected_cache_on_layer_detail_stage_specs() -> Vec<StageSpec> {
+    let layer_zero_prefix = "layer0.";
+    let detail_prefix = format!("layer{CACHE_ON_LAYER_DETAIL_INDEX}.");
+    let mut stages = expected_stage_specs()
+        .into_iter()
+        .filter(|spec| spec.name.starts_with(layer_zero_prefix))
+        .map(|mut spec| {
+            spec.name = spec.name.replacen(layer_zero_prefix, &detail_prefix, 1);
+            spec
+        })
+        .collect::<Vec<_>>();
+    stages.push(StageSpec {
+        name: "last_logits".to_owned(),
+        shape: vec![u64::try_from(QWEN3B_VOCABULARY_SIZE).expect("vocabulary fits")],
+        source: StageSource::LastLogits,
+    });
+    assert_eq!(stages.len(), LlamaLastTokenLayerStage::ALL.len() + 1);
+    stages
 }
 
 fn full_sequence_stage_trace_id(layer_index: usize) -> String {
@@ -1579,6 +1621,275 @@ fn load_hf_cache_on_prefill_stage_artifact(
     })
 }
 
+fn load_hf_cache_on_layer_detail_artifact(
+    teacher: &TeacherCacheOn,
+    workload: &Workload,
+) -> TestResult<HfCacheOnLayerDetailArtifact> {
+    let manifest_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_STAGE_MANIFEST")?,
+        "HF P2048 cache-on layer-detail manifest",
+    )?;
+    let sidecar_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_STAGE_SIDECAR")?,
+        "HF P2048 cache-on layer-detail sidecar",
+    )?;
+    let payload = fs::read(&manifest_path)?;
+    let manifest_sha256 = sha256_hex(&payload);
+    let manifest: Value = serde_json::from_slice(&payload)?;
+    if manifest["schema_version"].as_str() != Some(CACHE_ON_LAYER_DETAIL_SCHEMA_VERSION)
+        || manifest["artifact_kind"].as_str() != Some(CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND)
+        || manifest["trace_id"].as_str() != Some(CACHE_ON_LAYER_DETAIL_TRACE_ID)
+        || manifest["performance_claim_eligible"].as_bool() != Some(false)
+        || manifest["producer"]["implementation_id"].as_str()
+            != Some("riley-python-qwen3b-hf-eager-cache-on-layer-detail-v1")
+    {
+        return Err("HF P2048 cache-on layer-detail manifest identity differs".into());
+    }
+    require_exact_fields(
+        &manifest["model"],
+        &[
+            "checkpoint_path",
+            "checkpoint_receipt_filename",
+            "checkpoint_receipt_sha256",
+        ],
+        "HF P2048 cache-on layer-detail model",
+    )?;
+    let model = manifest["model"]
+        .as_object()
+        .ok_or("HF P2048 cache-on layer-detail model is missing")?;
+    if model
+        .get("checkpoint_path")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+        || model
+            .get("checkpoint_receipt_filename")
+            .and_then(Value::as_str)
+            != Some(CHECKPOINT_RECEIPT_FILENAME)
+    {
+        return Err("HF P2048 cache-on layer-detail checkpoint receipt identity differs".into());
+    }
+    let checkpoint_receipt_filename = CHECKPOINT_RECEIPT_FILENAME.to_owned();
+    let checkpoint_receipt_sha256 = json_sha256(
+        model
+            .get("checkpoint_receipt_sha256")
+            .ok_or("HF P2048 cache-on layer-detail checkpoint receipt SHA-256 is missing")?,
+        "HF P2048 cache-on layer-detail checkpoint receipt SHA-256",
+    )?;
+
+    let contract = manifest["contract"]
+        .as_object()
+        .ok_or("HF P2048 cache-on layer-detail contract is missing")?;
+    require_exact_fields(
+        &manifest["contract"],
+        &[
+            "model_id",
+            "model_revision",
+            "workload",
+            "execution",
+            "input",
+            "source_logit_bindings",
+        ],
+        "HF P2048 cache-on layer-detail contract",
+    )?;
+    if contract.get("model_id").and_then(Value::as_str) != Some(QWEN3B_MODEL_ID)
+        || contract.get("model_revision").and_then(Value::as_str) != Some(QWEN3B_REVISION)
+        || contract.get("execution")
+            != Some(&json!({
+                "attention_implementation": "eager",
+                "batch_size": 1,
+                "cache_position_argument": "omitted-transformers-5.15.1",
+                "cublas_workspace_config": ":4096:8",
+                "deterministic_algorithms": true,
+                "dtype": "bfloat16",
+                "explicit_attention_mask": true,
+                "explicit_input_ids": true,
+                "explicit_position_ids": true,
+                "hf_hub_offline": true,
+                "inference_mode": true,
+                "local_files_only": true,
+                "logits_to_keep": 1,
+                "return_dict": true,
+                "sampling_applied": false,
+                "tf32_enabled": false,
+                "transformers_offline": true,
+                "trust_remote_code": false,
+                "use_cache": true,
+            }))
+    {
+        return Err("HF P2048 cache-on layer-detail contract differs".into());
+    }
+    let workload_contract = contract
+        .get("workload")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on layer-detail workload contract is missing")?;
+    if workload_contract
+        .get("schema_version")
+        .and_then(Value::as_str)
+        != Some(QWEN3B_WORKLOAD_SCHEMA)
+        || workload_contract.get("case").and_then(Value::as_str) != Some(QWEN3B_WORKLOAD_CASE)
+        || workload_contract
+            .get("source_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_WORKLOAD_SHA256)
+        || workload_contract
+            .get("prompt_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(workload.prompt_token_ids.len())?)
+        || workload_contract
+            .get("prompt_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_PROMPT_TOKEN_SHA256)
+    {
+        return Err("HF P2048 cache-on layer-detail workload contract differs".into());
+    }
+    let input = contract
+        .get("input")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on layer-detail input contract is missing")?;
+    if input.get("construction").and_then(Value::as_str)
+        != Some("verified_hf_cache_on.P2048_prefill_then_teacher_token_ids[:2]_M1_decodes")
+        || input
+            .get("prefill_prompt_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT)?)
+        || input
+            .get("prefill_prompt_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_PROMPT_TOKEN_SHA256)
+        || input
+            .get("teacher_decode_token_count")
+            .and_then(Value::as_u64)
+            != Some(2)
+        || json_u32_array(
+            input
+                .get("teacher_decode_token_ids")
+                .ok_or("HF P2048 cache-on layer-detail teacher decode IDs are missing")?,
+            "HF P2048 cache-on layer-detail teacher decode token IDs",
+        )? != teacher.token_ids
+        || input
+            .get("teacher_decode_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(token_ids_sha256(&teacher.token_ids).as_str())
+    {
+        return Err("HF P2048 cache-on layer-detail input binding differs".into());
+    }
+    let teacher_source = input
+        .get("teacher_source")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on layer-detail teacher source is missing")?;
+    if teacher_source
+        .get("artifact_schema_version")
+        .and_then(Value::as_str)
+        != Some(TEACHER_ARTIFACT_SCHEMA)
+        || teacher_source.get("artifact_kind").and_then(Value::as_str)
+            != Some(TEACHER_ARTIFACT_KIND)
+        || teacher_source
+            .get("artifact_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.artifact_sha256.as_str())
+        || teacher_source.get("cache_mode").and_then(Value::as_str) != Some("cache-on")
+        || teacher_source
+            .get("cache_on_sidecar_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.cache_on_sidecar_sha256.as_str())
+        || teacher_source
+            .get("full_teacher_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.full_teacher_token_ids_sha256.as_str())
+        || teacher_source
+            .get("cache_on_sidecar_tensor_key")
+            .and_then(Value::as_str)
+            != Some(TEACHER_CACHE_OFF_SIDECAR_KEY)
+    {
+        return Err("HF P2048 cache-on layer-detail teacher source differs".into());
+    }
+    let source_logit_bindings = contract
+        .get("source_logit_bindings")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on layer-detail source logits are missing")?;
+    if source_logit_bindings.len() != 2
+        || !source_logit_bindings.contains_key("prefill")
+        || !source_logit_bindings.contains_key("decode_step_1")
+    {
+        return Err("HF P2048 cache-on layer-detail source logit set differs".into());
+    }
+    for (name, row) in [("prefill", 0_u64), ("decode_step_1", 1_u64)] {
+        let record = source_logit_bindings
+            .get(name)
+            .and_then(Value::as_object)
+            .ok_or("HF P2048 cache-on layer-detail source logit record is missing")?;
+        if record.len() != 2 || record.get("source_logit_row").and_then(Value::as_u64) != Some(row)
+        {
+            return Err("HF P2048 cache-on layer-detail source logit row differs".into());
+        }
+        json_sha256(
+            record
+                .get("bf16_le_sha256")
+                .ok_or("HF P2048 cache-on layer-detail source logit SHA-256 is missing")?,
+            "HF P2048 cache-on layer-detail source logit SHA-256",
+        )?;
+    }
+
+    let expected_trace_profile = json!({
+        "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-rows",
+        "id": CACHE_ON_LAYER_DETAIL_TRACE_ID,
+        "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
+        "prefill_source_logit_row": 0,
+        "m1_source_logit_row": 1,
+        "tensor_count": LlamaLastTokenLayerStage::ALL.len() + 1,
+        "rust_consumer": {
+            "api": "riley_runtime::llama::PreparedLlamaDecode::prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer+decode_hf_eager_qwen_p2048_cache_on_m1_traced",
+            "cache_layout": "contiguous-kv-only",
+            "execution": "P2048 prefill then teacher-forced M=1 decode",
+            "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
+            "serving_eligibility": "none-until-every-stage-is-bf16-exact",
+        },
+    });
+    if manifest.get("trace_profile") != Some(&expected_trace_profile) {
+        return Err("HF P2048 cache-on layer-detail trace profile differs".into());
+    }
+    let root = repository_root()?;
+    let provenance = manifest["provenance"]["source_repository"]
+        .as_object()
+        .ok_or("HF P2048 cache-on layer-detail source provenance is missing")?;
+    if provenance.get("source_dirty").and_then(Value::as_bool) != Some(false) {
+        return Err("HF P2048 cache-on layer-detail source provenance is dirty".into());
+    }
+    let sources = provenance
+        .get("sources")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on layer-detail source records are missing")?;
+    for required in [
+        "cache_on_layer_detail_trace",
+        "cache_on_layer_stage_trace",
+        "rust_decode",
+        "rust_p2051_quality_gate",
+    ] {
+        if !sources.contains_key(required) {
+            return Err(format!("HF P2048 cache-on layer-detail sources omit {required}").into());
+        }
+    }
+    for (name, record) in sources {
+        validate_source_record(
+            &root,
+            record,
+            &format!("HF P2048 cache-on layer-detail source {name}"),
+        )?;
+    }
+    let specs = expected_cache_on_layer_detail_stage_specs();
+    let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
+    let sidecar_sha256 = sha256_file(&sidecar_path)?;
+    Ok(HfCacheOnLayerDetailArtifact {
+        manifest_path,
+        manifest_sha256,
+        sidecar_path,
+        sidecar_sha256,
+        checkpoint_receipt_filename,
+        checkpoint_receipt_sha256,
+        tensors,
+    })
+}
+
 fn load_hf_full_sequence_stage_artifact(
     teacher: &TeacherPrefix,
     workload: &Workload,
@@ -1792,6 +2103,13 @@ fn load_model(hf: &HfStageArtifact) -> TestResult<LoadedModel> {
 }
 
 fn load_cache_on_prefill_model(hf: &HfCacheOnPrefillStageArtifact) -> TestResult<LoadedModel> {
+    load_model_from_checkpoint_receipt(
+        &hf.checkpoint_receipt_filename,
+        &hf.checkpoint_receipt_sha256,
+    )
+}
+
+fn load_cache_on_layer_detail_model(hf: &HfCacheOnLayerDetailArtifact) -> TestResult<LoadedModel> {
     load_model_from_checkpoint_receipt(
         &hf.checkpoint_receipt_filename,
         &hf.checkpoint_receipt_sha256,
@@ -2687,6 +3005,38 @@ fn collect_cache_on_m1_trace(
     Ok(observed)
 }
 
+fn collect_cache_on_m1_layer_detail_trace(
+    trace: &PreparedLlamaDecodeM1Trace,
+) -> TestResult<BTreeMap<String, Vec<u8>>> {
+    if !trace.is_complete() {
+        return Err("P2048 cache-on M1 layer-detail trace did not capture every boundary".into());
+    }
+    if trace.detailed_layer_index() != CACHE_ON_LAYER_DETAIL_INDEX {
+        return Err("P2048 cache-on M1 trace selected the wrong detailed layer".into());
+    }
+    let mut observed = BTreeMap::new();
+    for stage in LlamaLastTokenLayerStage::ALL {
+        let name = format!("layer{CACHE_ON_LAYER_DETAIL_INDEX}.{}.last", stage.name());
+        observed.insert(
+            name,
+            canonical_bf16_le(
+                trace
+                    .detailed_layer(stage)
+                    .ok_or("P2048 cache-on M1 detailed layer stage is missing")?,
+            )?,
+        );
+    }
+    observed.insert(
+        "last_logits".to_owned(),
+        canonical_bf16_le(
+            trace
+                .logits()
+                .ok_or("P2048 cache-on M1 detailed trace logits are missing")?,
+        )?,
+    );
+    Ok(observed)
+}
+
 fn run_cache_on_m1_reference_trace_profile(
     model: &LoadedModel,
     input: &[u32],
@@ -2814,6 +3164,140 @@ fn run_cache_on_m1_reference_trace_profile(
         (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
         (Err(run_error), Err(cleanup_error)) => Err(format!(
             "P2048 cache-on M1 trace execution failed: {run_error}; cleanup also failed: {cleanup_error}"
+        )
+        .into()),
+    }
+}
+
+fn run_cache_on_m1_layer_detail_profile(
+    model: &LoadedModel,
+    input: &[u32],
+    m1_token: u32,
+    hf: &HfCacheOnLayerDetailArtifact,
+) -> TestResult<Value> {
+    let (context, mut stream) = first_context()?;
+    let config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+        FULL_FORWARD_UPLOAD_STAGING_BYTES,
+        FULL_FORWARD_IO_STAGING_BYTES,
+        HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
+        REFERENCE_ATTENTION_BUDGET_BYTES,
+    ))
+    .with_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+    let mut decode = match PreparedLlamaDecode::prepare(
+        model,
+        &context,
+        &mut stream,
+        QWEN3B_PROMPT_TOKEN_COUNT,
+        QWEN3B_PROMPT_TOKEN_COUNT + 1,
+        config,
+    ) {
+        Ok(decode) => decode,
+        Err(error) => {
+            let cleanup = close_decode_resources(None, stream, context);
+            return match cleanup {
+                Ok(()) => Err(error.into()),
+                Err(cleanup_error) => Err(format!(
+                    "P2048 cache-on M1 layer-detail preparation failed: {error}; cleanup also failed: {cleanup_error}"
+                )
+                .into()),
+            };
+        }
+    };
+    let result = (|| -> TestResult<Value> {
+        if !matches!(
+            decode.cache_layout(),
+            riley_runtime::llama::LlamaKvCacheStorageLayout::Contiguous(_)
+        ) {
+            return Err(
+                "P2048 cache-on M1 layer-detail trace did not select contiguous KV storage".into(),
+            );
+        }
+        let selection = decode.prepared_attention().selection_trace();
+        if selection.implementation_id() != "riley.cuda.materialized-gqa-decode.bf16" {
+            return Err(
+                "P2048 cache-on M1 layer-detail trace did not select materialized reference decode attention"
+                    .into(),
+            );
+        }
+
+        decode.prefill(input, &mut stream)?;
+        let mut trace = decode
+            .prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer(CACHE_ON_LAYER_DETAIL_INDEX)?;
+        decode.decode_hf_eager_qwen_p2048_cache_on_m1_traced(m1_token, &mut trace, &mut stream)?;
+        let observed = collect_cache_on_m1_layer_detail_trace(&trace)?;
+
+        // Repeat with the same owner and host trace buffers; this is lifecycle
+        // evidence, never a serving timing measurement.
+        decode.reset()?;
+        decode.prefill(input, &mut stream)?;
+        decode.decode_hf_eager_qwen_p2048_cache_on_m1_traced(m1_token, &mut trace, &mut stream)?;
+        let repeated = collect_cache_on_m1_layer_detail_trace(&trace)?;
+        if observed != repeated {
+            return Err("P2048 cache-on M1 layer-detail trace differs on same-owner reuse".into());
+        }
+
+        let mut stages = Map::new();
+        let mut exact_count = 0_u64;
+        let mut first_non_exact = None;
+        for spec in expected_cache_on_layer_detail_stage_specs() {
+            let hf_bytes = hf
+                .tensors
+                .get(&spec.name)
+                .ok_or("HF P2048 cache-on layer-detail stage is missing")?;
+            let riley_bytes = observed
+                .get(&spec.name)
+                .ok_or("Riley P2048 cache-on layer-detail stage is missing")?;
+            if hf_bytes.len() != shape_byte_len(&spec.shape)? || riley_bytes.len() != hf_bytes.len()
+            {
+                return Err(format!(
+                    "P2048 cache-on layer-detail stage {} byte length differs",
+                    spec.name
+                )
+                .into());
+            }
+            let stage_metrics = metrics(hf_bytes, riley_bytes)?;
+            if stage_metrics["bf16_exact"] == true {
+                exact_count += 1;
+            } else if first_non_exact.is_none() {
+                first_non_exact = Some(spec.name.clone());
+            }
+            stages.insert(spec.name, stage_metrics);
+        }
+        Ok(json!({
+            "profile_id": "hf-eager-qwen-p2048-cache-on-m1-layer3-detail-trace-v1",
+            "cache_mode": "cache-on-m1-diagnostic",
+            "same_scheduler_engine": false,
+            "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
+            "m1_execution": {
+                "teacher_forced_token_id": m1_token,
+                "position": QWEN3B_PROMPT_TOKEN_COUNT,
+                "logical_cache_length": QWEN3B_PROMPT_TOKEN_COUNT + 1,
+                "kv_layout": "contiguous-head-major",
+                "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
+                "decode_attention_backend": selection.implementation_id(),
+                "decode_attention_selection_reason": format!("{:?}", selection.reason()),
+                "projection_path": "HF-compatible M1 Q/K/V cuBLASLt bias epilogues plus direct-cuBLAS O/MLP/LM-head candidate",
+                "rms_norm_path": HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID,
+            },
+            "repeat_execution": {
+                "reused_prepared_owner": true,
+                "reused_trace_storage": true,
+                "all_m1_layer_detail_tensors_bf16_identical": true,
+            },
+            "summary": {
+                "stage_count": stages.len(),
+                "bf16_exact_stage_count": exact_count,
+                "first_non_exact_stage": first_non_exact,
+            },
+            "stages": stages,
+        }))
+    })();
+    let cleanup = close_decode_resources(Some(decode), stream, context);
+    match (result, cleanup) {
+        (Ok(result), Ok(())) => Ok(result),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "P2048 cache-on M1 layer-detail trace execution failed: {run_error}; cleanup also failed: {cleanup_error}"
         )
         .into()),
     }
@@ -3232,6 +3716,86 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_reference_trace() -> TestResult {
     write_artifact_exclusive(&output, &receipt)?;
     println!(
         "{CACHE_ON_M1_MARKER_PREFIX}{}",
+        serde_json::to_string(&receipt)?
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on M1 layer-three HF/Rust detail trace"]
+fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_detail_trace() -> TestResult {
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_layer_detail_artifact(&teacher, &workload)?;
+    let m1_token = *teacher
+        .token_ids
+        .first()
+        .ok_or("P2048 cache-on teacher artifact has no M1 token")?;
+    if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
+        || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
+    {
+        return Err("P2048 cache-on M1 layer-detail input does not bind the HF artifact".into());
+    }
+    let model = load_cache_on_layer_detail_model(&hf)?;
+    let candidate =
+        run_cache_on_m1_layer_detail_profile(&model, &workload.prompt_token_ids, m1_token, &hf)?;
+    let summary = candidate
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or("P2048 cache-on M1 layer-detail candidate summary is missing")?;
+    let exact_count = summary
+        .get("bf16_exact_stage_count")
+        .and_then(Value::as_u64)
+        .ok_or("P2048 cache-on M1 layer-detail exact stage count is missing")?;
+    let stage_count = u64::try_from(expected_cache_on_layer_detail_stage_specs().len())?;
+    let detail_exact = exact_count == stage_count
+        && summary
+            .get("first_non_exact_stage")
+            .is_some_and(Value::is_null);
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_STAGE_OUTPUT")?;
+    let receipt = json!({
+        "schema_version": CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION,
+        "artifact_kind": CACHE_ON_LAYER_DETAIL_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "contract": {
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "prefill_input_token_count": QWEN3B_PROMPT_TOKEN_COUNT,
+            "prefill_input_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_SHA256,
+            "teacher_m1_token_id": m1_token,
+            "teacher_decode_token_ids": teacher.token_ids,
+            "teacher_forced_artifact_sha256": teacher.artifact_sha256,
+            "teacher_cache_on_sidecar_sha256": teacher.cache_on_sidecar_sha256,
+            "teacher_full_token_ids_le_u32_sha256": teacher.full_teacher_token_ids_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
+            "hf_execution": "P2048 cache-building prefill followed by teacher-forced M1",
+            "riley_execution": "P2048 exact-prefill candidate plus source-bound M1 selected-layer trace",
+            "trace_stage_count": stage_count,
+        },
+        "hf_stage_artifact": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "candidate": candidate,
+        "quality_gate": {
+            "required_m1_layer_detail_stage_count": stage_count,
+            "candidate_exact_m1_layer_detail_stage_count": exact_count,
+            "layer3_m1_bf16_exact": detail_exact,
+            "cache_on_m1_decode_bf16_exact": false,
+            "cache_on_full_forward_bf16_exact": false,
+            "corrected_cache_on_eligible": false,
+            "serving_selector_eligible": false,
+            "performance_claim_eligible": false,
+        },
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "{CACHE_ON_LAYER_DETAIL_MARKER_PREFIX}{}",
         serde_json::to_string(&receipt)?
     );
     Ok(())
