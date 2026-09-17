@@ -1354,6 +1354,8 @@ pub(super) enum LlamaRmsNormProfile {
     FixedContiguous37Balanced,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HuggingFaceCudaQwenP2051Probe,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2048CacheOnProbe,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1368,6 +1370,8 @@ enum LlamaRopeTableSelection {
     Automatic,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HuggingFaceCudaQwenP2051ProbeV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2048CacheOnProbeV1,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1376,6 +1380,8 @@ enum LlamaRmsNormSelection {
     Automatic,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HuggingFaceCudaQwenP2051ProbeV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2048CacheOnProbeV1,
 }
 
 fn resolve_rms_norm_profile(
@@ -1389,6 +1395,13 @@ fn resolve_rms_norm_profile(
         // point. Returning the profile unconditionally prevents selection
         // from silently falling back on a mismatched model or sequence.
         return LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe;
+    }
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    if _rms_norm_selection == LlamaRmsNormSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1 {
+        // The native primitive admits only the source-bound P2048/P2051
+        // descriptors, so this cannot silently become a generic RMSNorm
+        // selection on an unrelated model or sequence.
+        return LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe;
     }
     match reduction_profile {
         LlamaReductionProfile::FixedContiguous37BalancedV1 => {
@@ -1420,6 +1433,14 @@ fn resolve_rope_table_profile(
             return LlamaRopeTableProfile::HuggingFaceCuda;
         }
     }
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    if _selection == LlamaRopeTableSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1 {
+        // This selection is bound to cache-building prefill. M1 cache-on
+        // decode will qualify a separate table/position path before reuse.
+        if matches!(model.config(), ModelConfig::Qwen2(_)) && _sequence_length == 2_048 {
+            return LlamaRopeTableProfile::HuggingFaceCuda;
+        }
+    }
     if reduction_profile == LlamaReductionProfile::CanonicalV1
         && matches!(model.config(), ModelConfig::Llama(_))
         && is_reviewed_smollm2_rope_geometry(model.spec())
@@ -1443,6 +1464,10 @@ pub(super) fn execute_profile_rms_norm<S: CudaExecutionStream + ?Sized>(
         LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
             hugging_face_qwen_p2051_rms_norm(params, stream)
         }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe => {
+            hugging_face_qwen_p2051_rms_norm(params, stream)
+        }
     }
 }
 
@@ -1459,6 +1484,10 @@ pub(super) fn execute_profile_residual_rms_norm<S: CudaExecutionStream + ?Sized>
         LlamaRmsNormProfile::FixedContiguous37Balanced => fixed37_residual_rms_norm(params, stream),
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => residual_rms_norm(params, stream),
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe => {
+            residual_rms_norm(params, stream)
+        }
     }
 }
 
@@ -2143,6 +2172,8 @@ pub(super) enum LlamaOutputProjectionMode {
     StrictHiddenGemmV1,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HfEagerQwenP2051DirectCublasProbeV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HfEagerQwenP2048CacheOnDirectCublasProbeV1,
 }
 
 impl LlamaOutputProjectionMode {
@@ -2153,12 +2184,21 @@ impl LlamaOutputProjectionMode {
             Self::HfEagerQwenP2051DirectCublasProbeV1 => {
                 "hf-eager-qwen-p2051-direct-cublas-probe-v1"
             }
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            Self::HfEagerQwenP2048CacheOnDirectCublasProbeV1 => {
+                "hf-eager-qwen-p2048-cache-on-direct-cublas-probe-v1"
+            }
         }
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     const fn is_hf_eager_qwen_p2051_direct_cublas_probe(self) -> bool {
         matches!(self, Self::HfEagerQwenP2051DirectCublasProbeV1)
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    const fn is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe(self) -> bool {
+        matches!(self, Self::HfEagerQwenP2048CacheOnDirectCublasProbeV1)
     }
 }
 
@@ -2173,6 +2213,8 @@ pub(super) enum LlamaMlpProjectionMode {
     StrictStagedV1,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HfEagerQwenP2051DirectCublasProbeV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HfEagerQwenP2048CacheOnDirectCublasProbeV1,
 }
 
 impl LlamaMlpProjectionMode {
@@ -2183,12 +2225,21 @@ impl LlamaMlpProjectionMode {
             Self::HfEagerQwenP2051DirectCublasProbeV1 => {
                 "hf-eager-qwen-p2051-direct-cublas-probe-v1"
             }
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            Self::HfEagerQwenP2048CacheOnDirectCublasProbeV1 => {
+                "hf-eager-qwen-p2048-cache-on-direct-cublas-probe-v1"
+            }
         }
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     const fn is_hf_eager_qwen_p2051_direct_cublas_probe(self) -> bool {
         matches!(self, Self::HfEagerQwenP2051DirectCublasProbeV1)
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    const fn is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe(self) -> bool {
+        matches!(self, Self::HfEagerQwenP2048CacheOnDirectCublasProbeV1)
     }
 }
 
@@ -2204,6 +2255,8 @@ pub(super) enum LlamaLmHeadMode {
     StrictFullSequenceGemmV1,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     HfEagerQwenP2051LastTokenDirectCublasProbeV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HfEagerQwenP2048CacheOnLastTokenDirectCublasProbeV1,
 }
 
 impl LlamaLmHeadMode {
@@ -2214,12 +2267,24 @@ impl LlamaLmHeadMode {
             Self::HfEagerQwenP2051LastTokenDirectCublasProbeV1 => {
                 "hf-eager-qwen-p2051-last-token-direct-cublas-probe-v1"
             }
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            Self::HfEagerQwenP2048CacheOnLastTokenDirectCublasProbeV1 => {
+                "hf-eager-qwen-p2048-cache-on-last-token-direct-cublas-probe-v1"
+            }
         }
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     const fn is_hf_eager_qwen_p2051_last_token_direct_cublas_probe(self) -> bool {
         matches!(self, Self::HfEagerQwenP2051LastTokenDirectCublasProbeV1)
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    const fn is_hf_eager_qwen_p2048_cache_on_last_token_direct_cublas_probe(self) -> bool {
+        matches!(
+            self,
+            Self::HfEagerQwenP2048CacheOnLastTokenDirectCublasProbeV1
+        )
     }
 }
 
@@ -2419,6 +2484,27 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Selects the whole P2048 Qwen cache-on *prefill* diagnostic profile.
+    ///
+    /// The profile is deliberately one atomic opt-in rather than a collection
+    /// of serving toggles: Q/K/V bias epilogues, attention, O/MLP/LM direct
+    /// cuBLAS, GPU RoPE tables, and RMSNorm must all match the same offline
+    /// HF cache-on stage receipt. It has no decode or serving selector route.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_eager_qwen_p2048_cache_on_prefill_probe(mut self) -> Self {
+        self.attention_preference = AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe;
+        self.projection_bias_mode = LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1;
+        self.output_projection_mode =
+            LlamaOutputProjectionMode::HfEagerQwenP2048CacheOnDirectCublasProbeV1;
+        self.mlp_projection_mode =
+            LlamaMlpProjectionMode::HfEagerQwenP2048CacheOnDirectCublasProbeV1;
+        self.lm_head_mode = LlamaLmHeadMode::HfEagerQwenP2048CacheOnLastTokenDirectCublasProbeV1;
+        self.rope_table_selection = LlamaRopeTableSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1;
+        self.rms_norm_selection = LlamaRmsNormSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1;
+        self
+    }
+
     #[must_use]
     pub const fn upload_staging_bytes(self) -> u64 {
         self.upload_staging_bytes
@@ -2462,6 +2548,44 @@ impl PreparedLlamaForwardConfig {
         self.mlp_projection_mode
     }
 
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn has_hf_eager_qwen_p2048_cache_on_component(self) -> bool {
+        self.attention_preference == AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe
+            || self
+                .output_projection_mode
+                .is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+            || self
+                .mlp_projection_mode
+                .is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+            || self
+                .lm_head_mode
+                .is_hf_eager_qwen_p2048_cache_on_last_token_direct_cublas_probe()
+            || self.rope_table_selection
+                == LlamaRopeTableSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1
+            || self.rms_norm_selection
+                == LlamaRmsNormSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn is_hf_eager_qwen_p2048_cache_on_prefill_profile(self) -> bool {
+        self.attention_preference == AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe
+            && self.projection_bias_mode == LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+            && self
+                .output_projection_mode
+                .is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+            && self
+                .mlp_projection_mode
+                .is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+            && self
+                .lm_head_mode
+                .is_hf_eager_qwen_p2048_cache_on_last_token_direct_cublas_probe()
+            && self.rope_table_selection
+                == LlamaRopeTableSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1
+            && self.rms_norm_selection
+                == LlamaRmsNormSelection::HuggingFaceCudaQwenP2048CacheOnProbeV1
+            && self.reduction_profile == LlamaReductionProfile::CanonicalV1
+    }
+
     fn validate(self) -> LlamaForwardResult<()> {
         if self.upload_staging_bytes == 0 {
             return Err(LlamaForwardError::InvalidConfiguration {
@@ -2481,6 +2605,15 @@ impl PreparedLlamaForwardConfig {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "projection_bias_mode",
                 reason: "cuBLASLt bias epilogue requires canonical-v1 reductions",
+            });
+        }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if self.has_hf_eager_qwen_p2048_cache_on_component()
+            && !self.is_hf_eager_qwen_p2048_cache_on_prefill_profile()
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "p2048_cache_on_prefill_profile",
+                reason: "every paired P2048 cache-on Q/K/V, attention, O-projection, MLP, LM-head, RoPE-table, RMSNorm, and canonical reduction mode must be selected together",
             });
         }
         #[cfg(feature = "cuda-cublas-gemm-probe")]
@@ -3263,6 +3396,10 @@ impl PreparedLlamaForward {
             LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
                 "hf-cuda-qwen-p2051-rmsnorm-probe-v1"
             }
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe => {
+                "hf-cuda-qwen-p2048-cache-on-rmsnorm-probe-v1"
+            }
         }
     }
 
@@ -3794,6 +3931,9 @@ impl PreparedLlamaForward {
         if self
             .lm_head_mode
             .is_hf_eager_qwen_p2051_last_token_direct_cublas_probe()
+            || self
+                .lm_head_mode
+                .is_hf_eager_qwen_p2048_cache_on_last_token_direct_cublas_probe()
         {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "lm_head_mode",
@@ -5216,6 +5356,7 @@ const fn attention_probabilities_available(backend: AttentionBackend) -> bool {
         AttentionBackend::MaterializedReference
             | AttentionBackend::HuggingFaceEager
             | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+            | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
     )
 }
 
@@ -5490,14 +5631,22 @@ pub(super) fn prepare_gemms(
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     let output_projection_direct_cublas = if output_projection_mode
         .is_hf_eager_qwen_p2051_direct_cublas_probe()
+        || output_projection_mode.is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
     {
         const P2051_SEQUENCE: u64 = 2_051;
+        const P2048_CACHE_ON_SEQUENCE: u64 = 2_048;
         const QWEN_HIDDEN: u64 = 2_048;
         const QWEN_KEY_VALUE: u64 = 256;
         const QWEN_INTERMEDIATE: u64 = 11_008;
         const QWEN_LAYER_COUNT: usize = 36;
+        let expected_sequence =
+            if output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe() {
+                P2051_SEQUENCE
+            } else {
+                P2048_CACHE_ON_SEQUENCE
+            };
         if anchors.is_some()
-            || sequence != P2051_SEQUENCE
+            || sequence != expected_sequence
             || hidden != QWEN_HIDDEN
             || key_value != QWEN_KEY_VALUE
             || intermediate != QWEN_INTERMEDIATE
@@ -5509,7 +5658,7 @@ pub(super) fn prepare_gemms(
         {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "output_projection_mode",
-                reason: "the direct-cuBLAS O-projection probe requires cache-free Qwen P2051 geometry, no output biases, and no batch-shape variants",
+                reason: "the direct-cuBLAS O-projection probe requires source-bound Qwen P2051 cache-free or P2048 cache-on geometry, no output biases, and no batch-shape variants",
             });
         }
         let output_site = ExecutionSite::layer(0, LlamaOp::OutputProjection);
@@ -5527,15 +5676,28 @@ pub(super) fn prepare_gemms(
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     let mlp_projection_direct_cublas = if mlp_projection_mode
         .is_hf_eager_qwen_p2051_direct_cublas_probe()
+        || mlp_projection_mode.is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
     {
         const P2051_SEQUENCE: u64 = 2_051;
+        const P2048_CACHE_ON_SEQUENCE: u64 = 2_048;
         const QWEN_HIDDEN: u64 = 2_048;
         const QWEN_KEY_VALUE: u64 = 256;
         const QWEN_INTERMEDIATE: u64 = 11_008;
         const QWEN_LAYER_COUNT: usize = 36;
+        let p2051 = mlp_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe();
+        let expected_sequence = if p2051 {
+            P2051_SEQUENCE
+        } else {
+            P2048_CACHE_ON_SEQUENCE
+        };
+        let paired_output = if p2051 {
+            output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
+        } else {
+            output_projection_mode.is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+        };
         if anchors.is_some()
-            || !output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
-            || sequence != P2051_SEQUENCE
+            || !paired_output
+            || sequence != expected_sequence
             || hidden != QWEN_HIDDEN
             || key_value != QWEN_KEY_VALUE
             || intermediate != QWEN_INTERMEDIATE
@@ -5543,7 +5705,7 @@ pub(super) fn prepare_gemms(
         {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "mlp_projection_mode",
-                reason: "the direct-cuBLAS MLP projection probe requires the paired cache-free Qwen P2051 O-projection geometry and no batch-shape variants",
+                reason: "the direct-cuBLAS MLP projection probe requires the matching source-bound Qwen P2051/P2048 O-projection geometry and no batch-shape variants",
             });
         }
         let gate_site = ExecutionSite::layer(0, LlamaOp::GateProjection);
@@ -5568,17 +5730,35 @@ pub(super) fn prepare_gemms(
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     let lm_head_last_token_direct_cublas = if lm_head_mode
         .is_hf_eager_qwen_p2051_last_token_direct_cublas_probe()
+        || lm_head_mode.is_hf_eager_qwen_p2048_cache_on_last_token_direct_cublas_probe()
     {
         const P2051_SEQUENCE: u64 = 2_051;
+        const P2048_CACHE_ON_SEQUENCE: u64 = 2_048;
         const QWEN_HIDDEN: u64 = 2_048;
         const QWEN_KEY_VALUE: u64 = 256;
         const QWEN_INTERMEDIATE: u64 = 11_008;
         const QWEN_VOCABULARY: u64 = 151_936;
         const QWEN_LAYER_COUNT: usize = 36;
+        let p2051 = lm_head_mode.is_hf_eager_qwen_p2051_last_token_direct_cublas_probe();
+        let expected_sequence = if p2051 {
+            P2051_SEQUENCE
+        } else {
+            P2048_CACHE_ON_SEQUENCE
+        };
+        let paired_mlp = if p2051 {
+            mlp_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
+        } else {
+            mlp_projection_mode.is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+        };
+        let paired_output = if p2051 {
+            output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
+        } else {
+            output_projection_mode.is_hf_eager_qwen_p2048_cache_on_direct_cublas_probe()
+        };
         if anchors.is_some()
-            || !mlp_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
-            || !output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
-            || sequence != P2051_SEQUENCE
+            || !paired_mlp
+            || !paired_output
+            || sequence != expected_sequence
             || hidden != QWEN_HIDDEN
             || key_value != QWEN_KEY_VALUE
             || intermediate != QWEN_INTERMEDIATE
@@ -5587,7 +5767,7 @@ pub(super) fn prepare_gemms(
         {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "lm_head_mode",
-                reason: "the last-token direct-cuBLAS LM-head probe requires cache-free Qwen P2051 geometry and no batch-shape variants",
+                reason: "the last-token direct-cuBLAS LM-head probe requires source-bound Qwen P2051 cache-free or P2048 cache-on geometry and no batch-shape variants",
             });
         }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
@@ -6025,6 +6205,41 @@ mod tests {
                     .validate(),
                 Err(LlamaForwardError::InvalidConfiguration {
                     field: "lm_head_mode",
+                    ..
+                })
+            ));
+
+            let p2048_cache_on = defaults.with_hf_eager_qwen_p2048_cache_on_prefill_probe();
+            assert_eq!(
+                p2048_cache_on.attention_preference(),
+                AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe
+            );
+            assert_eq!(
+                p2048_cache_on.output_projection_mode.id(),
+                "hf-eager-qwen-p2048-cache-on-direct-cublas-probe-v1"
+            );
+            assert_eq!(
+                p2048_cache_on.mlp_projection_mode().id(),
+                "hf-eager-qwen-p2048-cache-on-direct-cublas-probe-v1"
+            );
+            assert_eq!(
+                p2048_cache_on.lm_head_mode.id(),
+                "hf-eager-qwen-p2048-cache-on-last-token-direct-cublas-probe-v1"
+            );
+            p2048_cache_on
+                .validate()
+                .expect("P2048 cache-on prefill profile must be atomic and canonical");
+            assert!(matches!(
+                p2048_cache_on.with_reference_attention().validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "p2048_cache_on_prefill_profile",
+                    ..
+                })
+            ));
+            assert!(matches!(
+                p2048_cache_on.with_fixed37_reductions().validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "projection_bias_mode",
                     ..
                 })
             ));

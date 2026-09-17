@@ -23,6 +23,9 @@ pub const HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
 pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE: u64 = 2_048;
 /// Exact full-sequence row count certified for the Qwen P2051 diagnostic.
 pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT: u64 = 2_051;
+/// Exact cache-building prefill row count certified for the Qwen P2048
+/// cache-on diagnostic.
+pub const HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT: u64 = 2_048;
 /// Exact FP32 epsilon bits required by the Qwen P2051 diagnostic model.
 pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS: u32 = 0x3586_37bd;
 /// Successful deterministic BF16 argmax row.
@@ -575,12 +578,14 @@ pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
     }
 }
 
-/// Executes the source-bound Hugging Face Qwen P2051 BF16 `RMSNorm` topology.
+/// Executes the source-bound Hugging Face Qwen BF16 `RMSNorm` topology.
 ///
 /// The additive entry point is intentionally closed over one cache-free
-/// diagnostic geometry: `row_count=2051`, `hidden_size=2048`, and
-/// `epsilon=1e-6`. It reproduces the pinned PyTorch F32 `pow(2).mean`
-/// reduction order and never falls back to generic RMSNorm.
+/// diagnostic geometry: `row_count=2051` (cache-free) or `row_count=2048`
+/// (cache-on prefill), `hidden_size=2048`, and `epsilon=1e-6`. It reproduces
+/// the pinned PyTorch F32 `pow(2).mean` reduction order and never falls back
+/// to generic RMSNorm. The ABI symbol remains P2051 while the accepted
+/// descriptor set is deliberately explicit and finite.
 ///
 /// # Errors
 ///
@@ -1881,7 +1886,11 @@ fn validate_hugging_face_qwen_p2051_rms_norm_contract(
     epsilon: f32,
 ) -> CudaResult<()> {
     if dtype == CudaDType::BF16
-        && row_count == HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT
+        && matches!(
+            row_count,
+            HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT
+                | HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT
+        )
         && hidden_size == HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE
         && epsilon.to_bits() == HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS
     {
@@ -1893,7 +1902,7 @@ fn validate_hugging_face_qwen_p2051_rms_norm_contract(
         CudaErrorStage::Validation,
         0,
         operation,
-        "the reviewed path requires BF16, row_count=2051, hidden_size=2048, and epsilon=1e-6 exactly",
+        "the Qwen diagnostic path requires BF16, row_count=2051 or 2048, hidden_size=2048, and epsilon=1e-6 exactly",
     ))
 }
 
@@ -1915,7 +1924,8 @@ mod tests {
 
     use super::{
         BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
-        Bf16ArgmaxResult, CudaDType, HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS,
+        Bf16ArgmaxResult, CudaDType, HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT,
+        HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS,
         HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
         checked_product3, required_matrix_bytes, validate_bf16_argmax_descriptor,
         validate_fixed37_axis, validate_hugging_face_qwen_p2051_rms_norm_contract, validate_span,
@@ -1941,7 +1951,7 @@ mod tests {
     }
 
     #[test]
-    fn qwen_p2051_rms_norm_profile_is_closed_over_its_exact_geometry() {
+    fn qwen_rms_norm_profile_is_closed_over_its_source_bound_geometries() {
         let epsilon = f32::from_bits(HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS);
         validate_hugging_face_qwen_p2051_rms_norm_contract(
             "test qwen P2051 RMSNorm",
@@ -1951,6 +1961,14 @@ mod tests {
             epsilon,
         )
         .expect("exact Qwen P2051 geometry must be accepted");
+        validate_hugging_face_qwen_p2051_rms_norm_contract(
+            "test qwen P2048 cache-on RMSNorm",
+            CudaDType::BF16,
+            HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT,
+            HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+            epsilon,
+        )
+        .expect("exact Qwen P2048 cache-on geometry must be accepted");
         for (dtype, rows, hidden, candidate_epsilon) in [
             (
                 CudaDType::F32,
@@ -1960,7 +1978,7 @@ mod tests {
             ),
             (
                 CudaDType::BF16,
-                HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT - 1,
+                HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT - 1,
                 HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
                 epsilon,
             ),

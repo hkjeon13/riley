@@ -36,6 +36,8 @@ const ONLINE_IMPLEMENTATION_ID: &str = "riley.cuda.online-gqa-prefill.bf16.d64";
 const HF_EAGER_IMPLEMENTATION_ID: &str = "riley.cuda.hf-eager-cublaslt-gqa-prefill.bf16";
 const HF_EAGER_QWEN_P2051_PROBE_IMPLEMENTATION_ID: &str =
     "riley.cuda.hf-eager-cublaslt-qwen-p2051-probe.bf16";
+const HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_IMPLEMENTATION_ID: &str =
+    "riley.cuda.hf-eager-cublaslt-qwen-p2048-cache-on-probe.bf16";
 #[cfg(feature = "cuda")]
 const HF_EAGER_CUBLASLT_WORKSPACE_CAP_BYTES: u64 = 8_519_680;
 #[cfg(feature = "cuda")]
@@ -49,6 +51,7 @@ const HF_EAGER_QWEN_P2051_PROBE_QUERY_HEAD_COUNT: u64 = 16;
 const HF_EAGER_QWEN_P2051_PROBE_KEY_VALUE_HEAD_COUNT: u64 = 2;
 const HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE: u64 = 128;
 const HF_EAGER_QWEN_P2051_PROBE_SEQUENCE: u64 = 2051;
+const HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE: u64 = 2048;
 const FIXED37_MATERIALIZED_IMPLEMENTATION_ID: &str =
     "riley.cuda.fixed37.materialized-gqa-prefill.bf16";
 const FIXED37_TWO_PASS_IMPLEMENTATION_ID: &str =
@@ -183,6 +186,11 @@ pub enum AttentionPreference {
     /// is never selected by the serving policy. Its numerical contract must
     /// be established by the Qwen boundary receipt before any promotion.
     HuggingFaceEagerQwenP2051Probe,
+    /// Require the P2048 Qwen cache-on prefill diagnostic candidate.
+    ///
+    /// This is an explicit quality-only backend for the cache-building call;
+    /// it is never selected by normal serving policy or by decode dispatch.
+    HuggingFaceEagerQwenP2048CacheOnProbe,
 }
 
 /// Native implementation fixed into a prepared prefill plan.
@@ -197,6 +205,8 @@ pub enum AttentionBackend {
     HuggingFaceEager,
     /// Opt-in Qwen P2051 cuBLASLt diagnostic candidate.
     HuggingFaceEagerQwenP2051Probe,
+    /// Opt-in Qwen P2048 cache-on-prefill cuBLASLt diagnostic candidate.
+    HuggingFaceEagerQwenP2048CacheOnProbe,
     /// Materialized fixed37 QK, softmax, and AV with canonical score staging.
     Fixed37Materialized,
     /// No-HBM two-score-pass fixed37 attention for `D=64`, `S<=8192`.
@@ -213,6 +223,8 @@ pub enum AttentionSelectionReason {
     ExplicitHuggingFaceEager,
     /// The caller explicitly required the Qwen P2051 diagnostic candidate.
     ExplicitHuggingFaceEagerQwenP2051Probe,
+    /// The caller explicitly required the Qwen P2048 cache-on prefill probe.
+    ExplicitHuggingFaceEagerQwenP2048CacheOnProbe,
     /// The optimized backend was available and satisfied every capability.
     OptimizedCapabilityMatch,
     /// The optimized backend was not present in the supplied availability set.
@@ -1004,6 +1016,23 @@ impl PreparedPrefillAttention {
                     AttentionReductionProfile::CanonicalV1,
                 )
             }
+            AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe => {
+                if !availability.hf_eager {
+                    return Err(not_supported(
+                        "select_prefill_attention",
+                        "the explicit Qwen P2048 cache-on prefill diagnostic candidate is unavailable",
+                    ));
+                }
+                require_hf_eager_qwen_p2048_cache_on_probe_support(request, compute_capability)?;
+                prepare_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe,
+                    AttentionSelectionReason::ExplicitHuggingFaceEagerQwenP2048CacheOnProbe,
+                    AttentionReductionProfile::CanonicalV1,
+                )
+            }
         }
     }
 
@@ -1091,7 +1120,8 @@ impl PreparedPrefillAttention {
                 )
             }
             AttentionPreference::HuggingFaceEager
-            | AttentionPreference::HuggingFaceEagerQwenP2051Probe => Err(not_supported(
+            | AttentionPreference::HuggingFaceEagerQwenP2051Probe
+            | AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe => Err(not_supported(
                 "select_prefill_attention",
                 "HF-eager cuBLASLt attention belongs to canonical-v1; fixed37 cross-profile fallback is forbidden",
             )),
@@ -1278,7 +1308,8 @@ impl PreparedPrefillAttention {
                 &mut stream.native,
             ),
             AttentionBackend::HuggingFaceEager
-            | AttentionBackend::HuggingFaceEagerQwenP2051Probe => {
+            | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+            | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe => {
                 let workspace = params.workspace.as_mut().ok_or_else(|| {
                     CudaError::invalid_argument(OPERATION, "HF-eager workspace is missing")
                 })?;
@@ -1780,6 +1811,33 @@ const HF_EAGER_QWEN_P2051_PROBE_CAPABILITY: AttentionCapability = AttentionCapab
     maximum_reduction_elements: Some(HF_EAGER_QWEN_P2051_PROBE_SEQUENCE),
 };
 
+const HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_CAPABILITY: AttentionCapability = AttentionCapability {
+    implementation_id: HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_IMPLEMENTATION_ID,
+    implementation_version: "0",
+    native_dependency: NATIVE_DEPENDENCY,
+    mode: AttentionMode::Prefill,
+    layout: AttentionLayout::DenseBshd,
+    input_dtype: CudaDType::BF16,
+    accumulator_dtype: CudaDType::F32,
+    output_dtype: CudaDType::BF16,
+    minimum_hardware_compute_capability: MINIMUM_HARDWARE_COMPUTE_CAPABILITY,
+    compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
+    head_size: Some(HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE),
+    causal: true,
+    causal_local: false,
+    minimum_local_window_size: None,
+    variable_sequence: false,
+    non_contiguous: false,
+    cuda_graph_capture: false,
+    online_reduction: false,
+    partial_state_merge: false,
+    score_materialization: AttentionScoreMaterialization::FullStagedBf16,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: Some(HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE),
+};
+
 const FIXED37_MATERIALIZED_CAPABILITY: AttentionCapability = AttentionCapability {
     implementation_id: FIXED37_MATERIALIZED_IMPLEMENTATION_ID,
     implementation_version: IMPLEMENTATION_VERSION,
@@ -1920,6 +1978,32 @@ fn validate_hf_eager_qwen_p2051_probe_provenance(
     Ok(())
 }
 
+#[cfg(feature = "cuda")]
+fn validate_hf_eager_qwen_p2048_cache_on_probe_provenance(
+    info: &ffi::NativeHfPrefillAttentionPlanInfo,
+) -> CudaResult<()> {
+    let actual = HfEagerPlanProvenance::from(info);
+    if actual.token_count != HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE
+        || actual.compute_capability != (8, 9)
+        || actual.runtime_version != REVIEWED_RUNTIME_VERSION
+        || actual.cublaslt_version != REVIEWED_CUBLASLT_VERSION
+        || actual.qk.split_k != 1
+        || actual.qk.reduction_scheme != 0
+        || actual.qk.workspace_bytes != 0
+        || actual.av.split_k != 1
+        || actual.av.reduction_scheme != 0
+        || actual.av.workspace_bytes != 0
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            format!(
+                "Qwen P2048 cache-on prefill probe requires cc89/runtime-{REVIEWED_RUNTIME_VERSION}/cuBLASLt-{REVIEWED_CUBLASLT_VERSION} with zero-workspace no-split QK/AV: {actual:?}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 fn prepare_selection(
     context: &CudaContext,
@@ -1937,6 +2021,9 @@ fn prepare_selection(
         },
         AttentionBackend::HuggingFaceEager => HF_EAGER_CAPABILITY,
         AttentionBackend::HuggingFaceEagerQwenP2051Probe => HF_EAGER_QWEN_P2051_PROBE_CAPABILITY,
+        AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe => {
+            HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_CAPABILITY
+        }
         AttentionBackend::Fixed37Materialized => FIXED37_MATERIALIZED_CAPABILITY,
         AttentionBackend::Fixed37TwoPass => FIXED37_TWO_PASS_CAPABILITY,
     };
@@ -1944,7 +2031,9 @@ fn prepare_selection(
         AttentionBackend::MaterializedReference | AttentionBackend::Fixed37Materialized => {
             reference_workspace_bytes(request)?
         }
-        AttentionBackend::HuggingFaceEager | AttentionBackend::HuggingFaceEagerQwenP2051Probe => {
+        AttentionBackend::HuggingFaceEager
+        | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe => {
             hf_eager_workspace_bytes(request)?
         }
         AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => 0,
@@ -1953,6 +2042,7 @@ fn prepare_selection(
         AttentionBackend::MaterializedReference
         | AttentionBackend::HuggingFaceEager
         | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
         | AttentionBackend::Fixed37Materialized => reference_workspace_bytes(request)?,
         AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => 0,
     };
@@ -1960,6 +2050,7 @@ fn prepare_selection(
         AttentionBackend::MaterializedReference
         | AttentionBackend::HuggingFaceEager
         | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
         | AttentionBackend::Fixed37Materialized => {
             request.batch_size.checked_mul(score_bytes).ok_or_else(|| {
                 CudaError::out_of_range(
@@ -1974,7 +2065,8 @@ fn prepare_selection(
         AttentionBackend::MaterializedReference
         | AttentionBackend::Online
         | AttentionBackend::HuggingFaceEager
-        | AttentionBackend::HuggingFaceEagerQwenP2051Probe => 0,
+        | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe => 0,
         AttentionBackend::Fixed37Materialized => {
             fixed37_reduction_shared_bytes(request.head_size.max(request.sequence_length))?
         }
@@ -1982,7 +2074,9 @@ fn prepare_selection(
     };
     let layout_copy_bytes = if matches!(
         backend,
-        AttentionBackend::HuggingFaceEager | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        AttentionBackend::HuggingFaceEager
+            | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+            | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
     ) {
         hf_eager_repeated_bytes(request)?
             .checked_mul(2)
@@ -1998,7 +2092,9 @@ fn prepare_selection(
     #[cfg(feature = "cuda")]
     let hf_eager_plan = if matches!(
         backend,
-        AttentionBackend::HuggingFaceEager | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        AttentionBackend::HuggingFaceEager
+            | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+            | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
     ) {
         let plan = ffi::HfPrefillAttentionPlanHandle::create(
             &context.inner.native,
@@ -2011,10 +2107,17 @@ fn prepare_selection(
             HF_EAGER_CUBLASLT_WORKSPACE_CAP_BYTES,
         )?;
         let info = plan.info()?;
-        if backend == AttentionBackend::HuggingFaceEager {
-            validate_hf_eager_reviewed_provenance(HfEagerPlanProvenance::from(&info))?;
-        } else {
-            validate_hf_eager_qwen_p2051_probe_provenance(&info)?;
+        match backend {
+            AttentionBackend::HuggingFaceEager => {
+                validate_hf_eager_reviewed_provenance(HfEagerPlanProvenance::from(&info))?;
+            }
+            AttentionBackend::HuggingFaceEagerQwenP2051Probe => {
+                validate_hf_eager_qwen_p2051_probe_provenance(&info)?;
+            }
+            AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe => {
+                validate_hf_eager_qwen_p2048_cache_on_probe_provenance(&info)?;
+            }
+            _ => unreachable!("only HF-eager backends create an HF plan"),
         }
         if info.backend != HF_EAGER_BACKEND_ID
             || info.deterministic != 1
@@ -2275,6 +2378,45 @@ fn require_hf_eager_qwen_p2051_probe_support(
     Ok(())
 }
 
+fn require_hf_eager_qwen_p2048_cache_on_probe_support(
+    request: PrefillAttentionRequest,
+    compute_capability: (u32, u32),
+) -> CudaResult<()> {
+    if compute_capability != (8, 9)
+        || !HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_CAPABILITY
+            .supports_compute_capability(compute_capability)
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            format!(
+                "the Qwen P2048 cache-on HF-eager diagnostic candidate requires compute capability 8.9; got {}.{} with CUDA targets {CUDA_COMPILED_ARCHITECTURES}",
+                compute_capability.0, compute_capability.1
+            ),
+        ));
+    }
+    if request.batch_size != 1
+        || request.sequence_length != HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE
+        || request.query_head_count != HF_EAGER_QWEN_P2051_PROBE_QUERY_HEAD_COUNT
+        || request.key_value_head_count != HF_EAGER_QWEN_P2051_PROBE_KEY_VALUE_HEAD_COUNT
+        || request.head_size != HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "the Qwen P2048 cache-on HF-eager diagnostic candidate requires B=1, S=2048, QH=16, KVH=2, and D=128",
+        ));
+    }
+    if !matches!(request.mask, AttentionMask::Causal)
+        || request.graph_capture
+        || request.key_partition_count != 1
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "the Qwen P2048 cache-on HF-eager diagnostic candidate requires full causal masking, no graph capture, and one key partition",
+        ));
+    }
+    Ok(())
+}
+
 fn require_fixed37_materialized_support(
     request: PrefillAttentionRequest,
     compute_capability: (u32, u32),
@@ -2364,6 +2506,7 @@ fn validate_execute_params(
         AttentionBackend::MaterializedReference
         | AttentionBackend::HuggingFaceEager
         | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+        | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
         | AttentionBackend::Fixed37Materialized => {
             let workspace = params.workspace.as_ref().ok_or_else(|| {
                 CudaError::invalid_argument(
@@ -2388,6 +2531,7 @@ fn validate_execute_params(
                 prepared.backend,
                 AttentionBackend::HuggingFaceEager
                     | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+                    | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
             ) && (params.query.byte_len() != query_bytes
                 || params.key.byte_len() != key_value_bytes
                 || params.value.byte_len() != key_value_bytes
@@ -2403,6 +2547,7 @@ fn validate_execute_params(
                 prepared.backend,
                 AttentionBackend::HuggingFaceEager
                     | AttentionBackend::HuggingFaceEagerQwenP2051Probe
+                    | AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
             ) {
                 validate_hf_eager_span_layout(params, workspace)?;
             }
@@ -2977,6 +3122,69 @@ mod tests {
             error
                 .message()
                 .contains("B=1, S=2051, QH=16, KVH=2, and D=128")
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn qwen_p2048_cache_on_probe_is_explicit_and_geometry_bound() {
+        let context = test_context(7);
+        let request = PrefillAttentionRequest::new(
+            1,
+            HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE,
+            HF_EAGER_QWEN_P2051_PROBE_QUERY_HEAD_COUNT,
+            HF_EAGER_QWEN_P2051_PROBE_KEY_VALUE_HEAD_COUNT,
+            HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE,
+            0.088_388_346,
+            AttentionMask::Causal,
+        );
+        let prepared = PreparedPrefillAttention::select_for_compute_capability(
+            &context,
+            (8, 9),
+            request,
+            AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe,
+            AttentionBackendAvailability::new(true, true).with_hf_eager(true),
+        )
+        .expect("the exact opt-in Qwen P2048 cache-on geometry must select");
+
+        assert_eq!(
+            prepared.backend(),
+            AttentionBackend::HuggingFaceEagerQwenP2048CacheOnProbe
+        );
+        assert_eq!(
+            prepared.selection_trace().reason(),
+            AttentionSelectionReason::ExplicitHuggingFaceEagerQwenP2048CacheOnProbe
+        );
+        assert_eq!(
+            prepared.selection_trace().implementation_id(),
+            HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_IMPLEMENTATION_ID
+        );
+        assert_eq!(prepared.capability().head_size(), Some(128));
+        assert!(!prepared.capability().supports_variable_sequence());
+        assert!(!prepared.capability().supports_cuda_graph_capture());
+
+        let wrong_sequence = PrefillAttentionRequest::new(
+            1,
+            HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_SEQUENCE - 1,
+            HF_EAGER_QWEN_P2051_PROBE_QUERY_HEAD_COUNT,
+            HF_EAGER_QWEN_P2051_PROBE_KEY_VALUE_HEAD_COUNT,
+            HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE,
+            0.088_388_346,
+            AttentionMask::Causal,
+        );
+        let error = PreparedPrefillAttention::select_for_compute_capability(
+            &context,
+            (8, 9),
+            wrong_sequence,
+            AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe,
+            AttentionBackendAvailability::new(true, true).with_hf_eager(true),
+        )
+        .expect_err("the cache-on probe must reject every non-P2048 geometry");
+        assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+        assert!(
+            error
+                .message()
+                .contains("B=1, S=2048, QH=16, KVH=2, and D=128")
         );
     }
 

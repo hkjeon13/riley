@@ -41,6 +41,10 @@ constexpr uint64_t kQwenP2051ProbeQueryHeads = 16;
 constexpr uint64_t kQwenP2051ProbeKeyValueHeads = 2;
 constexpr uint64_t kQwenP2051ProbeHeadSize = 128;
 constexpr uint64_t kQwenP2051ProbeSequence = 2051;
+// P2048 is intentionally a separate cache-building diagnostic. It shares
+// Qwen's head geometry with the P2051 cache-free receipt but never aliases it
+// in a serving selector or in the last-row trace ABI below.
+constexpr uint64_t kQwenP2048CacheOnProbeSequence = 2048;
 
 using riley_cuda_internal::CurrentContext;
 using riley_cuda_internal::clear_error;
@@ -112,6 +116,14 @@ bool is_qwen_p2051_probe_geometry(
          config.key_value_head_count == kQwenP2051ProbeKeyValueHeads &&
          config.head_size == kQwenP2051ProbeHeadSize &&
          config.token_count == kQwenP2051ProbeSequence;
+}
+
+bool is_qwen_p2048_cache_on_probe_geometry(
+    const RileyCudaHfPrefillAttentionConfig& config) noexcept {
+  return config.query_head_count == kQwenP2051ProbeQueryHeads &&
+         config.key_value_head_count == kQwenP2051ProbeKeyValueHeads &&
+         config.head_size == kQwenP2051ProbeHeadSize &&
+         config.token_count == kQwenP2048CacheOnProbeSequence;
 }
 
 bool checked_add(uint64_t left, uint64_t right, uint64_t* output) noexcept {
@@ -249,11 +261,12 @@ RileyCudaStatus validate_config(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "key_value_head_count must divide query_head_count");
   }
-  if (!is_reviewed_geometry(*config) && !is_qwen_p2051_probe_geometry(*config)) {
+  if (!is_reviewed_geometry(*config) && !is_qwen_p2051_probe_geometry(*config) &&
+      !is_qwen_p2048_cache_on_probe_geometry(*config)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-        "the reviewed HF backend requires QH=9, KVH=3, D=64, S<=8192, or the explicit Qwen P2051 diagnostic geometry");
+        "the reviewed HF backend requires QH=9, KVH=3, D=64, S<=8192, or an explicit Qwen P2051/P2048 diagnostic geometry");
   }
   if (config->query_head_count >
           static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
@@ -742,7 +755,8 @@ RileyCudaStatus prepare_plan(
   plan->info.query_head_count = plan->config.query_head_count;
   plan->info.key_value_head_count = plan->config.key_value_head_count;
   plan->info.head_size = plan->config.head_size;
-  if (is_qwen_p2051_probe_geometry(plan->config)) {
+  if (is_qwen_p2051_probe_geometry(plan->config) ||
+      is_qwen_p2048_cache_on_probe_geometry(plan->config)) {
     return RILEY_CUDA_STATUS_SUCCESS;
   }
   return validate_reviewed_plan_provenance(plan, error);

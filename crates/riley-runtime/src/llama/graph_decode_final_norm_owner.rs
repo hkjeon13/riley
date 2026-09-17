@@ -198,6 +198,12 @@ mod gpu {
                 crate::llama::forward::LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
                     return Err(rejected("P2051 RMSNorm probe is not graph-qualified"));
                 }
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                crate::llama::forward::LlamaRmsNormProfile::HuggingFaceCudaQwenP2048CacheOnProbe => {
+                    return Err(rejected(
+                        "P2048 cache-on RMSNorm probe is not graph-qualified",
+                    ));
+                }
             };
             let mut probe = BorrowedNormGraph::prepare_with_profile(
                 BorrowedNormResources {
