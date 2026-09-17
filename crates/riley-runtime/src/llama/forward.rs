@@ -6,6 +6,8 @@ use std::error;
 use std::fmt;
 use std::mem;
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+use riley_cuda::CudaGemmReductionPolicy;
 use riley_cuda::{
     AttentionBackend, AttentionBackendAvailability, AttentionMask, AttentionPreference,
     AttentionSelectionTrace, BiasGemmParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
@@ -1468,6 +1470,15 @@ pub enum LlamaProjectionBiasMode {
     StrictStagedV1,
     /// Use the qualified cuBLASLt BIAS epilogue for Q/K/V projections only.
     CublasLtBiasEpilogueExperimentalV1,
+    /// Use the source-bound Hugging Face-compatible cuBLASLt BIAS profile.
+    ///
+    /// This diagnostic-only variant preserves the split-K reduction topology
+    /// selected by the pinned P2051 `torch.addmm` discriminator. It is hidden
+    /// behind the direct-cuBLAS probe feature and is deliberately unavailable
+    /// to the ordinary serving selector until full-forward qualification
+    /// completes.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HfCompatibleBiasEpilogueProbeV1,
 }
 
 impl LlamaProjectionBiasMode {
@@ -1477,11 +1488,27 @@ impl LlamaProjectionBiasMode {
         match self {
             Self::StrictStagedV1 => "strict-staged-v1",
             Self::CublasLtBiasEpilogueExperimentalV1 => "cublaslt-bias-epilogue-experimental-v1",
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            Self::HfCompatibleBiasEpilogueProbeV1 => "hf-compatible-bias-epilogue-probe-v1",
         }
     }
 
     const fn requires_qkv_bias_epilogue(self) -> bool {
-        matches!(self, Self::CublasLtBiasEpilogueExperimentalV1)
+        matches!(self, Self::CublasLtBiasEpilogueExperimentalV1) || {
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            {
+                matches!(self, Self::HfCompatibleBiasEpilogueProbeV1)
+            }
+            #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+            {
+                false
+            }
+        }
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    const fn is_hf_compatible_bias_epilogue_probe(self) -> bool {
+        matches!(self, Self::HfCompatibleBiasEpilogueProbeV1)
     }
 }
 
@@ -1586,6 +1613,18 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_cublaslt_bias_epilogue_projection_bias(mut self) -> Self {
         self.projection_bias_mode = LlamaProjectionBiasMode::CublasLtBiasEpilogueExperimentalV1;
+        self
+    }
+
+    /// Selects the P2051-qualified Hugging Face-compatible cuBLASLt Q/K/V
+    /// BIAS profile for an isolated full-forward diagnostic.
+    ///
+    /// This API is feature-gated so ordinary CUDA builds and serving selectors
+    /// cannot accidentally select the still-unqualified profile.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_compatible_bias_epilogue_projection_probe(mut self) -> Self {
+        self.projection_bias_mode = LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1;
         self
     }
 
@@ -3740,12 +3779,46 @@ pub(super) fn prepare_gemms(
             .map_err(|source| LlamaForwardError::cuda(query_site, source))?;
         let key_value_config = CudaGemmConfig::new(sequence, key_value, hidden, workspace_cap)
             .map_err(|source| LlamaForwardError::cuda(key_site, source))?;
-        let query = context
-            .prepare_bias_epilogue_gemm(query_config, query_bias)
-            .map_err(|source| LlamaForwardError::cuda(query_site, source))?;
-        let key_value = context
-            .prepare_bias_epilogue_gemm(key_value_config, key_bias)
-            .map_err(|source| LlamaForwardError::cuda(key_site, source))?;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let hf_compatible_probe = projection_bias_mode.is_hf_compatible_bias_epilogue_probe();
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let hf_compatible_probe = false;
+        let query = if hf_compatible_probe {
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            {
+                context.prepare_hf_compatible_bias_epilogue_probe(
+                    query_config.with_reduction_policy(
+                        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+                    ),
+                    query_bias,
+                )
+            }
+            #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+            {
+                unreachable!("feature-gated HF-compatible probe cannot be selected")
+            }
+        } else {
+            context.prepare_bias_epilogue_gemm(query_config, query_bias)
+        }
+        .map_err(|source| LlamaForwardError::cuda(query_site, source))?;
+        let key_value = if hf_compatible_probe {
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            {
+                context.prepare_hf_compatible_bias_epilogue_probe(
+                    key_value_config.with_reduction_policy(
+                        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+                    ),
+                    key_bias,
+                )
+            }
+            #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+            {
+                unreachable!("feature-gated HF-compatible probe cannot be selected")
+            }
+        } else {
+            context.prepare_bias_epilogue_gemm(key_value_config, key_bias)
+        }
+        .map_err(|source| LlamaForwardError::cuda(key_site, source))?;
         Some(ProjectionBiasEpilogueGemmPlans { query, key_value })
     } else {
         None
@@ -3975,6 +4048,28 @@ mod tests {
                 .projection_bias_mode(),
             LlamaProjectionBiasMode::StrictStagedV1
         );
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        {
+            let probe = defaults.with_hf_compatible_bias_epilogue_projection_probe();
+            assert_eq!(
+                probe.projection_bias_mode(),
+                LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+            );
+            assert_eq!(
+                probe.projection_bias_mode().id(),
+                "hf-compatible-bias-epilogue-probe-v1"
+            );
+            probe
+                .validate()
+                .expect("HF-compatible probe accepts canonical reductions");
+            assert!(matches!(
+                probe.with_fixed37_reductions().validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "projection_bias_mode",
+                    ..
+                })
+            ));
+        }
     }
 
     #[test]
