@@ -66,6 +66,7 @@ pub enum LlamaForwardResource {
     OutputProjectionDirectCublasGemm,
     MlpIntermediateDirectCublasGemm,
     MlpDownDirectCublasGemm,
+    LmHeadLastTokenDirectCublasGemm,
     IntermediateGemm,
     DownGemm,
     LmHeadGemm,
@@ -941,6 +942,7 @@ impl PreparedLlamaForward {
             projection_bias_mode: _,
             output_projection_mode: _,
             mlp_projection_mode: _,
+            lm_head_mode: _,
             rms_norm_profile: _,
             rope_table_profile: _,
             gemm_reduction_policies: _,
@@ -964,6 +966,8 @@ impl PreparedLlamaForward {
             output_projection_direct_cublas,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             mlp_projection_direct_cublas,
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            lm_head_last_token_direct_cublas,
         } = gemms;
         let ForwardBuffers {
             token_ids,
@@ -1038,6 +1042,14 @@ impl PreparedLlamaForward {
                 &mut first,
                 LlamaForwardResource::MlpDownDirectCublasGemm,
                 down.close(),
+            );
+        }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(plan) = lm_head_last_token_direct_cublas {
+            record_close(
+                &mut first,
+                LlamaForwardResource::LmHeadLastTokenDirectCublasGemm,
+                plan.close(),
             );
         }
         record_close(
@@ -1226,6 +1238,23 @@ pub(super) fn execute_direct_cublas_gemm_probe<S: CudaExecutionStream + ?Sized>(
     let config = plan.config();
     let input = span(input, CudaDType::BF16, config.input_bytes(), site)?;
     let output = span_mut(output, CudaDType::BF16, config.output_bytes(), site)?;
+    execute_direct_cublas_gemm_probe_spans(plan, input, weight, output, stream, site)
+}
+
+/// Executes the isolated direct-cuBLAS probe over validated BF16 subspans.
+///
+/// The P2051 final-logits qualifier uses this form to reproduce Hugging Face's
+/// `logits_to_keep=1` last-row linear invocation without exposing partial
+/// output through an ordinary serving path.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub(super) fn execute_direct_cublas_gemm_probe_spans<S: CudaExecutionStream + ?Sized>(
+    plan: &mut CudaPreparedCublasGemmProbe,
+    input: CudaBufferSpan<'_>,
+    weight: CudaBufferSpan<'_>,
+    output: CudaBufferSpanMut<'_>,
+    stream: &mut S,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
     let mut params = CublasGemmProbeParams {
         input,
         weight,
@@ -1816,6 +1845,7 @@ impl LlamaForwardResource {
             Self::OutputProjectionDirectCublasGemm => "output_projection_direct_cublas_gemm",
             Self::MlpIntermediateDirectCublasGemm => "mlp_intermediate_direct_cublas_gemm",
             Self::MlpDownDirectCublasGemm => "mlp_down_direct_cublas_gemm",
+            Self::LmHeadLastTokenDirectCublasGemm => "lm_head_last_token_direct_cublas_gemm",
             Self::IntermediateGemm => "intermediate_gemm",
             Self::DownGemm => "down_gemm",
             Self::LmHeadGemm => "lm_head_gemm",
@@ -2162,6 +2192,37 @@ impl LlamaMlpProjectionMode {
     }
 }
 
+/// Cold-selected implementation for the final vocabulary projection.
+///
+/// The diagnostic alternate is deliberately distinct from decoder output
+/// projections: Hugging Face's Qwen forward applies the LM head only to the
+/// final row when `logits_to_keep=1`, while the ordinary Riley owner produces
+/// the full fixed-sequence logits matrix.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum LlamaLmHeadMode {
+    #[default]
+    StrictFullSequenceGemmV1,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HfEagerQwenP2051LastTokenDirectCublasProbeV1,
+}
+
+impl LlamaLmHeadMode {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::StrictFullSequenceGemmV1 => "strict-full-sequence-gemm-v1",
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            Self::HfEagerQwenP2051LastTokenDirectCublasProbeV1 => {
+                "hf-eager-qwen-p2051-last-token-direct-cublas-probe-v1"
+            }
+        }
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    const fn is_hf_eager_qwen_p2051_last_token_direct_cublas_probe(self) -> bool {
+        matches!(self, Self::HfEagerQwenP2051LastTokenDirectCublasProbeV1)
+    }
+}
+
 /// Cold-path limits for one fixed-sequence forward owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[allow(clippy::struct_field_names)]
@@ -2175,6 +2236,7 @@ pub struct PreparedLlamaForwardConfig {
     projection_bias_mode: LlamaProjectionBiasMode,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
+    lm_head_mode: LlamaLmHeadMode,
     rope_table_selection: LlamaRopeTableSelection,
     rms_norm_selection: LlamaRmsNormSelection,
 }
@@ -2197,6 +2259,7 @@ impl PreparedLlamaForwardConfig {
             projection_bias_mode: LlamaProjectionBiasMode::StrictStagedV1,
             output_projection_mode: LlamaOutputProjectionMode::StrictHiddenGemmV1,
             mlp_projection_mode: LlamaMlpProjectionMode::StrictStagedV1,
+            lm_head_mode: LlamaLmHeadMode::StrictFullSequenceGemmV1,
             rope_table_selection: LlamaRopeTableSelection::Automatic,
             rms_norm_selection: LlamaRmsNormSelection::Automatic,
         }
@@ -2320,6 +2383,18 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe(mut self) -> Self {
         self.mlp_projection_mode = LlamaMlpProjectionMode::HfEagerQwenP2051DirectCublasProbeV1;
+        self
+    }
+
+    /// Selects the last-token-only direct-cuBLAS LM head used by the P2051
+    /// cache-free eager-HF qualifier. The mode mirrors Hugging Face's
+    /// `logits_to_keep=1` shape and is diagnostic-only: it cannot be reached
+    /// through an ordinary serving selector and does not make full logits
+    /// available for download.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_eager_qwen_p2051_last_token_direct_cublas_lm_head_probe(mut self) -> Self {
+        self.lm_head_mode = LlamaLmHeadMode::HfEagerQwenP2051LastTokenDirectCublasProbeV1;
         self
     }
 
@@ -2470,6 +2545,27 @@ impl PreparedLlamaForwardConfig {
                 reason: "the Qwen P2051 RMSNorm probe requires the paired P2051 Q/K/V, attention, O-projection, MLP, and canonical reduction probes",
             });
         }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if self
+            .lm_head_mode
+            .is_hf_eager_qwen_p2051_last_token_direct_cublas_probe()
+            && (self.rms_norm_selection != LlamaRmsNormSelection::HuggingFaceCudaQwenP2051ProbeV1
+                || self.rope_table_selection
+                    != LlamaRopeTableSelection::HuggingFaceCudaQwenP2051ProbeV1
+                || self.mlp_projection_mode
+                    != LlamaMlpProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.output_projection_mode
+                    != LlamaOutputProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.projection_bias_mode
+                    != LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+                || self.attention_preference != AttentionPreference::HuggingFaceEagerQwenP2051Probe
+                || self.reduction_profile != LlamaReductionProfile::CanonicalV1)
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "lm_head_mode",
+                reason: "the last-token direct-cuBLAS LM-head probe requires the paired P2051 Q/K/V, attention, O-projection, MLP, RoPE-table, RMSNorm, and canonical reduction probes",
+            });
+        }
         Ok(())
     }
 }
@@ -2583,6 +2679,8 @@ pub(super) struct GemmPlans {
     output_projection_direct_cublas: Option<CudaPreparedCublasGemmProbe>,
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     mlp_projection_direct_cublas: Option<MlpProjectionDirectCublasGemmPlans>,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    lm_head_last_token_direct_cublas: Option<CudaPreparedCublasGemmProbe>,
 }
 
 impl GemmPlans {
@@ -2608,6 +2706,10 @@ impl GemmPlans {
                             .is_some_and(|plans| {
                                 plans.intermediate.is_poisoned() || plans.down.is_poisoned()
                             })
+                        || self
+                            .lm_head_last_token_direct_cublas
+                            .as_ref()
+                            .is_some_and(CudaPreparedCublasGemmProbe::is_poisoned)
                 }
                 #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
                 {
@@ -2687,6 +2789,8 @@ impl GemmPlans {
             output_projection_direct_cublas,
             #[cfg(feature = "cuda-cublas-gemm-probe")]
             mlp_projection_direct_cublas,
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            lm_head_last_token_direct_cublas,
         } = self;
         let mut first = None;
         record_close(&mut first, LlamaForwardResource::HiddenGemm, hidden.close());
@@ -2742,6 +2846,14 @@ impl GemmPlans {
                 down.close(),
             );
         }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(plan) = lm_head_last_token_direct_cublas {
+            record_close(
+                &mut first,
+                LlamaForwardResource::LmHeadLastTokenDirectCublasGemm,
+                plan.close(),
+            );
+        }
         first.map_or(Ok(()), Err)
     }
 }
@@ -2778,6 +2890,7 @@ pub struct PreparedLlamaForward {
     projection_bias_mode: LlamaProjectionBiasMode,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
+    lm_head_mode: LlamaLmHeadMode,
     rms_norm_profile: LlamaRmsNormProfile,
     rope_table_profile: LlamaRopeTableProfile,
     gemm_reduction_policies: LlamaGemmReductionPolicies,
@@ -2801,6 +2914,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("projection_bias_mode", &self.projection_bias_mode)
             .field("output_projection_mode", &self.output_projection_mode)
             .field("mlp_projection_mode", &self.mlp_projection_mode)
+            .field("lm_head_mode", &self.lm_head_mode)
             .field("rms_norm_profile", &self.rms_norm_profile)
             .field("rope_table_profile", &self.rope_table_profile)
             .field("gemm_reduction_policies", &self.gemm_reduction_policies)
@@ -2894,6 +3008,7 @@ impl PreparedLlamaForward {
             config.projection_bias_mode,
             config.output_projection_mode,
             config.mlp_projection_mode,
+            config.lm_head_mode,
             None,
         )?;
         let gemm_workspace_bytes = gemms.maximum_workspace_bytes();
@@ -2965,6 +3080,7 @@ impl PreparedLlamaForward {
             projection_bias_mode: config.projection_bias_mode,
             output_projection_mode: config.output_projection_mode,
             mlp_projection_mode: config.mlp_projection_mode,
+            lm_head_mode: config.lm_head_mode,
             rms_norm_profile,
             rope_table_profile,
             gemm_reduction_policies,
@@ -3022,6 +3138,7 @@ impl PreparedLlamaForward {
             self.projection_bias_mode,
             self.output_projection_mode,
             self.mlp_projection_mode,
+            self.lm_head_mode,
             Some(&self.gemms),
         )?;
         Ok((plan, gemms))
@@ -3118,6 +3235,15 @@ impl PreparedLlamaForward {
     #[must_use]
     pub const fn mlp_projection_backend_id(&self) -> &'static str {
         self.mlp_projection_mode.id()
+    }
+
+    /// Stable cold-selection identifier for the final vocabulary projection.
+    ///
+    /// The P2051 last-token mode is diagnostic-only and intentionally does
+    /// not expose the uncomputed earlier logits rows.
+    #[must_use]
+    pub const fn lm_head_backend_id(&self) -> &'static str {
+        self.lm_head_mode.id()
     }
 
     pub(super) const fn rms_norm_profile(&self) -> LlamaRmsNormProfile {
@@ -3664,6 +3790,16 @@ impl PreparedLlamaForward {
         if !self.output_ready {
             return Err(LlamaForwardError::OutputNotReady);
         }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if self
+            .lm_head_mode
+            .is_hf_eager_qwen_p2051_last_token_direct_cublas_probe()
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "lm_head_mode",
+                reason: "the diagnostic last-token LM-head probe does not produce a full logits matrix",
+            });
+        }
         let expected =
             usize::try_from(self.plan.workspace_spec().logits_bytes()).map_err(|_| {
                 LlamaForwardError::ArithmeticOverflow {
@@ -3782,11 +3918,7 @@ impl PreparedLlamaForward {
             dimensions.hidden_size(),
             LlamaForwardResource::HiddenCurrent,
         )?;
-        let last_token_hidden_offset = if LAST_TOKEN_TRACE || LAYER_STAGE_TRACE {
-            last_token_hidden_row_offset(plan)?
-        } else {
-            0
-        };
+        let last_token_hidden_offset = last_token_hidden_row_offset(plan)?;
         let key_value_width = to_u64(dimensions.key_value_width(), LlamaForwardResource::KeyRaw)?;
         let last_token_key_value_offset = if LAYER_STAGE_TRACE {
             last_token_row_offset(plan, dimensions.key_value_width())?
@@ -5009,6 +5141,52 @@ impl PreparedLlamaForward {
         }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
         let lm_head_weight = weight_span(weights, plan.lm_head_weight(), lm_head_site)?;
+        let last_logits_bytes = trace_byte_len(plan, LlamaTracePoint::LastLogits)?;
+        let last_logits_offset = plan
+            .workspace_spec()
+            .logits_bytes()
+            .checked_sub(last_logits_bytes)
+            .ok_or(LlamaForwardError::ArithmeticOverflow {
+                resource: LlamaForwardResource::Logits,
+            })?;
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        {
+            if let Some(lm_head_plan) = gemms.lm_head_last_token_direct_cublas.as_mut() {
+                let input = CudaBufferSpan::new(
+                    &buffers.hidden_norm,
+                    CudaDType::BF16,
+                    last_token_hidden_offset,
+                    last_token_hidden_row_byte_len(plan)?,
+                )
+                .map_err(|source| LlamaForwardError::cuda(lm_head_site, source))?;
+                let output = CudaBufferSpanMut::new(
+                    &mut buffers.logits,
+                    CudaDType::BF16,
+                    last_logits_offset,
+                    last_logits_bytes,
+                )
+                .map_err(|source| LlamaForwardError::cuda(lm_head_site, source))?;
+                execute_direct_cublas_gemm_probe_spans(
+                    lm_head_plan,
+                    input,
+                    lm_head_weight,
+                    output,
+                    stream,
+                    lm_head_site,
+                )?;
+            } else {
+                execute_gemm(
+                    &mut gemms.lm_head,
+                    &buffers.hidden_norm,
+                    lm_head_weight,
+                    &mut buffers.logits,
+                    &mut buffers.gemm_workspace,
+                    stream,
+                    lm_head_site,
+                )?;
+            }
+        }
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         execute_gemm(
             &mut gemms.lm_head,
             &buffers.hidden_norm,
@@ -5018,14 +5196,6 @@ impl PreparedLlamaForward {
             stream,
             lm_head_site,
         )?;
-        let last_logits_bytes = trace_byte_len(plan, LlamaTracePoint::LastLogits)?;
-        let last_logits_offset = plan
-            .workspace_spec()
-            .logits_bytes()
-            .checked_sub(last_logits_bytes)
-            .ok_or(LlamaForwardError::ArithmeticOverflow {
-                resource: LlamaForwardResource::Logits,
-            })?;
         capture_trace(
             &mut trace,
             LlamaTracePoint::LastLogits,
@@ -5138,10 +5308,11 @@ pub(super) fn prepare_gemms(
     projection_bias_mode: LlamaProjectionBiasMode,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
+    lm_head_mode: LlamaLmHeadMode,
     anchors: Option<&GemmPlans>,
 ) -> LlamaForwardResult<GemmPlans> {
     #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
-    let _ = (output_projection_mode, mlp_projection_mode);
+    let _ = (output_projection_mode, mlp_projection_mode, lm_head_mode);
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
     let dimensions = plan.dimensions();
     let hidden = to_u64(
@@ -5394,6 +5565,43 @@ pub(super) fn prepare_gemms(
         None
     };
 
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    let lm_head_last_token_direct_cublas = if lm_head_mode
+        .is_hf_eager_qwen_p2051_last_token_direct_cublas_probe()
+    {
+        const P2051_SEQUENCE: u64 = 2_051;
+        const QWEN_HIDDEN: u64 = 2_048;
+        const QWEN_KEY_VALUE: u64 = 256;
+        const QWEN_INTERMEDIATE: u64 = 11_008;
+        const QWEN_VOCABULARY: u64 = 151_936;
+        const QWEN_LAYER_COUNT: usize = 36;
+        if anchors.is_some()
+            || !mlp_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
+            || !output_projection_mode.is_hf_eager_qwen_p2051_direct_cublas_probe()
+            || sequence != P2051_SEQUENCE
+            || hidden != QWEN_HIDDEN
+            || key_value != QWEN_KEY_VALUE
+            || intermediate != QWEN_INTERMEDIATE
+            || vocabulary != QWEN_VOCABULARY
+            || plan.layers().len() != QWEN_LAYER_COUNT
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "lm_head_mode",
+                reason: "the last-token direct-cuBLAS LM-head probe requires cache-free Qwen P2051 geometry and no batch-shape variants",
+            });
+        }
+        let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
+        let lm_head_config = CudaGemmConfig::new(1, vocabulary, hidden, workspace_cap)
+            .map_err(|source| LlamaForwardError::cuda(lm_head_site, source))?;
+        Some(
+            context
+                .prepare_cublas_gemm_probe(lm_head_config)
+                .map_err(|source| LlamaForwardError::cuda(lm_head_site, source))?,
+        )
+    } else {
+        None
+    };
+
     Ok(GemmPlans {
         hidden: hidden_plan,
         key_value: key_value_plan,
@@ -5405,6 +5613,8 @@ pub(super) fn prepare_gemms(
         output_projection_direct_cublas,
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         mlp_projection_direct_cublas,
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        lm_head_last_token_direct_cublas,
     })
 }
 
@@ -5799,6 +6009,22 @@ mod tests {
                     .validate(),
                 Err(LlamaForwardError::InvalidConfiguration {
                     field: "rms_norm_selection",
+                    ..
+                })
+            ));
+
+            let lm_head_probe = rope_table_probe
+                .with_hugging_face_cuda_qwen_p2051_rms_norm_probe()
+                .with_hf_eager_qwen_p2051_last_token_direct_cublas_lm_head_probe();
+            lm_head_probe
+                .validate()
+                .expect("paired Qwen P2051 last-token LM-head probe is canonical-only");
+            assert!(matches!(
+                defaults
+                    .with_hf_eager_qwen_p2051_last_token_direct_cublas_lm_head_probe()
+                    .validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "lm_head_mode",
                     ..
                 })
             ));
