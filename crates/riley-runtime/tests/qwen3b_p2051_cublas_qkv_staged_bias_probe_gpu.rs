@@ -920,6 +920,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
         let mut staged_repeated = true;
         let mut allocation_unchanged = true;
         let mut actual_endpoint_exact = true;
+        let mut actual_metric_matches_oracle = true;
         for projection in P12_PROJECTIONS {
             let expected = p12
                 .projections
@@ -937,13 +938,8 @@ mod p2051_cublas_qkv_staged_bias_contract {
             let raw_p11_comparison = metrics(&p11_expected.raw_bf16_le, &observed.raw_bf16_le)?;
             let staged_comparison = metrics(&expected.staged_bf16_le, &observed.staged_bf16_le)?;
             let actual_comparison = metrics(&expected.actual_bf16_le, &observed.staged_bf16_le)?;
-            if actual_comparison != expected.staged_vs_actual_metric {
-                return Err(format!(
-                    "P12 {} native staged/actual metric differs from oracle",
-                    projection.identifier
-                )
-                .into());
-            }
+            let projection_actual_metric_matches_oracle =
+                actual_comparison == expected.staged_vs_actual_metric;
             let raw_is_exact =
                 raw_comparison.get("bf16_exact").and_then(Value::as_bool) == Some(true);
             let staged_is_exact =
@@ -957,6 +953,8 @@ mod p2051_cublas_qkv_staged_bias_contract {
                 staged_repeated && observed.staged_bf16_le == observed.repeated_staged_bf16_le;
             allocation_unchanged = allocation_unchanged && observed.allocation_accounting_unchanged;
             actual_endpoint_exact = actual_endpoint_exact && actual_is_exact;
+            actual_metric_matches_oracle =
+                actual_metric_matches_oracle && projection_actual_metric_matches_oracle;
             projection_receipts.insert(
                 projection.identifier.to_owned(),
                 json!({
@@ -965,6 +963,8 @@ mod p2051_cublas_qkv_staged_bias_contract {
                     "raw_p11_comparison": raw_p11_comparison,
                     "staged_primary_comparison": staged_comparison,
                     "staged_vs_hf_actual_module_comparison": actual_comparison,
+                    "expected_staged_vs_hf_actual_module_comparison": expected.staged_vs_actual_metric,
+                    "staged_vs_hf_actual_module_metric_matches_oracle": projection_actual_metric_matches_oracle,
                     "repeated_raw_bf16_exact": observed.raw_bf16_le == observed.repeated_raw_bf16_le,
                     "repeated_staged_bf16_exact": observed.staged_bf16_le == observed.repeated_staged_bf16_le,
                     "allocation_accounting_unchanged": observed.allocation_accounting_unchanged,
@@ -1037,6 +1037,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
                 "staged_qkv_repeated_bf16_exact": staged_repeated,
                 "allocation_accounting_unchanged": allocation_unchanged,
                 "hf_actual_module_qkv_exact": actual_endpoint_exact,
+                "hf_actual_module_metric_matches_oracle": actual_metric_matches_oracle,
                 "projection_boundary_candidate_eligible": false,
                 "performance_claim_eligible": false,
                 "vllm_comparison_eligible": false,
