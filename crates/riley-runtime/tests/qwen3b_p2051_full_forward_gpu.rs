@@ -7,10 +7,11 @@
 //! serving performance result.
 //!
 //! The baseline strict staged-bias profile is compared with the feature-gated
-//! HF-compatible cuBLASLt BIAS candidate. Both use the cache-free
-//! materialized-reference attention owner. Layer-zero boundaries are captured
-//! with the existing selective trace API; every decoder residual output is
-//! captured as one last-token row through the bounded layer-trace API.
+//! HF-compatible cuBLASLt BIAS candidate. The candidate is then repeated with
+//! the opt-in Qwen P2051 cuBLASLt attention probe. Layer-zero boundaries are
+//! captured with the existing selective trace API; every decoder residual
+//! output is captured as one last-token row through the bounded layer-trace
+//! API.
 
 #![cfg(all(feature = "cuda", feature = "cuda-cublas-gemm-probe"))]
 #![allow(clippy::float_cmp, clippy::similar_names, clippy::too_many_lines)]
@@ -74,6 +75,8 @@ const QWEN3B_HEAD_DIMENSION: usize = 128;
 const QWEN3B_VOCABULARY_SIZE: usize = 151_936;
 const EXPECTED_SOURCE_ARCHITECTURE: &str = "Qwen2ForCausalLM";
 const DENSE_REFERENCE_ATTENTION_BACKEND_ID: &str = "riley.cuda.materialized-gqa-prefill.bf16";
+const HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID: &str =
+    "riley.cuda.hf-eager-cublaslt-qwen-p2051-probe.bf16";
 const TEACHER_ARTIFACT_SCHEMA: &str = "riley.qwen3b-hf-eager-teacher-forced-generation.v1";
 const TEACHER_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2048-teacher-forced-generation";
 const TEACHER_CACHE_OFF_SIDECAR_KEY: &str = "teacher_forced/logits";
@@ -105,6 +108,37 @@ struct StageSpec {
     name: String,
     shape: Vec<u64>,
     source: StageSource,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum AttentionProfile {
+    Reference,
+    HfEagerQwenP2051Probe,
+}
+
+impl AttentionProfile {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Reference => "reference-attention-v1",
+            Self::HfEagerQwenP2051Probe => "hf-eager-qwen-p2051-probe-v1",
+        }
+    }
+
+    const fn backend_id(self) -> &'static str {
+        match self {
+            Self::Reference => DENSE_REFERENCE_ATTENTION_BACKEND_ID,
+            Self::HfEagerQwenP2051Probe => HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID,
+        }
+    }
+
+    const fn configure(self, config: PreparedLlamaForwardConfig) -> PreparedLlamaForwardConfig {
+        match self {
+            Self::Reference => config.with_reference_attention(),
+            Self::HfEagerQwenP2051Probe => {
+                config.with_hugging_face_eager_qwen_p2051_probe_attention()
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1103,6 +1137,7 @@ fn run_profile(
     input: &[u32],
     hf: &HfStageArtifact,
     mode: LlamaProjectionBiasMode,
+    attention_profile: AttentionProfile,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
     let config = PreparedLlamaForwardConfig::new(
@@ -1111,8 +1146,8 @@ fn run_profile(
         profile_workspace_cap_bytes(mode),
         REFERENCE_ATTENTION_BUDGET_BYTES,
     )
-    .with_projection_bias_mode(mode)
-    .with_reference_attention();
+    .with_projection_bias_mode(mode);
+    let config = attention_profile.configure(config);
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1131,8 +1166,7 @@ fn run_profile(
     };
     let result = (|| -> TestResult<Value> {
         if forward.projection_bias_mode() != mode
-            || forward.attention_selection().implementation_id()
-                != DENSE_REFERENCE_ATTENTION_BACKEND_ID
+            || forward.attention_selection().implementation_id() != attention_profile.backend_id()
         {
             return Err("stage forward selected an unexpected numerical backend".into());
         }
@@ -1261,9 +1295,9 @@ fn run_profile(
             stages.insert(spec.name, stage_metrics);
         }
         Ok(json!({
-            "profile_id": mode.id(),
+            "profile_id": format!("{}+{}", mode.id(), attention_profile.id()),
             "projection_bias_backend": mode.id(),
-            "attention_backend": forward.attention_selection().implementation_id(),
+            "attention_backend": attention_profile.backend_id(),
             "use_cache": false,
             "same_scheduler_engine": false,
             "repeat_execution": {
@@ -1350,14 +1384,28 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         return Err("P2051 input does not bind the HF stage artifact".into());
     }
     let model = load_model(&hf)?;
-    let strict = run_profile(&model, &input, &hf, LlamaProjectionBiasMode::StrictStagedV1)?;
+    let strict = run_profile(
+        &model,
+        &input,
+        &hf,
+        LlamaProjectionBiasMode::StrictStagedV1,
+        AttentionProfile::Reference,
+    )?;
     let hf_compatible = run_profile(
         &model,
         &input,
         &hf,
         LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1,
+        AttentionProfile::Reference,
     )?;
-    let quality_gate = candidate_quality_gate(&hf_compatible)?;
+    let hf_compatible_qwen_p2051 = run_profile(
+        &model,
+        &input,
+        &hf,
+        LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1,
+        AttentionProfile::HfEagerQwenP2051Probe,
+    )?;
+    let quality_gate = candidate_quality_gate(&hf_compatible_qwen_p2051)?;
     let cache_off_full_forward_bf16_exact = quality_gate
         .get("cache_off_full_forward_bf16_exact")
         .and_then(Value::as_bool)
@@ -1382,7 +1430,8 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
             "use_cache": false,
             "same_scheduler_engine": false,
-            "attention_backend": DENSE_REFERENCE_ATTENTION_BACKEND_ID,
+            "baseline_attention_backend": DENSE_REFERENCE_ATTENTION_BACKEND_ID,
+            "candidate_attention_backend": HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID,
             "last_token_row_index": LAST_TOKEN_ROW_INDEX,
         },
         "hf_stage_artifact": {
@@ -1391,7 +1440,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "sidecar_path": hf.sidecar_path,
             "sidecar_sha256": hf.sidecar_sha256,
         },
-        "profiles": [strict, hf_compatible],
+        "profiles": [strict, hf_compatible, hf_compatible_qwen_p2051],
         "quality_gate": quality_gate,
     });
     write_artifact_exclusive(&output, &receipt)?;

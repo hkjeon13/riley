@@ -1569,6 +1569,16 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Requires the P2051 Qwen Hugging Face eager attention diagnostic
+    /// candidate. This is feature-gated and is never chosen by an ordinary
+    /// serving selection policy.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hugging_face_eager_qwen_p2051_probe_attention(mut self) -> Self {
+        self.attention_preference = AttentionPreference::HuggingFaceEagerQwenP2051Probe;
+        self
+    }
+
     /// Selects one whole-runtime reduction contract for GEMM, `RMSNorm`, and
     /// prefill attention. Preparation never falls back across profiles.
     #[must_use]
@@ -4071,6 +4081,12 @@ mod tests {
                     ..
                 })
             ));
+
+            let attention_probe = defaults.with_hugging_face_eager_qwen_p2051_probe_attention();
+            assert_eq!(
+                attention_probe.attention_preference(),
+                AttentionPreference::HuggingFaceEagerQwenP2051Probe
+            );
         }
     }
 
