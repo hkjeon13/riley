@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from riley_reference import qwen3b_generation_trace as generation
@@ -226,6 +227,43 @@ class Qwen3BP2051AttentionWindowTraceTests(unittest.TestCase):
             tampered["tensors"][name]["bf16_le_sha256"] = _sha("0")
             with self.assertRaisesRegex(trace.Qwen3BP2051AttentionWindowTraceError, "raw BF16 hash"):
                 trace.validate_sidecar_against_manifest(tampered, sidecar)
+
+    def test_external_provenance_rechecks_source_hashes_without_git(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repository"
+            root.mkdir()
+            source = root / "fixture.py"
+            source.write_text("fixture = 1\n", encoding="utf-8")
+            source_paths = {"fixture": "fixture.py"}
+            document = {
+                "git_revision": "a" * 40,
+                "source_dirty": False,
+                "source_status_sha256": hashlib.sha256(b"").hexdigest(),
+                "sources": {
+                    "fixture": {
+                        "path": "fixture.py",
+                        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    }
+                },
+            }
+            provenance = Path(directory) / "source-provenance.json"
+            provenance.write_text(json.dumps(document), encoding="utf-8")
+            environment = {trace.SOURCE_PROVENANCE_ENV: str(provenance)}
+            with (
+                mock.patch.dict(os.environ, environment, clear=False),
+                mock.patch.object(trace, "SOURCE_PATHS", source_paths),
+                mock.patch.object(
+                    trace.subprocess,
+                    "run",
+                    side_effect=AssertionError("external provenance must not run Git"),
+                ),
+            ):
+                self.assertEqual(trace.collect_source_provenance(root), document)
+                source.write_text("fixture = 2\n", encoding="utf-8")
+                with self.assertRaisesRegex(
+                    trace.Qwen3BP2051AttentionWindowTraceError, "hashes differ"
+                ):
+                    trace.collect_source_provenance(root)
 
 
 if __name__ == "__main__":
