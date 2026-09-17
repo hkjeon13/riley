@@ -97,6 +97,11 @@ SOURCE_PATHS = {
     "reference_python": "tools/python/reference/.python-version",
 }
 
+# Pinned offline inference containers may intentionally omit Git. A host-Git
+# document can supply the revision/status evidence while the container still
+# recomputes every named source hash before it accepts that document.
+SOURCE_PROVENANCE_ENV = "RILEY_QWEN3B_P2051_LAYER_STAGE_SOURCE_PROVENANCE"
+
 BackendFactory = Callable[..., "HuggingFaceQwen3BP2051LayerStageTraceBackend"]
 SourceProvenanceFactory = Callable[[Path], dict[str, object]]
 
@@ -305,6 +310,19 @@ def _canonical_bf16_le_bytes(tensor: object, torch: Any) -> bytes:
             for index in range(0, len(raw), BF16_BYTES)
         )
     raise Qwen3BP2051LayerStageTraceError("unsupported host byte order")
+
+
+def _ensure_sidecar_consumer_readable(path: Path) -> None:
+    """Keep a root-run container's immutable sidecar readable by host Rust."""
+
+    source = _regular_file(path, "trace sidecar")
+    try:
+        mode = source.stat().st_mode
+        source.chmod(mode | stat.S_IRGRP | stat.S_IROTH)
+    except OSError as error:
+        raise Qwen3BP2051LayerStageTraceError(
+            "cannot make trace sidecar readable by its Rust consumer"
+        ) from error
 
 
 def _tensor_shape(tensor: object) -> tuple[int, ...]:
@@ -580,8 +598,7 @@ def _source_record(root: Path, relative: str) -> dict[str, object]:
     return {"path": relative, "sha256": _sha256_file(source)}
 
 
-def collect_source_provenance(repo_root: Path) -> dict[str, object]:
-    root = _regular_directory(repo_root.expanduser(), "repository root")
+def _collect_git_source_provenance(root: Path) -> dict[str, object]:
     try:
         revision = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -618,6 +635,106 @@ def collect_source_provenance(repo_root: Path) -> dict[str, object]:
             for name, relative in SOURCE_PATHS.items()
         },
     }
+
+
+def _load_external_source_provenance(root: Path) -> dict[str, object] | None:
+    configured = os.environ.get(SOURCE_PROVENANCE_ENV)
+    if configured is None:
+        return None
+    if not configured:
+        raise Qwen3BP2051LayerStageTraceError(
+            f"{SOURCE_PROVENANCE_ENV} must not be empty"
+        )
+    source = _regular_file(Path(configured).expanduser(), "external source provenance")
+    try:
+        document = _require_mapping(
+            json.loads(
+                source.read_bytes(),
+                object_pairs_hook=_duplicate_key,
+                parse_constant=_nonfinite,
+            ),
+            "external source provenance",
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise Qwen3BP2051LayerStageTraceError(
+            "external source provenance is invalid"
+        ) from error
+    _validate_source_provenance(document)
+    if document["source_dirty"] is not False:
+        raise Qwen3BP2051LayerStageTraceError(
+            "external source provenance is dirty"
+        )
+    if document["source_status_sha256"] != _sha256_bytes(b""):
+        raise Qwen3BP2051LayerStageTraceError(
+            "external source provenance does not prove a clean pathspec"
+        )
+    expected_sources = {
+        name: _source_record(root, relative) for name, relative in SOURCE_PATHS.items()
+    }
+    if document["sources"] != expected_sources:
+        raise Qwen3BP2051LayerStageTraceError(
+            "external source provenance hashes differ"
+        )
+    return dict(document)
+
+
+def collect_source_provenance(repo_root: Path) -> dict[str, object]:
+    """Collect or revalidate source provenance without importing ML packages."""
+
+    root = _regular_directory(repo_root.expanduser(), "repository root")
+    external = _load_external_source_provenance(root)
+    if external is not None:
+        return external
+    return _collect_git_source_provenance(root)
+
+
+def write_source_provenance_exclusive(*, repo_root: Path, output_path: Path) -> dict[str, object]:
+    """Write clean host-Git provenance for a pinned container without Git."""
+
+    root = _regular_directory(repo_root.expanduser(), "repository root")
+    output = output_path.expanduser()
+    if not output.is_absolute() or output.suffix != ".json":
+        raise Qwen3BP2051LayerStageTraceError(
+            "source provenance output must be an absolute .json path"
+        )
+    parent = output.parent
+    if not parent:
+        raise Qwen3BP2051LayerStageTraceError(
+            "source provenance output has no parent"
+        )
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+        parent = _regular_directory(parent, "source provenance output parent")
+    except OSError as error:
+        raise Qwen3BP2051LayerStageTraceError(
+            "cannot create source provenance output parent"
+        ) from error
+    output = parent / output.name
+    if output == root or output.is_relative_to(root):
+        raise Qwen3BP2051LayerStageTraceError(
+            "source provenance output must remain outside the repository"
+        )
+    if output.exists() or output.is_symlink():
+        raise Qwen3BP2051LayerStageTraceError(
+            "refusing to overwrite source provenance output"
+        )
+    document = _collect_git_source_provenance(root)
+    if document["source_dirty"]:
+        raise Qwen3BP2051LayerStageTraceError(
+            "cannot write source provenance from a dirty source pathspec"
+        )
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    try:
+        with output.open("xb") as handle:
+            handle.write(payload)
+            handle.write(b"\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as error:
+        raise Qwen3BP2051LayerStageTraceError(
+            "cannot write source provenance output"
+        ) from error
+    return document
 
 
 def _workload_document(workload: oracle.ServingWorkload) -> dict[str, object]:
@@ -921,6 +1038,7 @@ def produce_hf_trace(
             sidecar_writer,
         )
         sidecar_written = True
+        _ensure_sidecar_consumer_readable(sidecar)
         document = build_manifest(
             workload=workload,
             checkpoint=checkpoint,
@@ -1437,6 +1555,12 @@ def _build_parser() -> argparse.ArgumentParser:
     produce.add_argument("--sidecar", type=Path, required=True)
     produce.add_argument("--repo-root", type=Path, required=True)
     produce.add_argument("--device", default="cuda:0")
+    provenance = commands.add_parser(
+        "provenance",
+        help="write host-Git source provenance for a pinned container without Git",
+    )
+    provenance.add_argument("--repo-root", type=Path, required=True)
+    provenance.add_argument("--output", type=Path, required=True)
     validate = commands.add_parser(
         "validate",
         help="validate output, workload, source, and teacher bindings without CUDA",
@@ -1453,6 +1577,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        if args.command == "provenance":
+            document = write_source_provenance_exclusive(
+                repo_root=args.repo_root,
+                output_path=args.output,
+            )
+            print(
+                "wrote source provenance: "
+                f"revision={document['git_revision']} "
+                f"status_sha256={document['source_status_sha256']}"
+            )
+            return 0
         if args.command == "produce":
             document = produce_hf_trace(
                 checkpoint_path=args.checkpoint,
