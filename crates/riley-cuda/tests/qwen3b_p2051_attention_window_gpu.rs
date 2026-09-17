@@ -687,6 +687,9 @@ fn download_full(
     buffer: &mut CudaDeviceBuffer,
     staging: &mut CudaPinnedHostBuffer,
 ) -> TestResult<Vec<u8>> {
+    if staging.byte_len() != buffer.byte_len() {
+        return Err("download staging and device buffer byte lengths differ".into());
+    }
     buffer
         .copy_to_pinned_async(0, staging, 0, buffer.byte_len(), stream)?
         .synchronize()?;
@@ -815,6 +818,7 @@ fn run_candidate(artifact: &AttentionArtifact) -> TestResult<Value> {
     }
     let mut transfer_staging =
         context.allocate_pinned_host_buffer(u64::try_from(query_bytes.len())?)?;
+    let mut trace_staging = context.allocate_pinned_host_buffer(trace_bytes)?;
     let query = upload(&context, &mut stream, &mut transfer_staging, query_bytes)?;
     let key = upload(&context, &mut stream, &mut transfer_staging, key_bytes)?;
     let value = upload(&context, &mut stream, &mut transfer_staging, value_bytes)?;
@@ -838,10 +842,10 @@ fn run_candidate(artifact: &AttentionArtifact) -> TestResult<Value> {
             &mut probabilities_last,
             &mut stream,
         )?;
-        let raw = download_full(&mut stream, &mut raw_qk_last, &mut transfer_staging)?;
-        let scaled = download_full(&mut stream, &mut scaled_masked_last, &mut transfer_staging)?;
+        let raw = download_full(&mut stream, &mut raw_qk_last, &mut trace_staging)?;
+        let scaled = download_full(&mut stream, &mut scaled_masked_last, &mut trace_staging)?;
         let probabilities =
-            download_full(&mut stream, &mut probabilities_last, &mut transfer_staging)?;
+            download_full(&mut stream, &mut probabilities_last, &mut trace_staging)?;
         let output_context = download_full(&mut stream, &mut output, &mut transfer_staging)?;
         if context.allocation_stats()? != before {
             return Err("P2051 last-row trace hot path changed allocations".into());
@@ -898,6 +902,7 @@ fn run_candidate(artifact: &AttentionArtifact) -> TestResult<Value> {
         ("value", value.close()),
         ("key", key.close()),
         ("query", query.close()),
+        ("trace staging", trace_staging.close()),
         ("transfer staging", transfer_staging.close()),
     ] {
         if let Err(error) = close {
