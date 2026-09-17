@@ -143,6 +143,15 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_LAST_TOKEN_DIRECT_CUBLAS_LM_HEAD_BACKEND_ID: 
     "hf-eager-qwen-p2048-cache-on-last-token-direct-cublas-probe-v1";
 const HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID: &str =
     "hf-cuda-qwen-p2048-cache-on-rmsnorm-probe-v1";
+// The immutable HF trace was captured before the direct-cuBLAS QK candidate
+// existed.  Its `rust_decode` record remains part of the trace contract, while
+// the candidate test admits this one reviewed replacement and records both
+// hashes in its receipt.  Any later edit to the candidate's decode path must
+// update this explicit qualifier rather than silently weakening provenance.
+const HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256: &str =
+    "2c4f8e6d057723993e6358cad80b696885e10d463eef9956a94fe0428ee58767";
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256: &str =
+    "4442da9a423a2fb9f5fc039b021fea756514afabc67b94a9d4b0b919d81e8f2e";
 
 #[derive(Debug)]
 struct Workload {
@@ -426,6 +435,12 @@ struct HfCacheOnLayerDetailArtifact {
     checkpoint_receipt_filename: String,
     checkpoint_receipt_sha256: String,
     tensors: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HfCacheOnLayerDetailSourceCompatibility {
+    ExactTraceSource,
+    DirectCublasQkCandidateV1,
 }
 
 fn required_path(variable: &str) -> TestResult<PathBuf> {
@@ -1033,6 +1048,40 @@ fn validate_source_record(root: &Path, value: &Value, label: &str) -> TestResult
     let source = regular_file(&root.join(relative_path), label)?;
     if sha256_file(&source)? != expected_hash {
         return Err(format!("{label} SHA-256 differs from current source").into());
+    }
+    Ok(())
+}
+
+fn validate_direct_cublas_qk_candidate_rust_decode_source(
+    root: &Path,
+    value: &Value,
+) -> TestResult {
+    let label = "HF P2048 cache-on layer-detail direct-cuBLAS QK candidate rust_decode source";
+    let record = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object"))?;
+    let relative = record
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} path is missing"))?;
+    if relative != "crates/riley-runtime/src/llama/decode.rs" {
+        return Err(format!("{label} path differs").into());
+    }
+    let trace_hash = json_sha256(
+        record
+            .get("sha256")
+            .ok_or_else(|| format!("{label} trace SHA-256 is missing"))?,
+        label,
+    )?;
+    if trace_hash != HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256 {
+        return Err(format!("{label} trace SHA-256 differs").into());
+    }
+    let source = regular_file(&root.join(relative), label)?;
+    let candidate_hash = sha256_file(&source)?;
+    if candidate_hash != HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256 {
+        return Err(
+            format!("{label} candidate SHA-256 differs from the reviewed candidate").into(),
+        );
     }
     Ok(())
 }
@@ -1648,6 +1697,7 @@ fn load_hf_cache_on_prefill_stage_artifact(
 fn load_hf_cache_on_layer_detail_artifact(
     teacher: &TeacherCacheOn,
     workload: &Workload,
+    source_compatibility: HfCacheOnLayerDetailSourceCompatibility,
 ) -> TestResult<HfCacheOnLayerDetailArtifact> {
     let manifest_path = regular_file(
         &required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_STAGE_MANIFEST")?,
@@ -1894,11 +1944,18 @@ fn load_hf_cache_on_layer_detail_artifact(
         }
     }
     for (name, record) in sources {
-        validate_source_record(
-            &root,
-            record,
-            &format!("HF P2048 cache-on layer-detail source {name}"),
-        )?;
+        if source_compatibility
+            == HfCacheOnLayerDetailSourceCompatibility::DirectCublasQkCandidateV1
+            && name == "rust_decode"
+        {
+            validate_direct_cublas_qk_candidate_rust_decode_source(&root, record)?;
+        } else {
+            validate_source_record(
+                &root,
+                record,
+                &format!("HF P2048 cache-on layer-detail source {name}"),
+            )?;
+        }
     }
     let specs = expected_cache_on_layer_detail_stage_specs();
     let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
@@ -3795,7 +3852,11 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_reference_trace() -> TestResult {
 fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_detail_trace() -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_cache_on()?;
-    let hf = load_hf_cache_on_layer_detail_artifact(&teacher, &workload)?;
+    let hf = load_hf_cache_on_layer_detail_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnLayerDetailSourceCompatibility::ExactTraceSource,
+    )?;
     let m1_token = *teacher
         .token_ids
         .first()
@@ -3880,7 +3941,11 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_detail_trace() -> TestResult {
 fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_candidate_trace() -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_cache_on()?;
-    let hf = load_hf_cache_on_layer_detail_artifact(&teacher, &workload)?;
+    let hf = load_hf_cache_on_layer_detail_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnLayerDetailSourceCompatibility::DirectCublasQkCandidateV1,
+    )?;
     let m1_token = *teacher
         .token_ids
         .first()
@@ -3958,6 +4023,12 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_candidate_trace() -> 
             "manifest_sha256": hf.manifest_sha256,
             "sidecar_path": hf.sidecar_path,
             "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "source_compatibility": {
+            "mode": "direct-cublas-qk-candidate-v1",
+            "only_current_source_difference": "crates/riley-runtime/src/llama/decode.rs",
+            "hf_trace_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256,
+            "candidate_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256,
         },
         "candidate": candidate,
         "quality_gate": {
