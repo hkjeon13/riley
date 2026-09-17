@@ -1639,6 +1639,7 @@ fn capture_hf_eager_qwen_p2048_cache_on_m1_embedding(
 
 fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
     trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    layer_index: usize,
     stage: LlamaLastTokenLayerStage,
     buffer: &mut CudaDeviceBuffer,
     io_staging: &mut CudaPinnedHostBuffer,
@@ -1651,7 +1652,7 @@ fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
     let mut layer_zero = Some(&mut trace.layer_zero);
     capture_last_token_layer_stage(
         &mut layer_zero,
-        0,
+        layer_index,
         stage,
         buffer,
         0,
@@ -2468,6 +2469,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::InputNorm,
                     &mut buffers.hidden_norm,
                     io_staging,
@@ -2499,6 +2501,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::QueryProjection,
                     &mut buffers.hidden_projection,
                     io_staging,
@@ -2529,6 +2532,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::KeyProjection,
                     &mut buffers.key_raw,
                     io_staging,
@@ -2559,6 +2563,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::ValueProjection,
                     &mut buffers.value_raw,
                     io_staging,
@@ -2610,6 +2615,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::QueryRotary,
                     &mut buffers.hidden_rotary,
                     io_staging,
@@ -2660,6 +2666,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::KeyRotary,
                     &mut buffers.key_rotary,
                     io_staging,
@@ -2757,6 +2764,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::AttentionContext,
                     &mut buffers.hidden_context,
                     io_staging,
@@ -2815,6 +2823,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::AfterAttentionResidual,
                     &mut buffers.hidden_rotary,
                     io_staging,
@@ -2851,6 +2860,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::PostAttentionNorm,
                     &mut buffers.hidden_norm,
                     io_staging,
@@ -2873,6 +2883,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::GateProjection,
                     &mut buffers.gate_raw,
                     io_staging,
@@ -2894,6 +2905,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::UpProjection,
                     &mut buffers.up_raw,
                     io_staging,
@@ -2950,6 +2962,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::Gated,
                     &mut buffers.gated_product,
                     io_staging,
@@ -2972,6 +2985,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::DownProjection,
                     &mut buffers.hidden_current,
                     io_staging,
@@ -3008,6 +3022,7 @@ impl PreparedLlamaDecode {
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
+                    layer_index,
                     LlamaLastTokenLayerStage::Output,
                     &mut buffers.hidden_projection,
                     io_staging,
