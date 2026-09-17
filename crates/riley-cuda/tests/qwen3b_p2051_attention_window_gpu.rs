@@ -48,7 +48,7 @@ const D: u64 = 128;
 const SCALE: f32 = 0.088_388_346;
 const BF16_BYTES: u64 = 2;
 const MAX_SAFETENSORS_HEADER_BYTES: usize = 1_048_576;
-const LAYER_INDEX: usize = 2;
+const MODEL_LAYER_COUNT: usize = 36;
 
 const Q_BSHD: [u64; 4] = [1, S, QH, D];
 const KV_BSHD: [u64; 4] = [1, S, KVH, D];
@@ -157,6 +157,7 @@ const TENSOR_SPECS: [TensorSpec; 8] = [
 
 #[derive(Debug)]
 struct AttentionArtifact {
+    layer_index: usize,
     manifest_path: PathBuf,
     manifest_sha256: String,
     sidecar_path: PathBuf,
@@ -164,8 +165,8 @@ struct AttentionArtifact {
     tensors: BTreeMap<String, Vec<u8>>,
 }
 
-fn tensor_name(spec: TensorSpec) -> String {
-    format!("layer{LAYER_INDEX}.{}", spec.suffix)
+fn tensor_name(layer_index: usize, spec: TensorSpec) -> String {
+    format!("layer{layer_index}.{}", spec.suffix)
 }
 
 fn tensor_key(name: &str) -> String {
@@ -367,7 +368,7 @@ fn validate_source_provenance(value: &Value) -> TestResult {
     Ok(())
 }
 
-fn validate_manifest_contract(manifest: &Value) -> TestResult {
+fn validate_manifest_contract(manifest: &Value) -> TestResult<usize> {
     require_exact_fields(
         manifest,
         &[
@@ -411,11 +412,23 @@ fn validate_manifest_contract(manifest: &Value) -> TestResult {
         ],
         "HF P2051 attention-window trace profile",
     )?;
-    let expected_names: Vec<_> = TENSOR_SPECS.iter().copied().map(tensor_name).collect();
+    let layer_index = usize::try_from(
+        profile
+            .get("layer_index")
+            .and_then(Value::as_u64)
+            .ok_or("HF P2051 attention-window layer index is missing")?,
+    )?;
+    if layer_index >= MODEL_LAYER_COUNT {
+        return Err("HF P2051 attention-window layer index is out of range".into());
+    }
+    let expected_names: Vec<_> = TENSOR_SPECS
+        .iter()
+        .copied()
+        .map(|spec| tensor_name(layer_index, spec))
+        .collect();
     if profile.get("capture_domain").and_then(Value::as_str)
         != Some("cache-free-p2051-selected-layer-hf-eager-attention-boundaries")
         || profile.get("id").and_then(Value::as_str) != Some(TRACE_ID)
-        || profile.get("layer_index").and_then(Value::as_u64) != Some(LAYER_INDEX as u64)
         || profile
             .get("tensor_names")
             .and_then(Value::as_array)
@@ -432,7 +445,7 @@ fn validate_manifest_contract(manifest: &Value) -> TestResult {
         "cache": false,
         "input_context_token_count": S,
         "last_token_row_index": S - 1,
-        "layer_index": LAYER_INDEX,
+        "layer_index": layer_index,
         "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
         "trace_row_layout": "full-qkv-context-plus-last-score-row",
     });
@@ -468,7 +481,8 @@ fn validate_manifest_contract(manifest: &Value) -> TestResult {
         .and_then(Value::as_object)
         .and_then(|provenance| provenance.get("source_repository"))
         .ok_or("HF P2051 attention-window provenance is missing")?;
-    validate_source_provenance(provenance)
+    validate_source_provenance(provenance)?;
+    Ok(layer_index)
 }
 
 fn validate_finite_bf16(bytes: &[u8], label: &str) -> TestResult {
@@ -484,7 +498,11 @@ fn validate_finite_bf16(bytes: &[u8], label: &str) -> TestResult {
     Ok(())
 }
 
-fn parse_sidecar(manifest: &Value, sidecar_path: &Path) -> TestResult<BTreeMap<String, Vec<u8>>> {
+fn parse_sidecar(
+    manifest: &Value,
+    sidecar_path: &Path,
+    layer_index: usize,
+) -> TestResult<BTreeMap<String, Vec<u8>>> {
     let source = regular_file(sidecar_path, "HF P2051 attention-window sidecar")?;
     let bytes = fs::read(&source)?;
     let sidecar = manifest
@@ -531,7 +549,7 @@ fn parse_sidecar(manifest: &Value, sidecar_path: &Path) -> TestResult<BTreeMap<S
     let expected_keys: BTreeSet<_> = TENSOR_SPECS
         .iter()
         .copied()
-        .map(tensor_name)
+        .map(|spec| tensor_name(layer_index, spec))
         .map(|name| tensor_key(&name))
         .collect();
     let actual_keys: BTreeSet<_> = header
@@ -549,7 +567,7 @@ fn parse_sidecar(manifest: &Value, sidecar_path: &Path) -> TestResult<BTreeMap<S
     let mut ranges = Vec::with_capacity(TENSOR_SPECS.len());
     let mut output = BTreeMap::new();
     for spec in TENSOR_SPECS {
-        let name = tensor_name(spec);
+        let name = tensor_name(layer_index, spec);
         let key = tensor_key(&name);
         let expected_shape = spec.shape.to_vec();
         let expected_bytes = shape_byte_len(spec.shape)?;
@@ -643,9 +661,10 @@ fn load_artifact() -> TestResult<AttentionArtifact> {
     )?;
     let manifest_bytes = fs::read(&manifest_path)?;
     let manifest: Value = serde_json::from_slice(&manifest_bytes)?;
-    validate_manifest_contract(&manifest)?;
-    let tensors = parse_sidecar(&manifest, &sidecar_path)?;
+    let layer_index = validate_manifest_contract(&manifest)?;
+    let tensors = parse_sidecar(&manifest, &sidecar_path, layer_index)?;
     Ok(AttentionArtifact {
+        layer_index,
         manifest_path,
         manifest_sha256: sha256_hex(&manifest_bytes),
         sidecar_sha256: sha256_file(&sidecar_path)?,
@@ -657,7 +676,7 @@ fn load_artifact() -> TestResult<AttentionArtifact> {
 fn tensor<'a>(artifact: &'a AttentionArtifact, suffix: &str) -> TestResult<&'a [u8]> {
     artifact
         .tensors
-        .get(&format!("layer{LAYER_INDEX}.{suffix}"))
+        .get(&format!("layer{}.{suffix}", artifact.layer_index))
         .map(Vec::as_slice)
         .ok_or_else(|| format!("attention trace tensor {suffix} is missing").into())
 }
@@ -1015,7 +1034,7 @@ fn qwen3b_p2051_hf_eager_attention_window_quality_gate() -> TestResult {
         "contract": {
             "model_id": MODEL_ID,
             "model_revision": MODEL_REVISION,
-            "layer_index": LAYER_INDEX,
+            "layer_index": artifact.layer_index,
             "token_count": S,
             "query_head_count": QH,
             "key_value_head_count": KVH,
