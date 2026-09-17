@@ -24,6 +24,7 @@ use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use riley_model::{LoadLimits, LoadedModel, ModelArchitecture, ModelFamily};
@@ -150,6 +151,8 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID: &str =
 // update this explicit qualifier rather than silently weakening provenance.
 const HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256: &str =
     "2c4f8e6d057723993e6358cad80b696885e10d463eef9956a94fe0428ee58767";
+const HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_QUALITY_GATE_SHA256: &str =
+    "96aa58db40245e074714d0ef746413559c9e040782b42e61f4898168148884fd";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256: &str =
     "4442da9a423a2fb9f5fc039b021fea756514afabc67b94a9d4b0b919d81e8f2e";
 
@@ -1086,6 +1089,65 @@ fn validate_direct_cublas_qk_candidate_rust_decode_source(
     Ok(())
 }
 
+fn validate_direct_cublas_qk_candidate_quality_gate_source(
+    root: &Path,
+    value: &Value,
+) -> TestResult {
+    let label = "HF P2048 cache-on layer-detail direct-cuBLAS QK candidate quality-gate source";
+    let record = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object"))?;
+    let relative = record
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} path is missing"))?;
+    if relative != "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs" {
+        return Err(format!("{label} path differs").into());
+    }
+    let trace_hash = json_sha256(
+        record
+            .get("sha256")
+            .ok_or_else(|| format!("{label} trace SHA-256 is missing"))?,
+        label,
+    )?;
+    if trace_hash != HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_QUALITY_GATE_SHA256 {
+        return Err(format!("{label} trace SHA-256 differs").into());
+    }
+    let _current_source = regular_file(&root.join(relative), label)?;
+    Ok(())
+}
+
+fn clean_git_revision_for_source(root: &Path, source: &str, label: &str) -> TestResult<String> {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            source,
+        ])
+        .output()?;
+    if !status.status.success() || !status.stdout.is_empty() {
+        return Err(format!("{label} must be clean in the candidate repository").into());
+    }
+    let revision = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    if !revision.status.success() {
+        return Err(format!("{label} candidate Git revision is unavailable").into());
+    }
+    let revision = String::from_utf8(revision.stdout)?;
+    let revision = revision.trim();
+    if revision.len() != 40 || !revision.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!("{label} candidate Git revision is invalid").into());
+    }
+    Ok(revision.to_owned())
+}
+
 fn parse_stage_sidecar(
     manifest: &Value,
     path: &Path,
@@ -1946,9 +2008,22 @@ fn load_hf_cache_on_layer_detail_artifact(
     for (name, record) in sources {
         if source_compatibility
             == HfCacheOnLayerDetailSourceCompatibility::DirectCublasQkCandidateV1
-            && name == "rust_decode"
         {
-            validate_direct_cublas_qk_candidate_rust_decode_source(&root, record)?;
+            match name.as_str() {
+                "rust_decode" => {
+                    validate_direct_cublas_qk_candidate_rust_decode_source(&root, record)?;
+                }
+                "rust_p2051_quality_gate" => {
+                    validate_direct_cublas_qk_candidate_quality_gate_source(&root, record)?;
+                }
+                _ => {
+                    validate_source_record(
+                        &root,
+                        record,
+                        &format!("HF P2048 cache-on layer-detail source {name}"),
+                    )?;
+                }
+            }
         } else {
             validate_source_record(
                 &root,
@@ -3994,6 +4069,18 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_candidate_trace() -> 
             .and_then(Value::as_bool)
             == Some(true)
     });
+    let repository_root = repository_root()?;
+    let candidate_quality_gate_source =
+        "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs";
+    let candidate_quality_gate_source_sha256 = sha256_file(&regular_file(
+        &repository_root.join(candidate_quality_gate_source),
+        "direct-cuBLAS QK candidate quality-gate source",
+    )?)?;
+    let candidate_quality_gate_git_revision = clean_git_revision_for_source(
+        &repository_root,
+        candidate_quality_gate_source,
+        "direct-cuBLAS QK candidate quality-gate source",
+    )?;
     let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_CUBLAS_QK_STAGE_OUTPUT")?;
     let receipt = json!({
         "schema_version": CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION,
@@ -4026,9 +4113,20 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_candidate_trace() -> 
         },
         "source_compatibility": {
             "mode": "direct-cublas-qk-candidate-v1",
-            "only_current_source_difference": "crates/riley-runtime/src/llama/decode.rs",
-            "hf_trace_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256,
-            "candidate_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256,
+            "current_source_differences": [
+                {
+                    "path": "crates/riley-runtime/src/llama/decode.rs",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256,
+                    "candidate_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_QK_CANDIDATE_RUST_DECODE_SHA256,
+                },
+                {
+                    "path": "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_QUALITY_GATE_SHA256,
+                    "candidate_sha256": candidate_quality_gate_source_sha256,
+                    "candidate_git_revision": candidate_quality_gate_git_revision,
+                    "candidate_git_worktree_clean": true,
+                },
+            ],
         },
         "candidate": candidate,
         "quality_gate": {
