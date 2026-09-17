@@ -1311,6 +1311,54 @@ pub(super) fn execute_bias_epilogue_gemm<S: CudaExecutionStream + ?Sized>(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
+/// Executes the source-bound one-row HF `addmm(bias, X, W.T)` candidate.
+///
+/// The prepared native owner retains an EPILOGUE_NONE descriptor and supplies
+/// the BF16 bias row as C with beta=1. This remains a diagnostic contract;
+/// callers must not use it as a serving fallback.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+pub(super) fn execute_bias_addmm_gemm<S: CudaExecutionStream + ?Sized>(
+    plan: &mut CudaPreparedBiasEpilogueGemm,
+    weights: &CudaUploadedWeights,
+    bias_id: Option<PhysicalWeightId>,
+    input: &CudaDeviceBuffer,
+    weight: CudaBufferSpan<'_>,
+    output: &mut CudaDeviceBuffer,
+    workspace: &mut Option<CudaDeviceBuffer>,
+    stream: &mut S,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let bias_id = bias_id.ok_or(LlamaForwardError::InvalidConfiguration {
+        field: "projection_bias_mode",
+        reason: "addmm bias was selected for a projection without a bound bias",
+    })?;
+    let config = plan.config();
+    let required_workspace = plan.algorithm_metadata().workspace_bytes();
+    let workspace = if required_workspace == 0 {
+        None
+    } else {
+        let buffer = workspace
+            .as_mut()
+            .ok_or(LlamaForwardError::InvalidConfiguration {
+                field: "gemm_workspace",
+                reason: "selected addmm-bias algorithm workspace was not allocated",
+            })?;
+        Some(span_mut(buffer, CudaDType::U8, required_workspace, site)?)
+    };
+    let input = span(input, CudaDType::BF16, config.input_bytes(), site)?;
+    let bias = weight_span(weights, bias_id, site)?;
+    let output = span_mut(output, CudaDType::BF16, config.output_bytes(), site)?;
+    let mut params = BiasGemmParams {
+        input,
+        weight,
+        bias,
+        output,
+        workspace,
+    };
+    plan.execute(&mut params, stream)
+        .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
 /// Selects the prepared fused Q/K/V plan when present, otherwise preserves
 /// the strict standalone-GEMM and row-bias sequence.
 #[allow(clippy::too_many_arguments)]

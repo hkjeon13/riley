@@ -495,8 +495,17 @@ pub struct CudaPreparedBiasEpilogueGemm {
     context: Arc<ContextInner>,
     config: CudaGemmConfig,
     algorithm: CudaGemmAlgorithmMetadata,
+    mode: BiasGemmMode,
     poisoned: bool,
     _not_sync: PhantomData<Cell<()>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(feature = "cuda-cublas-gemm-probe"), allow(dead_code))]
+enum BiasGemmMode {
+    Epilogue,
+    /// One-row `addmm(bias, X, W.T)` with the bias supplied as C and beta=1.
+    AddmmBetaC,
 }
 
 impl fmt::Debug for CudaPreparedGemm {
@@ -518,6 +527,7 @@ impl fmt::Debug for CudaPreparedBiasEpilogueGemm {
             .field("device_ordinal", &self.context.ordinal)
             .field("config", &self.config)
             .field("algorithm", &self.algorithm)
+            .field("mode", &self.mode)
             .field("poisoned", &self.poisoned)
             .finish_non_exhaustive()
     }
@@ -634,7 +644,12 @@ impl CudaContext {
                 "bias-epilogue qualification accepts only the strict-no-split-v1 reduction policy",
             ));
         }
-        self.prepare_bias_epilogue_gemm_unchecked(config, preparation_bias, OPERATION)
+        self.prepare_bias_gemm_unchecked(
+            config,
+            preparation_bias,
+            BiasGemmMode::Epilogue,
+            OPERATION,
+        )
     }
 
     /// Prepares the isolated HF-compatible cuBLASLt BIAS qualifier.
@@ -661,13 +676,53 @@ impl CudaContext {
                 "the HF-compatible qualifier requires allow-in-place-and-output-type-split-k-v1",
             ));
         }
-        self.prepare_bias_epilogue_gemm_unchecked(config, preparation_bias, OPERATION)
+        self.prepare_bias_gemm_unchecked(
+            config,
+            preparation_bias,
+            BiasGemmMode::Epilogue,
+            OPERATION,
+        )
     }
 
-    fn prepare_bias_epilogue_gemm_unchecked(
+    /// Prepares the M=1 addmm-bias candidate used to reproduce PyTorch's
+    /// contiguous linear lowering: `addmm(bias, X, W.T)`. Native keeps an
+    /// EPILOGUE_NONE descriptor and supplies the BF16 bias row as C with
+    /// beta=1, rather than using cuBLASLt's BIAS epilogue.
+    ///
+    /// This is test-only and intentionally has no graph or serving selector
+    /// integration. It must be qualified against the actual HF module trace.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn prepare_hf_compatible_bias_addmm_probe(
         &self,
         config: CudaGemmConfig,
         preparation_bias: CudaBufferSpan<'_>,
+    ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
+        const OPERATION: &str = "CudaContext::prepare_hf_compatible_bias_addmm_probe";
+        if config.m != 1
+            || config.reduction_policy != CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::NotSupported,
+                CudaErrorDomain::Rust,
+                CudaErrorStage::Validation,
+                0,
+                OPERATION,
+                "the HF-compatible addmm qualifier requires M=1 and allow-in-place-and-output-type-split-k-v1",
+            ));
+        }
+        self.prepare_bias_gemm_unchecked(
+            config,
+            preparation_bias,
+            BiasGemmMode::AddmmBetaC,
+            OPERATION,
+        )
+    }
+
+    fn prepare_bias_gemm_unchecked(
+        &self,
+        config: CudaGemmConfig,
+        preparation_bias: CudaBufferSpan<'_>,
+        mode: BiasGemmMode,
         operation: &'static str,
     ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
         ensure_same_context(
@@ -688,28 +743,49 @@ impl CudaContext {
 
         #[cfg(feature = "cuda")]
         {
-            let native = ffi::BiasGemmPlanHandle::create(
-                &self.inner.native,
-                config.m,
-                config.n,
-                config.k,
-                config.max_workspace_bytes,
-                config.reduction_policy.abi_flags(),
-                preparation_bias.raw(),
-            )?;
+            let native = match mode {
+                BiasGemmMode::Epilogue => ffi::BiasGemmPlanHandle::create(
+                    &self.inner.native,
+                    config.m,
+                    config.n,
+                    config.k,
+                    config.max_workspace_bytes,
+                    config.reduction_policy.abi_flags(),
+                    preparation_bias.raw(),
+                )?,
+                BiasGemmMode::AddmmBetaC => {
+                    #[cfg(feature = "cuda-cublas-gemm-probe")]
+                    {
+                        ffi::BiasGemmPlanHandle::create_addmm_probe(
+                            &self.inner.native,
+                            config.m,
+                            config.n,
+                            config.k,
+                            config.max_workspace_bytes,
+                            config.reduction_policy.abi_flags(),
+                            preparation_bias.raw(),
+                        )?
+                    }
+                    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                    {
+                        return Err(CudaError::unavailable(operation));
+                    }
+                }
+            };
             let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
             Ok(CudaPreparedBiasEpilogueGemm {
                 native,
                 context: Arc::clone(&self.inner),
                 config,
                 algorithm,
+                mode,
                 poisoned: false,
                 _not_sync: PhantomData,
             })
         }
         #[cfg(not(feature = "cuda"))]
         {
-            let _ = (config, preparation_bias);
+            let _ = (config, preparation_bias, mode);
             Err(CudaError::unavailable(operation))
         }
     }
