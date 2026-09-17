@@ -142,8 +142,8 @@ pub use prefill::{
     AttentionBackend, AttentionBackendAvailability, AttentionCapability, AttentionLayout,
     AttentionMask, AttentionMode, AttentionPreference, AttentionReductionProfile,
     AttentionScoreMaterialization, AttentionSelectionReason, AttentionSelectionTrace,
-    OnlineSoftmaxError, OnlineSoftmaxState, PrefillAttentionParams, PrefillAttentionRequest,
-    PreparedPrefillAttention,
+    HfEagerQwenP2051LastRowTrace, OnlineSoftmaxError, OnlineSoftmaxState, PrefillAttentionParams,
+    PrefillAttentionRequest, PreparedPrefillAttention,
 };
 pub use primitives::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_RESULT_U32_WORDS, BF16_ARGMAX_STATUS_NON_FINITE,

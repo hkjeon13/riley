@@ -81,3 +81,29 @@ fn native_plan_fail_closes_on_the_generated_environment_and_algorithm_allowlist(
     assert!(native.contains("actual.av_split_k == 1"));
     assert!(native.contains("validate_reviewed_plan_provenance(plan, error)"));
 }
+
+#[test]
+fn p2051_last_row_trace_stays_a_non_serving_diagnostic_abi() {
+    let native = include_str!("../../../kernels/src/attention_cublaslt.cu");
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let ffi = include_str!("../src/ffi.rs");
+    let prefill = include_str!("../src/prefill.rs");
+
+    assert!(header.contains("riley_cuda_hf_prefill_attention_plan_execute_last_row_trace("));
+    assert!(header.contains("This symbol is not used by serving"));
+    assert!(native.contains("riley_cuda_hf_prefill_attention_plan_execute_last_row_trace("));
+    assert!(native.contains("last-row tracing cannot run inside a command batch or graph capture"));
+    assert!(native.contains("cudaMemcpy2DAsync(destination.data"));
+    assert!(native.contains("is_qwen_p2051_probe_geometry(plan->config)"));
+    let (_, normal_and_after) = native
+        .split_once("riley_cuda_hf_prefill_attention_plan_execute(")
+        .expect("normal HF attention execute entry point must exist");
+    let (normal, _) = normal_and_after
+        .split_once("riley_cuda_hf_prefill_attention_plan_execute_last_row_trace(")
+        .expect("diagnostic entry point must follow normal execution");
+    assert!(normal.contains("index < kExecutionBufferCount"));
+    assert!(ffi.contains("fn riley_cuda_hf_prefill_attention_plan_execute_last_row_trace("));
+    assert!(prefill.contains("pub struct HfEagerQwenP2051LastRowTrace"));
+    assert!(prefill.contains("execute_hf_eager_qwen_p2051_last_row_traced"));
+    assert!(prefill.contains("last-row tracing requires the explicit Qwen P2051 HF-eager probe"));
+}

@@ -2501,6 +2501,25 @@ RileyCudaStatus riley_cuda_hf_prefill_attention_plan_execute(
     const RileyCudaBufferSpan* workspace,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Diagnostic-only P2051 execution. It performs the identical cuBLASLt QK,
+// staged scale/mask, softmax, and AV sequence as the normal prepared plan,
+// while device-copying the final causal query row for every query head after
+// QK, scale/mask, and softmax. Each trace span is a non-overlapping BF16
+// [query_head_count, token_count] buffer. This symbol is not used by serving
+// selection or graph capture and rejects all geometries except the explicit
+// Qwen P2051 probe contract.
+RileyCudaStatus riley_cuda_hf_prefill_attention_plan_execute_last_row_trace(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    const RileyCudaBufferSpan* query,
+    const RileyCudaBufferSpan* key,
+    const RileyCudaBufferSpan* value,
+    const RileyCudaBufferSpan* output,
+    const RileyCudaBufferSpan* workspace,
+    const RileyCudaBufferSpan* raw_qk_last,
+    const RileyCudaBufferSpan* scaled_masked_last,
+    const RileyCudaBufferSpan* probabilities_last,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_hf_prefill_attention_plan_close(
     RileyCudaHfPrefillAttentionPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

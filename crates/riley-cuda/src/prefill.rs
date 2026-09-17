@@ -747,6 +747,19 @@ pub struct PrefillAttentionParams<'a> {
     pub workspace: Option<CudaBufferSpanMut<'a>>,
 }
 
+/// Diagnostic-only final-query-row checkpoints for the Qwen P2051 HF-eager
+/// candidate. Each span is a BF16 `[query_head_count, sequence_length]`
+/// buffer. Normal prefill execution neither allocates nor writes these rows.
+#[derive(Debug)]
+pub struct HfEagerQwenP2051LastRowTrace<'a> {
+    /// QK output before scaling or causal-mask addition.
+    pub raw_qk_last: CudaBufferSpanMut<'a>,
+    /// QK output after the staged BF16 scale and causal-mask addition.
+    pub scaled_masked_last: CudaBufferSpanMut<'a>,
+    /// BF16 probabilities after the F32 softmax and output conversion.
+    pub probabilities_last: CudaBufferSpanMut<'a>,
+}
+
 /// One backend and execution contract fixed before any hot execution.
 #[derive(Clone)]
 pub struct PreparedPrefillAttention {
@@ -1133,6 +1146,76 @@ impl PreparedPrefillAttention {
         #[cfg(not(feature = "cuda"))]
         {
             false
+        }
+    }
+
+    /// Executes the explicit Qwen P2051 probe and records its three
+    /// last-token attention boundaries. This offline diagnostic is separate
+    /// from serving selection and deliberately rejects every other backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a non-P2051 plan, an invalid trace span, an incompatible
+    /// context, or any native launch/completion failure. A native failure
+    /// poisons the prepared probe just as [`Self::execute`] does.
+    #[allow(clippy::too_many_lines)]
+    pub fn execute_hf_eager_qwen_p2051_last_row_traced(
+        &self,
+        params: &mut PrefillAttentionParams<'_>,
+        trace: HfEagerQwenP2051LastRowTrace<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "prefill_attention_p2051_last_row_trace";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        if self.backend != AttentionBackend::HuggingFaceEagerQwenP2051Probe {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "last-row tracing requires the explicit Qwen P2051 HF-eager probe",
+            ));
+        }
+        validate_execute_params(self, params, stream)?;
+        validate_hf_eager_qwen_p2051_last_row_trace(self, params, &trace, stream)?;
+
+        #[cfg(feature = "cuda")]
+        {
+            let workspace = params.workspace.as_mut().ok_or_else(|| {
+                CudaError::invalid_argument(OPERATION, "HF-eager workspace is missing")
+            })?;
+            let owner = self.hf_eager_plan.as_ref().ok_or_else(|| {
+                CudaError::invalid_state(OPERATION, "HF-eager native plan is missing")
+            })?;
+            let mut state = owner.lock().map_err(|_| {
+                CudaError::invalid_state(OPERATION, "HF-eager plan mutex is poisoned")
+            })?;
+            if state.poisoned {
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the HF-eager plan was poisoned by a prior native failure",
+                ));
+            }
+            let result = state.plan.execute_last_row_trace(
+                params.query.raw(),
+                params.key.raw(),
+                params.value.raw(),
+                params.output.raw(),
+                workspace.raw(),
+                trace.raw_qk_last.raw(),
+                trace.scaled_masked_last.raw(),
+                trace.probabilities_last.raw(),
+                &mut stream.native,
+            );
+            if result.is_err() {
+                state.poisoned = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = trace;
+            Err(not_supported(
+                OPERATION,
+                "the Qwen P2051 last-row trace requires the CUDA feature",
+            ))
         }
     }
 
@@ -2329,6 +2412,135 @@ fn validate_execute_params(
                 return Err(CudaError::invalid_argument(
                     OPERATION,
                     "non-materialized attention requires no workspace; pass None",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_hf_eager_qwen_p2051_last_row_trace(
+    prepared: &PreparedPrefillAttention,
+    params: &PrefillAttentionParams<'_>,
+    trace: &HfEagerQwenP2051LastRowTrace<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "prefill_attention_p2051_last_row_trace";
+    let request = prepared.request;
+    if request.batch_size != 1
+        || request.sequence_length != HF_EAGER_QWEN_P2051_PROBE_SEQUENCE
+        || request.query_head_count != HF_EAGER_QWEN_P2051_PROBE_QUERY_HEAD_COUNT
+        || request.key_value_head_count != HF_EAGER_QWEN_P2051_PROBE_KEY_VALUE_HEAD_COUNT
+        || request.head_size != HF_EAGER_QWEN_P2051_PROBE_HEAD_SIZE
+        || request.mask != AttentionMask::Causal
+    {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "last-row tracing requires the fixed causal Qwen P2051 probe request",
+        ));
+    }
+    let trace_bytes = checked_product(
+        OPERATION,
+        &[
+            request.query_head_count,
+            request.sequence_length,
+            BF16_BYTES,
+        ],
+    )?;
+    for (name, span) in [
+        ("raw_qk_last", &trace.raw_qk_last),
+        ("scaled_masked_last", &trace.scaled_masked_last),
+        ("probabilities_last", &trace.probabilities_last),
+    ] {
+        if span.dtype() != CudaDType::BF16 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!("{name} must be bf16, got {}", span.dtype()),
+            ));
+        }
+        if span.byte_len() != trace_bytes {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!("{name} must expose exactly {trace_bytes} bytes"),
+            ));
+        }
+        if span.byte_offset() % HF_EAGER_REQUIRED_ALIGNMENT != 0 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!(
+                    "{name} byte offset {} is not {HF_EAGER_REQUIRED_ALIGNMENT}-byte aligned",
+                    span.byte_offset()
+                ),
+            ));
+        }
+        validate_resource(OPERATION, stream, span.buffer())?;
+    }
+    let workspace = params
+        .workspace
+        .as_ref()
+        .ok_or_else(|| CudaError::invalid_argument(OPERATION, "HF-eager workspace is missing"))?;
+    let spans = [
+        (
+            "query",
+            params.query.buffer(),
+            params.query.byte_offset(),
+            params.query.byte_len(),
+        ),
+        (
+            "key",
+            params.key.buffer(),
+            params.key.byte_offset(),
+            params.key.byte_len(),
+        ),
+        (
+            "value",
+            params.value.buffer(),
+            params.value.byte_offset(),
+            params.value.byte_len(),
+        ),
+        (
+            "output",
+            params.output.buffer(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+        ),
+        (
+            "workspace",
+            workspace.buffer(),
+            workspace.byte_offset(),
+            workspace.byte_len(),
+        ),
+        (
+            "raw_qk_last",
+            trace.raw_qk_last.buffer(),
+            trace.raw_qk_last.byte_offset(),
+            trace.raw_qk_last.byte_len(),
+        ),
+        (
+            "scaled_masked_last",
+            trace.scaled_masked_last.buffer(),
+            trace.scaled_masked_last.byte_offset(),
+            trace.scaled_masked_last.byte_len(),
+        ),
+        (
+            "probabilities_last",
+            trace.probabilities_last.buffer(),
+            trace.probabilities_last.byte_offset(),
+            trace.probabilities_last.byte_len(),
+        ),
+    ];
+    for left_index in 0..spans.len() {
+        for right_index in left_index + 1..spans.len() {
+            let (left_name, left_buffer, left_offset, left_len) = spans[left_index];
+            let (right_name, right_buffer, right_offset, right_len) = spans[right_index];
+            if ptr::eq(left_buffer, right_buffer)
+                && byte_ranges_overlap(left_offset, left_len, right_offset, right_len)
+            {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    format!(
+                        "P2051 last-row trace {left_name} and {right_name} ranges overlap in one device buffer"
+                    ),
                 ));
             }
         }

@@ -159,3 +159,8 @@ required-features = ["cuda"]
 name = "qwen3b_p2051_attention_boundary_gpu"
 path = "tests/qwen3b_p2051_attention_boundary_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "qwen3b_p2051_attention_window_gpu"
+path = "tests/qwen3b_p2051_attention_window_gpu.rs"
+required-features = ["cuda"]

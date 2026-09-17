@@ -20,7 +20,13 @@ constexpr uint64_t kBfloat16Bytes = 2;
 constexpr uint64_t kRequiredAlignment = 256;
 constexpr uint32_t kThreads = 256;
 constexpr uint32_t kMaximumBlocks = 65535;
-constexpr size_t kMaximumBuffers = 5;
+// The production execution owns five buffers. The diagnostic-only P2051
+// last-row trace adds three non-overlapping outputs, while retaining the
+// production capacity and launch sequence unchanged.
+constexpr size_t kExecutionBufferCount = 5;
+constexpr size_t kLastRowTraceBufferCount = 3;
+constexpr size_t kMaximumBuffers =
+    kExecutionBufferCount + kLastRowTraceBufferCount;
 constexpr int kHeuristicResults = 8;
 constexpr uint32_t kCausalMaskBf16AsF32Bits = 0xff7f0000U;
 constexpr uint64_t kReviewedQueryHeads = 9;
@@ -1517,7 +1523,7 @@ riley_cuda_hf_prefill_attention_plan_execute(
                           error, kOperation);
   }
   for (size_t index = 0;
-       status == RILEY_CUDA_STATUS_SUCCESS && index < kMaximumBuffers;
+       status == RILEY_CUDA_STATUS_SUCCESS && index < kExecutionBufferCount;
        ++index) {
     if (!same_context(plan->owner, spans[index].buffer->owner)) {
       status = validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -1526,7 +1532,7 @@ riley_cuda_hf_prefill_attention_plan_execute(
                                 "span belongs to another CUDA context");
     }
     for (size_t other = index + 1;
-         status == RILEY_CUDA_STATUS_SUCCESS && other < kMaximumBuffers;
+         status == RILEY_CUDA_STATUS_SUCCESS && other < kExecutionBufferCount;
          ++other) {
       if (spans_overlap(spans[index], spans[other])) {
         status = validation_error(error,
@@ -1541,8 +1547,8 @@ riley_cuda_hf_prefill_attention_plan_execute(
     return status;
   }
   ExclusiveUses uses(plan, stream);
-  for (const ResolvedSpan& span : spans) {
-    if (!uses.add(span.buffer)) {
+  for (size_t index = 0; index < kExecutionBufferCount; ++index) {
+    if (!uses.add(spans[index].buffer)) {
       return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kOperation, "attention buffer set overflow");
     }
@@ -1606,6 +1612,224 @@ riley_cuda_hf_prefill_attention_plan_execute(
     } else {
       status = launch_status(error, kOperation);
     }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    repeat_kv_kernel<<<block_count(repeated_elements), kThreads, 0,
+                       stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(spans[2].data), repeated,
+        plan->config.token_count, plan->config.query_head_count,
+        plan->config.key_value_head_count, plan->config.head_size,
+        repeated_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublaslt_error(
+        cublasLtMatmul(
+            plan->handle, plan->av.operation, &alpha, repeated,
+            plan->av.a_layout, scores, plan->av.b_layout, &beta,
+            spans[3].data, plan->av.c_layout, spans[3].data,
+            plan->av.c_layout, &plan->av.algorithm, nullptr, 0,
+            stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_execute_last_row_trace(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    const RileyCudaBufferSpan* query_span,
+    const RileyCudaBufferSpan* key_span,
+    const RileyCudaBufferSpan* value_span,
+    const RileyCudaBufferSpan* output_span,
+    const RileyCudaBufferSpan* workspace_span,
+    const RileyCudaBufferSpan* raw_qk_last_span,
+    const RileyCudaBufferSpan* scaled_masked_last_span,
+    const RileyCudaBufferSpan* probabilities_last_span,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute HF cuBLASLt P2051 attention last-row trace";
+  clear_error(error);
+  if (plan == nullptr || stream == nullptr || !plan->qk.algorithm_ready ||
+      !plan->av.algorithm_ready || plan->owner == nullptr ||
+      !same_context(plan->owner, stream->owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "plan or stream is invalid or belongs to another context");
+  }
+  if (!is_qwen_p2051_probe_geometry(plan->config) ||
+      plan->config.batch_count != 1) {
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "last-row tracing requires the single-request Qwen P2051 probe geometry");
+  }
+  if (command_batch_is_active(stream)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "last-row tracing cannot run inside a command batch or graph capture");
+  }
+  if (plan->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "the retained CUDA context cannot be restored");
+  }
+  const uint64_t trace_factors[] = {plan->config.query_head_count,
+                                    plan->config.token_count,
+                                    kBfloat16Bytes};
+  uint64_t trace_bytes = 0;
+  if (!checked_product(trace_factors,
+                       sizeof(trace_factors) / sizeof(trace_factors[0]),
+                       &trace_bytes)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "last-row trace byte count overflows u64");
+  }
+  ResolvedSpan spans[kMaximumBuffers]{};
+  RileyCudaStatus status = resolve_span(
+      query_span, plan->bytes.query, &spans[0], error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(key_span, plan->bytes.key_value, &spans[1], error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(value_span, plan->bytes.key_value, &spans[2], error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(output_span, plan->bytes.query, &spans[3], error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(workspace_span, plan->bytes.workspace, &spans[4],
+                          error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(raw_qk_last_span, trace_bytes, &spans[5], error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(scaled_masked_last_span, trace_bytes, &spans[6],
+                          error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(probabilities_last_span, trace_bytes, &spans[7],
+                          error, kOperation);
+  }
+  for (size_t index = 0;
+       status == RILEY_CUDA_STATUS_SUCCESS && index < kMaximumBuffers;
+       ++index) {
+    if (!same_context(plan->owner, spans[index].buffer->owner)) {
+      status = validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation,
+                                "span belongs to another CUDA context");
+    }
+    for (size_t other = index + 1;
+         status == RILEY_CUDA_STATUS_SUCCESS && other < kMaximumBuffers;
+         ++other) {
+      if (spans_overlap(spans[index], spans[other])) {
+        status = validation_error(error,
+                                  RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                                  RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                                  kOperation,
+                                  "P2051 attention trace spans must not overlap");
+      }
+    }
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(plan, stream);
+  for (const ResolvedSpan& span : spans) {
+    if (!uses.add(span.buffer)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kOperation, "attention buffer set overflow");
+    }
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  CurrentContext scope(plan->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  bool launch_attempted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  auto* scores = reinterpret_cast<__nv_bfloat16*>(spans[4].data);
+  auto* repeated = reinterpret_cast<__nv_bfloat16*>(
+      spans[4].data + static_cast<size_t>(plan->bytes.repeated_offset));
+  const uint64_t repeated_elements = plan->bytes.repeated_key_value / 2;
+  const uint64_t score_elements = plan->bytes.score / 2;
+  const size_t row_bytes =
+      static_cast<size_t>(plan->config.token_count * kBfloat16Bytes);
+  const size_t score_pitch = static_cast<size_t>(
+      plan->config.token_count * plan->config.token_count * kBfloat16Bytes);
+  const auto capture_last_rows = [&](const ResolvedSpan& destination) noexcept {
+    const auto* source = reinterpret_cast<const uint8_t*>(scores) +
+                         static_cast<size_t>(plan->config.token_count - 1) *
+                             row_bytes;
+    return runtime_error(
+        cudaMemcpy2DAsync(destination.data, row_bytes, source, score_pitch,
+                          row_bytes,
+                          static_cast<size_t>(plan->config.query_head_count),
+                          cudaMemcpyDeviceToDevice, stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
+  };
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    repeat_kv_kernel<<<block_count(repeated_elements), kThreads, 0,
+                       stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(spans[1].data), repeated,
+        plan->config.token_count, plan->config.query_head_count,
+        plan->config.key_value_head_count, plan->config.head_size,
+        repeated_elements);
+    status = launch_status(error, kOperation);
+  }
+  const float alpha = 1.0F;
+  const float beta = 0.0F;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublaslt_error(
+        cublasLtMatmul(
+            plan->handle, plan->qk.operation, &alpha, repeated,
+            plan->qk.a_layout, spans[0].data, plan->qk.b_layout, &beta,
+            scores, plan->qk.c_layout, scores, plan->qk.c_layout,
+            &plan->qk.algorithm, nullptr, 0, stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = capture_last_rows(spans[5]);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    scale_causal_mask_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            scores, plan->config.token_count, plan->config.scale,
+            score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = capture_last_rows(spans[6]);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const uint64_t rows =
+        plan->config.query_head_count * plan->config.token_count;
+    const bool softmax_launched =
+        launch_hf_persistent_softmax(scores, rows,
+                                     plan->config.token_count,
+                                     stream->stream) ||
+        launch_hf_regular_softmax(scores, rows, plan->config.token_count,
+                                  stream->stream);
+    if (!softmax_launched) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                              kOperation,
+                              "prepared HF softmax dispatch is unavailable");
+    } else {
+      status = launch_status(error, kOperation);
+    }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = capture_last_rows(spans[7]);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     repeat_kv_kernel<<<block_count(repeated_elements), kThreads, 0,

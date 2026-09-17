@@ -2407,6 +2407,19 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hf_prefill_attention_plan_execute_last_row_trace(
+        plan: *mut RawHfPrefillAttentionPlan,
+        query: *const RawBufferSpan,
+        key: *const RawBufferSpan,
+        value: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        workspace: *const RawBufferSpan,
+        raw_qk_last: *const RawBufferSpan,
+        scaled_masked_last: *const RawBufferSpan,
+        probabilities_last: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_hf_prefill_attention_plan_close(
         plan: *mut *mut RawHfPrefillAttentionPlan,
         error: *mut ErrorInfo,
@@ -8815,6 +8828,44 @@ impl HfPrefillAttentionPlanHandle {
             )
         };
         status_result(status, "execute HF cuBLASLt prefill attention", &error)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn execute_last_row_trace(
+        &mut self,
+        query: RawBufferSpan,
+        key: RawBufferSpan,
+        value: RawBufferSpan,
+        output: RawBufferSpan,
+        workspace: RawBufferSpan,
+        raw_qk_last: RawBufferSpan,
+        scaled_masked_last: RawBufferSpan,
+        probabilities_last: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: this diagnostic owner uniquely borrows all base and trace
+        // spans, the prepared plan, and the stream until native completion.
+        let status = unsafe {
+            riley_cuda_hf_prefill_attention_plan_execute_last_row_trace(
+                self.as_ptr(),
+                &query,
+                &key,
+                &value,
+                &output,
+                &workspace,
+                &raw_qk_last,
+                &scaled_masked_last,
+                &probabilities_last,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(
+            status,
+            "execute HF cuBLASLt P2051 attention last-row trace",
+            &error,
+        )
     }
 
     pub(super) fn close(&mut self) -> CudaResult<()> {
