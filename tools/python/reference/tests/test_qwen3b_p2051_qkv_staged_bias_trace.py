@@ -142,7 +142,7 @@ def _manifest(
             "source_revision": "e" * 40,
             "input_tensor_key": trace.p11.P7_INPUT_KEY,
             "actual_tensor_keys": {
-                item.identifier: f"trace/layer0.{item.module_name}"
+                item.identifier: f"trace/layer0/{item.module_name}"
                 for item in trace.PROJECTIONS
             },
             "actual_bf16_le_sha256": {
@@ -319,4 +319,3 @@ class Qwen3BP2051QkvStagedBiasTraceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

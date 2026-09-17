@@ -581,7 +581,7 @@ def _p7_binding_document(
         "source_revision": source["git_revision"],
         "input_tensor_key": p11.P7_INPUT_KEY,
         "actual_tensor_keys": {
-            item.identifier: f"trace/layer0.{item.module_name}" for item in PROJECTIONS
+            item.identifier: f"trace/layer0/{item.module_name}" for item in PROJECTIONS
         },
         "actual_bf16_le_sha256": {
             item.identifier: _mapping(
@@ -809,7 +809,7 @@ def _validate_p7_binding(value: object) -> Mapping[str, object]:
         or binding["sidecar_sha256"] != P7_SIDECAR_SHA256
         or binding["input_tensor_key"] != p11.P7_INPUT_KEY
         or binding["actual_tensor_keys"]
-        != {item.identifier: f"trace/layer0.{item.module_name}" for item in PROJECTIONS}
+        != {item.identifier: f"trace/layer0/{item.module_name}" for item in PROJECTIONS}
         or oracle.GIT_REVISION_RE.fullmatch(
             _string(binding["source_revision"], "P12 P7 source revision")
         )
@@ -1274,7 +1274,7 @@ def produce_hf_trace(
             (M, item.width),
         )
         p7_requested[item.p7_actual_name] = (
-            f"trace/layer0.{item.module_name}",
+            f"trace/layer0/{item.module_name}",
             (M, item.width),
         )
     p11_tensors = _load_sidecar_tensors(
