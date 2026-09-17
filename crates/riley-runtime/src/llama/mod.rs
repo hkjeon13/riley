@@ -151,8 +151,9 @@ pub use forward::LlamaProjectionBiasMode;
 
 #[cfg(feature = "cuda")]
 pub use forward::{
-    LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaTracePoint,
-    PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig,
+    LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaLastTokenLayerStage,
+    LlamaTracePoint, PreparedLlamaAllocationReport, PreparedLlamaForward,
+    PreparedLlamaForwardConfig, PreparedLlamaLastTokenLayerStageTrace,
     PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
 };
 
@@ -189,7 +190,7 @@ mod source_contract_tests {
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::executor::config::normalize_prepared_config;
-    use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
+    use super::forward::{LlamaLastTokenLayerStage, LlamaTracePoint, PreparedLlamaForwardConfig};
     use super::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
     use riley_cuda::{AttentionPreference, AttentionReductionProfile};
 
@@ -508,8 +509,8 @@ mod source_contract_tests {
             "hot execute must use the backend fixed during cold preparation"
         );
         assert!(
-            source.contains("self.execute_inner::<false>(stream, None, None, None)"),
-            "public cache-free execute must not attach a PR09 cache sink"
+            source.contains("self.execute_inner::<false, false>(stream, None, None, None, None)"),
+            "public cache-free execute must not attach diagnostic traces or a PR09 cache sink"
         );
     }
 
@@ -581,6 +582,37 @@ mod source_contract_tests {
                 "final_norm.output",
                 "last_logits",
             ]
+        );
+    }
+
+    #[test]
+    fn selected_layer_stage_trace_names_are_stable_and_generic() {
+        let names: Vec<_> = LlamaLastTokenLayerStage::ALL
+            .into_iter()
+            .map(LlamaLastTokenLayerStage::name)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "input_norm",
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "q_rope",
+                "k_rope",
+                "attention_context",
+                "after_attention_residual",
+                "post_attention_norm",
+                "gate_proj",
+                "up_proj",
+                "gated",
+                "down_proj",
+                "output",
+            ]
+        );
+        assert!(
+            include_str!("forward.rs").contains("prepare_last_token_layer_stage_trace"),
+            "the selected-layer diagnostic must remain an opt-in preparation API"
         );
     }
 
