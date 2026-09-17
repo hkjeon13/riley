@@ -153,8 +153,8 @@ pub use forward::LlamaProjectionBiasMode;
 pub use forward::{
     LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaLastTokenLayerStage,
     LlamaTracePoint, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, PreparedLlamaLastTokenLayerStageTrace,
-    PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
+    PreparedLlamaForwardConfig, PreparedLlamaFullSequenceLayerStageTrace,
+    PreparedLlamaLastTokenLayerStageTrace, PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
 };
 
 #[cfg(feature = "cuda")]
@@ -509,7 +509,7 @@ mod source_contract_tests {
             "hot execute must use the backend fixed during cold preparation"
         );
         assert!(
-            source.contains("self.execute_inner::<false, false>(stream, None, None, None, None)"),
+            source.contains("self.execute_inner::<false, false, false>("),
             "public cache-free execute must not attach diagnostic traces or a PR09 cache sink"
         );
     }
@@ -613,6 +613,14 @@ mod source_contract_tests {
         assert!(
             include_str!("forward.rs").contains("prepare_last_token_layer_stage_trace"),
             "the selected-layer diagnostic must remain an opt-in preparation API"
+        );
+        assert!(
+            include_str!("forward.rs").contains("prepare_full_sequence_layer_stage_trace"),
+            "the full-sequence layer diagnostic must remain an opt-in preparation API"
+        );
+        assert!(
+            include_str!("forward.rs").contains("execute_full_sequence_layer_stage_traced"),
+            "the full-sequence layer diagnostic must remain outside ordinary serving execution"
         );
     }
 

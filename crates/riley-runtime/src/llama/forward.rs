@@ -454,11 +454,38 @@ pub struct PreparedLlamaLastTokenLayerStageTrace {
     captured: u16,
 }
 
+/// Caller-owned full-sequence tensors for selected boundaries in one decoder
+/// layer.
+///
+/// This is a bounded diagnostic owner for investigating a divergence that is
+/// invisible in a last-token row: later causal attention consumes every prior
+/// row. Normal forward execution neither creates this owner nor transfers its
+/// tensors. Callers explicitly select the layer and named stages before using
+/// [`PreparedLlamaForward::execute_full_sequence_layer_stage_traced`].
+pub struct PreparedLlamaFullSequenceLayerStageTrace {
+    contract: LlamaTraceContract,
+    layer_index: usize,
+    tensors: Box<[Box<[u8]>]>,
+    requested: u16,
+    captured: u16,
+}
+
 impl fmt::Debug for PreparedLlamaLastTokenLayerStageTrace {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PreparedLlamaLastTokenLayerStageTrace")
             .field("layer_index", &self.layer_index)
+            .field("captured_stage_count", &self.captured_stage_count())
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for PreparedLlamaFullSequenceLayerStageTrace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedLlamaFullSequenceLayerStageTrace")
+            .field("layer_index", &self.layer_index)
+            .field("requested_stage_count", &self.requested_stage_count())
             .field("captured_stage_count", &self.captured_stage_count())
             .finish_non_exhaustive()
     }
@@ -534,6 +561,130 @@ impl PreparedLlamaLastTokenLayerStageTrace {
     pub fn tensor(&self, stage: LlamaLastTokenLayerStage) -> Option<&[u8]> {
         (self.captured & layer_stage_trace_bit(stage) != 0)
             .then(|| self.tensors[stage.index()].as_ref())
+    }
+
+    fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
+        if self.contract != trace_contract(plan) {
+            return Err(LlamaForwardError::TracePlanMismatch);
+        }
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        self.captured = 0;
+    }
+
+    fn destination(&mut self, stage: LlamaLastTokenLayerStage) -> &mut [u8] {
+        self.tensors[stage.index()].as_mut()
+    }
+
+    fn mark_captured(&mut self, stage: LlamaLastTokenLayerStage) {
+        self.captured |= layer_stage_trace_bit(stage);
+    }
+}
+
+impl PreparedLlamaFullSequenceLayerStageTrace {
+    fn prepare(
+        plan: &LlamaExecutionPlan,
+        layer_index: usize,
+        stages: &[LlamaLastTokenLayerStage],
+    ) -> LlamaForwardResult<Self> {
+        let layer_count = plan.layers().len();
+        if layer_index >= layer_count {
+            return Err(
+                LlamaForwardError::FullSequenceLayerStageTraceLayerUnavailable {
+                    layer_index,
+                    actual_layers: layer_count,
+                },
+            );
+        }
+        let requested = stages
+            .iter()
+            .fold(0_u16, |mask, &stage| mask | layer_stage_trace_bit(stage));
+        let total_capture_bytes =
+            LlamaLastTokenLayerStage::ALL
+                .into_iter()
+                .try_fold(0_u64, |total, stage| {
+                    if requested & layer_stage_trace_bit(stage) == 0 {
+                        return Ok(total);
+                    }
+                    total
+                        .checked_add(full_sequence_layer_stage_byte_len(plan, stage)?)
+                        .ok_or(LlamaForwardError::ArithmeticOverflow {
+                            resource: LlamaForwardResource::TraceCapture,
+                        })
+                })?;
+        let mut tensors = Vec::new();
+        tensors
+            .try_reserve_exact(LAST_TOKEN_LAYER_STAGE_COUNT)
+            .map_err(|_| LlamaForwardError::HostAllocation {
+                resource: LlamaForwardResource::TraceCapture,
+                requested_bytes: total_capture_bytes,
+            })?;
+        for stage in LlamaLastTokenLayerStage::ALL {
+            tensors.push(if requested & layer_stage_trace_bit(stage) == 0 {
+                Box::default()
+            } else {
+                allocate_host_bytes(
+                    full_sequence_layer_stage_byte_len(plan, stage)?,
+                    LlamaForwardResource::TraceCapture,
+                )?
+            });
+        }
+        if tensors.len() != LAST_TOKEN_LAYER_STAGE_COUNT {
+            return Err(LlamaForwardError::HostAllocation {
+                resource: LlamaForwardResource::TraceCapture,
+                requested_bytes: total_capture_bytes,
+            });
+        }
+        Ok(Self {
+            contract: trace_contract(plan),
+            layer_index,
+            tensors: tensors.into_boxed_slice(),
+            requested,
+            captured: 0,
+        })
+    }
+
+    /// Decoder-layer index selected during cold diagnostic preparation.
+    #[must_use]
+    pub const fn layer_index(&self) -> usize {
+        self.layer_index
+    }
+
+    /// Number of full-sequence boundaries selected by the caller.
+    #[must_use]
+    pub const fn requested_stage_count(&self) -> u32 {
+        self.requested.count_ones()
+    }
+
+    /// Number of selected full-sequence boundaries captured in the latest run.
+    #[must_use]
+    pub const fn captured_stage_count(&self) -> u32 {
+        self.captured.count_ones()
+    }
+
+    /// Whether every selected full-sequence boundary was captured.
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        self.requested == self.captured
+    }
+
+    /// Returns a selected full-sequence BF16 tensor after it was captured.
+    #[must_use]
+    pub fn tensor(&self, stage: LlamaLastTokenLayerStage) -> Option<&[u8]> {
+        (self.captured & layer_stage_trace_bit(stage) != 0)
+            .then(|| self.tensors[stage.index()].as_ref())
+    }
+
+    /// Exact BF16 byte length reserved for one selected full-sequence stage.
+    #[must_use]
+    pub fn tensor_byte_len(&self, stage: LlamaLastTokenLayerStage) -> usize {
+        self.tensors[stage.index()].len()
+    }
+
+    fn requests(&self, stage: LlamaLastTokenLayerStage) -> bool {
+        self.requested & layer_stage_trace_bit(stage) != 0
     }
 
     fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
@@ -1407,6 +1558,17 @@ fn last_token_layer_stage_row_byte_len(
     last_token_row_byte_len(width)
 }
 
+fn full_sequence_layer_stage_byte_len(
+    plan: &LlamaExecutionPlan,
+    stage: LlamaLastTokenLayerStage,
+) -> LlamaForwardResult<u64> {
+    to_u64(plan.sequence_length(), LlamaForwardResource::TraceCapture)?
+        .checked_mul(last_token_layer_stage_row_byte_len(plan, stage)?)
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::TraceCapture,
+        })
+}
+
 fn last_token_trace_total_bytes(
     layer_count: usize,
     row_byte_len: u64,
@@ -1497,6 +1659,31 @@ fn capture_last_token_layer_stage(
         let destination = trace.destination(stage);
         buffer
             .download_to_slice(source_offset, destination, io_staging, stream)
+            .map_err(|source| LlamaForwardError::cuda(site, source))?;
+    }
+    trace.mark_captured(stage);
+    Ok(())
+}
+
+fn capture_full_sequence_layer_stage(
+    trace: &mut Option<&mut PreparedLlamaFullSequenceLayerStageTrace>,
+    layer_index: usize,
+    stage: LlamaLastTokenLayerStage,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    if trace.layer_index() != layer_index || !trace.requests(stage) {
+        return Ok(());
+    }
+    {
+        let destination = trace.destination(stage);
+        buffer
+            .download_to_slice(0, destination, io_staging, stream)
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
     }
     trace.mark_captured(stage);
@@ -1635,6 +1822,10 @@ pub enum LlamaForwardError {
         layer_index: usize,
         actual_layers: usize,
     },
+    FullSequenceLayerStageTraceLayerUnavailable {
+        layer_index: usize,
+        actual_layers: usize,
+    },
     Cleanup {
         resource: LlamaForwardResource,
         source: CudaError,
@@ -1735,6 +1926,13 @@ impl fmt::Display for LlamaForwardError {
             } => write!(
                 formatter,
                 "last-token layer trace requested layer {layer_index}, but the forward has {actual_layers} decoder layers"
+            ),
+            Self::FullSequenceLayerStageTraceLayerUnavailable {
+                layer_index,
+                actual_layers,
+            } => write!(
+                formatter,
+                "full-sequence layer-stage trace requested layer {layer_index}, but the forward has {actual_layers} decoder layers"
             ),
             Self::Cleanup { resource, source } => {
                 write!(formatter, "could not close {resource}: {source}")
@@ -2888,6 +3086,24 @@ impl PreparedLlamaForward {
         PreparedLlamaLastTokenLayerStageTrace::prepare(&self.plan, layer_index)
     }
 
+    /// Allocates selected full-sequence BF16 boundaries in one decoder layer.
+    ///
+    /// This owner is diagnostic-only. It exists for cases where a final-token
+    /// boundary is exact while earlier causal rows still affect a later layer.
+    /// Normal serving execution does not allocate or copy these tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the layer does not exist or the caller-selected full
+    /// sequence tensors cannot be reserved.
+    pub fn prepare_full_sequence_layer_stage_trace(
+        &self,
+        layer_index: usize,
+        stages: &[LlamaLastTokenLayerStage],
+    ) -> LlamaForwardResult<PreparedLlamaFullSequenceLayerStageTrace> {
+        PreparedLlamaFullSequenceLayerStageTrace::prepare(&self.plan, layer_index, stages)
+    }
+
     /// Whether one valid exact-length token vector has been uploaded.
     #[must_use]
     pub const fn tokens_ready(&self) -> bool {
@@ -2992,7 +3208,8 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         self.output_ready = false;
-        let result = self.execute_inner::<false, false>(stream, None, None, None, None);
+        let result =
+            self.execute_inner::<false, false, false>(stream, None, None, None, None, None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -3024,7 +3241,8 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         self.output_ready = false;
-        let result = self.execute_inner::<false, false>(stream, None, None, None, Some(cache));
+        let result =
+            self.execute_inner::<false, false, false>(stream, None, None, None, None, Some(cache));
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -3075,7 +3293,8 @@ impl PreparedLlamaForward {
         trace.validate(&self.plan)?;
         trace.reset();
         self.output_ready = false;
-        let result = self.execute_inner::<false, false>(stream, Some(trace), None, None, None);
+        let result =
+            self.execute_inner::<false, false, false>(stream, Some(trace), None, None, None, None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -3115,7 +3334,8 @@ impl PreparedLlamaForward {
         trace.validate(&self.plan)?;
         trace.reset();
         self.output_ready = false;
-        let result = self.execute_inner::<true, false>(stream, None, Some(trace), None, None);
+        let result =
+            self.execute_inner::<true, false, false>(stream, None, Some(trace), None, None, None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -3154,7 +3374,48 @@ impl PreparedLlamaForward {
         trace.validate(&self.plan)?;
         trace.reset();
         self.output_ready = false;
-        let result = self.execute_inner::<false, true>(stream, None, None, Some(trace), None);
+        let result =
+            self.execute_inner::<false, true, false>(stream, None, None, Some(trace), None, None);
+        match result {
+            Ok(()) => {
+                self.output_ready = true;
+                Ok(())
+            }
+            Err(error) => {
+                poison_for_forward_error(&mut self.poisoned, &error);
+                self.poisoned |= self.gemms.any_poisoned();
+                Err(error)
+            }
+        }
+    }
+
+    /// Executes the graph while capturing caller-selected full-sequence
+    /// boundaries in one decoder layer.
+    ///
+    /// This is a diagnostic-only path. Each selected transfer synchronizes the
+    /// explicit stream; the normal serving path has no allocation or transfer
+    /// branch for this owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns for missing tokens, a poisoned owner, an incompatible trace, or
+    /// a layer/op-qualified CUDA transfer or execution failure.
+    pub fn execute_full_sequence_layer_stage_traced(
+        &mut self,
+        stream: &mut CudaStream,
+        trace: &mut PreparedLlamaFullSequenceLayerStageTrace,
+    ) -> LlamaForwardResult<()> {
+        if self.poisoned {
+            return Err(LlamaForwardError::Poisoned);
+        }
+        if !self.tokens_ready {
+            return Err(LlamaForwardError::TokensNotUploaded);
+        }
+        trace.validate(&self.plan)?;
+        trace.reset();
+        self.output_ready = false;
+        let result =
+            self.execute_inner::<false, false, true>(stream, None, None, None, Some(trace), None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -3291,12 +3552,17 @@ impl PreparedLlamaForward {
         clippy::cast_precision_loss,
         clippy::similar_names
     )]
-    fn execute_inner<const LAST_TOKEN_TRACE: bool, const LAYER_STAGE_TRACE: bool>(
+    fn execute_inner<
+        const LAST_TOKEN_TRACE: bool,
+        const LAYER_STAGE_TRACE: bool,
+        const FULL_SEQUENCE_LAYER_STAGE_TRACE: bool,
+    >(
         &mut self,
         stream: &mut CudaStream,
         mut trace: Option<&mut PreparedLlamaTrace>,
         mut last_token_layer_trace: Option<&mut PreparedLlamaLastTokenLayerTrace>,
         mut last_token_layer_stage_trace: Option<&mut PreparedLlamaLastTokenLayerStageTrace>,
+        mut full_sequence_layer_stage_trace: Option<&mut PreparedLlamaFullSequenceLayerStageTrace>,
         mut cache: Option<PrefillKvCacheSink<'_>>,
     ) -> LlamaForwardResult<()> {
         let plan = &self.plan;
@@ -3432,6 +3698,17 @@ impl PreparedLlamaForward {
                     input_norm_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::InputNorm,
+                    &mut buffers.hidden_norm,
+                    io_staging,
+                    stream,
+                    input_norm_site,
+                )?;
+            }
 
             let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
             let query_weight = weight_span(weights, layer.query_weight(), query_site)?;
@@ -3497,6 +3774,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::QueryProjection,
                     &mut buffers.hidden_projection,
                     last_token_hidden_offset,
+                    io_staging,
+                    stream,
+                    query_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::QueryProjection,
+                    &mut buffers.hidden_projection,
                     io_staging,
                     stream,
                     query_site,
@@ -3571,6 +3859,17 @@ impl PreparedLlamaForward {
                     key_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::KeyProjection,
+                    &mut buffers.key_raw,
+                    io_staging,
+                    stream,
+                    key_site,
+                )?;
+            }
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
             let value_weight = weight_span(weights, layer.value_weight(), value_site)?;
             let (strict, fused) = gemms.key_value_projection_plans();
@@ -3640,6 +3939,17 @@ impl PreparedLlamaForward {
                     value_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::ValueProjection,
+                    &mut buffers.value_raw,
+                    io_staging,
+                    stream,
+                    value_site,
+                )?;
+            }
 
             let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
             {
@@ -3701,6 +4011,17 @@ impl PreparedLlamaForward {
                     query_rope_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::QueryRotary,
+                    &mut buffers.hidden_rotary,
+                    io_staging,
+                    stream,
+                    query_rope_site,
+                )?;
+            }
             let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
             {
                 let mut params = RopeParams {
@@ -3756,6 +4077,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::KeyRotary,
                     &mut buffers.key_rotary,
                     last_token_key_value_offset,
+                    io_staging,
+                    stream,
+                    key_rope_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::KeyRotary,
+                    &mut buffers.key_rotary,
                     io_staging,
                     stream,
                     key_rope_site,
@@ -3870,6 +4202,17 @@ impl PreparedLlamaForward {
                     prefill_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::AttentionContext,
+                    &mut buffers.hidden_context,
+                    io_staging,
+                    stream,
+                    prefill_site,
+                )?;
+            }
 
             let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
             let output_weight = weight_span(weights, layer.output_weight(), output_site)?;
@@ -3965,6 +4308,17 @@ impl PreparedLlamaForward {
                     attention_residual_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::AfterAttentionResidual,
+                    &mut buffers.hidden_rotary,
+                    io_staging,
+                    stream,
+                    attention_residual_site,
+                )?;
+            }
 
             let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
             let post_norm_weight =
@@ -4009,6 +4363,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::PostAttentionNorm,
                     &mut buffers.hidden_norm,
                     last_token_hidden_offset,
+                    io_staging,
+                    stream,
+                    post_norm_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::PostAttentionNorm,
+                    &mut buffers.hidden_norm,
                     io_staging,
                     stream,
                     post_norm_site,
@@ -4073,6 +4438,17 @@ impl PreparedLlamaForward {
                     gate_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::GateProjection,
+                    &mut buffers.gate_raw,
+                    io_staging,
+                    stream,
+                    gate_site,
+                )?;
+            }
             let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
             let up_weight = weight_span(weights, layer.up_weight(), up_site)?;
             #[cfg(feature = "cuda-cublas-gemm-probe")]
@@ -4126,6 +4502,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::UpProjection,
                     &mut buffers.up_raw,
                     last_token_intermediate_offset,
+                    io_staging,
+                    stream,
+                    up_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::UpProjection,
+                    &mut buffers.up_raw,
                     io_staging,
                     stream,
                     up_site,
@@ -4200,6 +4587,17 @@ impl PreparedLlamaForward {
                     gated_site,
                 )?;
             }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::Gated,
+                    &mut buffers.gated_product,
+                    io_staging,
+                    stream,
+                    gated_site,
+                )?;
+            }
             let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
             let down_weight = weight_span(weights, layer.down_weight(), down_site)?;
             #[cfg(feature = "cuda-cublas-gemm-probe")]
@@ -4253,6 +4651,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::DownProjection,
                     &mut buffers.hidden_current,
                     last_token_hidden_offset,
+                    io_staging,
+                    stream,
+                    down_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::DownProjection,
+                    &mut buffers.hidden_current,
                     io_staging,
                     stream,
                     down_site,
@@ -4312,6 +4721,17 @@ impl PreparedLlamaForward {
                     LlamaLastTokenLayerStage::Output,
                     &mut buffers.hidden_projection,
                     last_token_hidden_offset,
+                    io_staging,
+                    stream,
+                    mlp_residual_site,
+                )?;
+            }
+            if FULL_SEQUENCE_LAYER_STAGE_TRACE {
+                capture_full_sequence_layer_stage(
+                    &mut full_sequence_layer_stage_trace,
+                    layer_index,
+                    LlamaLastTokenLayerStage::Output,
+                    &mut buffers.hidden_projection,
                     io_staging,
                     stream,
                     mlp_residual_site,
