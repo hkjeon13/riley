@@ -18,6 +18,10 @@ use riley_cuda::{
     RopeParams, RopeTableParams, SiluParams, embedding, gated_multiply, kv_cache_append,
     paged_kv_cache_append, residual_add, rope, rope_table, silu,
 };
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+use riley_cuda::{
+    CudaGemmReductionPolicy, CudaPreparedBiasEpilogueGemm, CudaPreparedCublasGemmProbe,
+};
 use riley_model::LoadedModel;
 
 use crate::paged_kv::{
@@ -34,6 +38,8 @@ use super::forward::{
     execute_projection_bias, poison_for_cuda_error, poison_for_forward_error, span, span_mut,
     weight_span,
 };
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+use super::forward::{execute_bias_epilogue_gemm, execute_direct_cublas_gemm_probe};
 use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 
 const BF16_BYTES: u64 = 2;
@@ -73,6 +79,12 @@ pub enum LlamaDecodeResource {
     IntermediateGemm,
     DownGemm,
     LmHeadGemm,
+    HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm,
+    HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm,
+    HfEagerQwenP2048CacheOnM1OutputProjectionDirectCublasGemm,
+    HfEagerQwenP2048CacheOnM1MlpIntermediateDirectCublasGemm,
+    HfEagerQwenP2048CacheOnM1MlpDownDirectCublasGemm,
+    HfEagerQwenP2048CacheOnM1LmHeadDirectCublasGemm,
 }
 
 impl LlamaDecodeResource {
@@ -95,6 +107,24 @@ impl LlamaDecodeResource {
             Self::IntermediateGemm => "decode_intermediate_gemm",
             Self::DownGemm => "decode_down_gemm",
             Self::LmHeadGemm => "decode_lm_head_gemm",
+            Self::HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_query_bias_epilogue_gemm"
+            }
+            Self::HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_key_value_bias_epilogue_gemm"
+            }
+            Self::HfEagerQwenP2048CacheOnM1OutputProjectionDirectCublasGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_output_projection_direct_cublas_gemm"
+            }
+            Self::HfEagerQwenP2048CacheOnM1MlpIntermediateDirectCublasGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_mlp_intermediate_direct_cublas_gemm"
+            }
+            Self::HfEagerQwenP2048CacheOnM1MlpDownDirectCublasGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_mlp_down_direct_cublas_gemm"
+            }
+            Self::HfEagerQwenP2048CacheOnM1LmHeadDirectCublasGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_lm_head_direct_cublas_gemm"
+            }
         }
     }
 }
@@ -1362,12 +1392,24 @@ impl PrefillKvCacheSink<'_> {
     }
 }
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+struct HfEagerQwenP2048CacheOnM1ProjectionGemmPlans {
+    query: CudaPreparedBiasEpilogueGemm,
+    key_value: CudaPreparedBiasEpilogueGemm,
+    output: CudaPreparedCublasGemmProbe,
+    intermediate: CudaPreparedCublasGemmProbe,
+    down: CudaPreparedCublasGemmProbe,
+    lm_head: CudaPreparedCublasGemmProbe,
+}
+
 struct DecodeGemmPlans {
     hidden: PreparedLlamaGemm,
     key_value: PreparedLlamaGemm,
     intermediate: PreparedLlamaGemm,
     down: PreparedLlamaGemm,
     lm_head: PreparedLlamaGemm,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    hf_eager_qwen_p2048_cache_on_m1: Option<HfEagerQwenP2048CacheOnM1ProjectionGemmPlans>,
 }
 
 /// Prepared attention plan matching the selected cache address space.
@@ -1442,10 +1484,29 @@ impl DecodeGemmPlans {
             || self.intermediate.is_poisoned()
             || self.down.is_poisoned()
             || self.lm_head.is_poisoned()
+            || {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    self.hf_eager_qwen_p2048_cache_on_m1
+                        .as_ref()
+                        .is_some_and(|plans| {
+                            plans.query.is_poisoned()
+                                || plans.key_value.is_poisoned()
+                                || plans.output.is_poisoned()
+                                || plans.intermediate.is_poisoned()
+                                || plans.down.is_poisoned()
+                                || plans.lm_head.is_poisoned()
+                        })
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                {
+                    false
+                }
+            }
     }
 
     fn maximum_workspace_bytes(&self) -> u64 {
-        [
+        let maximum = [
             self.hidden.workspace_bytes(),
             self.key_value.workspace_bytes(),
             self.intermediate.workspace_bytes(),
@@ -1454,7 +1515,21 @@ impl DecodeGemmPlans {
         ]
         .into_iter()
         .max()
-        .unwrap_or(0)
+        .unwrap_or(0);
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let maximum = self
+            .hf_eager_qwen_p2048_cache_on_m1
+            .as_ref()
+            .map_or(maximum, |plans| {
+                maximum.max(
+                    plans
+                        .query
+                        .algorithm_metadata()
+                        .workspace_bytes()
+                        .max(plans.key_value.algorithm_metadata().workspace_bytes()),
+                )
+            });
+        maximum
     }
 }
 
@@ -1932,6 +2007,7 @@ impl PreparedLlamaDecode {
             context,
             &forward,
             config.forward().gemm_workspace_cap_bytes(),
+            hf_eager_qwen_p2048_cache_on_m1_trace_probe,
         )?;
         let decode_gemm_workspace_bytes = gemms.maximum_workspace_bytes();
         let rope_table_bytes_per_kind =
@@ -2480,24 +2556,51 @@ impl PreparedLlamaDecode {
 
             let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
             let query_weight = weight_span(weights, layer.query_weight(), query_site)?;
-            execute_gemm(
-                &mut gemms.hidden,
-                &buffers.hidden_norm,
-                query_weight,
-                &mut buffers.hidden_projection,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                query_site,
-            )?;
-            execute_projection_bias(
-                weights,
-                layer.query_bias(),
-                &mut buffers.hidden_projection,
-                1,
-                hidden,
-                stream,
-                query_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms
+                        .hf_eager_qwen_p2048_cache_on_m1
+                        .as_mut()
+                        .ok_or(LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
+                        })?;
+                    execute_bias_epilogue_gemm(
+                        &mut candidate.query,
+                        weights,
+                        layer.query_bias(),
+                        &buffers.hidden_norm,
+                        query_weight,
+                        &mut buffers.hidden_projection,
+                        &mut decode_buffers.gemm_workspace,
+                        stream,
+                        query_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.hidden,
+                    &buffers.hidden_norm,
+                    query_weight,
+                    &mut buffers.hidden_projection,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    query_site,
+                )?;
+                execute_projection_bias(
+                    weights,
+                    layer.query_bias(),
+                    &mut buffers.hidden_projection,
+                    1,
+                    hidden,
+                    stream,
+                    query_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -2511,24 +2614,51 @@ impl PreparedLlamaDecode {
             }
             let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
             let key_weight = weight_span(weights, layer.key_weight(), key_site)?;
-            execute_gemm(
-                &mut gemms.key_value,
-                &buffers.hidden_norm,
-                key_weight,
-                &mut buffers.key_raw,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                key_site,
-            )?;
-            execute_projection_bias(
-                weights,
-                layer.key_bias(),
-                &mut buffers.key_raw,
-                1,
-                key_value_width,
-                stream,
-                key_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms
+                        .hf_eager_qwen_p2048_cache_on_m1
+                        .as_mut()
+                        .ok_or(LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
+                        })?;
+                    execute_bias_epilogue_gemm(
+                        &mut candidate.key_value,
+                        weights,
+                        layer.key_bias(),
+                        &buffers.hidden_norm,
+                        key_weight,
+                        &mut buffers.key_raw,
+                        &mut decode_buffers.gemm_workspace,
+                        stream,
+                        key_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.key_value,
+                    &buffers.hidden_norm,
+                    key_weight,
+                    &mut buffers.key_raw,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    key_site,
+                )?;
+                execute_projection_bias(
+                    weights,
+                    layer.key_bias(),
+                    &mut buffers.key_raw,
+                    1,
+                    key_value_width,
+                    stream,
+                    key_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -2542,24 +2672,51 @@ impl PreparedLlamaDecode {
             }
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
             let value_weight = weight_span(weights, layer.value_weight(), value_site)?;
-            execute_gemm(
-                &mut gemms.key_value,
-                &buffers.hidden_norm,
-                value_weight,
-                &mut buffers.value_raw,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                value_site,
-            )?;
-            execute_projection_bias(
-                weights,
-                layer.value_bias(),
-                &mut buffers.value_raw,
-                1,
-                key_value_width,
-                stream,
-                value_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms
+                        .hf_eager_qwen_p2048_cache_on_m1
+                        .as_mut()
+                        .ok_or(LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
+                        })?;
+                    execute_bias_epilogue_gemm(
+                        &mut candidate.key_value,
+                        weights,
+                        layer.value_bias(),
+                        &buffers.hidden_norm,
+                        value_weight,
+                        &mut buffers.value_raw,
+                        &mut decode_buffers.gemm_workspace,
+                        stream,
+                        value_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.key_value,
+                    &buffers.hidden_norm,
+                    value_weight,
+                    &mut buffers.value_raw,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    value_site,
+                )?;
+                execute_projection_bias(
+                    weights,
+                    layer.value_bias(),
+                    &mut buffers.value_raw,
+                    1,
+                    key_value_width,
+                    stream,
+                    value_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -2775,24 +2932,48 @@ impl PreparedLlamaDecode {
 
             let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
             let output_weight = weight_span(weights, layer.output_weight(), output_site)?;
-            execute_gemm(
-                &mut gemms.hidden,
-                &buffers.hidden_context,
-                output_weight,
-                &mut buffers.hidden_projection,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                output_site,
-            )?;
-            execute_projection_bias(
-                weights,
-                layer.output_bias(),
-                &mut buffers.hidden_projection,
-                1,
-                hidden,
-                stream,
-                output_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms
+                        .hf_eager_qwen_p2048_cache_on_m1
+                        .as_mut()
+                        .ok_or(LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared O-projection candidate",
+                        })?;
+                    execute_direct_cublas_gemm_probe(
+                        &mut candidate.output,
+                        &buffers.hidden_context,
+                        output_weight,
+                        &mut buffers.hidden_projection,
+                        stream,
+                        output_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.hidden,
+                    &buffers.hidden_context,
+                    output_weight,
+                    &mut buffers.hidden_projection,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    output_site,
+                )?;
+                execute_projection_bias(
+                    weights,
+                    layer.output_bias(),
+                    &mut buffers.hidden_projection,
+                    1,
+                    hidden,
+                    stream,
+                    output_site,
+                )?;
+            }
             let attention_residual_site =
                 ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
             {
@@ -2871,15 +3052,38 @@ impl PreparedLlamaDecode {
 
             let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
             let gate_weight = weight_span(weights, layer.gate_weight(), gate_site)?;
-            execute_gemm(
-                &mut gemms.intermediate,
-                &buffers.hidden_norm,
-                gate_weight,
-                &mut buffers.gate_raw,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                gate_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms.hf_eager_qwen_p2048_cache_on_m1.as_mut().ok_or(
+                        LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared MLP candidate",
+                        },
+                    )?;
+                    execute_direct_cublas_gemm_probe(
+                        &mut candidate.intermediate,
+                        &buffers.hidden_norm,
+                        gate_weight,
+                        &mut buffers.gate_raw,
+                        stream,
+                        gate_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.intermediate,
+                    &buffers.hidden_norm,
+                    gate_weight,
+                    &mut buffers.gate_raw,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    gate_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -2893,15 +3097,38 @@ impl PreparedLlamaDecode {
             }
             let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
             let up_weight = weight_span(weights, layer.up_weight(), up_site)?;
-            execute_gemm(
-                &mut gemms.intermediate,
-                &buffers.hidden_norm,
-                up_weight,
-                &mut buffers.up_raw,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                up_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms.hf_eager_qwen_p2048_cache_on_m1.as_mut().ok_or(
+                        LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared MLP candidate",
+                        },
+                    )?;
+                    execute_direct_cublas_gemm_probe(
+                        &mut candidate.intermediate,
+                        &buffers.hidden_norm,
+                        up_weight,
+                        &mut buffers.up_raw,
+                        stream,
+                        up_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.intermediate,
+                    &buffers.hidden_norm,
+                    up_weight,
+                    &mut buffers.up_raw,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    up_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -2973,15 +3200,38 @@ impl PreparedLlamaDecode {
 
             let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
             let down_weight = weight_span(weights, layer.down_weight(), down_site)?;
-            execute_gemm(
-                &mut gemms.down,
-                &buffers.gated_product,
-                down_weight,
-                &mut buffers.hidden_current,
-                &mut decode_buffers.gemm_workspace,
-                stream,
-                down_site,
-            )?;
+            if M1_TRACE {
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                {
+                    let candidate = gemms.hf_eager_qwen_p2048_cache_on_m1.as_mut().ok_or(
+                        LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                            reason: "the source-bound M1 trace requires its prepared MLP candidate",
+                        },
+                    )?;
+                    execute_direct_cublas_gemm_probe(
+                        &mut candidate.down,
+                        &buffers.gated_product,
+                        down_weight,
+                        &mut buffers.hidden_current,
+                        stream,
+                        down_site,
+                    )
+                    .map_err(LlamaDecodeError::Forward)?;
+                }
+                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                unreachable!("the source-bound M1 trace is feature-gated");
+            } else {
+                execute_gemm(
+                    &mut gemms.down,
+                    &buffers.gated_product,
+                    down_weight,
+                    &mut buffers.hidden_current,
+                    &mut decode_buffers.gemm_workspace,
+                    stream,
+                    down_site,
+                )?;
+            }
             if M1_TRACE {
                 capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
                     &mut trace,
@@ -3076,15 +3326,38 @@ impl PreparedLlamaDecode {
         }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
         let lm_head_weight = weight_span(weights, plan.lm_head_weight(), lm_head_site)?;
-        execute_gemm(
-            &mut gemms.lm_head,
-            &buffers.hidden_norm,
-            lm_head_weight,
-            &mut buffers.logits,
-            &mut decode_buffers.gemm_workspace,
-            stream,
-            lm_head_site,
-        )?;
+        if M1_TRACE {
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            {
+                let candidate = gemms.hf_eager_qwen_p2048_cache_on_m1.as_mut().ok_or(
+                    LlamaDecodeError::InvalidConfiguration {
+                        field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                        reason: "the source-bound M1 trace requires its prepared LM-head candidate",
+                    },
+                )?;
+                execute_direct_cublas_gemm_probe(
+                    &mut candidate.lm_head,
+                    &buffers.hidden_norm,
+                    lm_head_weight,
+                    &mut buffers.logits,
+                    stream,
+                    lm_head_site,
+                )
+                .map_err(LlamaDecodeError::Forward)?;
+            }
+            #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+            unreachable!("the source-bound M1 trace is feature-gated");
+        } else {
+            execute_gemm(
+                &mut gemms.lm_head,
+                &buffers.hidden_norm,
+                lm_head_weight,
+                &mut buffers.logits,
+                &mut decode_buffers.gemm_workspace,
+                stream,
+                lm_head_site,
+            )?;
+        }
         debug_assert_eq!(gemms.lm_head.config().output_bytes(), logits_bytes);
         if M1_TRACE {
             capture_hf_eager_qwen_p2048_cache_on_m1_logits(
@@ -3216,6 +3489,8 @@ impl PreparedLlamaDecode {
             intermediate,
             down,
             lm_head,
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            hf_eager_qwen_p2048_cache_on_m1,
         } = gemms;
         let DecodeBuffers {
             cache,
@@ -3239,6 +3514,47 @@ impl PreparedLlamaDecode {
         );
         record_decode_close(&mut first, LlamaDecodeResource::DownGemm, down.close());
         record_decode_close(&mut first, LlamaDecodeResource::LmHeadGemm, lm_head.close());
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if let Some(HfEagerQwenP2048CacheOnM1ProjectionGemmPlans {
+            query,
+            key_value,
+            output,
+            intermediate,
+            down,
+            lm_head,
+        }) = hf_eager_qwen_p2048_cache_on_m1
+        {
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm,
+                query.close(),
+            );
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm,
+                key_value.close(),
+            );
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1OutputProjectionDirectCublasGemm,
+                output.close(),
+            );
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1MlpIntermediateDirectCublasGemm,
+                intermediate.close(),
+            );
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1MlpDownDirectCublasGemm,
+                down.close(),
+            );
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1LmHeadDirectCublasGemm,
+                lm_head.close(),
+            );
+        }
         match cache {
             KvCacheStorage::Contiguous(cache) => {
                 let ContiguousKvCache {
@@ -3330,7 +3646,10 @@ fn prepare_decode_gemms(
     context: &CudaContext,
     forward: &PreparedLlamaForward,
     workspace_cap: u64,
+    hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
 ) -> LlamaDecodeResult<DecodeGemmPlans> {
+    #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+    let _ = hf_eager_qwen_p2048_cache_on_m1_trace_probe;
     let dimensions = forward.plan.dimensions();
     let hidden = decode_u64(dimensions.hidden_size(), LlamaDecodeResource::GemmWorkspace)?;
     let key_value = decode_u64(
@@ -3358,6 +3677,16 @@ fn prepare_decode_gemms(
                 .map(PreparedLlamaGemm::Fixed37)
                 .map_err(|source| LlamaDecodeError::cuda(site, source)),
         }
+    };
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    let hf_eager_qwen_p2048_cache_on_m1 = if hf_eager_qwen_p2048_cache_on_m1_trace_probe {
+        Some(prepare_hf_eager_qwen_p2048_cache_on_m1_projection_gemms(
+            context,
+            forward,
+            workspace_cap,
+        )?)
+    } else {
+        None
     };
     Ok(DecodeGemmPlans {
         hidden: prepare(
@@ -3390,6 +3719,121 @@ fn prepare_decode_gemms(
             hidden,
             ExecutionSite::global(LlamaOp::LmHead),
         )?,
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        hf_eager_qwen_p2048_cache_on_m1,
+    })
+}
+
+/// Prepares the source-bound one-row projection contract used only by the
+/// P2048 cache-on M1 trace.  Its Q/K/V plans retain the framework-compatible
+/// fused bias epilogue, while O/MLP/LM-head retain direct cuBLAS execution.
+/// This owner is deliberately separate from ordinary decode GEMMs: its
+/// geometry and epilogue contract have not been admitted to serving.
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+fn prepare_hf_eager_qwen_p2048_cache_on_m1_projection_gemms(
+    context: &CudaContext,
+    forward: &PreparedLlamaForward,
+    workspace_cap: u64,
+) -> LlamaDecodeResult<HfEagerQwenP2048CacheOnM1ProjectionGemmPlans> {
+    const QWEN_SEQUENCE: usize = 2_048;
+    const QWEN_HIDDEN: usize = 2_048;
+    const QWEN_KEY_VALUE: usize = 256;
+    const QWEN_INTERMEDIATE: usize = 11_008;
+    const QWEN_VOCABULARY: usize = 151_936;
+    const QWEN_LAYER_COUNT: usize = 36;
+
+    let plan = &forward.plan;
+    let dimensions = plan.dimensions();
+    if plan.sequence_length() != QWEN_SEQUENCE
+        || dimensions.hidden_size() != QWEN_HIDDEN
+        || dimensions.key_value_width() != QWEN_KEY_VALUE
+        || dimensions.intermediate_size() != QWEN_INTERMEDIATE
+        || dimensions.vocabulary_size() != QWEN_VOCABULARY
+        || plan.layers().len() != QWEN_LAYER_COUNT
+        || plan.layers().iter().any(|layer| {
+            layer.query_bias().is_none()
+                || layer.key_bias().is_none()
+                || layer.value_bias().is_none()
+                || layer.output_bias().is_some()
+        })
+    {
+        return Err(LlamaDecodeError::InvalidConfiguration {
+            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+            reason: "requires the reviewed Qwen P2048 cache-on geometry, Q/K/V biases, and bias-free O projection",
+        });
+    }
+    let first_layer = plan
+        .layers()
+        .first()
+        .ok_or(LlamaDecodeError::InvalidConfiguration {
+            field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+            reason: "requires at least one decoder layer",
+        })?;
+    let query_site = ExecutionSite::layer(0, LlamaOp::QueryProjection);
+    let key_site = ExecutionSite::layer(0, LlamaOp::KeyProjection);
+    let output_site = ExecutionSite::layer(0, LlamaOp::OutputProjection);
+    let gate_site = ExecutionSite::layer(0, LlamaOp::GateProjection);
+    let down_site = ExecutionSite::layer(0, LlamaOp::DownProjection);
+    let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
+    let query_bias = weight_span(
+        &forward.weights,
+        first_layer
+            .query_bias()
+            .ok_or(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                reason: "requires a layer-zero Q projection bias",
+            })?,
+        query_site,
+    )
+    .map_err(LlamaDecodeError::Forward)?;
+    let key_bias = weight_span(
+        &forward.weights,
+        first_layer
+            .key_bias()
+            .ok_or(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
+                reason: "requires a layer-zero K projection bias",
+            })?,
+        key_site,
+    )
+    .map_err(LlamaDecodeError::Forward)?;
+    let hidden = decode_u64(QWEN_HIDDEN, LlamaDecodeResource::GemmWorkspace)?;
+    let key_value = decode_u64(QWEN_KEY_VALUE, LlamaDecodeResource::GemmWorkspace)?;
+    let intermediate = decode_u64(QWEN_INTERMEDIATE, LlamaDecodeResource::GemmWorkspace)?;
+    let vocabulary = decode_u64(QWEN_VOCABULARY, LlamaDecodeResource::GemmWorkspace)?;
+    let query_config = CudaGemmConfig::new(1, hidden, hidden, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(query_site, source))?
+        .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+    let key_value_config = CudaGemmConfig::new(1, key_value, hidden, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(key_site, source))?
+        .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+    let output_config = CudaGemmConfig::new(1, hidden, hidden, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(output_site, source))?;
+    let intermediate_config = CudaGemmConfig::new(1, intermediate, hidden, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(gate_site, source))?;
+    let down_config = CudaGemmConfig::new(1, hidden, intermediate, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(down_site, source))?;
+    let lm_head_config = CudaGemmConfig::new(1, vocabulary, hidden, workspace_cap)
+        .map_err(|source| LlamaDecodeError::cuda(lm_head_site, source))?;
+    Ok(HfEagerQwenP2048CacheOnM1ProjectionGemmPlans {
+        query: context
+            .prepare_hf_compatible_bias_epilogue_probe(query_config, query_bias)
+            .map_err(|source| LlamaDecodeError::cuda(query_site, source))?,
+        key_value: context
+            .prepare_hf_compatible_bias_epilogue_probe(key_value_config, key_bias)
+            .map_err(|source| LlamaDecodeError::cuda(key_site, source))?,
+        output: context
+            .prepare_cublas_gemm_probe(output_config)
+            .map_err(|source| LlamaDecodeError::cuda(output_site, source))?,
+        intermediate: context
+            .prepare_cublas_gemm_probe(intermediate_config)
+            .map_err(|source| LlamaDecodeError::cuda(gate_site, source))?,
+        down: context
+            .prepare_cublas_gemm_probe(down_config)
+            .map_err(|source| LlamaDecodeError::cuda(down_site, source))?,
+        lm_head: context
+            .prepare_cublas_gemm_probe(lm_head_config)
+            .map_err(|source| LlamaDecodeError::cuda(lm_head_site, source))?,
     })
 }
 
