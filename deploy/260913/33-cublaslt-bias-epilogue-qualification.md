@@ -38,6 +38,7 @@ throughput·TTFT·TPOT·tail latency 수치로 옮기지 않는다.
 | P9: P2051 raw-Q BF16 arithmetic policy | Diagnostic pass — current strict raw Q가 두 `reduced_precision_reduction=false` control과 exact, P7 default control과 non-exact | strict raw-Q: full-forward/serving eligible 아님 | 없음 — selector 변경 없음 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | P7 default의 reduced-precision-reduction-on 결과를 재현하는 native BF16 candidate를 full-sequence·full-forward에 qualification한 뒤에만 vLLM AB/BA를 실행 |
 | P10 r2: P2051 direct cuBLAS BF16 feasibility | Diagnostic pass — direct cuBLAS default가 P7 default와 exact이고, disallow-reduced control이 Riley/P9 reduced-off와 exact; repeat exact | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: P7 default exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 native arithmetic candidate를 Q/K/V·full-forward quality gate로 확장한 뒤에만 serving selector와 vLLM AB/BA를 평가 |
 | P10 r3: Riley native direct cuBLAS raw-Q | Diagnostic pass — feature-gated native/Rust probe가 P7 default raw-Q와 BF16 exact `0 / 4,200,448`; repeat·allocation accounting pass | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw-Q: Riley native/Rust boundary까지 exact, diagnostic only; full-forward/serving eligible 아님 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 없음 — matched AB/BA 미실행 | 동일 profile을 raw Q/K/V, bias boundary, full-forward quality gate에 순차 확장한 뒤에만 selector integration과 vLLM AB/BA를 실행 |
+| P11: P2051 direct cuBLAS raw Q/K/V | Diagnostic pass — Q `0 / 4,200,448`, K `0 / 525,056`, V `0 / 525,056` BF16 exact; 각 projection repeat·allocation/close pass | strict raw-Q: reduced-off control exact, full-forward/serving eligible 아님 | direct cuBLAS default raw Q/K/V: native/Rust boundary까지 exact, test-only; bias/full-forward/selector 미검증 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | 미실행 — matched AB/BA serving candidate 없음 | P12에서 사전 선언한 staged-bias와 HF actual module output을 독립 검증; selector 변경과 vLLM 수치 비교는 그 뒤에도 full-forward gate까지 보류 |
 
 P7은 full-sequence projection correctness receipt이며 vLLM serving result가 아니다.
 그 뒤의 각 의미 있는 최적화 batch는 quality gate 결과와 동일 조건의 Riley
@@ -139,6 +140,43 @@ artifact validation과 transfer가 포함되므로 throughput, TTFT, TPOT, P95/P
 따라서 P10 r3는 **pinned raw-Q arithmetic correspondence만** 확정한다. raw K/V, bias,
 full-forward, model output quality, selector integration, concurrency stability와 vLLM serving 성능은
 아직 검증되지 않았고, 이 표의 vLLM 성능 칸은 의도적으로 비워 둔다.
+
+## P11 Riley native direct-cuBLAS raw-Q/K/V result — 2026-09-17
+
+P11은 P10 r3의 default-arithmetic direct `cublasGemmEx` profile을 layer-zero Q/K/V의
+no-bias full-sequence endpoints로 넓힌 quality-only batch다. Python/HF는 immutable offline
+oracle artifact만 만들었고, native qualifier는 그 artifact와 pinned checkpoint bytes를 Rust에서
+검증한 뒤 direct cuBLAS를 같은 stream에서 두 번 실행했다. serving selector, CUDA Graph,
+command batch, scheduler, HTTP path에는 연결하지 않았다.
+
+offline artifact는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-qkv-default-cublas-r1-20260917T005532Z/`에
+있다. manifest/sidecar SHA-256은 각각
+`bff87ad504a406f5b8be98414bc4397f03a15efddb1b6b2cf11d625908bd0255`,
+`f92424889ee044678de3b316f97a731577537ecfc1ea8d2b11200165c9a53b8c`다. native receipt는
+`/data/riley-benchmarks/20260915T134348Z-n06a-shared-host/qwen3b-p2051-cublas-qkv-r2-20260917T010718Z/`에
+있고 result JSON SHA-256은
+`94b6867a744255cb8f79de8a2bc8a216d9467d50ea2d27e9772c0ade5ede1841`다. 두 artifact의
+`SHA256SUMS`는 생성 뒤 다시 검증했다.
+
+| Projection | Shape `[M, N, K]` | P11 default oracle BF16 comparison | Repeat / allocation | Output SHA-256 |
+|---|---:|---:|---|---|
+| Q | `[2051, 2048, 2048]` | exact: `0 / 4,200,448` | exact / unchanged, close 뒤 zero | `9353470bc0d4110218b9c4584ea782257d5a59888db5a3c0479131e5ba46ec8f` |
+| K | `[2051, 256, 2048]` | exact: `0 / 525,056` | exact / unchanged, close 뒤 zero | `fd561bb4602e3cdcf8bcc0a960996045588ee48905af0bb7211a93ddb071edc8` |
+| V | `[2051, 256, 2048]` | exact: `0 / 525,056` | exact / unchanged, close 뒤 zero | `5ecc4af8cc0b0f02e3b4e4ffa4ea828cce26c7bfa8137d88fef3ed798de16439` |
+
+RTX 4090/SM89, CUDA runtime `12080`, cuBLAS `120804`에서 metadata는 세 endpoint 모두
+backend `3`, default math/pointer/atomics `(0,0)`와 expected `(M,N,K)`였다. test wall time
+3.72초에는 artifact validation과 transfer가 포함되므로 성능 수치가 아니다. I/O PSI
+`some/full avg10`은 시작 `6.46/5.76`, 종료 `8.14/7.65`로 보존했고 sample 선택이나 보정에는
+사용하지 않았다.
+
+P11의 결론은 **raw Q/K/V arithmetic correspondence만**이다. bias rounding, unmodified HF
+module output, full-forward, selector integration, stability, throughput, TTFT/TPOT, P95/P99와
+vLLM 비교는 검증하지 않았다. 따라서 `performance_claim_eligible=false`,
+`vllm_comparison_eligible=false`, `serving_selector_changed=false`를 유지한다. 위 비교표의
+`미실행`은 누락값이 아니라, 같은 model/checkpoint/hardware/workload/concurrency의 matched
+AB/BA serving candidate가 아직 없다는 판정이다.
 
 ## 변경 묶음
 

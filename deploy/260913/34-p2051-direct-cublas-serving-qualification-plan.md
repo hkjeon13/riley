@@ -1,14 +1,15 @@
 # P2051 direct cuBLAS 후보의 품질·serving qualification 계획
 
-상태: **계획만**. P10 r3까지의 raw-Q correctness work은 완료됐다. 다음 batch는
+상태: **P11 완료, P12 진행 전**. P10 r3의 raw-Q와 P11의 raw Q/K/V correctness work은 완료됐다. 다음 batch는
 `cuda-cublas-gemm-probe` test-only surface를 바로 serving selector로 승격하지 않는다.
 먼저 raw Q/K/V와 full-forward의 사전 선언한 quality gate를 통과시킨 뒤에만 opt-in
 integration과 vLLM AB/BA 측정으로 간다.
 
-현재 근거는 [P10 결과와 비교표](33-cublaslt-bias-epilogue-qualification.md)의 P10 r3이다.
-RTX 4090/SM89에서 direct `cublasGemmEx` default math가 P7 default raw-Q와
-`0 / 4,200,448` BF16 byte-exact였고, 반복 실행·allocation accounting·close도 통과했다.
-이는 단일 no-bias Q endpoint의 arithmetic correspondence이며 serving 성능 증거가 아니다.
+현재 근거는 [P11 결과와 비교표](33-cublaslt-bias-epilogue-qualification.md)의 P11이다.
+RTX 4090/SM89에서 direct `cublasGemmEx` default math가 P11 oracle Q/K/V와 각각
+`0 / 4,200,448`, `0 / 525,056`, `0 / 525,056` BF16 byte-exact였고, 반복 실행·allocation
+accounting·close도 통과했다. 이는 no-bias Q/K/V endpoint의 arithmetic correspondence이며
+serving 성능 증거가 아니다.
 
 ## 유지할 경계
 
@@ -58,6 +59,13 @@ RTX 4090/SM89에서 direct `cublasGemmEx` default math가 P7 default raw-Q와
 완료 조건은 세 raw endpoint의 predeclared oracle equality와 artifact integrity다. 이 단계의 elapsed
 time은 성능 수치가 아니다.
 
+**완료 결과 (2026-09-17).** P11 offline artifact manifest/sidecar SHA-256은
+`bff87ad504a406f5b8be98414bc4397f03a15efddb1b6b2cf11d625908bd0255` /
+`f92424889ee044678de3b316f97a731577537ecfc1ea8d2b11200165c9a53b8c`이고, native result JSON
+SHA-256은 `94b6867a744255cb8f79de8a2bc8a216d9467d50ea2d27e9772c0ade5ede1841`이다. Q/K/V 모두
+predeclared raw oracle과 BF16 exact, repeated hash와 allocation/close도 pass했다. 이 결과는
+quality-only이며 vLLM throughput, TTFT, TPOT, P95/P99, failure rate는 모두 **미실행**이다.
+
 ### P12 — bias boundary와 full-sequence projection gate
 
 P11을 통과한 경우에만 direct raw output과 bias application의 numerical profile을 분리한다. 이 단계는
@@ -65,7 +73,9 @@ P11을 통과한 경우에만 direct raw output과 bias application의 numerical
 
 - raw Q/K/V는 P11 default oracle과 exact해야 한다.
 - staged bias 결과는 별도의 explicit staged reference와 비교하고, actual HF module output도 독립적으로
-  비교한다. 둘 중 어느 contract를 selector candidate의 target으로 삼는지 결과 전 선언한다.
+  비교한다. P12의 primary target은 `BF16(raw default-cuBLAS output.to(FP32) + checkpoint BF16
+  bias.to(FP32))` staged contract로 사전 선언한다. actual HF module output은 별도 endpoint로
+  기록하며, 동일하다고 가정하거나 결과 뒤에 target을 바꾸지 않는다.
 - full `M=2051` 및 serving-relevant small M set에서 Q/K/V의 bias-boundary trace, repeated output,
   allocation/lifetime failure cases를 receipt로 남긴다.
 - strict staged profile과 fused `cuBLASLt BIAS` profile을 교차 참조하되, 서로 다른 rounding 결과를
