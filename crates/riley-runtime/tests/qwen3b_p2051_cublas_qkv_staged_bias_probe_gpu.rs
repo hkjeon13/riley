@@ -692,6 +692,27 @@ mod p2051_cublas_qkv_staged_bias_contract {
         })
     }
 
+    fn p12_actual_metric_matches_oracle(expected: &Value, observed: &Value) -> TestResult<bool> {
+        let expected = expected
+            .as_object()
+            .ok_or("P12 staged/actual oracle metric must be an object")?;
+        let expected_keys = expected.keys().map(String::as_str).collect::<BTreeSet<_>>();
+        let required_keys = BTreeSet::from([
+            "bf16_exact",
+            "max_abs",
+            "total_elements",
+            "unequal_elements",
+        ]);
+        if expected_keys != required_keys {
+            return Err("P12 staged/actual oracle metric fields differ".into());
+        }
+
+        Ok(expected.get("bf16_exact") == observed.get("bf16_exact")
+            && expected.get("max_abs") == observed.get("max_abs_bf16_as_f32")
+            && expected.get("total_elements") == observed.get("element_count")
+            && expected.get("unequal_elements") == observed.get("unequal_element_count"))
+    }
+
     fn validate_probe_metadata(
         metadata: CublasGemmProbeMetadata,
         config: CudaGemmConfig,
@@ -938,8 +959,10 @@ mod p2051_cublas_qkv_staged_bias_contract {
             let raw_p11_comparison = metrics(&p11_expected.raw_bf16_le, &observed.raw_bf16_le)?;
             let staged_comparison = metrics(&expected.staged_bf16_le, &observed.staged_bf16_le)?;
             let actual_comparison = metrics(&expected.actual_bf16_le, &observed.staged_bf16_le)?;
-            let projection_actual_metric_matches_oracle =
-                actual_comparison == expected.staged_vs_actual_metric;
+            let projection_actual_metric_matches_oracle = p12_actual_metric_matches_oracle(
+                &expected.staged_vs_actual_metric,
+                &actual_comparison,
+            )?;
             let raw_is_exact =
                 raw_comparison.get("bf16_exact").and_then(Value::as_bool) == Some(true);
             let staged_is_exact =
