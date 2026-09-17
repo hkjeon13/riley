@@ -1551,6 +1551,10 @@ fn load_hf_cache_on_prefill_stage_artifact(
     for required in [
         "rust_forward",
         "rust_decode",
+        "rust_cuda_gemm",
+        "rust_cuda_ffi",
+        "native_cuda_gemm",
+        "native_cuda_header",
         "rust_cache_on_trace",
         "rust_p2051_quality_gate",
     ] {
