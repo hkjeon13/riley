@@ -39,7 +39,7 @@ use super::forward::{
     weight_span,
 };
 #[cfg(feature = "cuda-cublas-gemm-probe")]
-use super::forward::{execute_bias_addmm_gemm, execute_direct_cublas_gemm_probe};
+use super::forward::{execute_bias_epilogue_gemm, execute_direct_cublas_gemm_probe};
 use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 
 const BF16_BYTES: u64 = 2;
@@ -79,8 +79,8 @@ pub enum LlamaDecodeResource {
     IntermediateGemm,
     DownGemm,
     LmHeadGemm,
-    HfEagerQwenP2048CacheOnM1QueryBiasAddmmGemm,
-    HfEagerQwenP2048CacheOnM1KeyValueBiasAddmmGemm,
+    HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm,
+    HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm,
     HfEagerQwenP2048CacheOnM1OutputProjectionDirectCublasGemm,
     HfEagerQwenP2048CacheOnM1MlpIntermediateDirectCublasGemm,
     HfEagerQwenP2048CacheOnM1MlpDownDirectCublasGemm,
@@ -107,11 +107,11 @@ impl LlamaDecodeResource {
             Self::IntermediateGemm => "decode_intermediate_gemm",
             Self::DownGemm => "decode_down_gemm",
             Self::LmHeadGemm => "decode_lm_head_gemm",
-            Self::HfEagerQwenP2048CacheOnM1QueryBiasAddmmGemm => {
-                "hf_eager_qwen_p2048_cache_on_m1_query_bias_addmm_gemm"
+            Self::HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_query_bias_epilogue_gemm"
             }
-            Self::HfEagerQwenP2048CacheOnM1KeyValueBiasAddmmGemm => {
-                "hf_eager_qwen_p2048_cache_on_m1_key_value_bias_addmm_gemm"
+            Self::HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm => {
+                "hf_eager_qwen_p2048_cache_on_m1_key_value_bias_epilogue_gemm"
             }
             Self::HfEagerQwenP2048CacheOnM1OutputProjectionDirectCublasGemm => {
                 "hf_eager_qwen_p2048_cache_on_m1_output_projection_direct_cublas_gemm"
@@ -2566,7 +2566,7 @@ impl PreparedLlamaDecode {
                             field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
                             reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
                         })?;
-                    execute_bias_addmm_gemm(
+                    execute_bias_epilogue_gemm(
                         &mut candidate.query,
                         weights,
                         layer.query_bias(),
@@ -2624,7 +2624,7 @@ impl PreparedLlamaDecode {
                             field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
                             reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
                         })?;
-                    execute_bias_addmm_gemm(
+                    execute_bias_epilogue_gemm(
                         &mut candidate.key_value,
                         weights,
                         layer.key_bias(),
@@ -2682,7 +2682,7 @@ impl PreparedLlamaDecode {
                             field: "hf_eager_qwen_p2048_cache_on_m1_projection_gemms",
                             reason: "the source-bound M1 trace requires its prepared Q/K/V candidate",
                         })?;
-                    execute_bias_addmm_gemm(
+                    execute_bias_epilogue_gemm(
                         &mut candidate.key_value,
                         weights,
                         layer.value_bias(),
@@ -3526,12 +3526,12 @@ impl PreparedLlamaDecode {
         {
             record_decode_close(
                 &mut first,
-                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1QueryBiasAddmmGemm,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1QueryBiasEpilogueGemm,
                 query.close(),
             );
             record_decode_close(
                 &mut first,
-                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1KeyValueBiasAddmmGemm,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1KeyValueBiasEpilogueGemm,
                 key_value.close(),
             );
             record_decode_close(
@@ -3725,11 +3725,10 @@ fn prepare_decode_gemms(
 }
 
 /// Prepares the source-bound one-row projection contract used only by the
-/// P2048 cache-on M1 trace. Its Q/K/V plans retain the framework-compatible
-/// one-row `addmm(bias, X, W.T)` boundary, while O/MLP/LM-head retain direct
-/// cuBLAS execution.
+/// P2048 cache-on M1 trace.  Its Q/K/V plans retain the framework-compatible
+/// fused bias epilogue, while O/MLP/LM-head retain direct cuBLAS execution.
 /// This owner is deliberately separate from ordinary decode GEMMs: its
-/// geometry and HF rounding contract have not been admitted to serving.
+/// geometry and epilogue contract have not been admitted to serving.
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 fn prepare_hf_eager_qwen_p2048_cache_on_m1_projection_gemms(
     context: &CudaContext,
@@ -3818,10 +3817,10 @@ fn prepare_hf_eager_qwen_p2048_cache_on_m1_projection_gemms(
         .map_err(|source| LlamaDecodeError::cuda(lm_head_site, source))?;
     Ok(HfEagerQwenP2048CacheOnM1ProjectionGemmPlans {
         query: context
-            .prepare_hf_compatible_bias_addmm_probe(query_config, query_bias)
+            .prepare_hf_compatible_bias_epilogue_probe(query_config, query_bias)
             .map_err(|source| LlamaDecodeError::cuda(query_site, source))?,
         key_value: context
-            .prepare_hf_compatible_bias_addmm_probe(key_value_config, key_bias)
+            .prepare_hf_compatible_bias_epilogue_probe(key_value_config, key_bias)
             .map_err(|source| LlamaDecodeError::cuda(key_site, source))?,
         output: context
             .prepare_cublas_gemm_probe(output_config)

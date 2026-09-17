@@ -2760,20 +2760,6 @@ RileyCudaStatus riley_cuda_bias_gemm_plan_close(
     RileyCudaBiasGemmPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
-#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
-// Prepares the M=1 BF16 addmm bias contract selected by PyTorch's contiguous
-// linear fast path: Y = bias + X * W^T. The plan uses EPILOGUE_NONE and the
-// execute entry point above supplies the packed BF16 [N] bias as C with
-// beta=1. It is a numerical diagnostic only: no graph, batch, or serving
-// selector may create this owner.
-RileyCudaStatus riley_cuda_bias_addmm_gemm_probe_plan_create(
-    RileyCudaContext* context,
-    const RileyCudaGemmConfig* config,
-    const RileyCudaBufferSpan* preparation_bias,
-    RileyCudaBiasGemmPlan** out_plan,
-    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
-#endif
-
 // Prepares the custom fixed-contiguous-37-balanced-v1 implementation for the
 // same logical BF16/F32 GEMM contract as RileyCudaGemmConfig. The custom
 // plan never selects or falls back to cuBLASLt and requires no caller

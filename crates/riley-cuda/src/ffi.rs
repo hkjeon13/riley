@@ -2477,14 +2477,6 @@ unsafe extern "C" {
         out_plan: *mut *mut RawBiasGemmPlan,
         error: *mut ErrorInfo,
     ) -> i32;
-    #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn riley_cuda_bias_addmm_gemm_probe_plan_create(
-        context: *mut RawContext,
-        config: *const RawGemmConfig,
-        preparation_bias: *const RawBufferSpan,
-        out_plan: *mut *mut RawBiasGemmPlan,
-        error: *mut ErrorInfo,
-    ) -> i32;
     fn riley_cuda_bias_gemm_plan_info(
         plan: *mut RawBiasGemmPlan,
         out_info: *mut RawGemmAlgorithmInfo,
@@ -9177,49 +9169,6 @@ impl BiasGemmPlanHandle {
             missing_output(
                 "prepare CUDA bias-epilogue GEMM plan",
                 "native bias-epilogue GEMM plan handle is null",
-            )
-        })?;
-        Ok(Self {
-            pointer: Some(pointer),
-        })
-    }
-
-    #[cfg(feature = "cuda-cublas-gemm-probe")]
-    pub(super) fn create_addmm_probe(
-        context: &ContextHandle,
-        m: u64,
-        n: u64,
-        k: u64,
-        max_workspace_bytes: u64,
-        flags: u32,
-        preparation_bias: RawBufferSpan,
-    ) -> CudaResult<Self> {
-        if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
-            return Err(CudaError::invalid_argument(
-                "prepare CUDA addmm-bias GEMM probe plan",
-                "unknown GEMM reduction-policy flags",
-            ));
-        }
-        let config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
-        let mut pointer = ptr::null_mut();
-        let mut error = ErrorInfo::new();
-        // SAFETY: this probe owns a live context; the temporary BF16 [N]
-        // preparation span proves the first layer binding. Native retains no
-        // bias pointer and each execution supplies its current C vector.
-        let status = unsafe {
-            riley_cuda_bias_addmm_gemm_probe_plan_create(
-                context.as_ptr(),
-                &config,
-                &preparation_bias,
-                &mut pointer,
-                &mut error,
-            )
-        };
-        status_result(status, "prepare CUDA addmm-bias GEMM probe plan", &error)?;
-        let pointer = NonNull::new(pointer).ok_or_else(|| {
-            missing_output(
-                "prepare CUDA addmm-bias GEMM probe plan",
-                "native addmm-bias GEMM probe plan handle is null",
             )
         })?;
         Ok(Self {

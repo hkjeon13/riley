@@ -17,6 +17,13 @@ constexpr uint64_t kRequiredAlignment = 256;
 constexpr int kMaximumHeuristicResults = 32;
 constexpr size_t kStrictGemmBufferCount = 4;
 constexpr size_t kMaximumGemmBuffers = 5;
+// The source-bound HF M=1 BIAS diagnostic is the only profile that mirrors
+// PyTorch's `gemm_and_bias` heuristic preferences.  Keep this distinct from
+// the strict serving contract: these split-K flags are admitted only by the
+// Rust diagnostic owner.
+constexpr uint32_t kHfCompatibleBiasDiagnosticFlags =
+    RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
+    RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
 
 struct GemmByteLengths {
   uint64_t input;
@@ -74,14 +81,6 @@ struct RileyCudaGemmPlan {
   RileyCudaDeferredCloseNode deferred_close;
 };
 
-enum class BiasGemmExecutionContract : uint8_t {
-  kEpilogue = 0,
-  // PyTorch's contiguous linear path lowers a one-row linear with bias to
-  // addmm(bias, X, W^T). The plan therefore retains an ordinary matmul
-  // descriptor and supplies the packed [N] bias as C with beta=1 at launch.
-  kAddmmBetaC = 1,
-};
-
 // The strict no-epilogue plan remains the sole RileyCudaGemmPlan ABI. The
 // experimental bias plan embeds the same private descriptor state but has a
 // distinct opaque C type and entry points, preventing graph or strict callers
@@ -90,15 +89,12 @@ struct RileyCudaBiasGemmPlan {
   RileyCudaBiasGemmPlan(RileyCudaContext* owning_context,
                         const RileyCudaGemmConfig& plan_config,
                         const GemmByteLengths& lengths,
-                        uint64_t plan_bias_bytes,
-                        BiasGemmExecutionContract plan_contract) noexcept
+                        uint64_t plan_bias_bytes) noexcept
       : gemm(owning_context, plan_config, lengths),
-        bias_bytes(plan_bias_bytes),
-        contract(plan_contract) {}
+        bias_bytes(plan_bias_bytes) {}
 
   RileyCudaGemmPlan gemm;
   uint64_t bias_bytes;
-  BiasGemmExecutionContract contract;
 };
 
 namespace {
@@ -308,33 +304,6 @@ RileyCudaStatus validate_bias_config(const RileyCudaGemmConfig* config,
     status = matrix_bytes(1, config->n, bias_bytes, error);
   }
   return status;
-}
-
-// PyTorch's contiguous F.linear path lowers a bias-bearing M=1 operation to
-// addmm(bias, X, W^T). The ordinary GEMM descriptor therefore remains
-// EPILOGUE_NONE and the packed [N] bias is supplied as C at execution with
-// beta=1. A vector C is valid only for the source-bound one-row shape.
-RileyCudaStatus validate_addmm_bias_config(const RileyCudaGemmConfig* config,
-                                           GemmByteLengths* lengths,
-                                           uint64_t* bias_bytes,
-                                           RileyCudaErrorInfo* error) noexcept {
-  if (bias_bytes == nullptr) {
-    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
-                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
-                            "validate cuBLASLt addmm-bias GEMM config",
-                            "bias byte-length output is null");
-  }
-  RileyCudaStatus status = validate_config(config, lengths, error);
-  if (status != RILEY_CUDA_STATUS_SUCCESS) {
-    return status;
-  }
-  if (config->m != 1) {
-    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
-                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
-                            "validate cuBLASLt addmm-bias GEMM config",
-                            "the packed BF16 [N] addmm bias contract requires M=1");
-  }
-  return matrix_bytes(1, config->n, bias_bytes, error);
 }
 
 template <typename T>
@@ -846,6 +815,34 @@ RileyCudaStatus prepare_plan_with_optional_bias(
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
+  if (preparation_bias != nullptr &&
+      plan->config.flags == kHfCompatibleBiasDiagnosticFlags) {
+    // PyTorch's CUDA addmm fast path calls gemm_and_bias with a 1-D bias and
+    // sets the A/B/C minimum-alignment preferences from its actual pointers
+    // before it asks cuBLASLt for a heuristic. Riley's diagnostic span
+    // contract already proves each pointer has this alignment. Do not set D:
+    // PyTorch supplies only A/B/C, and strict serving plans retain their
+    // existing selection contract.
+    const uint32_t minimum_alignment =
+        static_cast<uint32_t>(kRequiredAlignment);
+    constexpr cublasLtMatmulPreferenceAttributes_t kAlignmentAttributes[] = {
+        CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_A_BYTES,
+        CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_B_BYTES,
+        CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_C_BYTES,
+    };
+    for (const cublasLtMatmulPreferenceAttributes_t attribute :
+         kAlignmentAttributes) {
+      status = cublaslt_error(
+          cublasLtMatmulPreferenceSetAttribute(
+              plan->preference, attribute, &minimum_alignment,
+              sizeof(minimum_alignment)),
+          error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+          "prepare HF-compatible cuBLASLt bias GEMM plan");
+      if (status != RILEY_CUDA_STATUS_SUCCESS) {
+        return status;
+      }
+    }
+  }
   const size_t max_workspace =
       static_cast<size_t>(plan->config.max_workspace_bytes);
   status = cublaslt_error(
@@ -895,22 +892,6 @@ RileyCudaStatus prepare_bias_plan(RileyCudaBiasGemmPlan* plan,
   }
   return prepare_plan_with_optional_bias(&plan->gemm, nullptr,
                                          preparation_bias, error);
-}
-
-RileyCudaStatus prepare_addmm_bias_plan(
-    RileyCudaBiasGemmPlan* plan, const ResolvedSpan* preparation_bias,
-    RileyCudaErrorInfo* error) noexcept {
-  if (plan == nullptr || preparation_bias == nullptr ||
-      plan->contract != BiasGemmExecutionContract::kAddmmBetaC) {
-    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
-                            RILEY_CUDA_ERROR_STAGE_PREPARE,
-                            "prepare cuBLASLt addmm-bias GEMM plan",
-                            "addmm-bias GEMM plan or preparation bias is invalid");
-  }
-  // The preparation span proves the owned BF16 [N] binding, but the ordinary
-  // descriptor intentionally carries no BIAS epilogue pointer. Each launch
-  // passes the current layer's vector as C with beta=1.
-  return prepare_plan(&plan->gemm, nullptr, error);
 }
 
 RileyCudaStatus destroy_plan_resources(
@@ -1669,12 +1650,12 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(
   return status;
 }
 
-RileyCudaStatus create_bias_gemm_plan(
+extern "C" RileyCudaStatus riley_cuda_bias_gemm_plan_create(
     RileyCudaContext* context, const RileyCudaGemmConfig* config,
     const RileyCudaBufferSpan* preparation_bias,
     RileyCudaBiasGemmPlan** out_plan,
-    BiasGemmExecutionContract contract, const char* kOperation,
     RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "create cuBLASLt bias GEMM plan";
   clear_error(error);
   if (out_plan == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
@@ -1691,9 +1672,7 @@ RileyCudaStatus create_bias_gemm_plan(
   GemmByteLengths lengths{};
   uint64_t bias_bytes = 0;
   RileyCudaStatus status =
-      contract == BiasGemmExecutionContract::kEpilogue
-          ? validate_bias_config(config, &lengths, &bias_bytes, error)
-          : validate_addmm_bias_config(config, &lengths, &bias_bytes, error);
+      validate_bias_config(config, &lengths, &bias_bytes, error);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
@@ -1720,7 +1699,7 @@ RileyCudaStatus create_bias_gemm_plan(
                      "host plan allocation failed");
   }
   auto* plan = new (storage) RileyCudaBiasGemmPlan(
-      context, normalized_config, lengths, bias_bytes, contract);
+      context, normalized_config, lengths, bias_bytes);
   if (!retain_child(context)) {
     plan->~RileyCudaBiasGemmPlan();
     std::free(plan);
@@ -1729,12 +1708,10 @@ RileyCudaStatus create_bias_gemm_plan(
   }
 
   CurrentContext scope(context);
-  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE, kOperation);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       "prepare cuBLASLt bias GEMM plan");
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    status = contract == BiasGemmExecutionContract::kEpilogue
-                 ? prepare_bias_plan(plan, &resolved_preparation_bias, error)
-                 : prepare_addmm_bias_plan(plan, &resolved_preparation_bias,
-                                           error);
+    status = prepare_bias_plan(plan, &resolved_preparation_bias, error);
   }
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     (void)destroy_plan_resources(&plan->gemm, nullptr,
@@ -1742,7 +1719,7 @@ RileyCudaStatus create_bias_gemm_plan(
                                  "cleanup failed cuBLASLt bias GEMM plan");
   }
   status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
-                       kOperation);
+                       "prepare cuBLASLt bias GEMM plan");
 
   const bool restoration_confirmed =
       !context->restoration_failed.load(std::memory_order_acquire);
@@ -1763,30 +1740,6 @@ RileyCudaStatus create_bias_gemm_plan(
   // retains the unreachable wrapper and its context-child lease fail closed.
   return status;
 }
-
-extern "C" RileyCudaStatus riley_cuda_bias_gemm_plan_create(
-    RileyCudaContext* context, const RileyCudaGemmConfig* config,
-    const RileyCudaBufferSpan* preparation_bias,
-    RileyCudaBiasGemmPlan** out_plan,
-    RileyCudaErrorInfo* error) noexcept {
-  return create_bias_gemm_plan(
-      context, config, preparation_bias, out_plan,
-      BiasGemmExecutionContract::kEpilogue,
-      "create cuBLASLt bias GEMM plan", error);
-}
-
-#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
-extern "C" RileyCudaStatus riley_cuda_bias_addmm_gemm_probe_plan_create(
-    RileyCudaContext* context, const RileyCudaGemmConfig* config,
-    const RileyCudaBufferSpan* preparation_bias,
-    RileyCudaBiasGemmPlan** out_plan,
-    RileyCudaErrorInfo* error) noexcept {
-  return create_bias_gemm_plan(
-      context, config, preparation_bias, out_plan,
-      BiasGemmExecutionContract::kAddmmBetaC,
-      "create cuBLASLt addmm-bias GEMM probe plan", error);
-}
-#endif
 
 extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_anchored(
     RileyCudaContext* context, const RileyCudaGemmConfig* config,
@@ -2126,22 +2079,15 @@ extern "C" RileyCudaStatus riley_cuda_bias_gemm_plan_execute(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   bool matmul_attempted = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    const float alpha = 1.0F;
-    const float beta = plan->contract == BiasGemmExecutionContract::kEpilogue
-                           ? 0.0F
-                           : 1.0F;
-    const void* c_data = plan->contract == BiasGemmExecutionContract::kEpilogue
-                             ? spans[3].data
-                             : spans[2].data;
-    if (plan->contract == BiasGemmExecutionContract::kEpilogue) {
-      const void* bias_data = spans[2].data;
-      status = cublaslt_error(
-          cublasLtMatmulDescSetAttribute(
-              gemm->operation, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias_data,
-              sizeof(bias_data)),
-          error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
-    }
+    const void* bias_data = spans[2].data;
+    status = cublaslt_error(
+        cublasLtMatmulDescSetAttribute(
+            gemm->operation, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias_data,
+            sizeof(bias_data)),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
     if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      const float alpha = 1.0F;
+      const float beta = 0.0F;
       void* workspace_data = gemm->algorithm_info.workspace_bytes == 0
                                  ? nullptr
                                  : spans[4].data;
@@ -2150,7 +2096,7 @@ extern "C" RileyCudaStatus riley_cuda_bias_gemm_plan_execute(
           cublasLtMatmul(
               gemm->handle, gemm->operation, &alpha, spans[1].data,
               gemm->weight_layout, spans[0].data, gemm->input_layout, &beta,
-              c_data, gemm->output_layout, spans[3].data,
+              spans[3].data, gemm->output_layout, spans[3].data,
               gemm->output_layout, &gemm->algorithm, workspace_data,
               static_cast<size_t>(gemm->algorithm_info.workspace_bytes),
               stream->stream),

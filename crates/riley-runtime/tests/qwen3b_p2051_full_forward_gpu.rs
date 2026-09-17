@@ -2792,7 +2792,7 @@ fn run_cache_on_m1_reference_trace_profile(
                 "kv_layout": "contiguous-head-major",
                 "decode_attention_backend": selection.implementation_id(),
                 "decode_attention_selection_reason": format!("{:?}", selection.reason()),
-                "projection_path": "HF-compatible M1 Q/K/V cuBLASLt addmm-bias plus direct-cuBLAS O/MLP/LM-head candidate",
+                "projection_path": "HF-compatible M1 Q/K/V cuBLASLt bias epilogues plus direct-cuBLAS O/MLP/LM-head candidate",
                 "rms_norm_path": HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID,
             },
             "repeat_execution": {
