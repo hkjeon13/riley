@@ -353,11 +353,11 @@ mod p2051_cublas_o_projection_probe_contract {
         {
             return Err("HF P2051 O-projection producer identity differs".into());
         }
-        for field in (
+        for field in [
             "runtime_dependency_class",
             "torch_version",
             "transformers_version",
-        ) {
+        ] {
             if producer
                 .get(field)
                 .and_then(Value::as_str)
