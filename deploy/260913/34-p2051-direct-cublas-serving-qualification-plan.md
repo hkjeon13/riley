@@ -142,6 +142,16 @@ cache layout과 logical position을 함께 cold-prepare하고, 불지원 shape·
 fallback 없이 diagnostic rejection을 낸다. 이 묶음의 source-bound layer oracle과 full-forward
 gate가 통과하기 전에는 selector, HTTP serving, vLLM benchmark를 시작하지 않는다.
 
+**cache-on stage oracle 구현 상태 (2026-09-17).**
+`tools/python/reference/riley_reference/qwen3b_cache_on_layer_stage_trace.py`는 기존의
+검증된 HF cache-on teacher artifact를 입력으로 받아, P2048 prefill과 그 뒤 teacher-forced M=1
+decode 두 번의 각 last-token boundary 52개를 총 156개 BF16 tensor로 create-only sidecar에
+기록한다. producer와 standalone validator는 세 `last_logits` row가 기존 cache-on sidecar의
+row 0/1/2와 raw BF16 bytes까지 같은지 다시 확인한다. 이 모듈은 Python/HF offline diagnostic일
+뿐 serving에서 import되지 않으며, artifact 생산·P2048/M1 CUDA candidate·selector admission은
+아직 **미실행**이다. model-free synthetic test는 통과했고, 다음 단계는 clean source로 remote
+artifact를 생산한 뒤 first divergent boundary를 기반으로 kernel profile을 고정하는 것이다.
+
 ### P14 — opt-in production integration
 
 P13 통과 뒤에만 test feature와 분리된 opt-in production selector를 만든다. 이 PR은 scheduler나
