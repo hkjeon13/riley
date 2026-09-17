@@ -3,6 +3,9 @@
 
 #include <cuda_bf16.h>
 #include <math_constants.h>
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+#include <cublas_v2.h>
+#endif
 
 #include <cmath>
 #include <cstddef>
@@ -13,10 +16,16 @@ namespace {
 
 using riley_cuda_internal::CurrentContext;
 using riley_cuda_internal::clear_error;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+using riley_cuda_internal::command_batch_is_active;
+#endif
 using riley_cuda_internal::internal_error;
 using riley_cuda_internal::release_exclusive_use;
 using riley_cuda_internal::runtime_error;
 using riley_cuda_internal::same_context;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+using riley_cuda_internal::set_error;
+#endif
 using riley_cuda_internal::try_acquire_exclusive_use;
 using riley_cuda_internal::validation_error;
 
@@ -44,6 +53,10 @@ constexpr uint64_t kReviewedHuggingFaceKeyValueHeadCount = 3;
 constexpr uint64_t kReviewedHuggingFaceHeadSize = 64;
 constexpr uint64_t kMaximumGridX = 2147483647;
 constexpr uint64_t kMaximumGridYOrZ = 65535;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+constexpr uint64_t kHfEagerQwenP2048M1LogicalTokenCount = 2049;
+constexpr uint64_t kHfEagerQwenP2048M1CublasWorkspaceBytes = 8519680;
+#endif
 
 static_assert(sizeof(RileyCudaKvCacheWriteParams) == 272,
               "KV cache write ABI size changed");
@@ -237,6 +250,53 @@ RileyCudaStatus typed_bytes(uint64_t element_count, uint64_t element_size,
   }
   return RILEY_CUDA_STATUS_SUCCESS;
 }
+
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+const char* cublas_status_detail(cublasStatus_t status) noexcept {
+  switch (status) {
+    case CUBLAS_STATUS_SUCCESS:
+      return "success";
+    case CUBLAS_STATUS_NOT_INITIALIZED:
+      return "cuBLAS was not initialized";
+    case CUBLAS_STATUS_ALLOC_FAILED:
+      return "cuBLAS allocation failed";
+    case CUBLAS_STATUS_INVALID_VALUE:
+      return "cuBLAS received an invalid value";
+    case CUBLAS_STATUS_ARCH_MISMATCH:
+      return "the CUDA device architecture is unsupported";
+    case CUBLAS_STATUS_MAPPING_ERROR:
+      return "cuBLAS could not map a resource";
+    case CUBLAS_STATUS_EXECUTION_FAILED:
+      return "cuBLAS execution failed";
+    case CUBLAS_STATUS_INTERNAL_ERROR:
+      return "cuBLAS reported an internal error";
+    case CUBLAS_STATUS_NOT_SUPPORTED:
+      return "the requested cuBLAS operation is unsupported";
+    default:
+      return "cuBLAS reported an unknown error";
+  }
+}
+
+RileyCudaStatus cublas_qk_error(cublasStatus_t result,
+                                 RileyCudaErrorInfo* error, uint32_t stage,
+                                 const char* operation) noexcept {
+  if (result == CUBLAS_STATUS_SUCCESS) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  RileyCudaStatus status = RILEY_CUDA_STATUS_CUBLASLT_ERROR;
+  if (result == CUBLAS_STATUS_INVALID_VALUE) {
+    status = RILEY_CUDA_STATUS_INVALID_ARGUMENT;
+  } else if (result == CUBLAS_STATUS_ALLOC_FAILED) {
+    status = RILEY_CUDA_STATUS_OUT_OF_MEMORY;
+  } else if (result == CUBLAS_STATUS_ARCH_MISMATCH ||
+             result == CUBLAS_STATUS_NOT_SUPPORTED) {
+    status = RILEY_CUDA_STATUS_NOT_SUPPORTED;
+  }
+  return set_error(error, status, static_cast<int32_t>(result),
+                   RILEY_CUDA_ERROR_DOMAIN_CUBLASLT, stage, operation,
+                   cublas_status_detail(result));
+}
+#endif
 
 RileyCudaStatus cache_byte_counts(
     uint64_t source_token_count, uint64_t maximum_token_count,
@@ -679,6 +739,46 @@ RileyCudaStatus complete_execution(ExclusiveUses* uses,
   return status;
 }
 
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+RileyCudaStatus complete_hf_eager_cublas_qk_execution(
+    ExclusiveUses* uses, CurrentContext* scope, RileyCudaStream* stream,
+    RileyCudaStatus operation_status, bool launch_attempted,
+    cublasHandle_t handle, RileyCudaErrorInfo* error,
+    const char* operation) noexcept {
+  bool completion_confirmed = !launch_attempted;
+  RileyCudaStatus status = operation_status;
+  if (launch_attempted) {
+    const cudaError_t synchronize_result = cudaStreamSynchronize(stream->stream);
+    completion_confirmed = synchronize_result == cudaSuccess;
+    if (!completion_confirmed) {
+      status = runtime_error(synchronize_result, error,
+                             RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
+    }
+  }
+  if (handle != nullptr) {
+    const cublasStatus_t destroy_result = cublasDestroy(handle);
+    if (status == RILEY_CUDA_STATUS_SUCCESS &&
+        destroy_result != CUBLAS_STATUS_SUCCESS) {
+      status = cublas_qk_error(destroy_result, error,
+                               RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                               operation);
+    }
+  }
+  status = scope->leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                        operation);
+  const bool restoration_confirmed =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (completion_confirmed && restoration_confirmed) {
+    if (!uses->release_completed()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                            operation,
+                            "exclusive-use accounting was corrupted");
+    }
+  }
+  return status;
+}
+#endif
+
 RileyCudaStatus validate_cache_write_dimensions(
     const RileyCudaKvCacheWriteParams& params,
     RileyCudaErrorInfo* error, const char* operation) noexcept {
@@ -1020,6 +1120,32 @@ __global__ void decode_qk_reference_kernel(
     scores[index] = __float2bfloat16_rn(accumulator);
   }
 }
+
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// Materialize the physical [KVH,maximum_T,D] cache into the contiguous
+// [QH,logical_T,D] layout consumed by HF eager's repeat_kv followed by its
+// strided-batched M=1 cuBLAS call. The workspace is diagnostic-only and never
+// belongs to an ordinary decode selection.
+__global__ void hf_eager_repeat_key_for_qk_kernel(
+    const __nv_bfloat16* key_cache, __nv_bfloat16* repeated_key,
+    uint64_t maximum_token_count, uint64_t logical_token_count,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t head_size, uint64_t repeated_key_elements) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = first; index < repeated_key_elements; index += stride) {
+    const uint64_t depth = index % head_size;
+    const uint64_t token = (index / head_size) % logical_token_count;
+    const uint64_t query_head = index / (logical_token_count * head_size);
+    const uint64_t key_value_head = query_head / group_size;
+    const uint64_t cache_index =
+        (key_value_head * maximum_token_count + token) * head_size + depth;
+    repeated_key[index] = key_cache[cache_index];
+  }
+}
+#endif
 
 __global__ void decode_scale_reference_kernel(__nv_bfloat16* scores,
                                                float scale,
@@ -3025,6 +3151,259 @@ riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
       params, scaled_scores_trace, true, stream, error,
       "execute reference decode attention scaled-scores trace");
 }
+
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+extern "C" RileyCudaStatus
+riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    const RileyCudaBufferSpan* repeated_key_workspace,
+    const RileyCudaBufferSpan* cublas_workspace,
+    const RileyCudaBufferSpan* scaled_scores_trace, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute HF eager Qwen P2048 M1 cuBLAS QK diagnostic";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  if (repeated_key_workspace == nullptr || cublas_workspace == nullptr ||
+      scaled_scores_trace == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "repeated-key, cuBLAS, and scaled-score diagnostic spans are required");
+  }
+  const RileyCudaDecodeAttentionReferenceParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RileyCudaStatus status = validate_decode_dimensions(
+      params->maximum_token_count, params->logical_token_count,
+      params->query_head_count, params->key_value_head_count,
+      params->head_size, params->scale, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      (params->logical_token_count != kHfEagerQwenP2048M1LogicalTokenCount ||
+       params->query_head_count != kNativeBf16PagedSplitGqaD128QueryHeadCount ||
+       params->key_value_head_count !=
+           kNativeBf16PagedSplitGqaD128KeyValueHeadCount ||
+       params->head_size != kNativeBf16PagedSplitGqaD128HeadSize)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "candidate supports only Qwen P2048->M1 T=2049 QH=16 KVH=2 D=128");
+  }
+  DecodeByteCounts bytes{};
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = decode_byte_counts(
+        params->maximum_token_count, params->logical_token_count,
+        params->query_head_count, params->key_value_head_count,
+        params->head_size, &bytes, error, kOperation);
+  }
+  uint64_t repeated_key_elements = 0;
+  uint64_t repeated_key_bytes = 0;
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
+      !checked_product3(params->query_head_count, params->logical_token_count,
+                        params->head_size, &repeated_key_elements)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "repeated-key tensor shape overflows uint64_t");
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(repeated_key_elements, 2, &repeated_key_bytes, error,
+                         kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_cache{};
+  ResolvedSpan value_cache{};
+  ResolvedSpan score_workspace{};
+  ResolvedSpan output{};
+  ResolvedSpan repeated_key{};
+  ResolvedSpan cublas_scratch{};
+  ResolvedSpan scaled_scores{};
+  status = resolve_decode_inputs(
+      params->query, params->key_cache, params->value_cache, params->output,
+      bytes, &query, &key_cache, &value_cache, &output, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->score_workspace, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.scores, &score_workspace, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(*repeated_key_workspace, RILEY_CUDA_DTYPE_BF16, 2,
+                          repeated_key_bytes, &repeated_key, error,
+                          kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(*cublas_workspace, RILEY_CUDA_DTYPE_BF16, 2,
+                          kHfEagerQwenP2048M1CublasWorkspaceBytes,
+                          &cublas_scratch, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(*scaled_scores_trace, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.scores, &scaled_scores, error, kOperation);
+  }
+  const ResolvedSpan execution_spans[] = {query, key_cache, value_cache,
+                                          score_workspace, output};
+  for (const ResolvedSpan& execution_span : execution_spans) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = reject_overlap(repeated_key, execution_span, error, kOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = reject_overlap(cublas_scratch, execution_span, error,
+                              kOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = reject_overlap(scaled_scores, execution_span, error,
+                              kOperation);
+    }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(repeated_key, cublas_scratch, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(repeated_key, scaled_scores, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(cublas_scratch, scaled_scores, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query, key_cache, value_cache, score_workspace,
+                                output, repeated_key, cublas_scratch,
+                                scaled_scores};
+  status = validate_contexts(stream, spans, 8, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (command_batch_is_active(stream)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "diagnostic cuBLAS QK cannot run inside a command batch or graph capture");
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_cache.buffer) ||
+      !uses.add(value_cache.buffer) || !uses.add(score_workspace.buffer) ||
+      !uses.add(output.buffer) || !uses.add(repeated_key.buffer) ||
+      !uses.add(cublas_scratch.buffer) || !uses.add(scaled_scores.buffer)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  bool launch_attempted = false;
+  cublasHandle_t handle = nullptr;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+    status = runtime_error(cudaStreamIsCapturing(stream->stream, &capture_status),
+                           error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS &&
+        capture_status != cudaStreamCaptureStatusNone) {
+      status = validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation,
+          "diagnostic cuBLAS QK cannot run while CUDA Graph capture is active");
+    }
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublas_qk_error(cublasCreate(&handle), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublas_qk_error(cublasSetStream(handle, stream->stream), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = cublas_qk_error(
+        cublasSetWorkspace(handle, cublas_scratch.data,
+                           static_cast<size_t>(cublas_scratch.used_bytes)),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    hf_eager_repeat_key_for_qk_kernel
+        <<<block_count(repeated_key_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(key_cache.data),
+            reinterpret_cast<__nv_bfloat16*>(repeated_key.data),
+            params->maximum_token_count, params->logical_token_count,
+            params->query_head_count, params->key_value_head_count,
+            params->head_size, repeated_key_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const float alpha = 1.0F;
+    const float beta = 0.0F;
+    status = cublas_qk_error(
+        cublasGemmStridedBatchedEx(
+            handle, CUBLAS_OP_T, CUBLAS_OP_N,
+            static_cast<int>(params->logical_token_count), 1,
+            static_cast<int>(params->head_size), &alpha, repeated_key.data,
+            CUDA_R_16BF, static_cast<int>(params->head_size),
+            static_cast<long long>(params->logical_token_count *
+                                   params->head_size),
+            query.data, CUDA_R_16BF, static_cast<int>(params->head_size),
+            static_cast<long long>(params->head_size), &beta,
+            score_workspace.data, CUDA_R_16BF,
+            static_cast<int>(params->logical_token_count),
+            static_cast<long long>(params->logical_token_count),
+            static_cast<int>(params->query_head_count), CUBLAS_COMPUTE_32F,
+            CUBLAS_GEMM_DEFAULT_TENSOR_OP),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  }
+  const uint64_t score_elements = bytes.scores / 2;
+  const uint64_t output_elements = bytes.query_output / 2;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
+            params->scale, score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = runtime_error(
+        cudaMemcpyAsync(scaled_scores.data, score_workspace.data,
+                        static_cast<size_t>(bytes.scores),
+                        cudaMemcpyDeviceToDevice, stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    decode_softmax_reference_kernel
+        <<<block_count(params->query_head_count), kThreads, 0,
+           stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
+            params->logical_token_count, params->query_head_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    decode_av_reference_kernel
+        <<<block_count(output_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(score_workspace.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_cache.data),
+            reinterpret_cast<__nv_bfloat16*>(output.data),
+            params->maximum_token_count, params->logical_token_count,
+            params->query_head_count, params->key_value_head_count,
+            params->head_size, output_elements);
+    status = launch_status(error, kOperation);
+  }
+  return complete_hf_eager_cublas_qk_execution(
+      &uses, &scope, stream, status, launch_attempted, handle, error,
+      kOperation);
+}
+#endif
 
 extern "C" RileyCudaStatus
 riley_cuda_fixed37_decode_attention_reference_execute(

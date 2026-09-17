@@ -2560,6 +2560,26 @@ RileyCudaStatus riley_cuda_decode_attention_reference_execute_scaled_scores_trac
     const RileyCudaBufferSpan* scaled_scores_trace,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+#if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
+// Diagnostic-only Qwen P2048->M1 eager-QK candidate. It accepts exactly the
+// traced QH=16, KVH=2, D=128, T=2049 geometry, first expands the contiguous
+// KV-head-major cache into a caller-owned BF16 [QH,T,D] workspace, then calls
+// cublasGemmStridedBatchedEx with the same TN, BF16 I/O, FP32 compute, and
+// DEFAULT_TENSOR_OP contract recorded from the pinned HF eager execution.
+// The separately owned cuBLAS workspace must have the captured 8,519,680-byte
+// capacity. The call copies scaled BF16 scores before the existing reference
+// softmax/AV stages, synchronizes before return, and rejects command batches
+// and graph capture. It is excluded from normal CUDA archives and never
+// participates in serving selection.
+RileyCudaStatus
+riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    const RileyCudaBufferSpan* repeated_key_workspace,
+    const RileyCudaBufferSpan* cublas_workspace,
+    const RileyCudaBufferSpan* scaled_scores_trace,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+#endif
 // Fixed-contiguous-37 materialized decode reuses the reference descriptor and
 // BF16 [QH,T] workspace. Logical D and T are each limited to 151552 elements.
 // QK, softmax maximum/denominator, and AV use ascending 37-element F32 left

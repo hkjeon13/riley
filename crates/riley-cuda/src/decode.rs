@@ -19,6 +19,10 @@ use crate::ffi;
 
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT: u64 = 2_049;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_EAGER_QWEN_P2048_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
 const ONLINE_HEAD_SIZE: u64 = 64;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE: u64 = 128;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT: u64 = 16;
@@ -1907,6 +1911,109 @@ impl PreparedDecodeAttention {
             let _ = (params, scaled_scores_trace);
             Err(CudaError::unavailable(OPERATION))
         }
+    }
+
+    /// Executes the source-bound Qwen P2048-to-M1 cuBLAS QK candidate.
+    ///
+    /// This diagnostic-only path expands the contiguous KV cache into a
+    /// separately owned QH-major key workspace, invokes the captured HF eager
+    /// `cublasGemmStridedBatchedEx` contract, copies scaled BF16 scores, then
+    /// keeps the reference softmax and AV stages. It never changes selection
+    /// metadata or enters an ordinary serving build.
+    ///
+    /// # Errors
+    ///
+    /// Returns unless this is the materialized reference backend with exactly
+    /// the reviewed Qwen P2048-to-M1 geometry, every diagnostic span has its
+    /// required dtype/capacity/context, and the native synchronous call
+    /// completes successfully.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_hf_eager_qwen_p2048_m1_cublas_qk_with_scaled_scores_trace(
+        &self,
+        logical_token_count: u64,
+        params: &mut DecodeAttentionParams<'_>,
+        repeated_key_workspace: CudaBufferSpanMut<'_>,
+        cublas_workspace: CudaBufferSpanMut<'_>,
+        scaled_scores_trace: CudaBufferSpanMut<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "hf_eager_qwen_p2048_m1_cublas_qk";
+        if self.backend != DecodeAttentionBackend::MaterializedReference {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "cuBLAS QK qualification requires the materialized reference decode backend",
+            ));
+        }
+        if logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+            || self.request.query_head_count != NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
+            || self.request.key_value_head_count
+                != NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
+            || self.request.head_size != NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+        {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "candidate supports only Qwen P2048-to-M1 T=2049 QH=16 KVH=2 D=128",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_execute_params(self, params, stream)?;
+        validate_reference_scaled_scores_trace(
+            self,
+            logical_token_count,
+            &scaled_scores_trace,
+            stream,
+        )?;
+        for (name, dtype) in [
+            ("repeated_key_workspace", repeated_key_workspace.dtype()),
+            ("cublas_workspace", cublas_workspace.dtype()),
+        ] {
+            require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+        }
+        let repeated_key_bytes = checked_bytes(
+            OPERATION,
+            &[
+                self.request.query_head_count,
+                logical_token_count,
+                self.request.head_size,
+                BF16_BYTES,
+            ],
+        )?;
+        require_capacity(
+            OPERATION,
+            "repeated_key_workspace",
+            repeated_key_workspace.byte_len(),
+            repeated_key_bytes,
+        )?;
+        require_capacity(
+            OPERATION,
+            "cublas_workspace",
+            cublas_workspace.byte_len(),
+            HF_EAGER_QWEN_P2048_M1_CUBLAS_WORKSPACE_BYTES,
+        )?;
+        validate_resources(
+            OPERATION,
+            stream,
+            &[repeated_key_workspace.buffer(), cublas_workspace.buffer()],
+        )?;
+
+        ffi::hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+            params.query.raw(),
+            params.key_cache.raw(),
+            params.value_cache.raw(),
+            params.workspace.raw(),
+            params.output.raw(),
+            repeated_key_workspace.raw(),
+            cublas_workspace.raw(),
+            scaled_scores_trace.raw(),
+            self.request.maximum_sequence_length,
+            logical_token_count,
+            self.request.query_head_count,
+            self.request.key_value_head_count,
+            self.request.head_size,
+            self.request.scale,
+            &mut stream.native,
+        )
     }
 
     /// Executes the fixed37 two-pass backend without an HBM workspace.

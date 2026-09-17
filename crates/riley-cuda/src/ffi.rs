@@ -2322,6 +2322,15 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+        params: *const RawDecodeAttentionReferenceParams,
+        repeated_key_workspace: *const RawBufferSpan,
+        cublas_workspace: *const RawBufferSpan,
+        scaled_scores_trace: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_decode_attention_reference_execute(
         params: *const RawDecodeAttentionReferenceParams,
         stream: *mut RawStream,
@@ -7745,6 +7754,62 @@ pub(super) fn decode_attention_reference_execute_scaled_scores_trace(
             unsafe {
                 riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
                     &params,
+                    &scaled_scores_trace,
+                    stream,
+                    error,
+                )
+            }
+        },
+    )
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    repeated_key_workspace: RawBufferSpan,
+    cublas_workspace: RawBufferSpan,
+    scaled_scores_trace: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionReferenceParams {
+        struct_size: DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        score_workspace,
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute HF eager Qwen P2048 M1 cuBLAS QK diagnostic",
+        stream,
+        |stream, error| {
+            // SAFETY: every fixed-layout descriptor and borrowed native
+            // resource remains live through this synchronous diagnostic call.
+            unsafe {
+                riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
+                    &params,
+                    &repeated_key_workspace,
+                    &cublas_workspace,
                     &scaled_scores_trace,
                     stream,
                     error,

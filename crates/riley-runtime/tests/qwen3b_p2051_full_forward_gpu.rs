@@ -115,8 +115,7 @@ const CACHE_ON_LAYER_DETAIL_SCHEMA_VERSION: &str =
     "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v2";
 const CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace";
-const CACHE_ON_LAYER_DETAIL_TRACE_ID: &str =
-    "qwen3b-p2048-cache-on-m1-layer3-attention-detail-v2";
+const CACHE_ON_LAYER_DETAIL_TRACE_ID: &str = "qwen3b-p2048-cache-on-m1-layer3-attention-detail-v2";
 const CACHE_ON_LAYER_DETAIL_INDEX: usize = 3;
 const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-comparison.v1";
@@ -3060,9 +3059,7 @@ fn collect_cache_on_m1_layer_detail_trace(
         )?,
     );
     observed.insert(
-        format!(
-            "layer{CACHE_ON_LAYER_DETAIL_INDEX}.attention_probabilities.last"
-        ),
+        format!("layer{CACHE_ON_LAYER_DETAIL_INDEX}.attention_probabilities.last"),
         canonical_bf16_le(
             trace
                 .attention_probabilities()
@@ -3078,7 +3075,10 @@ fn collect_cache_on_m1_layer_detail_trace(
         )?,
     );
     if observed.len() != expected_cache_on_layer_detail_stage_specs().len() {
-        return Err("P2048 cache-on M1 attention-detail trace stage count differs from the HF artifact".into());
+        return Err(
+            "P2048 cache-on M1 attention-detail trace stage count differs from the HF artifact"
+                .into(),
+        );
     }
     Ok(observed)
 }
@@ -3220,15 +3220,20 @@ fn run_cache_on_m1_layer_detail_profile(
     input: &[u32],
     m1_token: u32,
     hf: &HfCacheOnLayerDetailArtifact,
+    use_cublas_qk_candidate: bool,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
-    let config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+    let base_config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
         FULL_FORWARD_UPLOAD_STAGING_BYTES,
         FULL_FORWARD_IO_STAGING_BYTES,
         HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
         REFERENCE_ATTENTION_BUDGET_BYTES,
-    ))
-    .with_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+    ));
+    let config = if use_cublas_qk_candidate {
+        base_config.with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate()
+    } else {
+        base_config.with_hf_eager_qwen_p2048_cache_on_m1_trace_probe()
+    };
     let mut decode = match PreparedLlamaDecode::prepare(
         model,
         &context,
@@ -3313,7 +3318,11 @@ fn run_cache_on_m1_layer_detail_profile(
             stages.insert(spec.name, stage_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-eager-qwen-p2048-cache-on-m1-layer3-attention-detail-trace-v2",
+            "profile_id": if use_cublas_qk_candidate {
+                "hf-eager-qwen-p2048-cache-on-m1-layer3-cublas-qk-attention-detail-trace-v1"
+            } else {
+                "hf-eager-qwen-p2048-cache-on-m1-layer3-attention-detail-trace-v2"
+            },
             "cache_mode": "cache-on-m1-diagnostic",
             "same_scheduler_engine": false,
             "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
@@ -3330,6 +3339,11 @@ fn run_cache_on_m1_layer_detail_profile(
                     "score_shape": [QWEN3B_QUERY_HEADS, QWEN3B_PROMPT_TOKEN_COUNT + 1],
                     "probability_dtype": "bfloat16",
                     "probability_shape": [QWEN3B_QUERY_HEADS, QWEN3B_PROMPT_TOKEN_COUNT + 1],
+                },
+                "qk_path": if use_cublas_qk_candidate {
+                    "diagnostic-cublas-strided-batched-bf16-fp32-default-tensor-op"
+                } else {
+                    "materialized-reference-one-thread-per-score"
                 },
                 "projection_path": "HF-compatible M1 Q/K/V cuBLASLt bias epilogues plus direct-cuBLAS O/MLP/LM-head candidate",
                 "rms_norm_path": HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID,
@@ -3792,8 +3806,13 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_detail_trace() -> TestResult {
         return Err("P2048 cache-on M1 layer-detail input does not bind the HF artifact".into());
     }
     let model = load_cache_on_layer_detail_model(&hf)?;
-    let candidate =
-        run_cache_on_m1_layer_detail_profile(&model, &workload.prompt_token_ids, m1_token, &hf)?;
+    let candidate = run_cache_on_m1_layer_detail_profile(
+        &model,
+        &workload.prompt_token_ids,
+        m1_token,
+        &hf,
+        false,
+    )?;
     let summary = candidate
         .get("summary")
         .and_then(Value::as_object)
@@ -3840,6 +3859,112 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_detail_trace() -> TestResult {
         "quality_gate": {
             "required_m1_layer_detail_stage_count": stage_count,
             "candidate_exact_m1_layer_detail_stage_count": exact_count,
+            "layer3_m1_bf16_exact": detail_exact,
+            "cache_on_m1_decode_bf16_exact": false,
+            "cache_on_full_forward_bf16_exact": false,
+            "corrected_cache_on_eligible": false,
+            "serving_selector_eligible": false,
+            "performance_claim_eligible": false,
+        },
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "{CACHE_ON_LAYER_DETAIL_MARKER_PREFIX}{}",
+        serde_json::to_string(&receipt)?
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on M1 layer-three direct-cuBLAS QK qualifier"]
+fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_candidate_trace() -> TestResult {
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_layer_detail_artifact(&teacher, &workload)?;
+    let m1_token = *teacher
+        .token_ids
+        .first()
+        .ok_or("P2048 cache-on teacher artifact has no M1 token")?;
+    if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
+        || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
+    {
+        return Err("P2048 cache-on M1 layer-detail input does not bind the HF artifact".into());
+    }
+    let model = load_cache_on_layer_detail_model(&hf)?;
+    let candidate = run_cache_on_m1_layer_detail_profile(
+        &model,
+        &workload.prompt_token_ids,
+        m1_token,
+        &hf,
+        true,
+    )?;
+    let summary = candidate
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or("P2048 cache-on M1 cuBLAS QK candidate summary is missing")?;
+    let exact_count = summary
+        .get("bf16_exact_stage_count")
+        .and_then(Value::as_u64)
+        .ok_or("P2048 cache-on M1 cuBLAS QK exact stage count is missing")?;
+    let stage_count = u64::try_from(expected_cache_on_layer_detail_stage_specs().len())?;
+    let detail_exact = exact_count == stage_count
+        && summary
+            .get("first_non_exact_stage")
+            .is_some_and(Value::is_null);
+    let qk_scores_exact = candidate
+        .pointer("/stages/layer3.attention_scores.last/bf16_exact")
+        .and_then(Value::as_bool)
+        .ok_or("P2048 cache-on M1 cuBLAS QK score gate is missing")?;
+    let qkv_and_rope_exact = [
+        "layer3.q_proj.last",
+        "layer3.k_proj.last",
+        "layer3.v_proj.last",
+        "layer3.q_rope.last",
+        "layer3.k_rope.last",
+    ]
+    .into_iter()
+    .all(|name| {
+        candidate
+            .pointer(&format!("/stages/{name}/bf16_exact"))
+            .and_then(Value::as_bool)
+            == Some(true)
+    });
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_LAYER_DETAIL_CUBLAS_QK_STAGE_OUTPUT")?;
+    let receipt = json!({
+        "schema_version": CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION,
+        "artifact_kind": CACHE_ON_LAYER_DETAIL_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "contract": {
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "prefill_input_token_count": QWEN3B_PROMPT_TOKEN_COUNT,
+            "prefill_input_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_SHA256,
+            "teacher_m1_token_id": m1_token,
+            "teacher_decode_token_ids": teacher.token_ids,
+            "teacher_forced_artifact_sha256": teacher.artifact_sha256,
+            "teacher_cache_on_sidecar_sha256": teacher.cache_on_sidecar_sha256,
+            "teacher_full_token_ids_le_u32_sha256": teacher.full_teacher_token_ids_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
+            "hf_execution": "P2048 cache-building prefill followed by teacher-forced M1",
+            "riley_execution": "P2048 exact-prefill candidate plus source-bound M1 direct-cuBLAS QK selected-layer trace",
+            "qk_dispatch_contract": "cublasGemmStridedBatchedEx TN BF16 input/output FP32 compute DEFAULT_TENSOR_OP with repeated KV heads",
+            "trace_stage_count": stage_count,
+        },
+        "hf_stage_artifact": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "candidate": candidate,
+        "quality_gate": {
+            "required_m1_layer_detail_stage_count": stage_count,
+            "candidate_exact_m1_layer_detail_stage_count": exact_count,
+            "qkv_projection_and_rope_bf16_exact": qkv_and_rope_exact,
+            "qk_scores_bf16_exact": qk_scores_exact,
             "layer3_m1_bf16_exact": detail_exact,
             "cache_on_m1_decode_bf16_exact": false,
             "cache_on_full_forward_bf16_exact": false,

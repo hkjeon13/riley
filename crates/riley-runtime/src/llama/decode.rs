@@ -52,6 +52,7 @@ const ROPE_ALLOCATION_COUNT: u64 = 2;
 const ATTENTION_ALLOCATION_COUNT: u64 = 1;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH: usize = 2_048;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH: usize = 2_050;
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
 const _: () = assert!(KV_BLOCK_SIZE as u64 == PAGED_KV_BLOCK_SIZE);
 const _: () = assert!(BLOCK_TABLE_V1_VERSION as u32 == PAGED_KV_BLOCK_TABLE_VERSION);
 
@@ -74,6 +75,8 @@ pub enum LlamaDecodeResource {
     RopeSin,
     AttentionWorkspace,
     HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+    HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
+    HfEagerQwenP2048CacheOnM1CublasWorkspace,
     GemmWorkspace,
     HiddenGemm,
     KeyValueGemm,
@@ -104,6 +107,12 @@ impl LlamaDecodeResource {
             Self::AttentionWorkspace => "decode_attention_workspace",
             Self::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace => {
                 "hf_eager_qwen_p2048_cache_on_m1_attention_scaled_scores_trace"
+            }
+            Self::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace => {
+                "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_repeated_key_workspace"
+            }
+            Self::HfEagerQwenP2048CacheOnM1CublasWorkspace => {
+                "hf_eager_qwen_p2048_cache_on_m1_cublas_workspace"
             }
             Self::GemmWorkspace => "decode_gemm_workspace",
             Self::HiddenGemm => "decode_hidden_gemm",
@@ -512,6 +521,7 @@ pub struct PreparedLlamaDecodeConfig {
     decode_attention_preference: DecodeAttentionPreference,
     kv_cache_policy: LlamaKvCachePolicy,
     hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
+    hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: bool,
 }
 
 impl PreparedLlamaDecodeConfig {
@@ -522,6 +532,7 @@ impl PreparedLlamaDecodeConfig {
             decode_attention_preference: DecodeAttentionPreference::Optimized,
             kv_cache_policy: LlamaKvCachePolicy::paged(),
             hf_eager_qwen_p2048_cache_on_m1_trace_probe: false,
+            hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: false,
         }
     }
 
@@ -596,6 +607,17 @@ impl PreparedLlamaDecodeConfig {
         self
     }
 
+    /// Selects the source-bound candidate that reproduces the observed HF
+    /// eager M=1 QK cuBLAS call for one attention-detail trace. This remains
+    /// a diagnostic control and has no serving selector route.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate(self) -> Self {
+        let mut configured = self.with_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+        configured.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate = true;
+        configured
+    }
+
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
@@ -620,6 +642,12 @@ impl PreparedLlamaDecodeConfig {
     #[must_use]
     pub(super) const fn is_hf_eager_qwen_p2048_cache_on_m1_trace_probe(self) -> bool {
         self.hf_eager_qwen_p2048_cache_on_m1_trace_probe
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub(super) const fn is_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate(self) -> bool {
+        self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate
     }
 }
 
@@ -1543,6 +1571,8 @@ struct DecodeBuffers {
     rope_sin: CudaDeviceBuffer,
     attention_workspace: CudaDeviceBuffer,
     attention_scaled_scores_trace: Option<CudaDeviceBuffer>,
+    attention_cublas_qk_repeated_key_workspace: Option<CudaDeviceBuffer>,
+    attention_cublas_workspace: Option<CudaDeviceBuffer>,
     gemm_workspace: Option<CudaDeviceBuffer>,
     rope_table_bytes_per_kind: u64,
 }
@@ -1983,6 +2013,7 @@ pub struct PreparedLlamaDecode {
     phase: LlamaDecodePhase,
     latest_output: Option<LatestOutput>,
     hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
+    hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: bool,
 }
 
 impl fmt::Debug for PreparedLlamaDecode {
@@ -1999,6 +2030,10 @@ impl fmt::Debug for PreparedLlamaDecode {
             .field(
                 "hf_eager_qwen_p2048_cache_on_m1_trace_probe",
                 &self.hf_eager_qwen_p2048_cache_on_m1_trace_probe,
+            )
+            .field(
+                "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate",
+                &self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate,
             )
             .field("allocation_report", &self.allocation_report)
             .field("poisoned", &self.is_poisoned())
@@ -2049,6 +2084,8 @@ impl PreparedLlamaDecode {
         #[cfg(feature = "cuda-cublas-gemm-probe")]
         let hf_eager_qwen_p2048_cache_on_m1_trace_probe = {
             let m1_trace_probe = config.is_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+            let cublas_qk_candidate =
+                config.is_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate();
             let has_p2048_component = config
                 .forward()
                 .has_hf_eager_qwen_p2048_cache_on_component();
@@ -2072,10 +2109,21 @@ impl PreparedLlamaDecode {
                     reason: "the P2048 cache-on profile may enter decode only through the source-bound M1 trace probe",
                 });
             }
+            if cublas_qk_candidate && !m1_trace_probe {
+                return Err(LlamaDecodeError::InvalidConfiguration {
+                    field: "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate",
+                    reason: "requires the source-bound P2048 cache-on M1 trace probe",
+                });
+            }
             m1_trace_probe
         };
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate =
+            config.is_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate();
         #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         let hf_eager_qwen_p2048_cache_on_m1_trace_probe = false;
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate = false;
 
         let mut forward =
             PreparedLlamaForward::prepare(model, context, stream, prompt_length, config.forward())?;
@@ -2227,6 +2275,60 @@ impl PreparedLlamaDecode {
         let attention_scaled_scores_trace_bytes = attention_scaled_scores_trace
             .as_ref()
             .map_or(0, CudaDeviceBuffer::byte_len);
+        let attention_cublas_qk_repeated_key_workspace =
+            if hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate {
+                let trace_tokens = decode_u64(
+                    HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1,
+                    LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
+                )?;
+                let repeated_key_bytes = query_heads
+                    .checked_mul(trace_tokens)
+                    .and_then(|elements| elements.checked_mul(head_size))
+                    .and_then(|elements| elements.checked_mul(BF16_BYTES))
+                    .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                        resource:
+                            LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
+                    })?;
+                Some(
+                    context
+                        .allocate_device_buffer(repeated_key_bytes)
+                        .map_err(|source| {
+                            LlamaDecodeError::cuda(
+                                ExecutionSite::layer(0, LlamaOp::DecodeAttention),
+                                source,
+                            )
+                        })?,
+                )
+            } else {
+                None
+            };
+        let attention_cublas_qk_repeated_key_workspace_bytes =
+            attention_cublas_qk_repeated_key_workspace
+                .as_ref()
+                .map_or(0, CudaDeviceBuffer::byte_len);
+        let attention_cublas_workspace = if hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate {
+            Some(
+                context
+                    .allocate_device_buffer(HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_WORKSPACE_BYTES)
+                    .map_err(|source| {
+                        LlamaDecodeError::cuda(
+                            ExecutionSite::layer(0, LlamaOp::DecodeAttention),
+                            source,
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+        let attention_cublas_workspace_bytes = attention_cublas_workspace
+            .as_ref()
+            .map_or(0, CudaDeviceBuffer::byte_len);
+        let diagnostic_attention_bytes = attention_scaled_scores_trace_bytes
+            .checked_add(attention_cublas_qk_repeated_key_workspace_bytes)
+            .and_then(|bytes| bytes.checked_add(attention_cublas_workspace_bytes))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::AttentionWorkspace,
+            })?;
         let gemm_workspace = if decode_gemm_workspace_bytes == 0 {
             None
         } else {
@@ -2288,7 +2390,7 @@ impl PreparedLlamaDecode {
             rope_table_bytes_per_kind,
             attention.workspace_bytes(),
             decode_gemm_workspace_bytes,
-            attention_scaled_scores_trace_bytes,
+            diagnostic_attention_bytes,
         )?;
         Ok(Self {
             forward,
@@ -2300,6 +2402,8 @@ impl PreparedLlamaDecode {
                 rope_sin,
                 attention_workspace,
                 attention_scaled_scores_trace,
+                attention_cublas_qk_repeated_key_workspace,
+                attention_cublas_workspace,
                 gemm_workspace,
                 rope_table_bytes_per_kind,
             },
@@ -2311,6 +2415,7 @@ impl PreparedLlamaDecode {
             phase: LlamaDecodePhase::Empty,
             latest_output: None,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe,
+            hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate,
         })
     }
 
@@ -2658,6 +2763,8 @@ impl PreparedLlamaDecode {
         mut trace: Option<&mut PreparedLlamaDecodeM1Trace>,
         stream: &mut CudaStream,
     ) -> LlamaDecodeResult<()> {
+        let hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate =
+            self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate;
         let forward = &mut self.forward;
         let rms_norm_profile = forward.rms_norm_profile();
         let plan = &forward.plan;
@@ -3141,14 +3248,75 @@ impl PreparedLlamaDecode {
                                 scaled_scores_bytes,
                             )
                             .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
-                            attention
-                                .execute_reference_with_scaled_scores_trace(
-                                    logical_token_count,
-                                    &mut params,
-                                    scaled_scores_trace,
-                                    stream,
+                            if hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate {
+                                let repeated_key_workspace = decode_buffers
+                                    .attention_cublas_qk_repeated_key_workspace
+                                    .as_mut()
+                                    .ok_or(LlamaDecodeError::InvalidConfiguration {
+                                        field: "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate",
+                                        reason: "candidate repeated-key device storage is unavailable",
+                                    })?;
+                                let repeated_key_workspace_bytes =
+                                    repeated_key_workspace.byte_len();
+                                let repeated_key_workspace = CudaBufferSpanMut::new(
+                                    repeated_key_workspace,
+                                    CudaDType::BF16,
+                                    0,
+                                    repeated_key_workspace_bytes,
                                 )
                                 .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                                let cublas_workspace = decode_buffers
+                                    .attention_cublas_workspace
+                                    .as_mut()
+                                    .ok_or(LlamaDecodeError::InvalidConfiguration {
+                                        field: "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate",
+                                        reason: "candidate cuBLAS device storage is unavailable",
+                                    })?;
+                                let cublas_workspace_bytes = cublas_workspace.byte_len();
+                                let cublas_workspace = CudaBufferSpanMut::new(
+                                    cublas_workspace,
+                                    CudaDType::BF16,
+                                    0,
+                                    cublas_workspace_bytes,
+                                )
+                                .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                                attention
+                                    .execute_hf_eager_qwen_p2048_m1_cublas_qk_with_scaled_scores_trace(
+                                        logical_token_count,
+                                        &mut params,
+                                        repeated_key_workspace,
+                                        cublas_workspace,
+                                        scaled_scores_trace,
+                                        stream,
+                                    )
+                                    .map_err(|source| {
+                                        LlamaDecodeError::cuda(attention_site, source)
+                                    })?;
+                                #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+                                {
+                                    let _ = (
+                                        repeated_key_workspace,
+                                        cublas_workspace,
+                                        scaled_scores_trace,
+                                    );
+                                    return Err(LlamaDecodeError::InvalidConfiguration {
+                                        field: "hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate",
+                                        reason: "requires the diagnostic cuBLAS probe build",
+                                    });
+                                }
+                            } else {
+                                attention
+                                    .execute_reference_with_scaled_scores_trace(
+                                        logical_token_count,
+                                        &mut params,
+                                        scaled_scores_trace,
+                                        stream,
+                                    )
+                                    .map_err(|source| {
+                                        LlamaDecodeError::cuda(attention_site, source)
+                                    })?;
+                            }
                         } else {
                             attention
                                 .execute(logical_token_count, &mut params, stream)
@@ -3785,6 +3953,7 @@ impl PreparedLlamaDecode {
             phase: _,
             latest_output: _,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe: _,
+            hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: _,
         } = self;
         let DecodeGemmPlans {
             hidden,
@@ -3801,6 +3970,8 @@ impl PreparedLlamaDecode {
             rope_sin,
             attention_workspace,
             attention_scaled_scores_trace,
+            attention_cublas_qk_repeated_key_workspace,
+            attention_cublas_workspace,
             gemm_workspace,
             rope_table_bytes_per_kind: _,
         } = buffers;
@@ -3923,6 +4094,20 @@ impl PreparedLlamaDecode {
                 &mut first,
                 LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
                 trace.close(),
+            );
+        }
+        if let Some(workspace) = attention_cublas_qk_repeated_key_workspace {
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
+                workspace.close(),
+            );
+        }
+        if let Some(workspace) = attention_cublas_workspace {
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasWorkspace,
+                workspace.close(),
             );
         }
         if let Some(workspace) = gemm_workspace {
