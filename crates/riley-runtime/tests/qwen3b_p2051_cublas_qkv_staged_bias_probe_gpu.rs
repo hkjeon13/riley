@@ -88,7 +88,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
         checkpoint_bias_key: &'static str,
     }
 
-    const PROJECTIONS: [ProjectionSpec; 3] = [
+    const P12_PROJECTIONS: [ProjectionSpec; 3] = [
         ProjectionSpec {
             identifier: "q",
             module_name: "q_proj",
@@ -358,7 +358,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
             "P11 input",
         )?;
         let mut projections = BTreeMap::new();
-        for projection in PROJECTIONS {
+        for projection in P12_PROJECTIONS {
             let weight_bf16_le = raw_sidecar_tensor(
                 &header,
                 &data,
@@ -549,7 +549,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
             .and_then(Value::as_object)
             .ok_or("P12 staged/actual comparison map is missing")?;
         let mut projections = BTreeMap::new();
-        for projection in PROJECTIONS {
+        for projection in P12_PROJECTIONS {
             let result = results
                 .get(projection.identifier)
                 .and_then(Value::as_object)
@@ -782,7 +782,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
             input.upload_from_slice(0, &input_native, &mut staging, &mut stream)?;
             let base_allocations = context.allocation_stats()?;
             let mut projections = BTreeMap::new();
-            for projection in PROJECTIONS {
+            for projection in P12_PROJECTIONS {
                 let p11_projection = p11
                     .projections
                     .get(projection.identifier)
@@ -920,7 +920,7 @@ mod p2051_cublas_qkv_staged_bias_contract {
         let mut staged_repeated = true;
         let mut allocation_unchanged = true;
         let mut actual_endpoint_exact = true;
-        for projection in PROJECTIONS {
+        for projection in P12_PROJECTIONS {
             let expected = p12
                 .projections
                 .get(projection.identifier)
