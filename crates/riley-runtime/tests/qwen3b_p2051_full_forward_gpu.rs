@@ -95,6 +95,7 @@ const HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID: &str =
 const STRICT_MLP_PROJECTION_BACKEND_ID: &str = "strict-staged-v1";
 const HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID: &str =
     "hf-eager-qwen-p2051-direct-cublas-probe-v1";
+const HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID: &str = "hf-cuda-qwen-p2051-rmsnorm-probe-v1";
 const TEACHER_ARTIFACT_SCHEMA: &str = "riley.qwen3b-hf-eager-teacher-forced-generation.v1";
 const TEACHER_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2048-teacher-forced-generation";
 const TEACHER_CACHE_OFF_SIDECAR_KEY: &str = "teacher_forced/logits";
@@ -143,6 +144,37 @@ impl RopeTableProfile {
             Self::Default => config,
             Self::HuggingFaceCudaQwenP2051ProbeV1 => {
                 config.with_hugging_face_cuda_qwen_p2051_rope_table_probe()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RmsNormProfile {
+    Default,
+    HuggingFaceCudaQwenP2051ProbeV1,
+}
+
+impl RmsNormProfile {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Default => "default-rmsnorm-v1",
+            Self::HuggingFaceCudaQwenP2051ProbeV1 => "hf-cuda-qwen-p2051-rmsnorm-probe-v1",
+        }
+    }
+
+    const fn backend_id(self) -> &'static str {
+        match self {
+            Self::Default => "canonical-rmsnorm-v1",
+            Self::HuggingFaceCudaQwenP2051ProbeV1 => HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID,
+        }
+    }
+
+    const fn configure(self, config: PreparedLlamaForwardConfig) -> PreparedLlamaForwardConfig {
+        match self {
+            Self::Default => config,
+            Self::HuggingFaceCudaQwenP2051ProbeV1 => {
+                config.with_hugging_face_cuda_qwen_p2051_rms_norm_probe()
             }
         }
     }
@@ -1566,8 +1598,11 @@ fn candidate_quality_gate(profile: &Value) -> TestResult<Value> {
         .get("mlp_projection_backend")
         .and_then(Value::as_str)
         == Some(HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID);
+    let p2051_rms_norm_selected = profile.get("rms_norm_backend").and_then(Value::as_str)
+        == Some(HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID);
     let full_forward_exact = direct_output_projection_selected
         && direct_mlp_projection_selected
+        && p2051_rms_norm_selected
         && qkv_exact
         && attention_context_exact
         && exact_stage_count == expected_stage_count
@@ -1581,6 +1616,7 @@ fn candidate_quality_gate(profile: &Value) -> TestResult<Value> {
         "attention_context_last_row_bf16_exact": attention_context_exact,
         "direct_cublas_output_projection_selected": direct_output_projection_selected,
         "direct_cublas_mlp_projection_selected": direct_mlp_projection_selected,
+        "p2051_rms_norm_selected": p2051_rms_norm_selected,
         "cache_off_full_forward_bf16_exact": full_forward_exact,
         "corrected_cache_on_eligible": full_forward_exact,
         "serving_selector_eligible": full_forward_exact,
@@ -1597,6 +1633,7 @@ fn run_profile(
     output_projection_profile: OutputProjectionProfile,
     mlp_projection_profile: MlpProjectionProfile,
     rope_table_profile: RopeTableProfile,
+    rms_norm_profile: RmsNormProfile,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
     let config = PreparedLlamaForwardConfig::new(
@@ -1610,6 +1647,7 @@ fn run_profile(
     let config = output_projection_profile.configure(config);
     let config = mlp_projection_profile.configure(config);
     let config = rope_table_profile.configure(config);
+    let config = rms_norm_profile.configure(config);
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1631,6 +1669,7 @@ fn run_profile(
             || forward.attention_selection().implementation_id() != attention_profile.backend_id()
             || forward.output_projection_backend_id() != output_projection_profile.backend_id()
             || forward.mlp_projection_backend_id() != mlp_projection_profile.backend_id()
+            || forward.rms_norm_backend_id() != rms_norm_profile.backend_id()
         {
             return Err("stage forward selected an unexpected numerical backend".into());
         }
@@ -1765,18 +1804,20 @@ fn run_profile(
         }
         Ok(json!({
             "profile_id": format!(
-                "{}+{}+{}+{}+{}",
+                "{}+{}+{}+{}+{}+{}",
                 mode.id(),
                 attention_profile.id(),
                 output_projection_profile.id(),
                 mlp_projection_profile.id(),
                 rope_table_profile.id(),
+                rms_norm_profile.id(),
             ),
             "projection_bias_backend": mode.id(),
             "attention_backend": attention_profile.backend_id(),
             "output_projection_backend": forward.output_projection_backend_id(),
             "mlp_projection_backend": forward.mlp_projection_backend_id(),
             "rope_table_backend": rope_table_profile.id(),
+            "rms_norm_backend": forward.rms_norm_backend_id(),
             "use_cache": false,
             "same_scheduler_engine": false,
             "repeat_execution": {
@@ -1826,7 +1867,8 @@ fn run_full_sequence_layer_stage_profile(
     .with_hugging_face_eager_qwen_p2051_probe_attention()
     .with_hf_eager_qwen_p2051_direct_cublas_output_projection_probe()
     .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe()
-    .with_hugging_face_cuda_qwen_p2051_rope_table_probe();
+    .with_hugging_face_cuda_qwen_p2051_rope_table_probe()
+    .with_hugging_face_cuda_qwen_p2051_rms_norm_probe();
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1855,6 +1897,7 @@ fn run_full_sequence_layer_stage_profile(
                 != HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID
             || forward.mlp_projection_backend_id()
                 != HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID
+            || forward.rms_norm_backend_id() != HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID
         {
             return Err("full-sequence forward selected an unexpected numerical backend".into());
         }
@@ -1964,11 +2007,12 @@ fn run_full_sequence_layer_stage_profile(
             stages.insert(spec.name.clone(), stage_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-compatible-bias-epilogue-probe-v1+hf-eager-qwen-p2051-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-cuda-rope-table-probe-v1",
+            "profile_id": "hf-compatible-bias-epilogue-probe-v1+hf-eager-qwen-p2051-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-cuda-rope-table-probe-v1+hf-cuda-qwen-p2051-rmsnorm-probe-v1",
             "projection_bias_backend": forward.projection_bias_mode().id(),
             "attention_backend": forward.attention_selection().implementation_id(),
             "output_projection_backend": forward.output_projection_backend_id(),
             "mlp_projection_backend": forward.mlp_projection_backend_id(),
+            "rms_norm_backend": forward.rms_norm_backend_id(),
             "use_cache": false,
             "same_scheduler_engine": false,
             "full_sequence_layer_capture": {
@@ -2026,13 +2070,17 @@ fn full_sequence_quality_gate(profile: &Value) -> TestResult<Value> {
         .ok_or("full-sequence exact stage count is missing")?;
     let required_stage_count =
         u64::try_from(expected_full_sequence_stage_specs(FULL_SEQUENCE_STAGE_LAYER_INDEX).len())?;
-    let full_sequence_exact = exact_stage_count == required_stage_count
+    let p2051_rms_norm_selected = profile.get("rms_norm_backend").and_then(Value::as_str)
+        == Some(HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID);
+    let full_sequence_exact = p2051_rms_norm_selected
+        && exact_stage_count == required_stage_count
         && summary
             .get("first_non_exact_stage")
             .is_some_and(Value::is_null);
     Ok(json!({
         "required_stage_count": required_stage_count,
         "candidate_exact_stage_count": exact_stage_count,
+        "p2051_rms_norm_selected": p2051_rms_norm_selected,
         "layer2_full_sequence_bf16_exact": full_sequence_exact,
         "cache_on_eligible": false,
         "serving_selector_eligible": false,
@@ -2103,6 +2151,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
         RopeTableProfile::Default,
+        RmsNormProfile::Default,
     )?;
     let hf_compatible = run_profile(
         &model,
@@ -2113,6 +2162,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
         RopeTableProfile::Default,
+        RmsNormProfile::Default,
     )?;
     let hf_compatible_qwen_p2051 = run_profile(
         &model,
@@ -2123,6 +2173,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
         RopeTableProfile::Default,
+        RmsNormProfile::Default,
     )?;
     let hf_compatible_qwen_p2051_o_projection = run_profile(
         &model,
@@ -2133,6 +2184,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         OutputProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
         MlpProjectionProfile::StrictStagedV1,
         RopeTableProfile::Default,
+        RmsNormProfile::Default,
     )?;
     let hf_compatible_qwen_p2051_all_projections = run_profile(
         &model,
@@ -2143,6 +2195,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         OutputProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
         MlpProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
         RopeTableProfile::HuggingFaceCudaQwenP2051ProbeV1,
+        RmsNormProfile::HuggingFaceCudaQwenP2051ProbeV1,
     )?;
     let quality_gate = candidate_quality_gate(&hf_compatible_qwen_p2051_all_projections)?;
     let cache_off_full_forward_bf16_exact = quality_gate
@@ -2176,6 +2229,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "baseline_mlp_projection_backend": STRICT_MLP_PROJECTION_BACKEND_ID,
             "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
             "candidate_rope_table_backend": "hf-cuda-rope-table-probe-v1",
+            "candidate_rms_norm_backend": HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID,
             "last_token_row_index": LAST_TOKEN_ROW_INDEX,
         },
         "hf_stage_artifact": {
@@ -2253,6 +2307,7 @@ fn qwen3b_p2051_hf_compatible_full_sequence_layer2_quality_gate() -> TestResult 
             "candidate_output_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
             "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
             "candidate_rope_table_backend": "hf-cuda-rope-table-probe-v1",
+            "candidate_rms_norm_backend": HF_EAGER_QWEN_P2051_RMS_NORM_BACKEND_ID,
             "diagnostic_only": true,
         },
         "hf_full_sequence_stage_artifact": {

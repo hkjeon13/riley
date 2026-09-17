@@ -194,6 +194,10 @@ mod gpu {
                 crate::llama::forward::LlamaRmsNormProfile::FixedContiguous37Balanced => {
                     return Err(rejected("unsupported norm graph profile"));
                 }
+                #[cfg(feature = "cuda-cublas-gemm-probe")]
+                crate::llama::forward::LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
+                    return Err(rejected("P2051 RMSNorm probe is not graph-qualified"));
+                }
             };
             let mut probe = BorrowedNormGraph::prepare_with_profile(
                 BorrowedNormResources {

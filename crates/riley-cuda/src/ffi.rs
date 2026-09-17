@@ -2181,6 +2181,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
@@ -6856,6 +6861,38 @@ pub(super) fn hugging_face_smollm2_rms_norm_execute(
             // SAFETY: the reviewed descriptor and every borrowed opaque
             // resource remain live through synchronous native completion.
             unsafe { riley_cuda_hugging_face_smollm2_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
+pub(super) fn hugging_face_qwen_p2051_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face Qwen P2051 CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the source-bound descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(&params, stream, error) }
         },
     )
 }

@@ -2303,6 +2303,15 @@ RileyCudaStatus riley_cuda_hugging_face_smollm2_rms_norm_execute(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
+// Additive byte-exact sibling for the source-bound Hugging Face Qwen P2051
+// cache-free diagnostic. It admits only BF16 row_count=2051,
+// hidden_size=2048, and epsilon=1e-6. The native implementation reproduces
+// the pinned PyTorch float4 mean-reduction order and never falls back.
+RileyCudaStatus riley_cuda_hugging_face_qwen_p2051_rms_norm_execute(
+    const RileyCudaRmsNormParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
 // Alternate RMSNorm entry point for fixed-contiguous-37-balanced-v1. The
 // storage, alias, exceptional-value, and synchronous-completion contract is
 // identical to riley_cuda_rms_norm_execute; only the sum-of-squares

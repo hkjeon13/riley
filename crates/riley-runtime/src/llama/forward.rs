@@ -19,7 +19,10 @@ use riley_cuda::{
     residual_add, residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
 };
 #[cfg(feature = "cuda-cublas-gemm-probe")]
-use riley_cuda::{CublasGemmProbeParams, CudaGemmReductionPolicy, CudaPreparedCublasGemmProbe};
+use riley_cuda::{
+    CublasGemmProbeParams, CudaGemmReductionPolicy, CudaPreparedCublasGemmProbe,
+    hugging_face_qwen_p2051_rms_norm,
+};
 use riley_model::{LoadedModel, ModelConfig};
 
 use super::decode::PrefillKvCacheSink;
@@ -1320,6 +1323,8 @@ pub(super) enum LlamaRmsNormProfile {
     Canonical,
     HuggingFaceSmolLm2,
     FixedContiguous37Balanced,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2051Probe,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1336,10 +1341,26 @@ enum LlamaRopeTableSelection {
     HuggingFaceCudaQwenP2051ProbeV1,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum LlamaRmsNormSelection {
+    #[default]
+    Automatic,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2051ProbeV1,
+}
+
 fn resolve_rms_norm_profile(
     model: &LoadedModel,
     reduction_profile: LlamaReductionProfile,
+    _rms_norm_selection: LlamaRmsNormSelection,
 ) -> LlamaRmsNormProfile {
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    if _rms_norm_selection == LlamaRmsNormSelection::HuggingFaceCudaQwenP2051ProbeV1 {
+        // Geometry and epsilon are revalidated by the narrow native entry
+        // point. Returning the profile unconditionally prevents selection
+        // from silently falling back on a mismatched model or sequence.
+        return LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe;
+    }
     match reduction_profile {
         LlamaReductionProfile::FixedContiguous37BalancedV1 => {
             LlamaRmsNormProfile::FixedContiguous37Balanced
@@ -1389,6 +1410,10 @@ pub(super) fn execute_profile_rms_norm<S: CudaExecutionStream + ?Sized>(
         LlamaRmsNormProfile::Canonical => rms_norm(params, stream),
         LlamaRmsNormProfile::HuggingFaceSmolLm2 => hugging_face_smollm2_rms_norm(params, stream),
         LlamaRmsNormProfile::FixedContiguous37Balanced => fixed37_rms_norm(params, stream),
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
+            hugging_face_qwen_p2051_rms_norm(params, stream)
+        }
     }
 }
 
@@ -1403,6 +1428,8 @@ pub(super) fn execute_profile_residual_rms_norm<S: CudaExecutionStream + ?Sized>
             hugging_face_smollm2_residual_rms_norm(params, stream)
         }
         LlamaRmsNormProfile::FixedContiguous37Balanced => fixed37_residual_rms_norm(params, stream),
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => residual_rms_norm(params, stream),
     }
 }
 
@@ -2149,6 +2176,7 @@ pub struct PreparedLlamaForwardConfig {
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
     rope_table_selection: LlamaRopeTableSelection,
+    rms_norm_selection: LlamaRmsNormSelection,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -2170,6 +2198,7 @@ impl PreparedLlamaForwardConfig {
             output_projection_mode: LlamaOutputProjectionMode::StrictHiddenGemmV1,
             mlp_projection_mode: LlamaMlpProjectionMode::StrictStagedV1,
             rope_table_selection: LlamaRopeTableSelection::Automatic,
+            rms_norm_selection: LlamaRmsNormSelection::Automatic,
         }
     }
 
@@ -2305,6 +2334,16 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Selects the P2051-native RMSNorm candidate that reproduces the pinned
+    /// Hugging Face FP32 `pow(2).mean` reduction topology. This is
+    /// feature-gated and diagnostic-only; no serving selector can use it.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hugging_face_cuda_qwen_p2051_rms_norm_probe(mut self) -> Self {
+        self.rms_norm_selection = LlamaRmsNormSelection::HuggingFaceCudaQwenP2051ProbeV1;
+        self
+    }
+
     #[must_use]
     pub const fn upload_staging_bytes(self) -> u64 {
         self.upload_staging_bytes
@@ -2413,6 +2452,22 @@ impl PreparedLlamaForwardConfig {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "rope_table_selection",
                 reason: "the Qwen GPU RoPE-table probe requires the paired P2051 Q/K/V, attention, O-projection, MLP, and canonical reduction probes",
+            });
+        }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if self.rms_norm_selection == LlamaRmsNormSelection::HuggingFaceCudaQwenP2051ProbeV1
+            && (self.mlp_projection_mode
+                != LlamaMlpProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.output_projection_mode
+                    != LlamaOutputProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.projection_bias_mode
+                    != LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+                || self.attention_preference != AttentionPreference::HuggingFaceEagerQwenP2051Probe
+                || self.reduction_profile != LlamaReductionProfile::CanonicalV1)
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "rms_norm_selection",
+                reason: "the Qwen P2051 RMSNorm probe requires the paired P2051 Q/K/V, attention, O-projection, MLP, and canonical reduction probes",
             });
         }
         Ok(())
@@ -2790,7 +2845,8 @@ impl PreparedLlamaForward {
 
         let gemm_reduction_policies =
             resolve_gemm_reduction_policies(model, config.reduction_profile);
-        let rms_norm_profile = resolve_rms_norm_profile(model, config.reduction_profile);
+        let rms_norm_profile =
+            resolve_rms_norm_profile(model, config.reduction_profile, config.rms_norm_selection);
         let rope_table_profile = resolve_rope_table_profile(
             model,
             config.reduction_profile,
@@ -3066,6 +3122,22 @@ impl PreparedLlamaForward {
 
     pub(super) const fn rms_norm_profile(&self) -> LlamaRmsNormProfile {
         self.rms_norm_profile
+    }
+
+    /// Stable identifier for the RMSNorm numerical path selected at cold
+    /// preparation. The P2051 identifier remains diagnostic-only and is not a
+    /// serving selector value.
+    #[must_use]
+    pub const fn rms_norm_backend_id(&self) -> &'static str {
+        match self.rms_norm_profile {
+            LlamaRmsNormProfile::Canonical => "canonical-rmsnorm-v1",
+            LlamaRmsNormProfile::HuggingFaceSmolLm2 => "hf-smollm2-rmsnorm-v1",
+            LlamaRmsNormProfile::FixedContiguous37Balanced => "fixed37-balanced-rmsnorm-v1",
+            #[cfg(feature = "cuda-cublas-gemm-probe")]
+            LlamaRmsNormProfile::HuggingFaceCudaQwenP2051Probe => {
+                "hf-cuda-qwen-p2051-rmsnorm-probe-v1"
+            }
+        }
     }
 
     pub(super) const fn rope_table_profile(&self) -> LlamaRopeTableProfile {
@@ -5712,6 +5784,21 @@ mod tests {
                     .validate(),
                 Err(LlamaForwardError::InvalidConfiguration {
                     field: "rope_table_selection",
+                    ..
+                })
+            ));
+
+            let rms_norm_probe =
+                paired_mlp_probe.with_hugging_face_cuda_qwen_p2051_rms_norm_probe();
+            rms_norm_probe
+                .validate()
+                .expect("paired Qwen P2051 RMSNorm probe is canonical-only");
+            assert!(matches!(
+                defaults
+                    .with_hugging_face_cuda_qwen_p2051_rms_norm_probe()
+                    .validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "rms_norm_selection",
                     ..
                 })
             ));

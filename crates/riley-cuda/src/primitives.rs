@@ -18,6 +18,13 @@ pub const HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE: u64 = 576;
 pub const HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS: u64 = 8_192;
 /// Exact FP32 epsilon bits required by the reviewed `SmolLM2` model.
 pub const HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
+/// Hidden width certified against the source-bound Hugging Face Qwen P2051
+/// cache-free `RMSNorm` diagnostic.
+pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE: u64 = 2_048;
+/// Exact full-sequence row count certified for the Qwen P2051 diagnostic.
+pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT: u64 = 2_051;
+/// Exact FP32 epsilon bits required by the Qwen P2051 diagnostic model.
+pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS: u32 = 0x3586_37bd;
 /// Successful deterministic BF16 argmax row.
 pub const BF16_ARGMAX_STATUS_SUCCESS: u32 = 0;
 /// At least one logit in the row was NaN or infinity.
@@ -552,6 +559,74 @@ pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
     #[cfg(feature = "cuda")]
     {
         ffi::hugging_face_smollm2_rms_norm_execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Executes the source-bound Hugging Face Qwen P2051 BF16 `RMSNorm` topology.
+///
+/// The additive entry point is intentionally closed over one cache-free
+/// diagnostic geometry: `row_count=2051`, `hidden_size=2048`, and
+/// `epsilon=1e-6`. It reproduces the pinned PyTorch F32 `pow(2).mean`
+/// reduction order and never falls back to generic RMSNorm.
+///
+/// # Errors
+///
+/// Returns not-supported outside the reviewed contract, or a descriptor,
+/// shape, overlap, launch, or synchronization error.
+pub fn hugging_face_qwen_p2051_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "hugging_face_qwen_p2051_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_qwen_p2051_rms_norm_contract(
+        OPERATION,
+        params.input.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::hugging_face_qwen_p2051_rms_norm_execute(
             params.input.raw(),
             params.weight.raw(),
             params.output.raw(),
@@ -1798,6 +1873,30 @@ fn validate_hugging_face_smollm2_rms_norm_contract(
     ))
 }
 
+fn validate_hugging_face_qwen_p2051_rms_norm_contract(
+    operation: &'static str,
+    dtype: CudaDType,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+) -> CudaResult<()> {
+    if dtype == CudaDType::BF16
+        && row_count == HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT
+        && hidden_size == HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE
+        && epsilon.to_bits() == HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS
+    {
+        return Ok(());
+    }
+    Err(CudaError::new(
+        CudaErrorKind::NotSupported,
+        CudaErrorDomain::Rust,
+        CudaErrorStage::Validation,
+        0,
+        operation,
+        "the reviewed path requires BF16, row_count=2051, hidden_size=2048, and epsilon=1e-6 exactly",
+    ))
+}
+
 #[cfg(feature = "cuda")]
 fn native_contract_error(operation: &'static str, message: impl Into<String>) -> CudaError {
     CudaError::new(
@@ -1816,8 +1915,10 @@ mod tests {
 
     use super::{
         BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
-        Bf16ArgmaxResult, CudaDType, checked_product3, required_matrix_bytes,
-        validate_bf16_argmax_descriptor, validate_fixed37_axis, validate_span,
+        Bf16ArgmaxResult, CudaDType, HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS,
+        HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
+        checked_product3, required_matrix_bytes, validate_bf16_argmax_descriptor,
+        validate_fixed37_axis, validate_hugging_face_qwen_p2051_rms_norm_contract, validate_span,
     };
     use crate::{CudaErrorKind, CudaErrorStage};
 
@@ -1837,6 +1938,56 @@ mod tests {
             .expect_err("one element above the maximum must fail");
         assert_eq!(error.kind(), CudaErrorKind::NotSupported);
         assert_eq!(error.stage(), CudaErrorStage::Validation);
+    }
+
+    #[test]
+    fn qwen_p2051_rms_norm_profile_is_closed_over_its_exact_geometry() {
+        let epsilon = f32::from_bits(HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS);
+        validate_hugging_face_qwen_p2051_rms_norm_contract(
+            "test qwen P2051 RMSNorm",
+            CudaDType::BF16,
+            HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
+            HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+            epsilon,
+        )
+        .expect("exact Qwen P2051 geometry must be accepted");
+        for (dtype, rows, hidden, candidate_epsilon) in [
+            (
+                CudaDType::F32,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+                epsilon,
+            ),
+            (
+                CudaDType::BF16,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT - 1,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+                epsilon,
+            ),
+            (
+                CudaDType::BF16,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE - 1,
+                epsilon,
+            ),
+            (
+                CudaDType::BF16,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
+                HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+                f32::from_bits(HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS + 1),
+            ),
+        ] {
+            let error = validate_hugging_face_qwen_p2051_rms_norm_contract(
+                "test qwen P2051 RMSNorm",
+                dtype,
+                rows,
+                hidden,
+                candidate_epsilon,
+            )
+            .expect_err("every non-exact Qwen P2051 descriptor must fail closed");
+            assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+            assert_eq!(error.stage(), CudaErrorStage::Validation);
+        }
     }
 
     #[test]
