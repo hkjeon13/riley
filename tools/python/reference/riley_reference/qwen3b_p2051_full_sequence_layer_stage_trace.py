@@ -2,9 +2,9 @@
 
 The existing last-token trace proved that a candidate can reproduce the final
 row while an earlier causal row still changes the next decoder layer.  This
-module captures eleven whole BF16 tensors from layer one of the actual Hugging
-Face eager forward, including the BF16 cosine/sine tables handed to rotary
-embedding. It is an offline oracle only: it never starts Riley, does
+module captures eleven whole BF16 tensors from a selected decoder layer of the
+actual Hugging Face eager forward, including the BF16 cosine/sine tables handed
+to rotary embedding. It is an offline oracle only: it never starts Riley, does
 not participate in serving, and has no Python dependency at the Rust runtime
 boundary.
 """
@@ -29,31 +29,56 @@ from . import qwen3b_serving_oracle as oracle
 from . import qwen3b_stage_trace as stage
 from .hf_calibration import SidecarWriter, _default_sidecar_writer, _write_sidecar_exclusive
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v2"
-ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-rope-table-trace"
-TRACE_ID = "qwen3b-p2051-cache-off-full-sequence-layer1-stage-rope-table-v2"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-p2051-full-sequence-layer-stage-rope-table-v2"
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v3"
+ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-selected-layer-stage-rope-table-trace"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-p2051-full-sequence-selected-layer-stage-rope-table-v3"
 SOURCE_PROVENANCE_ENV = "RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_SOURCE_PROVENANCE"
 
+# The import-time default keeps the ordinary unit-test helpers convenient.
+# Produced artifacts bind their selected layer immutably in `trace_profile`.
 LAYER_INDEX = 1
 BF16_BYTES = 2
 MODEL_HIDDEN_SIZE = base.MODEL_HIDDEN_SIZE
 MODEL_KEY_VALUE_WIDTH = base.MODEL_KEY_VALUE_HEAD_COUNT * base.MODEL_HEAD_DIMENSION
 CONTEXT_TOKEN_COUNT = base.CONTEXT_TOKEN_COUNT
 
-TRACE_TENSORS = (
-    "layer1.input_norm.full",
-    "layer1.q_proj.full",
-    "layer1.k_proj.full",
-    "layer1.v_proj.full",
-    "layer1.rope_cos.full",
-    "layer1.rope_sin.full",
-    "layer1.q_rope.full",
-    "layer1.k_rope.full",
-    "layer1.attention_context.full",
-    "layer1.after_attention_residual.full",
-    "layer1.output.full",
-)
+def _validate_layer_index(layer_index: object) -> int:
+    if isinstance(layer_index, bool) or not isinstance(layer_index, int):
+        raise Qwen3BP2051FullSequenceLayerStageTraceError(
+            "trace layer index must be an integer"
+        )
+    if not 0 <= layer_index < base.MODEL_LAYER_COUNT:
+        raise Qwen3BP2051FullSequenceLayerStageTraceError(
+            "trace layer index is outside the model"
+        )
+    return layer_index
+
+
+def _trace_id(layer_index: int) -> str:
+    _validate_layer_index(layer_index)
+    return f"qwen3b-p2051-cache-off-full-sequence-layer{layer_index}-stage-rope-table-v3"
+
+
+def _trace_tensors(layer_index: int) -> tuple[str, ...]:
+    _validate_layer_index(layer_index)
+    prefix = f"layer{layer_index}"
+    return (
+        f"{prefix}.input_norm.full",
+        f"{prefix}.q_proj.full",
+        f"{prefix}.k_proj.full",
+        f"{prefix}.v_proj.full",
+        f"{prefix}.rope_cos.full",
+        f"{prefix}.rope_sin.full",
+        f"{prefix}.q_rope.full",
+        f"{prefix}.k_rope.full",
+        f"{prefix}.attention_context.full",
+        f"{prefix}.after_attention_residual.full",
+        f"{prefix}.output.full",
+    )
+
+
+TRACE_ID = _trace_id(LAYER_INDEX)
+TRACE_TENSORS = _trace_tensors(LAYER_INDEX)
 
 SOURCE_PATHS = {
     "qwen_serving_oracle": "tools/python/reference/riley_reference/qwen3b_serving_oracle.py",
@@ -152,7 +177,9 @@ def _sidecar_key(name: str) -> str:
     return f"trace/{name.replace('.', '/')}"
 
 
-def _expected_shapes() -> dict[str, tuple[int, ...]]:
+def _expected_shapes(layer_index: int = LAYER_INDEX) -> dict[str, tuple[int, ...]]:
+    layer_index = _validate_layer_index(layer_index)
+    prefix = f"layer{layer_index}"
     hidden = (CONTEXT_TOKEN_COUNT, MODEL_HIDDEN_SIZE)
     key_value = (CONTEXT_TOKEN_COUNT, MODEL_KEY_VALUE_WIDTH)
     rope = (CONTEXT_TOKEN_COUNT, base.MODEL_HEAD_DIMENSION)
@@ -167,26 +194,27 @@ def _expected_shapes() -> dict[str, tuple[int, ...]]:
         base.MODEL_HEAD_DIMENSION,
     )
     return {
-        "layer1.input_norm.full": hidden,
-        "layer1.q_proj.full": hidden,
-        "layer1.k_proj.full": key_value,
-        "layer1.v_proj.full": key_value,
-        "layer1.rope_cos.full": rope,
-        "layer1.rope_sin.full": rope,
-        "layer1.q_rope.full": query_rope,
-        "layer1.k_rope.full": key_rope,
-        "layer1.attention_context.full": hidden,
-        "layer1.after_attention_residual.full": hidden,
-        "layer1.output.full": hidden,
+        f"{prefix}.input_norm.full": hidden,
+        f"{prefix}.q_proj.full": hidden,
+        f"{prefix}.k_proj.full": key_value,
+        f"{prefix}.v_proj.full": key_value,
+        f"{prefix}.rope_cos.full": rope,
+        f"{prefix}.rope_sin.full": rope,
+        f"{prefix}.q_rope.full": query_rope,
+        f"{prefix}.k_rope.full": key_rope,
+        f"{prefix}.attention_context.full": hidden,
+        f"{prefix}.after_attention_residual.full": hidden,
+        f"{prefix}.output.full": hidden,
     }
 
 
-def _capture_profile_document() -> dict[str, object]:
+def _capture_profile_document(layer_index: int = LAYER_INDEX) -> dict[str, object]:
+    layer_index = _validate_layer_index(layer_index)
     return {
         "capture_domain": "cache-free-p2051-full-sequence-layer-boundaries",
-        "id": TRACE_ID,
-        "layer_index": LAYER_INDEX,
-        "tensor_count": len(TRACE_TENSORS),
+        "id": _trace_id(layer_index),
+        "layer_index": layer_index,
+        "tensor_count": len(_trace_tensors(layer_index)),
         "rust_consumer": {
             "api": "riley_runtime::llama::PreparedLlamaForward::prepare_full_sequence_layer_stage_trace+execute_full_sequence_layer_stage_traced",
             "attention_backend": "hf-eager-cublaslt-qwen-p2051-probe",
@@ -199,12 +227,16 @@ def _capture_profile_document() -> dict[str, object]:
     }
 
 
-def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
-    expected = _expected_shapes()
-    if set(tensors) != set(TRACE_TENSORS):
+def _validate_tensors(
+    tensors: Mapping[str, object], torch: Any, layer_index: int = LAYER_INDEX
+) -> None:
+    layer_index = _validate_layer_index(layer_index)
+    expected = _expected_shapes(layer_index)
+    trace_tensors = _trace_tensors(layer_index)
+    if set(tensors) != set(trace_tensors):
         raise Qwen3BP2051FullSequenceLayerStageTraceError("trace tensor names differ")
     identities: set[int] = set()
-    for name in TRACE_TENSORS:
+    for name in trace_tensors:
         tensor = tensors[name]
         try:
             shape = tuple(int(dimension) for dimension in tensor.shape)
@@ -291,7 +323,10 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
             ) from error
         captured[name] = value
 
-    def capture(self, input_token_ids: Sequence[int]) -> CapturedTrace:
+    def capture(
+        self, input_token_ids: Sequence[int], *, layer_index: int = LAYER_INDEX
+    ) -> CapturedTrace:
+        layer_index = _validate_layer_index(layer_index)
         model = self._model
         if model is None:
             raise Qwen3BP2051FullSequenceLayerStageTraceError("trace backend is closed")
@@ -315,8 +350,9 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 )
 
         torch = self._torch
-        layer = self._layers[LAYER_INDEX]
+        layer = self._layers[layer_index]
         attention = layer.self_attn
+        prefix = f"layer{layer_index}"
         captured: dict[str, object] = {}
         handles: list[object] = []
         original_rope = self._module.apply_rotary_pos_emb
@@ -347,7 +383,7 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
         ) -> object:
             nonlocal rope_calls
             output = original_rope(query, key, cosine, sine, unsqueeze_dim)
-            if rope_calls == LAYER_INDEX:
+            if rope_calls == layer_index:
                 if not isinstance(output, tuple) or len(output) != 2:
                     raise Qwen3BP2051FullSequenceLayerStageTraceError(
                         "Qwen rotary hook contract changed"
@@ -360,28 +396,28 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                     raise Qwen3BP2051FullSequenceLayerStageTraceError(
                         "Qwen rotary outputs cannot be transposed"
                     ) from error
-                self._capture_full(captured, "layer1.rope_cos.full", cosine)
-                self._capture_full(captured, "layer1.rope_sin.full", sine)
-                self._capture_full(captured, "layer1.q_rope.full", query_token_major)
-                self._capture_full(captured, "layer1.k_rope.full", key_token_major)
+                self._capture_full(captured, f"{prefix}.rope_cos.full", cosine)
+                self._capture_full(captured, f"{prefix}.rope_sin.full", sine)
+                self._capture_full(captured, f"{prefix}.q_rope.full", query_token_major)
+                self._capture_full(captured, f"{prefix}.k_rope.full", key_token_major)
             rope_calls += 1
             return output
 
         handles.extend(
             (
                 layer.input_layernorm.register_forward_hook(
-                    capture_output("layer1.input_norm.full")
+                    capture_output(f"{prefix}.input_norm.full")
                 ),
-                attention.q_proj.register_forward_hook(capture_output("layer1.q_proj.full")),
-                attention.k_proj.register_forward_hook(capture_output("layer1.k_proj.full")),
-                attention.v_proj.register_forward_hook(capture_output("layer1.v_proj.full")),
+                attention.q_proj.register_forward_hook(capture_output(f"{prefix}.q_proj.full")),
+                attention.k_proj.register_forward_hook(capture_output(f"{prefix}.k_proj.full")),
+                attention.v_proj.register_forward_hook(capture_output(f"{prefix}.v_proj.full")),
                 attention.o_proj.register_forward_pre_hook(
-                    capture_input("layer1.attention_context.full")
+                    capture_input(f"{prefix}.attention_context.full")
                 ),
                 layer.post_attention_layernorm.register_forward_pre_hook(
-                    capture_input("layer1.after_attention_residual.full")
+                    capture_input(f"{prefix}.after_attention_residual.full")
                 ),
-                layer.register_forward_hook(capture_output("layer1.output.full")),
+                layer.register_forward_hook(capture_output(f"{prefix}.output.full")),
             )
         )
         self._module.apply_rotary_pos_emb = traced_rope
@@ -410,8 +446,9 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                 raise Qwen3BP2051FullSequenceLayerStageTraceError(
                     "Qwen rotary invocation count differs"
                 )
-            ordered = {name: captured[name] for name in TRACE_TENSORS}
-            _validate_tensors(ordered, torch)
+            trace_tensors = _trace_tensors(layer_index)
+            ordered = {name: captured[name] for name in trace_tensors}
+            _validate_tensors(ordered, torch, layer_index)
             return CapturedTrace(tensors=ordered)
         except KeyError as error:
             raise Qwen3BP2051FullSequenceLayerStageTraceError(
@@ -606,10 +643,13 @@ def write_source_provenance_exclusive(*, repo_root: Path, output_path: Path) -> 
     return document
 
 
-def _tensor_manifest(tensors: Mapping[str, object], torch: Any) -> dict[str, object]:
-    _validate_tensors(tensors, torch)
+def _tensor_manifest(
+    tensors: Mapping[str, object], torch: Any, layer_index: int = LAYER_INDEX
+) -> dict[str, object]:
+    layer_index = _validate_layer_index(layer_index)
+    _validate_tensors(tensors, torch, layer_index)
     document: dict[str, object] = {}
-    for name in TRACE_TENSORS:
+    for name in _trace_tensors(layer_index):
         tensor = tensors[name]
         try:
             raw = base._canonical_bf16_le_bytes(tensor, torch)
@@ -663,7 +703,9 @@ def build_manifest(
     sidecar_name: str,
     sidecar_sha256: str,
     created_at: datetime,
+    layer_index: int = LAYER_INDEX,
 ) -> dict[str, object]:
+    layer_index = _validate_layer_index(layer_index)
     if Path(sidecar_name).name != sidecar_name or not sidecar_name.endswith(
         ".safetensors"
     ):
@@ -671,11 +713,11 @@ def build_manifest(
     document: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "artifact_kind": ARTIFACT_KIND,
-        "trace_id": TRACE_ID,
+        "trace_id": _trace_id(layer_index),
         "performance_claim_eligible": False,
         "created_at": oracle._utc_text(created_at),
         "producer": dict(producer_metadata),
-        "trace_profile": _capture_profile_document(),
+        "trace_profile": _capture_profile_document(layer_index),
         "contract": {
             "model_id": oracle.MODEL_ID,
             "model_revision": oracle.MODEL_REVISION,
@@ -693,9 +735,9 @@ def build_manifest(
             "path": sidecar_name,
             "sha256": sidecar_sha256,
             "format": "safetensors",
-            "tensor_count": len(TRACE_TENSORS),
+            "tensor_count": len(_trace_tensors(layer_index)),
         },
-        "tensors": _tensor_manifest(tensors, torch),
+        "tensors": _tensor_manifest(tensors, torch, layer_index),
     }
     validate_manifest(document)
     return document
@@ -725,7 +767,6 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     if (
         document["schema_version"] != SCHEMA_VERSION
         or document["artifact_kind"] != ARTIFACT_KIND
-        or document["trace_id"] != TRACE_ID
         or document["performance_claim_eligible"] is not False
     ):
         raise Qwen3BP2051FullSequenceLayerStageTraceError(
@@ -736,7 +777,12 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     except oracle.Qwen3BServingOracleError as error:
         raise Qwen3BP2051FullSequenceLayerStageTraceError(str(error)) from error
     _validate_producer(document["producer"])
-    if dict(_require_mapping(document["trace_profile"], "trace profile")) != _capture_profile_document():
+    profile = _require_mapping(document["trace_profile"], "trace profile")
+    layer_index = _validate_layer_index(profile.get("layer_index"))
+    if (
+        document["trace_id"] != _trace_id(layer_index)
+        or dict(profile) != _capture_profile_document(layer_index)
+    ):
         raise Qwen3BP2051FullSequenceLayerStageTraceError("trace profile differs")
     contract = _require_mapping(document["contract"], "trace contract")
     _require_exact_keys(
@@ -780,16 +826,17 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     sidecar_name = _require_string(sidecar["path"], "trace sidecar path")
     if Path(sidecar_name).name != sidecar_name or not sidecar_name.endswith(".safetensors"):
         raise Qwen3BP2051FullSequenceLayerStageTraceError("trace sidecar path differs")
-    if sidecar["format"] != "safetensors" or sidecar["tensor_count"] != len(TRACE_TENSORS):
+    trace_tensors = _trace_tensors(layer_index)
+    if sidecar["format"] != "safetensors" or sidecar["tensor_count"] != len(trace_tensors):
         raise Qwen3BP2051FullSequenceLayerStageTraceError(
             "trace sidecar metadata differs"
         )
     _require_sha256(sidecar["sha256"], "trace sidecar SHA-256")
     tensors = _require_mapping(document["tensors"], "trace tensors")
-    if set(tensors) != set(TRACE_TENSORS):
+    if set(tensors) != set(trace_tensors):
         raise Qwen3BP2051FullSequenceLayerStageTraceError("trace tensor names differ")
-    shapes = _expected_shapes()
-    for name in TRACE_TENSORS:
+    shapes = _expected_shapes(layer_index)
+    for name in trace_tensors:
         tensor = _require_mapping(tensors[name], f"trace tensor {name}")
         _require_exact_keys(
             tensor,
@@ -835,14 +882,17 @@ def validate_sidecar_against_manifest(
     except base.Qwen3BP2051LayerStageTraceError as error:
         raise Qwen3BP2051FullSequenceLayerStageTraceError(str(error)) from error
     tensors = _require_mapping(manifest["tensors"], "trace tensors")
-    expected_keys = {_sidecar_key(name) for name in TRACE_TENSORS}
+    profile = _require_mapping(manifest["trace_profile"], "trace profile")
+    layer_index = _validate_layer_index(profile.get("layer_index"))
+    trace_tensors = _trace_tensors(layer_index)
+    expected_keys = {_sidecar_key(name) for name in trace_tensors}
     if set(header) - {"__metadata__"} != expected_keys:
         raise Qwen3BP2051FullSequenceLayerStageTraceError(
             "trace sidecar tensor set differs"
         )
     ranges: list[tuple[int, int, str]] = []
     with sidecar.open("rb") as handle:
-        for name in TRACE_TENSORS:
+        for name in trace_tensors:
             reference = _require_mapping(tensors[name], f"trace tensor {name}")
             entry = _require_mapping(header[reference["key"]], f"sidecar tensor {name}")
             _require_exact_keys(
@@ -938,6 +988,7 @@ def produce_hf_trace(
     sidecar_path: Path,
     repo_root: Path,
     device: str,
+    layer_index: int = LAYER_INDEX,
     created_at: datetime | None = None,
     backend_factory: BackendFactory = HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend.load,
     sidecar_writer: SidecarWriter = _default_sidecar_writer,
@@ -946,6 +997,7 @@ def produce_hf_trace(
     """Create the source-bound actual-HF full-sequence layer trace."""
 
     try:
+        layer_index = _validate_layer_index(layer_index)
         manifest, sidecar = base._output_paths(manifest_path, sidecar_path, repo_root)
         workload = oracle.load_workload(workload_path)
         checkpoint = oracle.inspect_checkpoint(checkpoint_path)
@@ -960,12 +1012,15 @@ def produce_hf_trace(
     backend = backend_factory(checkpoint=checkpoint, device=device)
     sidecar_written = False
     try:
-        captured = backend.capture(input_token_ids)
+        captured = backend.capture(input_token_ids, layer_index=layer_index)
         tensors = dict(captured.tensors)
-        _validate_tensors(tensors, backend._torch)
+        _validate_tensors(tensors, backend._torch, layer_index)
         _write_sidecar_exclusive(
             sidecar,
-            {_sidecar_key(name): tensors[name] for name in TRACE_TENSORS},
+            {
+                _sidecar_key(name): tensors[name]
+                for name in _trace_tensors(layer_index)
+            },
             sidecar_writer,
         )
         sidecar_written = True
@@ -984,6 +1039,7 @@ def produce_hf_trace(
             sidecar_name=sidecar.name,
             sidecar_sha256=_sha256_file(sidecar),
             created_at=created_at or datetime.now(timezone.utc),
+            layer_index=layer_index,
         )
         validate_sidecar_against_manifest(document, sidecar)
         try:
@@ -1064,6 +1120,7 @@ def _build_parser() -> argparse.ArgumentParser:
     produce.add_argument("--sidecar", type=Path, required=True)
     produce.add_argument("--repo-root", type=Path, required=True)
     produce.add_argument("--device", default="cuda:0")
+    produce.add_argument("--layer-index", type=int, default=LAYER_INDEX)
     provenance = commands.add_parser(
         "provenance",
         help="write host-Git source provenance for a pinned container without Git",
@@ -1106,6 +1163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sidecar_path=args.sidecar,
                 repo_root=args.repo_root,
                 device=args.device,
+                layer_index=args.layer_index,
             )
         else:
             document = validate_bindings(

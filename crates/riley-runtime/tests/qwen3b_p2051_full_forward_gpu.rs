@@ -51,12 +51,10 @@ const STAGE_SCHEMA_VERSION: &str = "riley.qwen3b-hf-eager-p2051-cache-off-layer-
 const STAGE_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-layer-stage-trace";
 const STAGE_TRACE_ID: &str = "qwen3b-p2051-cache-off-last-token-layer-stage-v1";
 const FULL_SEQUENCE_STAGE_SCHEMA_VERSION: &str =
-    "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v2";
+    "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v3";
 const FULL_SEQUENCE_STAGE_ARTIFACT_KIND: &str =
-    "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-rope-table-trace";
-const FULL_SEQUENCE_STAGE_TRACE_ID: &str =
-    "qwen3b-p2051-cache-off-full-sequence-layer1-stage-rope-table-v2";
-const FULL_SEQUENCE_STAGE_LAYER_INDEX: usize = 1;
+    "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-selected-layer-stage-rope-table-trace";
+const FULL_SEQUENCE_STAGE_LAYER_INDEX: usize = 2;
 const RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2051-hf-compatible-cache-free-full-forward-comparison.v1";
 const RESULT_ARTIFACT_KIND: &str =
@@ -655,7 +653,11 @@ fn expected_stage_specs() -> Vec<StageSpec> {
     stages
 }
 
-fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
+fn full_sequence_stage_trace_id(layer_index: usize) -> String {
+    format!("qwen3b-p2051-cache-off-full-sequence-layer{layer_index}-stage-rope-table-v3")
+}
+
+fn expected_full_sequence_stage_specs(layer_index: usize) -> Vec<StageSpec> {
     let sequence = u64::try_from(CONTEXT_TOKEN_COUNT).expect("context token count fits");
     let hidden = u64::try_from(QWEN3B_HIDDEN_SIZE).expect("hidden size fits");
     let key_value_width = u64::try_from(QWEN3B_KEY_VALUE_HEADS * QWEN3B_HEAD_DIMENSION)
@@ -667,25 +669,25 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
     };
     vec![
         hidden_stage(
-            "layer1.input_norm.full",
+            &format!("layer{layer_index}.input_norm.full"),
             LlamaLastTokenLayerStage::InputNorm,
         ),
         hidden_stage(
-            "layer1.q_proj.full",
+            &format!("layer{layer_index}.q_proj.full"),
             LlamaLastTokenLayerStage::QueryProjection,
         ),
         StageSpec {
-            name: "layer1.k_proj.full".to_owned(),
+            name: format!("layer{layer_index}.k_proj.full"),
             shape: vec![sequence, key_value_width],
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::KeyProjection),
         },
         StageSpec {
-            name: "layer1.v_proj.full".to_owned(),
+            name: format!("layer{layer_index}.v_proj.full"),
             shape: vec![sequence, key_value_width],
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::ValueProjection),
         },
         StageSpec {
-            name: "layer1.rope_cos.full".to_owned(),
+            name: format!("layer{layer_index}.rope_cos.full"),
             shape: vec![
                 sequence,
                 u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
@@ -693,7 +695,7 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             source: StageSource::HfEagerRopeTableCosine,
         },
         StageSpec {
-            name: "layer1.rope_sin.full".to_owned(),
+            name: format!("layer{layer_index}.rope_sin.full"),
             shape: vec![
                 sequence,
                 u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
@@ -701,7 +703,7 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             source: StageSource::HfEagerRopeTableSine,
         },
         StageSpec {
-            name: "layer1.q_rope.full".to_owned(),
+            name: format!("layer{layer_index}.q_rope.full"),
             shape: vec![
                 sequence,
                 u64::try_from(QWEN3B_QUERY_HEADS).expect("query heads fit"),
@@ -710,7 +712,7 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::QueryRotary),
         },
         StageSpec {
-            name: "layer1.k_rope.full".to_owned(),
+            name: format!("layer{layer_index}.k_rope.full"),
             shape: vec![
                 sequence,
                 u64::try_from(QWEN3B_KEY_VALUE_HEADS).expect("key/value heads fit"),
@@ -719,14 +721,17 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::KeyRotary),
         },
         hidden_stage(
-            "layer1.attention_context.full",
+            &format!("layer{layer_index}.attention_context.full"),
             LlamaLastTokenLayerStage::AttentionContext,
         ),
         hidden_stage(
-            "layer1.after_attention_residual.full",
+            &format!("layer{layer_index}.after_attention_residual.full"),
             LlamaLastTokenLayerStage::AfterAttentionResidual,
         ),
-        hidden_stage("layer1.output.full", LlamaLastTokenLayerStage::Output),
+        hidden_stage(
+            &format!("layer{layer_index}.output.full"),
+            LlamaLastTokenLayerStage::Output,
+        ),
     ]
 }
 
@@ -1132,14 +1137,15 @@ fn load_hf_full_sequence_stage_artifact(
     let payload = fs::read(&manifest_path)?;
     let manifest_sha256 = sha256_hex(&payload);
     let manifest: Value = serde_json::from_slice(&payload)?;
+    let full_sequence_trace_id = full_sequence_stage_trace_id(FULL_SEQUENCE_STAGE_LAYER_INDEX);
     if manifest["schema_version"].as_str() != Some(FULL_SEQUENCE_STAGE_SCHEMA_VERSION)
         || manifest["artifact_kind"].as_str() != Some(FULL_SEQUENCE_STAGE_ARTIFACT_KIND)
-        || manifest["trace_id"].as_str() != Some(FULL_SEQUENCE_STAGE_TRACE_ID)
+        || manifest["trace_id"].as_str() != Some(full_sequence_trace_id.as_str())
         || manifest["performance_claim_eligible"].as_bool() != Some(false)
         || manifest["trace_profile"]
             != json!({
                 "capture_domain": "cache-free-p2051-full-sequence-layer-boundaries",
-                "id": FULL_SEQUENCE_STAGE_TRACE_ID,
+                "id": full_sequence_trace_id,
                 "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
                 "tensor_count": 11,
                 "rust_consumer": {
@@ -1302,7 +1308,7 @@ fn load_hf_full_sequence_stage_artifact(
             &format!("HF P2051 full-sequence source {name}"),
         )?;
     }
-    let specs = expected_full_sequence_stage_specs();
+    let specs = expected_full_sequence_stage_specs(FULL_SEQUENCE_STAGE_LAYER_INDEX);
     let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
     let sidecar_sha256 = sha256_file(&sidecar_path)?;
     Ok(HfFullSequenceStageArtifact {
@@ -1852,7 +1858,7 @@ fn run_full_sequence_layer_stage_profile(
         {
             return Err("full-sequence forward selected an unexpected numerical backend".into());
         }
-        let specs = expected_full_sequence_stage_specs();
+        let specs = expected_full_sequence_stage_specs(FULL_SEQUENCE_STAGE_LAYER_INDEX);
         let selected = specs
             .iter()
             .filter_map(|spec| match spec.source {
@@ -2018,7 +2024,8 @@ fn full_sequence_quality_gate(profile: &Value) -> TestResult<Value> {
         .get("bf16_exact_stage_count")
         .and_then(Value::as_u64)
         .ok_or("full-sequence exact stage count is missing")?;
-    let required_stage_count = u64::try_from(expected_full_sequence_stage_specs().len())?;
+    let required_stage_count =
+        u64::try_from(expected_full_sequence_stage_specs(FULL_SEQUENCE_STAGE_LAYER_INDEX).len())?;
     let full_sequence_exact = exact_stage_count == required_stage_count
         && summary
             .get("first_non_exact_stage")
@@ -2026,7 +2033,7 @@ fn full_sequence_quality_gate(profile: &Value) -> TestResult<Value> {
     Ok(json!({
         "required_stage_count": required_stage_count,
         "candidate_exact_stage_count": exact_stage_count,
-        "layer1_full_sequence_bf16_exact": full_sequence_exact,
+        "layer2_full_sequence_bf16_exact": full_sequence_exact,
         "cache_on_eligible": false,
         "serving_selector_eligible": false,
         "performance_claim_eligible": false,
@@ -2199,7 +2206,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
 
 #[test]
 #[ignore = "remote-only Qwen2.5-3B P2051 full-sequence layer-stage discriminator"]
-fn qwen3b_p2051_hf_compatible_full_sequence_layer1_quality_gate() -> TestResult {
+fn qwen3b_p2051_hf_compatible_full_sequence_layer2_quality_gate() -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_prefix()?;
     let hf = load_hf_full_sequence_stage_artifact(&teacher, &workload)?;
@@ -2218,7 +2225,7 @@ fn qwen3b_p2051_hf_compatible_full_sequence_layer1_quality_gate() -> TestResult 
     let candidate = run_full_sequence_layer_stage_profile(&model, &input, &hf)?;
     let quality_gate = full_sequence_quality_gate(&candidate)?;
     let full_sequence_exact = quality_gate
-        .get("layer1_full_sequence_bf16_exact")
+        .get("layer2_full_sequence_bf16_exact")
         .and_then(Value::as_bool)
         .ok_or("full-sequence quality gate is missing")?;
     let output = required_path("RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_OUTPUT")?;
@@ -2264,7 +2271,7 @@ fn qwen3b_p2051_hf_compatible_full_sequence_layer1_quality_gate() -> TestResult 
     );
     if !full_sequence_exact {
         return Err(
-            "HF-compatible full-sequence layer1 quality gate failed; receipt was written and cache-on/selector promotion remains blocked"
+            "HF-compatible full-sequence layer2 quality gate failed; receipt was written and cache-on/selector promotion remains blocked"
                 .into(),
         );
     }

@@ -73,11 +73,11 @@ def _source_provenance() -> dict[str, object]:
 
 
 def _tensor_document(
-    raw_by_name: dict[str, bytes] | None = None,
+    raw_by_name: dict[str, bytes] | None = None, layer_index: int = trace.LAYER_INDEX
 ) -> dict[str, object]:
     tensors: dict[str, object] = {}
-    for index, name in enumerate(trace.TRACE_TENSORS):
-        shape = trace._expected_shapes()[name]
+    for index, name in enumerate(trace._trace_tensors(layer_index)):
+        shape = trace._expected_shapes(layer_index)[name]
         raw = (
             raw_by_name[name]
             if raw_by_name is not None
@@ -99,16 +99,17 @@ def _manifest(
     tensors: dict[str, object] | None = None,
     sidecar_name: str = "p2051-full.safetensors",
     sidecar_sha256: str | None = None,
+    layer_index: int = trace.LAYER_INDEX,
 ) -> dict[str, object]:
     workload = _workload()
     return {
         "schema_version": trace.SCHEMA_VERSION,
         "artifact_kind": trace.ARTIFACT_KIND,
-        "trace_id": trace.TRACE_ID,
+        "trace_id": trace._trace_id(layer_index),
         "performance_claim_eligible": False,
         "created_at": "2026-09-17T00:00:00Z",
         "producer": _producer(),
-        "trace_profile": trace._capture_profile_document(),
+        "trace_profile": trace._capture_profile_document(layer_index),
         "contract": {
             "model_id": oracle.MODEL_ID,
             "model_revision": oracle.MODEL_REVISION,
@@ -126,9 +127,9 @@ def _manifest(
             "path": sidecar_name,
             "sha256": sidecar_sha256 or _sha("2"),
             "format": "safetensors",
-            "tensor_count": len(trace.TRACE_TENSORS),
+            "tensor_count": len(trace._trace_tensors(layer_index)),
         },
-        "tensors": tensors or _tensor_document(),
+        "tensors": tensors or _tensor_document(layer_index=layer_index),
     }
 
 
@@ -174,7 +175,7 @@ class Qwen3BP2051FullSequenceLayerStageTraceTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_schema_is_layer_one_full_sequence_only(self) -> None:
+    def test_schema_default_and_selected_layer_contracts(self) -> None:
         self.assertEqual(trace.LAYER_INDEX, 1)
         self.assertEqual(len(trace.TRACE_TENSORS), 11)
         self.assertEqual(
@@ -193,6 +194,16 @@ class Qwen3BP2051FullSequenceLayerStageTraceTests(unittest.TestCase):
             trace._capture_profile_document()["rust_consumer"]["trace_row_layout"],
             "full-sequence-token-major",
         )
+        layer_two_tensors = trace._trace_tensors(2)
+        self.assertEqual(layer_two_tensors[0], "layer2.input_norm.full")
+        self.assertEqual(
+            trace._expected_shapes(2)["layer2.attention_context.full"],
+            (2_051, 2_048),
+        )
+        self.assertEqual(
+            trace._capture_profile_document(2)["id"],
+            "qwen3b-p2051-cache-off-full-sequence-layer2-stage-rope-table-v3",
+        )
 
     def test_manifest_accepts_fixed_contract_without_ml_dependencies(self) -> None:
         document = _manifest()
@@ -205,6 +216,11 @@ class Qwen3BP2051FullSequenceLayerStageTraceTests(unittest.TestCase):
             trace.Qwen3BP2051FullSequenceLayerStageTraceError, "profile"
         ):
             trace.validate_manifest(tampered)
+
+        layer_two = _manifest(layer_index=2)
+        trace.validate_manifest(layer_two)
+        self.assertEqual(layer_two["trace_profile"]["layer_index"], 2)
+        self.assertIn("layer2.output.full", layer_two["tensors"])
 
     def test_sidecar_validator_replays_full_sequence_hashes_and_ranges(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
