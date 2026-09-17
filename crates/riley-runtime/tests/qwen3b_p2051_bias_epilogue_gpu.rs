@@ -21,6 +21,8 @@ use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+use riley_cuda::CudaGemmReductionPolicy;
 use riley_cuda::{
     BiasGemmParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer,
     CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPinnedHostBuffer, CudaPreparedBiasEpilogueGemm,
@@ -40,6 +42,8 @@ const ONE_GIB: u64 = 1024 * 1024 * 1024;
 const BF16_BYTES: usize = 2;
 const MAX_SAFETENSORS_HEADER_BYTES: usize = 1_048_576;
 const MAX_WORKSPACE_BYTES: u64 = 16 * 1024 * 1024;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_COMPAT_MAX_WORKSPACE_BYTES: u64 = 1024 * 1024;
 const UPLOAD_STAGING_BYTES: u64 = 16 * 1024 * 1024;
 
 const PROJECTION_SCHEMA_VERSION: &str = "riley.qwen3b-hf-eager-p2051-projection-trace.v1";
@@ -47,6 +51,12 @@ const PROJECTION_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off
 const PROJECTION_TRACE_ID: &str = "qwen3b-p2051-cache-off-layer0-projection-boundary-v1";
 const RESULT_SCHEMA_VERSION: &str = "riley.qwen3b-p2051-projection-boundary-comparison.v1";
 const RESULT_ARTIFACT_KIND: &str = "qwen2.5-3b-riley-p2051-direct-projection-boundary-comparison";
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_COMPAT_RESULT_SCHEMA_VERSION: &str = "riley.qwen3b-p2051-hf-compatible-bias-epilogue.v1";
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_COMPAT_RESULT_ARTIFACT_KIND: &str = "qwen2.5-3b-riley-p2051-hf-compatible-bias-epilogue";
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_COMPAT_OUTPUT_VARIABLE: &str = "RILEY_QWEN3B_P2051_HF_COMPAT_BIAS_OUTPUT";
 
 const QWEN3B_MODEL_ID: &str = "Qwen/Qwen2.5-3B-Instruct";
 const QWEN3B_REVISION: &str = "aa8e72537993ba99e69dfaafa59ed015b17504d1";
@@ -203,6 +213,14 @@ struct ExecutionReceipt {
     raw_q_shadow_bf16_exact: bool,
     strict_row_bias_q_bf16_exact: bool,
     fused_actual_endpoint_exact_count: u64,
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[derive(Debug)]
+struct HfCompatibleExecutionReceipt {
+    device: Value,
+    projections: Map<String, Value>,
+    exact_projection_count: u64,
 }
 
 fn required_path(variable: &str) -> TestResult<PathBuf> {
@@ -1385,6 +1403,31 @@ fn validate_metadata(
     Ok(())
 }
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+fn validate_hf_compatible_metadata(
+    metadata: CudaGemmAlgorithmMetadata,
+    config: CudaGemmConfig,
+    compute_capability: (u32, u32),
+    label: &str,
+) -> TestResult {
+    if config.reduction_policy() != CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1
+        || metadata.backend_id() != CudaGemmAlgorithmMetadata::CUBLASLT_BACKEND_ID
+        || !metadata.deterministic()
+        || metadata.dimensions() != (config.m(), config.n(), config.k())
+        || metadata.compute_capability() != compute_capability
+        || metadata.workspace_bytes() == 0
+        || metadata.workspace_bytes() > config.max_workspace_bytes()
+        || metadata.split_k() <= 1
+        || metadata.reduction_scheme() != 1
+    {
+        return Err(format!(
+            "{label} did not select the reviewed in-place split-K HF-compatible profile"
+        )
+        .into());
+    }
+    Ok(())
+}
+
 fn record_endpoint(
     metrics: &Value,
     label: &str,
@@ -1767,6 +1810,188 @@ fn run_direct_qualification(
     }
 }
 
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+fn run_hf_compatible_qualification(
+    model: &LoadedModel,
+    hf: &HfProjectionArtifact,
+) -> TestResult<HfCompatibleExecutionReceipt> {
+    let input_hf_le = hf
+        .tensors
+        .get("layer0.input_norm")
+        .ok_or("HF P2051 input_norm tensor is missing")?;
+    if input_hf_le.len() != shape_byte_len(&expected_shape("layer0.input_norm")?)? {
+        return Err("HF P2051 input_norm byte count differs".into());
+    }
+    let input_native = bf16_le_to_native(input_hf_le)?;
+    let runtime = CudaRuntime::initialize()?;
+    if runtime.device_count() == 0 {
+        return Err("HF-compatible qualifier has no CUDA device".into());
+    }
+    let gpu = runtime.device(0)?;
+    let properties = gpu.properties().clone();
+    let context = gpu.create_context()?;
+    let mut stream = context.create_stream()?;
+    let device = json!({
+        "ordinal": properties.ordinal(),
+        "name": properties.name(),
+        "total_memory_bytes": properties.total_memory_bytes(),
+        "compute_capability": properties.compute_capability(),
+        "multiprocessor_count": properties.multiprocessor_count(),
+        "driver_version": properties.driver_version(),
+        "runtime_version": properties.runtime_version(),
+    });
+
+    let result = (|| -> TestResult<HfCompatibleExecutionReceipt> {
+        let mut staging = context.allocate_pinned_host_buffer(UPLOAD_STAGING_BYTES)?;
+        let input = upload(&context, &mut stream, &mut staging, &input_native)?;
+        let mut projections = Map::new();
+        let mut exact_projection_count = 0_u64;
+
+        for projection in PROJECTIONS {
+            let config = CudaGemmConfig::new(
+                u64::try_from(CONTEXT_TOKEN_COUNT)?,
+                u64::try_from(projection.output_width)?,
+                u64::try_from(QWEN3B_HIDDEN_SIZE)?,
+                HF_COMPAT_MAX_WORKSPACE_BYTES,
+            )?
+            .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+            let expected_hf_le = hf
+                .tensors
+                .get(projection.output_name)
+                .ok_or("HF P2051 actual projection tensor is missing")?;
+            if expected_hf_le.len() != shape_byte_len(&expected_shape(projection.output_name)?)? {
+                return Err(
+                    format!("HF P2051 {} byte count differs", projection.output_name).into(),
+                );
+            }
+            let host = projection_host_tensors(model, projection)?;
+            let weight = upload(&context, &mut stream, &mut staging, &host.weight)?;
+            let bias = upload(&context, &mut stream, &mut staging, &host.bias)?;
+            let mut plan = context.prepare_hf_compatible_bias_epilogue_probe(
+                config,
+                CudaBufferSpan::new(&bias, CudaDType::BF16, 0, config.bias_bytes())?,
+            )?;
+            if plan.config() != config {
+                return Err(format!(
+                    "HF-compatible {} plan configuration differs",
+                    projection.label
+                )
+                .into());
+            }
+            let metadata = plan.algorithm_metadata();
+            validate_hf_compatible_metadata(
+                metadata,
+                config,
+                properties.compute_capability(),
+                projection.label,
+            )?;
+            let mut output = context.allocate_device_buffer(config.output_bytes())?;
+            let mut workspace = Some(context.allocate_device_buffer(metadata.workspace_bytes())?);
+            let allocations_before = context.allocation_stats()?;
+
+            execute_bias_epilogue(
+                &mut plan,
+                config,
+                metadata,
+                &input,
+                &weight,
+                &bias,
+                &mut output,
+                workspace.as_mut(),
+                &mut stream,
+            )?;
+            let first_native = download(&context, &mut stream, &mut output)?;
+            execute_bias_epilogue(
+                &mut plan,
+                config,
+                metadata,
+                &input,
+                &weight,
+                &bias,
+                &mut output,
+                workspace.as_mut(),
+                &mut stream,
+            )?;
+            let repeated_native = download(&context, &mut stream, &mut output)?;
+            if first_native != repeated_native {
+                return Err(format!(
+                    "HF-compatible {} output changed on repetition",
+                    projection.label
+                )
+                .into());
+            }
+            if context.allocation_stats()? != allocations_before {
+                return Err(format!(
+                    "HF-compatible {} changed allocation accounting",
+                    projection.label
+                )
+                .into());
+            }
+            let comparison = metrics(expected_hf_le, &bf16_native_to_le(&first_native)?)?;
+            if bf16_exact(&comparison, projection.label)? {
+                exact_projection_count += 1;
+            }
+            println!(
+                "qwen3b-p2051-hf-compatible-bias projection={} m={} n={} k={} bf16_exact={} unequal_elements={} workspace_bytes={} algorithm_id={} tile_id={} stages_id={} split_k={} reduction_scheme={} repeated_output_bf16_exact=true allocation_accounting_unchanged=true performance_claim_eligible=false",
+                projection.label,
+                config.m(),
+                config.n(),
+                config.k(),
+                comparison["bf16_exact"],
+                comparison["unequal_element_count"],
+                metadata.workspace_bytes(),
+                metadata.algorithm_id(),
+                metadata.tile_id(),
+                metadata.stages_id(),
+                metadata.split_k(),
+                metadata.reduction_scheme(),
+            );
+            projections.insert(
+                projection.label.to_owned(),
+                json!({
+                    "output_tensor": projection.output_name,
+                    "dimensions": {"m": config.m(), "n": config.n(), "k": config.k()},
+                    "weight": host.weight_provenance,
+                    "bias": host.bias_provenance,
+                    "algorithm": metadata_json(metadata),
+                    "repeated_output_bf16_exact": true,
+                    "allocation_accounting_unchanged": true,
+                    "hf_module_output_comparison": comparison,
+                }),
+            );
+            plan.close()?;
+            weight.close()?;
+            bias.close()?;
+            output.close()?;
+            if let Some(workspace) = workspace {
+                workspace.close()?;
+            }
+        }
+
+        input.close()?;
+        staging.close()?;
+        if !context.allocation_stats()?.is_zero() {
+            return Err(
+                "HF-compatible qualifier left a CUDA allocation before context close".into(),
+            );
+        }
+        Ok(HfCompatibleExecutionReceipt {
+            device,
+            projections,
+            exact_projection_count,
+        })
+    })();
+    let cleanup = close_context(stream, context);
+    match (result, cleanup) {
+        (Ok(result), Ok(())) => Ok(result),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "HF-compatible bias qualifier failed: {run_error}; cleanup also failed: {cleanup_error}"
+        )
+        .into()),
+    }
+}
+
 fn validate_output_destination(path: &Path) -> TestResult<PathBuf> {
     if !path.is_absolute() || path.extension().and_then(|value| value.to_str()) != Some("json") {
         return Err("P2051 projection output must be an absolute .json path".into());
@@ -1903,6 +2128,86 @@ fn qwen3b_p2051_direct_projection_boundary_qualifies_strict_and_fused_qkv() -> T
         PROJECTION_TRACE_ID,
         exact_endpoint_count,
         receipt["summary"]["strict_row_bias_q_bf16_exact"],
+    );
+    Ok(())
+}
+
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2051 HF-compatible split-K BIAS qualifier"]
+fn qwen3b_p2051_hf_compatible_bias_epilogue_matches_actual_module_output() -> TestResult {
+    let output = required_path(HF_COMPAT_OUTPUT_VARIABLE)?;
+    validate_output_destination(&output)?;
+    let workload = load_workload()?;
+    let teacher = load_teacher_prefix()?;
+    let hf = load_hf_projection_artifact(&teacher, &workload)?;
+    let input = workload
+        .prompt_token_ids
+        .iter()
+        .copied()
+        .chain(teacher.token_ids.iter().copied())
+        .collect::<Vec<_>>();
+    if input.len() != CONTEXT_TOKEN_COUNT
+        || token_ids_sha256(&input) != hf.input_token_ids_le_sha256
+    {
+        return Err("P2051 input does not bind the HF projection artifact".into());
+    }
+    let model = load_model(&hf)?;
+    let execution = run_hf_compatible_qualification(&model, &hf)?;
+    let hf_actual_module_qkv_exact =
+        execution.exact_projection_count == u64::try_from(PROJECTIONS.len())?;
+    let receipt = json!({
+        "schema_version": HF_COMPAT_RESULT_SCHEMA_VERSION,
+        "artifact_kind": HF_COMPAT_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "vllm_comparison_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "hf_projection_trace": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "contract": {
+            "trace_id": PROJECTION_TRACE_ID,
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "workload_case": QWEN3B_WORKLOAD_CASE,
+            "workload_sha256": QWEN3B_WORKLOAD_SHA256,
+            "input_token_count": CONTEXT_TOKEN_COUNT,
+            "input_token_ids_le_u32_sha256": hf.input_token_ids_le_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "input": "HF eager cache-free layer0.input_norm full BF16 sidecar",
+            "target": "HF torch.nn.functional.linear Q/K/V actual module output",
+            "operator": "cuBLASLt BF16 BIAS epilogue with F32 compute",
+            "reduction_policy": "allow-in-place-and-output-type-split-k-v1",
+            "workspace_cap_bytes": HF_COMPAT_MAX_WORKSPACE_BYTES,
+            "cuda_graph": false,
+            "python_in_hot_path": false,
+            "serving_selector_changed": false,
+        },
+        "device": execution.device,
+        "summary": {
+            "hf_actual_module_qkv_exact": hf_actual_module_qkv_exact,
+            "exact_projection_count": execution.exact_projection_count,
+            "projection_boundary_candidate_eligible": hf_actual_module_qkv_exact,
+            "performance_claim_eligible": false,
+            "vllm_comparison_eligible": false,
+            "serving_selector_changed": false,
+        },
+        "projections": execution.projections,
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    if !hf_actual_module_qkv_exact {
+        return Err(
+            "HF-compatible split-K BIAS candidate differs from a Q/K/V actual module endpoint"
+                .into(),
+        );
+    }
+    println!(
+        "QWEN3B_P2051_HF_COMPAT_BIAS trace_id={} hf_actual_module_qkv_exact=true projection_boundary_candidate_eligible=true performance_claim_eligible=false",
+        PROJECTION_TRACE_ID,
     );
     Ok(())
 }

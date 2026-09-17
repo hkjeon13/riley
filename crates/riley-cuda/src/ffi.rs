@@ -1239,11 +1239,17 @@ impl RawGemmConfig {
         }
     }
 
-    /// Constructs the only configuration accepted by the separate N02B
-    /// native owner. Its zero flags retain strict no-split selection; the
-    /// distinct epilogue is the sole intentional arithmetic difference.
-    const fn new_bias_epilogue(m: u64, n: u64, k: u64, max_workspace_bytes: u64) -> Self {
-        let mut config = Self::new(0, m, n, k, max_workspace_bytes);
+    /// Constructs a BIAS-epilogue configuration with an already-reviewed
+    /// deterministic reduction-policy bitset. Higher layers restrict the
+    /// non-strict choices to the isolated qualification feature.
+    const fn new_bias_epilogue(
+        flags: u32,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+    ) -> Self {
+        let mut config = Self::new(flags, m, n, k, max_workspace_bytes);
         config.epilogue = GEMM_EPILOGUE_BIAS;
         config
     }
@@ -9046,9 +9052,16 @@ impl BiasGemmPlanHandle {
         n: u64,
         k: u64,
         max_workspace_bytes: u64,
+        flags: u32,
         preparation_bias: RawBufferSpan,
     ) -> CudaResult<Self> {
-        let config = RawGemmConfig::new_bias_epilogue(m, n, k, max_workspace_bytes);
+        if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
+            return Err(CudaError::invalid_argument(
+                "prepare CUDA bias-epilogue GEMM plan",
+                "unknown GEMM reduction-policy flags",
+            ));
+        }
+        let config = RawGemmConfig::new_bias_epilogue(flags, m, n, k, max_workspace_bytes);
         let mut pointer = ptr::null_mut();
         let mut error = ErrorInfo::new();
         // SAFETY: the context is live; config and the immutable cold-phase

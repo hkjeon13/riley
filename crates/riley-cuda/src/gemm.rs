@@ -634,13 +634,49 @@ impl CudaContext {
                 "bias-epilogue qualification accepts only the strict-no-split-v1 reduction policy",
             ));
         }
+        self.prepare_bias_epilogue_gemm_unchecked(config, preparation_bias, OPERATION)
+    }
+
+    /// Prepares the isolated HF-compatible cuBLASLt BIAS qualifier.
+    ///
+    /// The profile permits reviewed in-place split-K reduction because the
+    /// pinned PyTorch `torch.addmm(vector_bias, X, W.T)` trace selects that
+    /// topology. It is available only with `cuda-cublas-gemm-probe`, has no
+    /// graph or serving-selector integration, and must pass its exact P2051
+    /// quality receipt before any production admission is considered.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn prepare_hf_compatible_bias_epilogue_probe(
+        &self,
+        config: CudaGemmConfig,
+        preparation_bias: CudaBufferSpan<'_>,
+    ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
+        const OPERATION: &str = "CudaContext::prepare_hf_compatible_bias_epilogue_probe";
+        if config.reduction_policy != CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1 {
+            return Err(CudaError::new(
+                CudaErrorKind::NotSupported,
+                CudaErrorDomain::Rust,
+                CudaErrorStage::Validation,
+                0,
+                OPERATION,
+                "the HF-compatible qualifier requires allow-in-place-and-output-type-split-k-v1",
+            ));
+        }
+        self.prepare_bias_epilogue_gemm_unchecked(config, preparation_bias, OPERATION)
+    }
+
+    fn prepare_bias_epilogue_gemm_unchecked(
+        &self,
+        config: CudaGemmConfig,
+        preparation_bias: CudaBufferSpan<'_>,
+        operation: &'static str,
+    ) -> CudaResult<CudaPreparedBiasEpilogueGemm> {
         ensure_same_context(
             &self.inner,
             preparation_bias.buffer().context_owner(),
-            OPERATION,
+            operation,
         )?;
         validate_span(
-            OPERATION,
+            operation,
             preparation_bias.buffer(),
             preparation_bias.dtype(),
             preparation_bias.byte_offset(),
@@ -658,6 +694,7 @@ impl CudaContext {
                 config.n,
                 config.k,
                 config.max_workspace_bytes,
+                config.reduction_policy.abi_flags(),
                 preparation_bias.raw(),
             )?;
             let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
@@ -673,7 +710,7 @@ impl CudaContext {
         #[cfg(not(feature = "cuda"))]
         {
             let _ = (config, preparation_bias);
-            Err(CudaError::unavailable(OPERATION))
+            Err(CudaError::unavailable(operation))
         }
     }
 

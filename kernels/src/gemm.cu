@@ -293,12 +293,6 @@ RileyCudaStatus validate_bias_config(const RileyCudaGemmConfig* config,
       config, lengths, RILEY_CUDA_GEMM_EPILOGUE_BIAS,
       "only row-major X=N/W=T, bias-epilogue, deterministic GEMM is supported",
       error);
-  if (status == RILEY_CUDA_STATUS_SUCCESS && config->flags != 0) {
-    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
-                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
-                            "validate cuBLASLt bias GEMM config",
-                            "bias-epilogue GEMM requires strict no-split flags");
-  }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = matrix_bytes(1, config->n, bias_bytes, error);
   }

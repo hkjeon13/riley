@@ -1169,9 +1169,10 @@ typedef struct RileyCudaFixed37RaggedPagedAttentionParams {
 // must be T, all layouts must be ROW_MAJOR, and deterministic must be
 // DETERMINISTIC_REQUIRED. riley_cuda_gemm_plan_create accepts only
 // EPILOGUE_NONE; riley_cuda_bias_gemm_plan_create accepts only EPILOGUE_BIAS
-// with zero flags and has its own numerical contract. max_workspace_bytes is
-// a preparation-time cap; the selected exact requirement is returned by
-// gemm_plan_info.
+// and has its own numerical contract. Its Rust serving wrapper admits only
+// zero flags; reviewed split-K flags are reserved for an isolated diagnostic
+// qualifier. max_workspace_bytes is a preparation-time cap; the selected exact
+// requirement is returned by gemm_plan_info.
 // flags is either zero for strict split-K=1/NONE selection, or a bitwise
 // combination of GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K and
 // GEMM_FLAG_ALLOW_INPLACE_SPLIT_K for the reviewed deterministic split-K
@@ -2686,7 +2687,9 @@ RileyCudaStatus riley_cuda_gemm_plan_defer_to_active_capture(
 
 // Creates an experimental cuBLASLt BIAS-epilogue plan for the same logical
 // row-major operation. config must use EPILOGUE_BIAS and the other BF16/F32
-// deterministic fields documented by RileyCudaGemmConfig, with zero flags.
+// deterministic fields documented by RileyCudaGemmConfig. The ordinary Rust
+// wrapper admits only zero flags; reviewed split-K flags are reserved for an
+// isolated diagnostic qualifier.
 // preparation_bias is a whole packed BF16 [N] device span with a 256-byte
 // aligned offset; it is used only during cold descriptor/heuristic selection.
 // Native clears its descriptor pointer before this call returns and retains no
