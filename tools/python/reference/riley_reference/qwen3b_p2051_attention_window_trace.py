@@ -191,6 +191,19 @@ def _canonical_bf16_le_bytes(tensor: object, torch: Any) -> bytes:
     raise Qwen3BP2051AttentionWindowTraceError("unsupported host byte order")
 
 
+def _ensure_sidecar_consumer_readable(path: Path) -> None:
+    """Keep a root-run container's immutable sidecar readable by Rust on host."""
+
+    source = _regular_file(path, "trace sidecar")
+    try:
+        mode = source.stat().st_mode
+        source.chmod(mode | stat.S_IRGRP | stat.S_IROTH)
+    except OSError as error:
+        raise Qwen3BP2051AttentionWindowTraceError(
+            "cannot make trace sidecar readable by its Rust consumer"
+        ) from error
+
+
 def _tensor_shape(tensor: object) -> tuple[int, ...]:
     try:
         shape = tuple(int(dimension) for dimension in tensor.shape)
@@ -833,6 +846,7 @@ def produce_hf_trace(
             sidecar_writer,
         )
         sidecar_written = True
+        _ensure_sidecar_consumer_readable(sidecar)
         document = build_manifest(
             layer_index=index,
             workload=workload,

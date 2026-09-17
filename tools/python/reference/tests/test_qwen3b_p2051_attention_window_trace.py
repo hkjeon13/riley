@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -264,6 +265,18 @@ class Qwen3BP2051AttentionWindowTraceTests(unittest.TestCase):
                     trace.Qwen3BP2051AttentionWindowTraceError, "hashes differ"
                 ):
                     trace.collect_source_provenance(root)
+
+    def test_sidecar_is_readable_by_a_host_rust_consumer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sidecar = Path(directory) / "trace.safetensors"
+            sidecar.write_bytes(b"fixture")
+            sidecar.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            trace._ensure_sidecar_consumer_readable(sidecar)
+            mode = sidecar.stat().st_mode
+            self.assertTrue(mode & stat.S_IRUSR)
+            self.assertTrue(mode & stat.S_IRGRP)
+            self.assertTrue(mode & stat.S_IROTH)
+            self.assertTrue(mode & stat.S_IWUSR)
 
 
 if __name__ == "__main__":
