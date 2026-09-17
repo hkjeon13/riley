@@ -8,10 +8,10 @@
 //!
 //! The baseline strict staged-bias profile is compared with the feature-gated
 //! HF-compatible cuBLASLt BIAS candidate. The candidate is then repeated with
-//! the opt-in Qwen P2051 cuBLASLt attention probe. Layer-zero boundaries are
-//! captured with the existing selective trace API; every decoder residual
-//! output is captured as one last-token row through the bounded layer-trace
-//! API.
+//! the opt-in Qwen P2051 cuBLASLt attention probe, followed by the paired
+//! direct-cuBLAS output-projection probe. Layer-zero boundaries are captured
+//! with the existing selective trace API; every decoder residual output is
+//! captured as one last-token row through the bounded layer-trace API.
 
 #![cfg(all(feature = "cuda", feature = "cuda-cublas-gemm-probe"))]
 #![allow(clippy::float_cmp, clippy::similar_names, clippy::too_many_lines)]
@@ -77,6 +77,9 @@ const EXPECTED_SOURCE_ARCHITECTURE: &str = "Qwen2ForCausalLM";
 const DENSE_REFERENCE_ATTENTION_BACKEND_ID: &str = "riley.cuda.materialized-gqa-prefill.bf16";
 const HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID: &str =
     "riley.cuda.hf-eager-cublaslt-qwen-p2051-probe.bf16";
+const STRICT_OUTPUT_PROJECTION_BACKEND_ID: &str = "strict-hidden-gemm-v1";
+const HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID: &str =
+    "hf-eager-qwen-p2051-direct-cublas-probe-v1";
 const TEACHER_ARTIFACT_SCHEMA: &str = "riley.qwen3b-hf-eager-teacher-forced-generation.v1";
 const TEACHER_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2048-teacher-forced-generation";
 const TEACHER_CACHE_OFF_SIDECAR_KEY: &str = "teacher_forced/logits";
@@ -136,6 +139,41 @@ impl AttentionProfile {
             Self::Reference => config.with_reference_attention(),
             Self::HfEagerQwenP2051Probe => {
                 config.with_hugging_face_eager_qwen_p2051_probe_attention()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum OutputProjectionProfile {
+    StrictHiddenGemmV1,
+    HfEagerQwenP2051DirectCublasProbeV1,
+}
+
+impl OutputProjectionProfile {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::StrictHiddenGemmV1 => "strict-hidden-gemm-v1",
+            Self::HfEagerQwenP2051DirectCublasProbeV1 => {
+                "hf-eager-qwen-p2051-direct-cublas-probe-v1"
+            }
+        }
+    }
+
+    const fn backend_id(self) -> &'static str {
+        match self {
+            Self::StrictHiddenGemmV1 => STRICT_OUTPUT_PROJECTION_BACKEND_ID,
+            Self::HfEagerQwenP2051DirectCublasProbeV1 => {
+                HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID
+            }
+        }
+    }
+
+    const fn configure(self, config: PreparedLlamaForwardConfig) -> PreparedLlamaForwardConfig {
+        match self {
+            Self::StrictHiddenGemmV1 => config,
+            Self::HfEagerQwenP2051DirectCublasProbeV1 => {
+                config.with_hf_eager_qwen_p2051_direct_cublas_output_projection_probe()
             }
         }
     }
@@ -1117,7 +1155,20 @@ fn candidate_quality_gate(profile: &Value) -> TestResult<Value> {
             .ok_or_else(|| format!("HF-compatible {name} exactness is missing"))?;
         Ok::<_, Box<dyn Error>>(all_exact && exact)
     })?;
-    let full_forward_exact = exact_stage_count == expected_stage_count
+    let attention_context_exact = stages
+        .get("layer0.attention_context.last")
+        .and_then(Value::as_object)
+        .and_then(|stage| stage.get("bf16_exact"))
+        .and_then(Value::as_bool)
+        .ok_or("HF-compatible layer0 attention context exactness is missing")?;
+    let direct_output_projection_selected = profile
+        .get("output_projection_backend")
+        .and_then(Value::as_str)
+        == Some(HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID);
+    let full_forward_exact = direct_output_projection_selected
+        && qkv_exact
+        && attention_context_exact
+        && exact_stage_count == expected_stage_count
         && summary
             .get("first_non_exact_stage")
             .is_some_and(Value::is_null);
@@ -1125,6 +1176,8 @@ fn candidate_quality_gate(profile: &Value) -> TestResult<Value> {
         "required_stage_count": expected_stage_count,
         "candidate_exact_stage_count": exact_stage_count,
         "qkv_last_rows_bf16_exact": qkv_exact,
+        "attention_context_last_row_bf16_exact": attention_context_exact,
+        "direct_cublas_output_projection_selected": direct_output_projection_selected,
         "cache_off_full_forward_bf16_exact": full_forward_exact,
         "corrected_cache_on_eligible": full_forward_exact,
         "serving_selector_eligible": full_forward_exact,
@@ -1138,6 +1191,7 @@ fn run_profile(
     hf: &HfStageArtifact,
     mode: LlamaProjectionBiasMode,
     attention_profile: AttentionProfile,
+    output_projection_profile: OutputProjectionProfile,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
     let config = PreparedLlamaForwardConfig::new(
@@ -1148,6 +1202,7 @@ fn run_profile(
     )
     .with_projection_bias_mode(mode);
     let config = attention_profile.configure(config);
+    let config = output_projection_profile.configure(config);
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1167,6 +1222,7 @@ fn run_profile(
     let result = (|| -> TestResult<Value> {
         if forward.projection_bias_mode() != mode
             || forward.attention_selection().implementation_id() != attention_profile.backend_id()
+            || forward.output_projection_backend_id() != output_projection_profile.backend_id()
         {
             return Err("stage forward selected an unexpected numerical backend".into());
         }
@@ -1252,6 +1308,11 @@ fn run_profile(
                 LlamaTracePoint::Layer0ValueProjection,
                 QWEN3B_KEY_VALUE_HEADS * QWEN3B_HEAD_DIMENSION,
             ),
+            (
+                "layer0.output.last",
+                LlamaTracePoint::Layer0Output,
+                QWEN3B_HIDDEN_SIZE,
+            ),
         ] {
             let repeated = last_row(
                 repeat_trace
@@ -1295,14 +1356,21 @@ fn run_profile(
             stages.insert(spec.name, stage_metrics);
         }
         Ok(json!({
-            "profile_id": format!("{}+{}", mode.id(), attention_profile.id()),
+            "profile_id": format!(
+                "{}+{}+{}",
+                mode.id(),
+                attention_profile.id(),
+                output_projection_profile.id(),
+            ),
             "projection_bias_backend": mode.id(),
             "attention_backend": attention_profile.backend_id(),
+            "output_projection_backend": forward.output_projection_backend_id(),
             "use_cache": false,
             "same_scheduler_engine": false,
             "repeat_execution": {
                 "reused_prepared_owner": true,
                 "qkv_last_rows_bf16_exact": true,
+                "layer0_output_last_row_bf16_exact": true,
                 "last_logits_bf16_exact": true,
             },
             "static_layer0_capture": true,
@@ -1390,6 +1458,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         &hf,
         LlamaProjectionBiasMode::StrictStagedV1,
         AttentionProfile::Reference,
+        OutputProjectionProfile::StrictHiddenGemmV1,
     )?;
     let hf_compatible = run_profile(
         &model,
@@ -1397,6 +1466,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         &hf,
         LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1,
         AttentionProfile::Reference,
+        OutputProjectionProfile::StrictHiddenGemmV1,
     )?;
     let hf_compatible_qwen_p2051 = run_profile(
         &model,
@@ -1404,8 +1474,17 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         &hf,
         LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1,
         AttentionProfile::HfEagerQwenP2051Probe,
+        OutputProjectionProfile::StrictHiddenGemmV1,
     )?;
-    let quality_gate = candidate_quality_gate(&hf_compatible_qwen_p2051)?;
+    let hf_compatible_qwen_p2051_o_projection = run_profile(
+        &model,
+        &input,
+        &hf,
+        LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1,
+        AttentionProfile::HfEagerQwenP2051Probe,
+        OutputProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
+    )?;
+    let quality_gate = candidate_quality_gate(&hf_compatible_qwen_p2051_o_projection)?;
     let cache_off_full_forward_bf16_exact = quality_gate
         .get("cache_off_full_forward_bf16_exact")
         .and_then(Value::as_bool)
@@ -1432,6 +1511,8 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "same_scheduler_engine": false,
             "baseline_attention_backend": DENSE_REFERENCE_ATTENTION_BACKEND_ID,
             "candidate_attention_backend": HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID,
+            "baseline_output_projection_backend": STRICT_OUTPUT_PROJECTION_BACKEND_ID,
+            "candidate_output_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
             "last_token_row_index": LAST_TOKEN_ROW_INDEX,
         },
         "hf_stage_artifact": {
@@ -1440,7 +1521,12 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "sidecar_path": hf.sidecar_path,
             "sidecar_sha256": hf.sidecar_sha256,
         },
-        "profiles": [strict, hf_compatible, hf_compatible_qwen_p2051],
+        "profiles": [
+            strict,
+            hf_compatible,
+            hf_compatible_qwen_p2051,
+            hf_compatible_qwen_p2051_o_projection,
+        ],
         "quality_gate": quality_gate,
     });
     write_artifact_exclusive(&output, &receipt)?;
