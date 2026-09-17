@@ -28,6 +28,10 @@ cuda-cublas-gemm-probe = ["cuda"]
 [dependencies]
 riley-core = { path = "../riley-core" }
 
+[dev-dependencies]
+serde_json = "=1.0.145"
+sha2 = { version = "=0.11.0", default-features = false }
+
 [lints]
 workspace = true
 
@@ -149,4 +153,9 @@ required-features = ["cuda"]
 [[test]]
 name = "native_bf16_paged_split_gqa_gpu"
 path = "tests/native_bf16_paged_split_gqa_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "qwen3b_p2051_attention_boundary_gpu"
+path = "tests/qwen3b_p2051_attention_boundary_gpu.rs"
 required-features = ["cuda"]
