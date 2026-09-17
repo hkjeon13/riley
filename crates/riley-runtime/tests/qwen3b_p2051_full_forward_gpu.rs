@@ -126,6 +126,30 @@ enum StageSource {
     HfEagerRopeTableSine,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum RopeTableProfile {
+    Default,
+    HuggingFaceCudaQwenP2051ProbeV1,
+}
+
+impl RopeTableProfile {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Default => "default-rope-table-v1",
+            Self::HuggingFaceCudaQwenP2051ProbeV1 => "hf-cuda-rope-table-probe-v1",
+        }
+    }
+
+    const fn configure(self, config: PreparedLlamaForwardConfig) -> PreparedLlamaForwardConfig {
+        match self {
+            Self::Default => config,
+            Self::HuggingFaceCudaQwenP2051ProbeV1 => {
+                config.with_hugging_face_cuda_qwen_p2051_rope_table_probe()
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct StageSpec {
     name: String,
@@ -1566,6 +1590,7 @@ fn run_profile(
     attention_profile: AttentionProfile,
     output_projection_profile: OutputProjectionProfile,
     mlp_projection_profile: MlpProjectionProfile,
+    rope_table_profile: RopeTableProfile,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
     let config = PreparedLlamaForwardConfig::new(
@@ -1578,6 +1603,7 @@ fn run_profile(
     let config = attention_profile.configure(config);
     let config = output_projection_profile.configure(config);
     let config = mlp_projection_profile.configure(config);
+    let config = rope_table_profile.configure(config);
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1733,16 +1759,18 @@ fn run_profile(
         }
         Ok(json!({
             "profile_id": format!(
-                "{}+{}+{}+{}",
+                "{}+{}+{}+{}+{}",
                 mode.id(),
                 attention_profile.id(),
                 output_projection_profile.id(),
                 mlp_projection_profile.id(),
+                rope_table_profile.id(),
             ),
             "projection_bias_backend": mode.id(),
             "attention_backend": attention_profile.backend_id(),
             "output_projection_backend": forward.output_projection_backend_id(),
             "mlp_projection_backend": forward.mlp_projection_backend_id(),
+            "rope_table_backend": rope_table_profile.id(),
             "use_cache": false,
             "same_scheduler_engine": false,
             "repeat_execution": {
@@ -2067,6 +2095,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         AttentionProfile::Reference,
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
+        RopeTableProfile::Default,
     )?;
     let hf_compatible = run_profile(
         &model,
@@ -2076,6 +2105,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         AttentionProfile::Reference,
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
+        RopeTableProfile::Default,
     )?;
     let hf_compatible_qwen_p2051 = run_profile(
         &model,
@@ -2085,6 +2115,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         AttentionProfile::HfEagerQwenP2051Probe,
         OutputProjectionProfile::StrictHiddenGemmV1,
         MlpProjectionProfile::StrictStagedV1,
+        RopeTableProfile::Default,
     )?;
     let hf_compatible_qwen_p2051_o_projection = run_profile(
         &model,
@@ -2094,6 +2125,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         AttentionProfile::HfEagerQwenP2051Probe,
         OutputProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
         MlpProjectionProfile::StrictStagedV1,
+        RopeTableProfile::Default,
     )?;
     let hf_compatible_qwen_p2051_all_projections = run_profile(
         &model,
@@ -2103,6 +2135,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
         AttentionProfile::HfEagerQwenP2051Probe,
         OutputProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
         MlpProjectionProfile::HfEagerQwenP2051DirectCublasProbeV1,
+        RopeTableProfile::HuggingFaceCudaQwenP2051ProbeV1,
     )?;
     let quality_gate = candidate_quality_gate(&hf_compatible_qwen_p2051_all_projections)?;
     let cache_off_full_forward_bf16_exact = quality_gate
@@ -2135,6 +2168,7 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
             "candidate_output_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
             "baseline_mlp_projection_backend": STRICT_MLP_PROJECTION_BACKEND_ID,
             "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
+            "candidate_rope_table_backend": "hf-cuda-rope-table-probe-v1",
             "last_token_row_index": LAST_TOKEN_ROW_INDEX,
         },
         "hf_stage_artifact": {
