@@ -470,6 +470,17 @@ pub struct PreparedLlamaFullSequenceLayerStageTrace {
     captured: u16,
 }
 
+/// Caller-owned eager-framework-layout BF16 copies of the cold RoPE tables.
+///
+/// The execution owner retains F32 `[position, head_dimension / 2]` tables.
+/// This diagnostic view narrows each value exactly once to BF16 and expands the
+/// duplicated half into the `[position, head_dimension]` layout that Qwen's
+/// eager rotary helper receives. Normal execution never creates or copies it.
+pub struct PreparedLlamaHuggingFaceRopeTableTrace {
+    cosine: Box<[u8]>,
+    sine: Box<[u8]>,
+}
+
 impl fmt::Debug for PreparedLlamaLastTokenLayerStageTrace {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -488,6 +499,30 @@ impl fmt::Debug for PreparedLlamaFullSequenceLayerStageTrace {
             .field("requested_stage_count", &self.requested_stage_count())
             .field("captured_stage_count", &self.captured_stage_count())
             .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for PreparedLlamaHuggingFaceRopeTableTrace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedLlamaHuggingFaceRopeTableTrace")
+            .field("cosine_byte_len", &self.cosine.len())
+            .field("sine_byte_len", &self.sine.len())
+            .finish()
+    }
+}
+
+impl PreparedLlamaHuggingFaceRopeTableTrace {
+    /// BF16 little-endian `[position, head_dimension]` cosine values.
+    #[must_use]
+    pub fn cosine(&self) -> &[u8] {
+        &self.cosine
+    }
+
+    /// BF16 little-endian `[position, head_dimension]` sine values.
+    #[must_use]
+    pub fn sine(&self) -> &[u8] {
+        &self.sine
     }
 }
 
@@ -1293,6 +1328,14 @@ pub(super) enum LlamaRopeTableProfile {
     HuggingFaceCuda,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum LlamaRopeTableSelection {
+    #[default]
+    Automatic,
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    HuggingFaceCudaQwenP2051ProbeV1,
+}
+
 fn resolve_rms_norm_profile(
     model: &LoadedModel,
     reduction_profile: LlamaReductionProfile,
@@ -1314,7 +1357,19 @@ fn resolve_rms_norm_profile(
 fn resolve_rope_table_profile(
     model: &LoadedModel,
     reduction_profile: LlamaReductionProfile,
+    _selection: LlamaRopeTableSelection,
+    _sequence_length: usize,
 ) -> LlamaRopeTableProfile {
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    if _selection == LlamaRopeTableSelection::HuggingFaceCudaQwenP2051ProbeV1 {
+        // The paired attention probe rejects every geometry other than the
+        // fixed B1/S2051/QH16/KVH2/D128 RTX 4090 diagnostic. Keep table
+        // selection explicit here too: normal Qwen serving remains on the
+        // established cold path until this full-forward gate passes.
+        if matches!(model.config(), ModelConfig::Qwen2(_)) && _sequence_length == 2_051 {
+            return LlamaRopeTableProfile::HuggingFaceCuda;
+        }
+    }
     if reduction_profile == LlamaReductionProfile::CanonicalV1
         && matches!(model.config(), ModelConfig::Llama(_))
         && is_reviewed_smollm2_rope_geometry(model.spec())
@@ -2093,6 +2148,7 @@ pub struct PreparedLlamaForwardConfig {
     projection_bias_mode: LlamaProjectionBiasMode,
     output_projection_mode: LlamaOutputProjectionMode,
     mlp_projection_mode: LlamaMlpProjectionMode,
+    rope_table_selection: LlamaRopeTableSelection,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -2113,6 +2169,7 @@ impl PreparedLlamaForwardConfig {
             projection_bias_mode: LlamaProjectionBiasMode::StrictStagedV1,
             output_projection_mode: LlamaOutputProjectionMode::StrictHiddenGemmV1,
             mlp_projection_mode: LlamaMlpProjectionMode::StrictStagedV1,
+            rope_table_selection: LlamaRopeTableSelection::Automatic,
         }
     }
 
@@ -2237,6 +2294,17 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Selects GPU-generated RoPE tables for the paired P2051 Qwen eager
+    /// diagnostic. This is feature-gated and cannot be reached by a serving
+    /// selector; it exists solely to reproduce the framework's cold table
+    /// construction before the cache-free quality gate is complete.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hugging_face_cuda_qwen_p2051_rope_table_probe(mut self) -> Self {
+        self.rope_table_selection = LlamaRopeTableSelection::HuggingFaceCudaQwenP2051ProbeV1;
+        self
+    }
+
     #[must_use]
     pub const fn upload_staging_bytes(self) -> u64 {
         self.upload_staging_bytes
@@ -2329,6 +2397,22 @@ impl PreparedLlamaForwardConfig {
             return Err(LlamaForwardError::InvalidConfiguration {
                 field: "mlp_projection_mode",
                 reason: "the direct-cuBLAS MLP projection probe requires the paired P2051 Q/K/V, attention, O-projection, and canonical reduction probes",
+            });
+        }
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        if self.rope_table_selection == LlamaRopeTableSelection::HuggingFaceCudaQwenP2051ProbeV1
+            && (self.mlp_projection_mode
+                != LlamaMlpProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.output_projection_mode
+                    != LlamaOutputProjectionMode::HfEagerQwenP2051DirectCublasProbeV1
+                || self.projection_bias_mode
+                    != LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+                || self.attention_preference != AttentionPreference::HuggingFaceEagerQwenP2051Probe
+                || self.reduction_profile != LlamaReductionProfile::CanonicalV1)
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "rope_table_selection",
+                reason: "the Qwen GPU RoPE-table probe requires the paired P2051 Q/K/V, attention, O-projection, MLP, and canonical reduction probes",
             });
         }
         Ok(())
@@ -2707,7 +2791,12 @@ impl PreparedLlamaForward {
         let gemm_reduction_policies =
             resolve_gemm_reduction_policies(model, config.reduction_profile);
         let rms_norm_profile = resolve_rms_norm_profile(model, config.reduction_profile);
-        let rope_table_profile = resolve_rope_table_profile(model, config.reduction_profile);
+        let rope_table_profile = resolve_rope_table_profile(
+            model,
+            config.reduction_profile,
+            config.rope_table_selection,
+            sequence_length,
+        );
 
         let weights = CudaUploadedWeights::upload(
             model.weights(),
@@ -3102,6 +3191,49 @@ impl PreparedLlamaForward {
         stages: &[LlamaLastTokenLayerStage],
     ) -> LlamaForwardResult<PreparedLlamaFullSequenceLayerStageTrace> {
         PreparedLlamaFullSequenceLayerStageTrace::prepare(&self.plan, layer_index, stages)
+    }
+
+    /// Downloads an eager-framework-layout BF16 view of the cold RoPE tables.
+    ///
+    /// This diagnostic copy is deliberately explicit. The execution owner
+    /// keeps its F32 half-tables and normal forward execution neither creates
+    /// host storage nor performs this D2H transfer.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the owner is poisoned, table host storage cannot be
+    /// reserved, or a staged CUDA copy fails.
+    pub fn download_hugging_face_bf16_rope_table_trace(
+        &mut self,
+        stream: &mut CudaStream,
+    ) -> LlamaForwardResult<PreparedLlamaHuggingFaceRopeTableTrace> {
+        if self.poisoned {
+            return Err(LlamaForwardError::Poisoned);
+        }
+        let table_bytes = self.plan.workspace_spec().rope_cos_bytes();
+        let mut cosine = allocate_host_bytes(table_bytes, LlamaForwardResource::TraceCapture)?;
+        let mut sine = allocate_host_bytes(table_bytes, LlamaForwardResource::TraceCapture)?;
+        let site = ExecutionSite::layer(0, LlamaOp::QueryRope);
+        self.buffers
+            .rope_cos
+            .download_to_slice(0, &mut cosine, &mut self.io_staging, stream)
+            .map_err(|source| LlamaForwardError::cuda(site, source))?;
+        self.buffers
+            .rope_sin
+            .download_to_slice(0, &mut sine, &mut self.io_staging, stream)
+            .map_err(|source| LlamaForwardError::cuda(site, source))?;
+        Ok(PreparedLlamaHuggingFaceRopeTableTrace {
+            cosine: hf_eager_bf16_rope_table_view(
+                &self.plan,
+                &cosine,
+                LlamaForwardResource::TraceCapture,
+            )?,
+            sine: hf_eager_bf16_rope_table_view(
+                &self.plan,
+                &sine,
+                LlamaForwardResource::TraceCapture,
+            )?,
+        })
     }
 
     /// Whether one valid exact-length token vector has been uploaded.
@@ -5361,6 +5493,76 @@ fn build_cpu_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTa
     Ok((cos, sin))
 }
 
+fn f32_to_bf16_bits(value: f32) -> u16 {
+    // CUDA's `cvt.rn.bf16.f32` uses round-to-nearest-even. The tables are
+    // finite by construction, so this bit-level conversion has no NaN payload
+    // contract to preserve.
+    let bits = value.to_bits();
+    let round = 0x7fff_u32 + ((bits >> 16) & 1);
+    (bits.wrapping_add(round) >> 16) as u16
+}
+
+fn hf_eager_bf16_rope_table_view(
+    plan: &LlamaExecutionPlan,
+    values: &[u8],
+    resource: LlamaForwardResource,
+) -> LlamaForwardResult<Box<[u8]>> {
+    if values.len() % mem::size_of::<f32>() != 0 {
+        return Err(LlamaForwardError::InvalidConfiguration {
+            field: "rope_table",
+            reason: "F32 table storage is not aligned to elements",
+        });
+    }
+    let sequence = plan.sequence_length();
+    let head_dimension = plan.dimensions().head_dimension();
+    let half = head_dimension / 2;
+    let table_elements = sequence
+        .checked_mul(half)
+        .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+    if values.len() / mem::size_of::<f32>() != table_elements {
+        return Err(LlamaForwardError::InvalidConfiguration {
+            field: "rope_table",
+            reason: "F32 table storage differs from the prepared RoPE geometry",
+        });
+    }
+    let output_elements = sequence
+        .checked_mul(head_dimension)
+        .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+    let output_bytes = u64::try_from(output_elements)
+        .map_err(|_| LlamaForwardError::ArithmeticOverflow { resource })?
+        .checked_mul(BF16_BYTES)
+        .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+    let mut output = allocate_host_bytes(output_bytes, resource)?;
+    for position in 0..sequence {
+        for pair in 0..half {
+            let source_index = position
+                .checked_mul(half)
+                .and_then(|value| value.checked_add(pair))
+                .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+            let source_offset = source_index
+                .checked_mul(mem::size_of::<f32>())
+                .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+            let value = f32::from_ne_bytes(
+                values[source_offset..source_offset + mem::size_of::<f32>()]
+                    .try_into()
+                    .expect("validated F32 table source range"),
+            );
+            let destination_index = position
+                .checked_mul(head_dimension)
+                .and_then(|value| value.checked_add(pair))
+                .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+            for index in [destination_index, destination_index + half] {
+                let destination_offset = index
+                    .checked_mul(BF16_BYTES as usize)
+                    .ok_or(LlamaForwardError::ArithmeticOverflow { resource })?;
+                output[destination_offset..destination_offset + BF16_BYTES as usize]
+                    .copy_from_slice(&f32_to_bf16_bits(value).to_le_bytes());
+            }
+        }
+    }
+    Ok(output)
+}
+
 fn to_u64(value: usize, resource: LlamaForwardResource) -> LlamaForwardResult<u64> {
     u64::try_from(value).map_err(|_| LlamaForwardError::ArithmeticOverflow { resource })
 }
@@ -5498,7 +5700,31 @@ mod tests {
                     ..
                 })
             ));
+
+            let rope_table_probe =
+                paired_mlp_probe.with_hugging_face_cuda_qwen_p2051_rope_table_probe();
+            rope_table_probe
+                .validate()
+                .expect("paired Qwen GPU RoPE-table probe is canonical-only");
+            assert!(matches!(
+                defaults
+                    .with_hugging_face_cuda_qwen_p2051_rope_table_probe()
+                    .validate(),
+                Err(LlamaForwardError::InvalidConfiguration {
+                    field: "rope_table_selection",
+                    ..
+                })
+            ));
         }
+    }
+
+    #[test]
+    fn eager_rope_table_view_uses_bf16_round_to_nearest_even() {
+        assert_eq!(f32_to_bf16_bits(1.0), 0x3f80);
+        // Halfway between BF16 1.0 (even mantissa) and its next representable
+        // value must retain the even low mantissa bit.
+        assert_eq!(f32_to_bf16_bits(1.003_906_2), 0x3f80);
+        assert_eq!(f32_to_bf16_bits(1.003_906_4), 0x3f81);
     }
 
     #[test]

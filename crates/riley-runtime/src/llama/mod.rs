@@ -154,7 +154,8 @@ pub use forward::{
     LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaLastTokenLayerStage,
     LlamaTracePoint, PreparedLlamaAllocationReport, PreparedLlamaForward,
     PreparedLlamaForwardConfig, PreparedLlamaFullSequenceLayerStageTrace,
-    PreparedLlamaLastTokenLayerStageTrace, PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
+    PreparedLlamaHuggingFaceRopeTableTrace, PreparedLlamaLastTokenLayerStageTrace,
+    PreparedLlamaLastTokenLayerTrace, PreparedLlamaTrace,
 };
 
 #[cfg(feature = "cuda")]

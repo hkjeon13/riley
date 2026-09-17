@@ -2,8 +2,9 @@
 
 The existing last-token trace proved that a candidate can reproduce the final
 row while an earlier causal row still changes the next decoder layer.  This
-module captures seven whole BF16 tensors from layer one of the actual Hugging
-Face eager forward.  It is an offline oracle only: it never starts Riley, does
+module captures eleven whole BF16 tensors from layer one of the actual Hugging
+Face eager forward, including the BF16 cosine/sine tables handed to rotary
+embedding. It is an offline oracle only: it never starts Riley, does
 not participate in serving, and has no Python dependency at the Rust runtime
 boundary.
 """
@@ -28,10 +29,10 @@ from . import qwen3b_serving_oracle as oracle
 from . import qwen3b_stage_trace as stage
 from .hf_calibration import SidecarWriter, _default_sidecar_writer, _write_sidecar_exclusive
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v1"
-ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-trace"
-TRACE_ID = "qwen3b-p2051-cache-off-full-sequence-layer1-stage-v1"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-p2051-full-sequence-layer-stage-v1"
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v2"
+ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-rope-table-trace"
+TRACE_ID = "qwen3b-p2051-cache-off-full-sequence-layer1-stage-rope-table-v2"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-p2051-full-sequence-layer-stage-rope-table-v2"
 SOURCE_PROVENANCE_ENV = "RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_SOURCE_PROVENANCE"
 
 LAYER_INDEX = 1
@@ -45,6 +46,8 @@ TRACE_TENSORS = (
     "layer1.q_proj.full",
     "layer1.k_proj.full",
     "layer1.v_proj.full",
+    "layer1.rope_cos.full",
+    "layer1.rope_sin.full",
     "layer1.q_rope.full",
     "layer1.k_rope.full",
     "layer1.attention_context.full",
@@ -152,6 +155,7 @@ def _sidecar_key(name: str) -> str:
 def _expected_shapes() -> dict[str, tuple[int, ...]]:
     hidden = (CONTEXT_TOKEN_COUNT, MODEL_HIDDEN_SIZE)
     key_value = (CONTEXT_TOKEN_COUNT, MODEL_KEY_VALUE_WIDTH)
+    rope = (CONTEXT_TOKEN_COUNT, base.MODEL_HEAD_DIMENSION)
     query_rope = (
         CONTEXT_TOKEN_COUNT,
         base.MODEL_QUERY_HEAD_COUNT,
@@ -167,6 +171,8 @@ def _expected_shapes() -> dict[str, tuple[int, ...]]:
         "layer1.q_proj.full": hidden,
         "layer1.k_proj.full": key_value,
         "layer1.v_proj.full": key_value,
+        "layer1.rope_cos.full": rope,
+        "layer1.rope_sin.full": rope,
         "layer1.q_rope.full": query_rope,
         "layer1.k_rope.full": key_rope,
         "layer1.attention_context.full": hidden,
@@ -186,6 +192,7 @@ def _capture_profile_document() -> dict[str, object]:
             "attention_backend": "hf-eager-cublaslt-qwen-p2051-probe",
             "cache": False,
             "input_context_token_count": CONTEXT_TOKEN_COUNT,
+            "rope_table_capture": "PreparedLlamaForward::download_hugging_face_bf16_rope_table_trace",
             "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
             "trace_row_layout": "full-sequence-token-major",
         },
@@ -353,6 +360,8 @@ class HuggingFaceQwen3BP2051FullSequenceLayerStageTraceBackend:
                     raise Qwen3BP2051FullSequenceLayerStageTraceError(
                         "Qwen rotary outputs cannot be transposed"
                     ) from error
+                self._capture_full(captured, "layer1.rope_cos.full", cosine)
+                self._capture_full(captured, "layer1.rope_sin.full", sine)
                 self._capture_full(captured, "layer1.q_rope.full", query_token_major)
                 self._capture_full(captured, "layer1.k_rope.full", key_token_major)
             rope_calls += 1

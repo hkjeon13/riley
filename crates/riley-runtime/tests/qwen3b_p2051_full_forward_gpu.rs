@@ -51,10 +51,11 @@ const STAGE_SCHEMA_VERSION: &str = "riley.qwen3b-hf-eager-p2051-cache-off-layer-
 const STAGE_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-layer-stage-trace";
 const STAGE_TRACE_ID: &str = "qwen3b-p2051-cache-off-last-token-layer-stage-v1";
 const FULL_SEQUENCE_STAGE_SCHEMA_VERSION: &str =
-    "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v1";
+    "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v2";
 const FULL_SEQUENCE_STAGE_ARTIFACT_KIND: &str =
-    "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-trace";
-const FULL_SEQUENCE_STAGE_TRACE_ID: &str = "qwen3b-p2051-cache-off-full-sequence-layer1-stage-v1";
+    "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-rope-table-trace";
+const FULL_SEQUENCE_STAGE_TRACE_ID: &str =
+    "qwen3b-p2051-cache-off-full-sequence-layer1-stage-rope-table-v2";
 const FULL_SEQUENCE_STAGE_LAYER_INDEX: usize = 1;
 const RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2051-hf-compatible-cache-free-full-forward-comparison.v1";
@@ -121,6 +122,8 @@ enum StageSource {
     FinalNormOutput,
     LastLogits,
     FullSequence(LlamaLastTokenLayerStage),
+    HfEagerRopeTableCosine,
+    HfEagerRopeTableSine,
 }
 
 #[derive(Clone, Debug)]
@@ -658,6 +661,22 @@ fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
             source: StageSource::FullSequence(LlamaLastTokenLayerStage::ValueProjection),
         },
         StageSpec {
+            name: "layer1.rope_cos.full".to_owned(),
+            shape: vec![
+                sequence,
+                u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
+            ],
+            source: StageSource::HfEagerRopeTableCosine,
+        },
+        StageSpec {
+            name: "layer1.rope_sin.full".to_owned(),
+            shape: vec![
+                sequence,
+                u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
+            ],
+            source: StageSource::HfEagerRopeTableSine,
+        },
+        StageSpec {
             name: "layer1.q_rope.full".to_owned(),
             shape: vec![
                 sequence,
@@ -1098,12 +1117,13 @@ fn load_hf_full_sequence_stage_artifact(
                 "capture_domain": "cache-free-p2051-full-sequence-layer-boundaries",
                 "id": FULL_SEQUENCE_STAGE_TRACE_ID,
                 "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
-                "tensor_count": 9,
+                "tensor_count": 11,
                 "rust_consumer": {
                     "api": "riley_runtime::llama::PreparedLlamaForward::prepare_full_sequence_layer_stage_trace+execute_full_sequence_layer_stage_traced",
                     "attention_backend": "hf-eager-cublaslt-qwen-p2051-probe",
                     "cache": false,
                     "input_context_token_count": CONTEXT_TOKEN_COUNT,
+                    "rope_table_capture": "PreparedLlamaForward::download_hugging_face_bf16_rope_table_trace",
                     "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
                     "trace_row_layout": "full-sequence-token-major",
                 },
@@ -1771,7 +1791,8 @@ fn run_full_sequence_layer_stage_profile(
     .with_hf_compatible_bias_epilogue_projection_probe()
     .with_hugging_face_eager_qwen_p2051_probe_attention()
     .with_hf_eager_qwen_p2051_direct_cublas_output_projection_probe()
-    .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe();
+    .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe()
+    .with_hugging_face_cuda_qwen_p2051_rope_table_probe();
     let mut forward = match PreparedLlamaForward::prepare(
         model,
         &context,
@@ -1806,11 +1827,12 @@ fn run_full_sequence_layer_stage_profile(
         let specs = expected_full_sequence_stage_specs();
         let selected = specs
             .iter()
-            .map(|spec| match spec.source {
-                StageSource::FullSequence(stage) => Ok(stage),
-                _ => Err("full-sequence stage source is malformed".into()),
+            .filter_map(|spec| match spec.source {
+                StageSource::FullSequence(stage) => Some(stage),
+                StageSource::HfEagerRopeTableCosine | StageSource::HfEagerRopeTableSine => None,
+                _ => panic!("full-sequence stage source is malformed"),
             })
-            .collect::<TestResult<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         let mut trace = forward
             .prepare_full_sequence_layer_stage_trace(FULL_SEQUENCE_STAGE_LAYER_INDEX, &selected)?;
         if trace.layer_index() != FULL_SEQUENCE_STAGE_LAYER_INDEX
@@ -1819,9 +1841,8 @@ fn run_full_sequence_layer_stage_profile(
             return Err("full-sequence layer trace preparation contract differs".into());
         }
         for spec in &specs {
-            let stage = match spec.source {
-                StageSource::FullSequence(stage) => stage,
-                _ => return Err("full-sequence stage source is malformed".into()),
+            let StageSource::FullSequence(stage) = spec.source else {
+                continue;
             };
             if trace.tensor_byte_len(stage) != shape_byte_len(&spec.shape)? {
                 return Err(format!("full-sequence {} byte reservation differs", spec.name).into());
@@ -1833,16 +1854,19 @@ fn run_full_sequence_layer_stage_profile(
         if !trace.is_complete() || trace.captured_stage_count() != u32::try_from(selected.len())? {
             return Err("full-sequence layer trace did not capture every requested stage".into());
         }
+        let rope_tables = forward.download_hugging_face_bf16_rope_table_trace(&mut stream)?;
         let mut observed = BTreeMap::new();
         for spec in &specs {
-            let stage = match spec.source {
-                StageSource::FullSequence(stage) => stage,
+            let row_major = match spec.source {
+                StageSource::FullSequence(stage) => canonical_bf16_le(
+                    trace
+                        .tensor(stage)
+                        .ok_or("full-sequence layer trace tensor is missing")?,
+                )?,
+                StageSource::HfEagerRopeTableCosine => canonical_bf16_le(rope_tables.cosine())?,
+                StageSource::HfEagerRopeTableSine => canonical_bf16_le(rope_tables.sine())?,
                 _ => return Err("full-sequence stage source is malformed".into()),
             };
-            let tensor = trace
-                .tensor(stage)
-                .ok_or("full-sequence layer trace tensor is missing")?;
-            let row_major = canonical_bf16_le(tensor)?;
             if row_major.len() != shape_byte_len(&spec.shape)? {
                 return Err(format!("full-sequence {} byte length differs", spec.name).into());
             }
@@ -1856,16 +1880,23 @@ fn run_full_sequence_layer_stage_profile(
         if !trace.is_complete() || trace.captured_stage_count() != u32::try_from(selected.len())? {
             return Err("repeat full-sequence layer trace is incomplete".into());
         }
+        let repeated_rope_tables =
+            forward.download_hugging_face_bf16_rope_table_trace(&mut stream)?;
         for spec in &specs {
-            let stage = match spec.source {
-                StageSource::FullSequence(stage) => stage,
+            let repeated = match spec.source {
+                StageSource::FullSequence(stage) => canonical_bf16_le(
+                    trace
+                        .tensor(stage)
+                        .ok_or("repeat full-sequence layer trace tensor is missing")?,
+                )?,
+                StageSource::HfEagerRopeTableCosine => {
+                    canonical_bf16_le(repeated_rope_tables.cosine())?
+                }
+                StageSource::HfEagerRopeTableSine => {
+                    canonical_bf16_le(repeated_rope_tables.sine())?
+                }
                 _ => return Err("full-sequence stage source is malformed".into()),
             };
-            let repeated = canonical_bf16_le(
-                trace
-                    .tensor(stage)
-                    .ok_or("repeat full-sequence layer trace tensor is missing")?,
-            )?;
             if observed.get(&spec.name) != Some(&repeated) {
                 return Err(format!("repeat {} BF16 tensor differs", spec.name).into());
             }
@@ -1899,7 +1930,7 @@ fn run_full_sequence_layer_stage_profile(
             stages.insert(spec.name.clone(), stage_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-compatible-bias-epilogue-probe-v1+hf-eager-qwen-p2051-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1",
+            "profile_id": "hf-compatible-bias-epilogue-probe-v1+hf-eager-qwen-p2051-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-cuda-rope-table-probe-v1",
             "projection_bias_backend": forward.projection_bias_mode().id(),
             "attention_backend": forward.attention_selection().implementation_id(),
             "output_projection_backend": forward.output_projection_backend_id(),
@@ -1911,6 +1942,12 @@ fn run_full_sequence_layer_stage_profile(
                 "token_count": CONTEXT_TOKEN_COUNT,
                 "stage_count": selected.len(),
                 "token_major_bf16": true,
+            },
+            "hf_eager_rope_table_capture": {
+                "token_count": CONTEXT_TOKEN_COUNT,
+                "head_dimension": QWEN3B_HEAD_DIMENSION,
+                "table_dtype": "bfloat16",
+                "table_layout": "token-major-duplicated-half",
             },
             "repeat_execution": {
                 "reused_prepared_owner": true,
@@ -2174,6 +2211,7 @@ fn qwen3b_p2051_hf_compatible_full_sequence_layer1_quality_gate() -> TestResult 
             "candidate_attention_backend": HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID,
             "candidate_output_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
             "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
+            "candidate_rope_table_backend": "hf-cuda-rope-table-probe-v1",
             "diagnostic_only": true,
         },
         "hf_full_sequence_stage_artifact": {
