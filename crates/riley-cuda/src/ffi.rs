@@ -2316,6 +2316,12 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
+        params: *const RawDecodeAttentionReferenceParams,
+        scaled_scores_trace: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_decode_attention_reference_execute(
         params: *const RawDecodeAttentionReferenceParams,
         stream: *mut RawStream,
@@ -7693,6 +7699,57 @@ pub(super) fn decode_attention_reference_execute(
             // SAFETY: all fixed-layout descriptors and opaque resources live
             // through the synchronous native execution.
             unsafe { riley_cuda_decode_attention_reference_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn decode_attention_reference_execute_scaled_scores_trace(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    scaled_scores_trace: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionReferenceParams {
+        struct_size: DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        score_workspace,
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA materialized decode attention scaled-scores trace",
+        stream,
+        |stream, error| {
+            // SAFETY: all fixed-layout descriptors and opaque resources live
+            // through the synchronous native diagnostic execution.
+            unsafe {
+                riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
+                    &params,
+                    &scaled_scores_trace,
+                    stream,
+                    error,
+                )
+            }
         },
     )
 }

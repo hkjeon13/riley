@@ -30,10 +30,10 @@ from . import qwen3b_serving_oracle as oracle
 from . import qwen3b_stage_trace as stage
 from .hf_calibration import SidecarWriter, _default_sidecar_writer, _write_sidecar_exclusive
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v1"
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v2"
 ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace"
-TRACE_ID = "qwen3b-p2048-cache-on-m1-layer3-detail-v1"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-layer-detail-v1"
+TRACE_ID = "qwen3b-p2048-cache-on-m1-layer3-attention-detail-v2"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-layer-detail-v2"
 DETAILED_LAYER_INDEX = 3
 BF16_BYTES = cache_free.BF16_BYTES
 TEACHER_DECODE_TOKEN_COUNT = 2
@@ -45,6 +45,8 @@ _DETAIL_STAGE_SUFFIXES = (
     "v_proj",
     "q_rope",
     "k_rope",
+    "attention_scores",
+    "attention_probabilities",
     "attention_context",
     "after_attention_residual",
     "post_attention_norm",
@@ -168,12 +170,18 @@ def _sidecar_key(name: str) -> str:
 
 def _expected_shapes() -> dict[str, tuple[int, ...]]:
     base_shapes = cache_free._expected_shapes()
-    result = {
-        f"layer{DETAILED_LAYER_INDEX}.{suffix}.last": base_shapes[
-            f"layer0.{suffix}.last"
-        ]
-        for suffix in _DETAIL_STAGE_SUFFIXES
-    }
+    result: dict[str, tuple[int, ...]] = {}
+    attention_shape = (
+        cache_free.MODEL_QUERY_HEAD_COUNT,
+        oracle.PROMPT_TOKEN_COUNT + 1,
+    )
+    for suffix in _DETAIL_STAGE_SUFFIXES:
+        name = f"layer{DETAILED_LAYER_INDEX}.{suffix}.last"
+        result[name] = (
+            attention_shape
+            if suffix in {"attention_scores", "attention_probabilities"}
+            else base_shapes[f"layer0.{suffix}.last"]
+        )
     result["last_logits"] = base_shapes["last_logits"]
     if set(result) != set(TRACE_TENSORS):
         raise AssertionError("selected-layer trace shape table differs")
@@ -222,7 +230,7 @@ def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
 
 def _capture_profile_document() -> dict[str, object]:
     return {
-        "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-rows",
+        "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-and-attention-rows",
         "id": TRACE_ID,
         "detailed_layer_index": DETAILED_LAYER_INDEX,
         "prefill_source_logit_row": 0,
@@ -231,7 +239,7 @@ def _capture_profile_document() -> dict[str, object]:
         "rust_consumer": {
             "api": (
                 "riley_runtime::llama::PreparedLlamaDecode::"
-                "prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer+"
+                "prepare_hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace_for_layer+"
                 "decode_hf_eager_qwen_p2048_cache_on_m1_traced"
             ),
             "cache_layout": "contiguous-kv-only",
@@ -314,6 +322,33 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         except (AttributeError, IndexError, RuntimeError, TypeError) as error:
             raise Qwen3BCacheOnLayerDetailTraceError(
                 f"trace hook {name} returned no last-token row"
+            ) from error
+        captured[name] = value
+
+    def _capture_attention_row(
+        self, captured: dict[str, object], name: str, tensor: object
+    ) -> None:
+        """Capture the selected M1 `[QH,T]` eager-attention row unchanged."""
+
+        if name in captured:
+            raise Qwen3BCacheOnLayerDetailTraceError(
+                f"trace hook {name} ran more than once"
+            )
+        expected = (
+            1,
+            cache_free.MODEL_QUERY_HEAD_COUNT,
+            1,
+            oracle.PROMPT_TOKEN_COUNT + 1,
+        )
+        try:
+            if _tensor_shape(tensor) != expected:
+                raise Qwen3BCacheOnLayerDetailTraceError(
+                    f"trace hook {name} attention shape differs"
+                )
+            value = tensor[0, :, 0, :].detach().to(device="cpu").contiguous()
+        except (AttributeError, IndexError, RuntimeError, TypeError) as error:
+            raise Qwen3BCacheOnLayerDetailTraceError(
+                f"trace hook {name} returned no attention row"
             ) from error
         captured[name] = value
 
@@ -463,6 +498,15 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         rope_calls = 0
         handles: list[object] = []
         original_rope = self._module.apply_rotary_pos_emb
+        try:
+            attention_functions = self._module.ALL_ATTENTION_FUNCTIONS
+            original_eager = self._module.eager_attention_forward
+            original_attention_interface = attention_functions["eager"]
+            repeat_kv = original_eager.__globals__["repeat_kv"]
+        except (AttributeError, KeyError, TypeError) as error:
+            raise Qwen3BCacheOnLayerDetailTraceError(
+                "Qwen eager attention hook contract changed"
+            ) from error
 
         def capture_output(name: str):
             def hook(_module: object, _args: object, output: object) -> None:
@@ -516,6 +560,62 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
             rope_calls += 1
             return output
 
+        def traced_eager_attention(
+            module: object,
+            query: object,
+            key: object,
+            value: object,
+            attention_mask: object,
+            scaling: float,
+            dropout: float = 0.0,
+            **kwargs: object,
+        ) -> object:
+            if active is None or module is not attention:
+                return original_attention_interface(
+                    module,
+                    query,
+                    key,
+                    value,
+                    attention_mask,
+                    scaling,
+                    dropout=dropout,
+                    **kwargs,
+                )
+            try:
+                key_states = repeat_kv(key, module.num_key_value_groups)
+                value_states = repeat_kv(value, module.num_key_value_groups)
+                attention_scores = self._torch.matmul(
+                    query, key_states.transpose(2, 3)
+                ) * scaling
+                if attention_mask is not None:
+                    attention_scores = attention_scores + attention_mask
+                prefix = f"layer{DETAILED_LAYER_INDEX}"
+                self._capture_attention_row(
+                    active, f"{prefix}.attention_scores.last", attention_scores
+                )
+                attention_probabilities = self._torch.nn.functional.softmax(
+                    attention_scores, dim=-1, dtype=self._torch.float32
+                ).to(query.dtype)
+                self._capture_attention_row(
+                    active,
+                    f"{prefix}.attention_probabilities.last",
+                    attention_probabilities,
+                )
+                attention_probabilities = self._torch.nn.functional.dropout(
+                    attention_probabilities,
+                    p=dropout,
+                    training=module.training,
+                )
+                attention_output = self._torch.matmul(
+                    attention_probabilities, value_states
+                )
+                attention_output = attention_output.transpose(1, 2).contiguous()
+                return attention_output, attention_probabilities
+            except (AttributeError, RuntimeError, TypeError) as error:
+                raise Qwen3BCacheOnLayerDetailTraceError(
+                    "Qwen eager attention trace contract changed"
+                ) from error
+
         prefix = f"layer{DETAILED_LAYER_INDEX}"
         handles.extend(
             (
@@ -556,6 +656,8 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
             )
         )
         self._module.apply_rotary_pos_emb = traced_rope
+        self._module.eager_attention_forward = traced_eager_attention
+        attention_functions["eager"] = traced_eager_attention
         try:
             active = {}
             output: object | None = self._call(
@@ -604,6 +706,8 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         finally:
             active = None
             self._module.apply_rotary_pos_emb = original_rope
+            self._module.eager_attention_forward = original_eager
+            attention_functions["eager"] = original_attention_interface
             for handle in reversed(handles):
                 handle.remove()
             del past

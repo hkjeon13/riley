@@ -180,10 +180,16 @@ class Qwen3BCacheOnLayerDetailTraceTests(unittest.TestCase):
 
     def test_schema_is_fixed_to_layer_three_m1_boundaries(self) -> None:
         self.assertEqual(trace.DETAILED_LAYER_INDEX, 3)
-        self.assertEqual(len(trace.DETAIL_TENSORS), 14)
-        self.assertEqual(len(trace.TRACE_TENSORS), 15)
+        self.assertEqual(len(trace.DETAIL_TENSORS), 16)
+        self.assertEqual(len(trace.TRACE_TENSORS), 17)
         self.assertEqual(
             trace.TRACE_TENSORS[0], "layer3.input_norm.last"
+        )
+        self.assertIn("layer3.attention_scores.last", trace.TRACE_TENSORS)
+        self.assertIn("layer3.attention_probabilities.last", trace.TRACE_TENSORS)
+        self.assertEqual(
+            trace._expected_shapes()["layer3.attention_scores.last"],
+            (16, oracle.PROMPT_TOKEN_COUNT + 1),
         )
         self.assertEqual(trace.TRACE_TENSORS[-1], "last_logits")
         profile = trace._capture_profile_document()

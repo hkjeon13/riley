@@ -2840,11 +2840,13 @@ riley_cuda_native_bf16_paged_split_gqa_d128_two_stage_execute(
                             error, kOperation);
 }
 
-extern "C" RileyCudaStatus
-riley_cuda_decode_attention_reference_execute(
+namespace {
+
+RileyCudaStatus execute_decode_attention_reference_impl(
     const RileyCudaDecodeAttentionReferenceParams* params,
-    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
-  constexpr const char* kOperation = "execute reference decode attention";
+    const RileyCudaBufferSpan* scaled_scores_trace,
+    bool require_scaled_scores_trace, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error, const char* kOperation) noexcept {
   clear_error(error);
   if (params == nullptr || params->struct_size < sizeof(*params)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
@@ -2858,6 +2860,11 @@ riley_cuda_decode_attention_reference_execute(
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "params reserved fields must be zero");
+  }
+  if (require_scaled_scores_trace && scaled_scores_trace == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "scaled-score trace span is null");
   }
 
   RileyCudaStatus status = validate_decode_dimensions(
@@ -2880,6 +2887,8 @@ riley_cuda_decode_attention_reference_execute(
   ResolvedSpan value_cache{};
   ResolvedSpan score_workspace{};
   ResolvedSpan output{};
+  ResolvedSpan scaled_scores{};
+  const bool capture_scaled_scores = scaled_scores_trace != nullptr;
   status = resolve_decode_inputs(
       params->query, params->key_cache, params->value_cache, params->output,
       bytes, &query, &key_cache, &value_cache, &output, error, kOperation);
@@ -2887,6 +2896,10 @@ riley_cuda_decode_attention_reference_execute(
     status = resolve_span(params->score_workspace,
                           RILEY_CUDA_DTYPE_BF16, 2, bytes.scores,
                           &score_workspace, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && capture_scaled_scores) {
+    status = resolve_span(*scaled_scores_trace, RILEY_CUDA_DTYPE_BF16, 2,
+                          bytes.scores, &scaled_scores, error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = reject_overlap(score_workspace, query, error, kOperation);
@@ -2900,12 +2913,24 @@ riley_cuda_decode_attention_reference_execute(
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = reject_overlap(score_workspace, output, error, kOperation);
   }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && capture_scaled_scores) {
+    const ResolvedSpan execution_spans[] = {query, key_cache, value_cache,
+                                            score_workspace, output};
+    for (const ResolvedSpan& execution_span : execution_spans) {
+      status = reject_overlap(scaled_scores, execution_span, error,
+                              kOperation);
+      if (status != RILEY_CUDA_STATUS_SUCCESS) {
+        break;
+      }
+    }
+  }
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   const ResolvedSpan spans[] = {query, key_cache, value_cache,
-                                score_workspace, output};
-  status = validate_contexts(stream, spans, 5, error, kOperation);
+                                score_workspace, output, scaled_scores};
+  const size_t span_count = capture_scaled_scores ? 6 : 5;
+  status = validate_contexts(stream, spans, span_count, error, kOperation);
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
@@ -2913,7 +2938,8 @@ riley_cuda_decode_attention_reference_execute(
   ExclusiveUses uses(stream);
   if (!uses.add(query.buffer) || !uses.add(key_cache.buffer) ||
       !uses.add(value_cache.buffer) || !uses.add(score_workspace.buffer) ||
-      !uses.add(output.buffer)) {
+      !uses.add(output.buffer) ||
+      (capture_scaled_scores && !uses.add(scaled_scores.buffer))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kOperation, "decode buffer set overflow");
   }
@@ -2949,6 +2975,14 @@ riley_cuda_decode_attention_reference_execute(
             params->scale, score_elements);
     status = launch_status(error, kOperation);
   }
+  if (status == RILEY_CUDA_STATUS_SUCCESS && capture_scaled_scores) {
+    launch_attempted = true;
+    status = runtime_error(
+        cudaMemcpyAsync(scaled_scores.data, score_workspace.data,
+                        static_cast<size_t>(bytes.scores),
+                        cudaMemcpyDeviceToDevice, stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
+  }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     decode_softmax_reference_kernel
         <<<block_count(params->query_head_count), kThreads, 0,
@@ -2970,6 +3004,26 @@ riley_cuda_decode_attention_reference_execute(
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus
+riley_cuda_decode_attention_reference_execute(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  return execute_decode_attention_reference_impl(
+      params, nullptr, false, stream, error, "execute reference decode attention");
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    const RileyCudaBufferSpan* scaled_scores_trace, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  return execute_decode_attention_reference_impl(
+      params, scaled_scores_trace, true, stream, error,
+      "execute reference decode attention scaled-scores trace");
 }
 
 extern "C" RileyCudaStatus

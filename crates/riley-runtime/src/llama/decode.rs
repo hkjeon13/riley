@@ -73,6 +73,7 @@ pub enum LlamaDecodeResource {
     RopeCos,
     RopeSin,
     AttentionWorkspace,
+    HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
     GemmWorkspace,
     HiddenGemm,
     KeyValueGemm,
@@ -101,6 +102,9 @@ impl LlamaDecodeResource {
             Self::RopeCos => "decode_rope_cos",
             Self::RopeSin => "decode_rope_sin",
             Self::AttentionWorkspace => "decode_attention_workspace",
+            Self::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace => {
+                "hf_eager_qwen_p2048_cache_on_m1_attention_scaled_scores_trace"
+            }
             Self::GemmWorkspace => "decode_gemm_workspace",
             Self::HiddenGemm => "decode_hidden_gemm",
             Self::KeyValueGemm => "decode_key_value_gemm",
@@ -1538,6 +1542,7 @@ struct DecodeBuffers {
     rope_cos: CudaDeviceBuffer,
     rope_sin: CudaDeviceBuffer,
     attention_workspace: CudaDeviceBuffer,
+    attention_scaled_scores_trace: Option<CudaDeviceBuffer>,
     gemm_workspace: Option<CudaDeviceBuffer>,
     rope_table_bytes_per_kind: u64,
 }
@@ -1559,8 +1564,21 @@ pub struct PreparedLlamaDecodeM1Trace {
     detailed_layer: PreparedLlamaLastTokenLayerStageTrace,
     layer_outputs: PreparedLlamaLastTokenLayerTrace,
     logits: Box<[u8]>,
+    attention_detail: Option<PreparedLlamaDecodeM1AttentionDetailTrace>,
     embedding_captured: bool,
     logits_captured: bool,
+}
+
+/// Caller-owned attention internals for the selected cache-on M1 layer.
+///
+/// Both rows are BF16 `[query_heads, P2049]`: scaled QK scores before
+/// softmax, then probabilities after the F32 softmax/output conversion.
+/// They are allocated only by the explicit attention-detail trace owner.
+struct PreparedLlamaDecodeM1AttentionDetailTrace {
+    scaled_scores: Box<[u8]>,
+    probabilities: Box<[u8]>,
+    scaled_scores_captured: bool,
+    probabilities_captured: bool,
 }
 
 impl fmt::Debug for PreparedLlamaDecodeM1Trace {
@@ -1580,6 +1598,12 @@ impl fmt::Debug for PreparedLlamaDecodeM1Trace {
             .field(
                 "final_norm_captured",
                 &self.layer_outputs.final_norm_output().is_some(),
+            )
+            .field(
+                "attention_detail_captured",
+                &self.attention_detail.as_ref().is_some_and(|detail| {
+                    detail.scaled_scores_captured && detail.probabilities_captured
+                }),
             )
             .field("logits_captured", &self.logits_captured)
             .finish_non_exhaustive()
@@ -1635,6 +1659,24 @@ impl PreparedLlamaDecodeM1Trace {
         self.logits_captured.then(|| self.logits.as_ref())
     }
 
+    /// Captured scaled BF16 QK-score rows before attention softmax.
+    #[must_use]
+    pub fn attention_scaled_scores(&self) -> Option<&[u8]> {
+        self.attention_detail
+            .as_ref()
+            .filter(|detail| detail.scaled_scores_captured)
+            .map(|detail| detail.scaled_scores.as_ref())
+    }
+
+    /// Captured BF16 attention-probability rows after F32 softmax.
+    #[must_use]
+    pub fn attention_probabilities(&self) -> Option<&[u8]> {
+        self.attention_detail
+            .as_ref()
+            .filter(|detail| detail.probabilities_captured)
+            .map(|detail| detail.probabilities.as_ref())
+    }
+
     /// Whether every source-bound M1 boundary completed during the latest run.
     #[must_use]
     pub fn is_complete(&self) -> bool {
@@ -1646,9 +1688,20 @@ impl PreparedLlamaDecodeM1Trace {
             && self.logits_captured
     }
 
+    /// Whether this owner additionally captured both selected-layer attention
+    /// internals. Ordinary M1 trace owners intentionally return `false`.
+    #[must_use]
+    pub fn attention_detail_is_complete(&self) -> bool {
+        self.is_complete()
+            && self.attention_detail.as_ref().is_some_and(|detail| {
+                detail.scaled_scores_captured && detail.probabilities_captured
+            })
+    }
+
     fn prepare(
         forward: &PreparedLlamaForward,
         detailed_layer_index: usize,
+        capture_attention_detail: bool,
     ) -> LlamaDecodeResult<Self> {
         let dimensions = forward.plan.dimensions();
         let hidden_bytes = dimensions
@@ -1679,6 +1732,40 @@ impl PreparedLlamaDecodeM1Trace {
                 reason: "prepared source-bound trace geometry differs",
             });
         }
+        let attention_detail = if capture_attention_detail {
+            let attention_row_bytes = dimensions
+                .query_heads()
+                .checked_mul(HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1)
+                .and_then(|elements| {
+                    elements.checked_mul(
+                        usize::try_from(BF16_BYTES).expect("BF16 byte width fits usize"),
+                    )
+                })
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource:
+                        LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                })?;
+            let attention_row_bytes = u64::try_from(attention_row_bytes).map_err(|_| {
+                LlamaDecodeError::ArithmeticOverflow {
+                    resource:
+                        LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                }
+            })?;
+            Some(PreparedLlamaDecodeM1AttentionDetailTrace {
+                scaled_scores: allocate_decode_host_bytes(
+                    attention_row_bytes,
+                    LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                )?,
+                probabilities: allocate_decode_host_bytes(
+                    attention_row_bytes,
+                    LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                )?,
+                scaled_scores_captured: false,
+                probabilities_captured: false,
+            })
+        } else {
+            None
+        };
         Ok(Self {
             embedding: allocate_decode_host_bytes(
                 u64::try_from(hidden_bytes).map_err(|_| LlamaDecodeError::ArithmeticOverflow {
@@ -1694,6 +1781,7 @@ impl PreparedLlamaDecodeM1Trace {
                 })?,
                 LlamaDecodeResource::GemmWorkspace,
             )?,
+            attention_detail,
             embedding_captured: false,
             logits_captured: false,
         })
@@ -1706,6 +1794,30 @@ impl PreparedLlamaDecodeM1Trace {
         self.layer_outputs
             .validate(&forward.plan)
             .map_err(LlamaDecodeError::Forward)?;
+        if let Some(detail) = &self.attention_detail {
+            let expected_bytes = forward
+                .plan
+                .dimensions()
+                .query_heads()
+                .checked_mul(HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1)
+                .and_then(|elements| {
+                    elements.checked_mul(
+                        usize::try_from(BF16_BYTES).expect("BF16 byte width fits usize"),
+                    )
+                })
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource:
+                        LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                })?;
+            if detail.scaled_scores.len() != expected_bytes
+                || detail.probabilities.len() != expected_bytes
+            {
+                return Err(LlamaDecodeError::InvalidConfiguration {
+                    field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+                    reason: "prepared attention trace geometry differs",
+                });
+            }
+        }
         Ok(())
     }
 
@@ -1713,7 +1825,15 @@ impl PreparedLlamaDecodeM1Trace {
         self.embedding_captured = false;
         self.detailed_layer.reset();
         self.layer_outputs.reset();
+        if let Some(detail) = &mut self.attention_detail {
+            detail.scaled_scores_captured = false;
+            detail.probabilities_captured = false;
+        }
         self.logits_captured = false;
+    }
+
+    fn captures_attention_detail_for_layer(&self, layer_index: usize) -> bool {
+        self.attention_detail.is_some() && self.detailed_layer_index() == layer_index
     }
 }
 
@@ -1758,6 +1878,39 @@ fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
         site,
     )
     .map_err(LlamaDecodeError::Forward)
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_attention_detail(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    layer_index: usize,
+    scaled_scores: &mut CudaDeviceBuffer,
+    probabilities: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    if !trace.captures_attention_detail_for_layer(layer_index) {
+        return Ok(());
+    }
+    let detail = trace
+        .attention_detail
+        .as_mut()
+        .ok_or(LlamaDecodeError::InvalidConfiguration {
+            field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+            reason: "selected attention-detail trace storage is unavailable",
+        })?;
+    scaled_scores
+        .download_to_slice(0, &mut detail.scaled_scores, io_staging, stream)
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+    detail.scaled_scores_captured = true;
+    probabilities
+        .download_to_slice(0, &mut detail.probabilities, io_staging, stream)
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+    detail.probabilities_captured = true;
+    Ok(())
 }
 
 fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_output(
@@ -2046,6 +2199,34 @@ impl PreparedLlamaDecode {
             .map_err(|source| {
                 LlamaDecodeError::cuda(ExecutionSite::layer(0, LlamaOp::DecodeAttention), source)
             })?;
+        let attention_scaled_scores_trace = if hf_eager_qwen_p2048_cache_on_m1_trace_probe {
+            let trace_tokens = decode_u64(
+                HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+            )?;
+            let trace_bytes = query_heads
+                .checked_mul(trace_tokens)
+                .and_then(|elements| elements.checked_mul(BF16_BYTES))
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource:
+                        LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                })?;
+            Some(
+                context
+                    .allocate_device_buffer(trace_bytes)
+                    .map_err(|source| {
+                        LlamaDecodeError::cuda(
+                            ExecutionSite::layer(0, LlamaOp::DecodeAttention),
+                            source,
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+        let attention_scaled_scores_trace_bytes = attention_scaled_scores_trace
+            .as_ref()
+            .map_or(0, CudaDeviceBuffer::byte_len);
         let gemm_workspace = if decode_gemm_workspace_bytes == 0 {
             None
         } else {
@@ -2107,6 +2288,7 @@ impl PreparedLlamaDecode {
             rope_table_bytes_per_kind,
             attention.workspace_bytes(),
             decode_gemm_workspace_bytes,
+            attention_scaled_scores_trace_bytes,
         )?;
         Ok(Self {
             forward,
@@ -2117,6 +2299,7 @@ impl PreparedLlamaDecode {
                 rope_cos,
                 rope_sin,
                 attention_workspace,
+                attention_scaled_scores_trace,
                 gemm_workspace,
                 rope_table_bytes_per_kind,
             },
@@ -2247,7 +2430,31 @@ impl PreparedLlamaDecode {
                 reason: "requires the source-bound P2048 cache-on M1 trace probe",
             });
         }
-        PreparedLlamaDecodeM1Trace::prepare(&self.forward, detailed_layer_index)
+        PreparedLlamaDecodeM1Trace::prepare(&self.forward, detailed_layer_index, false)
+    }
+
+    /// Allocates a source-bound M1 trace with the selected layer's scaled QK
+    /// scores and post-softmax probabilities in addition to the ordinary
+    /// boundaries.
+    ///
+    /// This explicit diagnostic owner is unavailable to normal decode and
+    /// cannot make a serving selector eligible.
+    ///
+    /// # Errors
+    ///
+    /// Returns if the atomic M1 probe was not prepared, the selected layer is
+    /// invalid, or host trace storage cannot be allocated.
+    pub fn prepare_hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace_for_layer(
+        &self,
+        detailed_layer_index: usize,
+    ) -> LlamaDecodeResult<PreparedLlamaDecodeM1Trace> {
+        if !self.hf_eager_qwen_p2048_cache_on_m1_trace_probe {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+                reason: "requires the source-bound P2048 cache-on M1 trace probe",
+            });
+        }
+        PreparedLlamaDecodeM1Trace::prepare(&self.forward, detailed_layer_index, true)
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.
@@ -2884,6 +3091,10 @@ impl PreparedLlamaDecode {
             )?;
 
             let attention_site = ExecutionSite::layer(layer_index, LlamaOp::DecodeAttention);
+            let capture_attention_detail = M1_TRACE
+                && trace
+                    .as_deref()
+                    .is_some_and(|trace| trace.captures_attention_detail_for_layer(layer_index));
             {
                 match (attention, &mut cache) {
                     (
@@ -2914,14 +3125,46 @@ impl PreparedLlamaDecode {
                             )
                             .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?,
                         };
-                        attention
-                            .execute(logical_token_count, &mut params, stream)
+                        if capture_attention_detail {
+                            let scaled_scores = decode_buffers
+                                .attention_scaled_scores_trace
+                                .as_mut()
+                                .ok_or(LlamaDecodeError::InvalidConfiguration {
+                                    field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+                                    reason: "selected attention trace device storage is unavailable",
+                                })?;
+                            let scaled_scores_bytes = scaled_scores.byte_len();
+                            let scaled_scores_trace = CudaBufferSpanMut::new(
+                                scaled_scores,
+                                CudaDType::BF16,
+                                0,
+                                scaled_scores_bytes,
+                            )
                             .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                            attention
+                                .execute_reference_with_scaled_scores_trace(
+                                    logical_token_count,
+                                    &mut params,
+                                    scaled_scores_trace,
+                                    stream,
+                                )
+                                .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                        } else {
+                            attention
+                                .execute(logical_token_count, &mut params, stream)
+                                .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                        }
                     }
                     (
                         PreparedLlamaDecodeAttention::Paged(attention),
                         PrefillKvCacheSink::Paged(cache),
                     ) => {
+                        if capture_attention_detail {
+                            return Err(LlamaDecodeError::InvalidConfiguration {
+                                field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+                                reason: "attention-detail tracing requires contiguous KV storage",
+                            });
+                        }
                         let (key_pool, value_pool) = cache.layer_spans(layer_index)?;
                         let block_table = cache.native_table(attention_site)?;
                         let mut params = PagedDecodeAttentionParams {
@@ -2970,6 +3213,24 @@ impl PreparedLlamaDecode {
                     stream,
                     attention_site,
                 )?;
+                if capture_attention_detail {
+                    let scaled_scores = decode_buffers
+                        .attention_scaled_scores_trace
+                        .as_mut()
+                        .ok_or(LlamaDecodeError::InvalidConfiguration {
+                            field: "hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace",
+                            reason: "selected attention trace device storage is unavailable",
+                        })?;
+                    capture_hf_eager_qwen_p2048_cache_on_m1_attention_detail(
+                        &mut trace,
+                        layer_index,
+                        scaled_scores,
+                        &mut decode_buffers.attention_workspace,
+                        io_staging,
+                        stream,
+                        attention_site,
+                    )?;
+                }
             }
 
             let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
@@ -3539,6 +3800,7 @@ impl PreparedLlamaDecode {
             rope_cos,
             rope_sin,
             attention_workspace,
+            attention_scaled_scores_trace,
             gemm_workspace,
             rope_table_bytes_per_kind: _,
         } = buffers;
@@ -3656,6 +3918,13 @@ impl PreparedLlamaDecode {
             LlamaDecodeResource::AttentionWorkspace,
             attention_workspace.close(),
         );
+        if let Some(trace) = attention_scaled_scores_trace {
+            record_decode_close(
+                &mut first,
+                LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
+                trace.close(),
+            );
+        }
         if let Some(workspace) = gemm_workspace {
             record_decode_close(
                 &mut first,
@@ -4026,6 +4295,7 @@ fn build_decode_allocation_report(
     rope_table_bytes_per_kind: u64,
     attention_workspace_bytes: u64,
     decode_gemm_workspace_bytes: u64,
+    diagnostic_attention_trace_bytes: u64,
 ) -> LlamaDecodeResult<PreparedLlamaDecodeAllocationReport> {
     let rope_table_bytes =
         rope_table_bytes_per_kind
@@ -4039,6 +4309,7 @@ fn build_decode_allocation_report(
         .and_then(|bytes| bytes.checked_add(rope_table_bytes))
         .and_then(|bytes| bytes.checked_add(attention_workspace_bytes))
         .and_then(|bytes| bytes.checked_add(decode_gemm_workspace_bytes))
+        .and_then(|bytes| bytes.checked_add(diagnostic_attention_trace_bytes))
         .ok_or(LlamaDecodeError::ArithmeticOverflow {
             resource: LlamaDecodeResource::GemmWorkspace,
         })?;
@@ -4053,6 +4324,7 @@ fn build_decode_allocation_report(
         .checked_add(ROPE_ALLOCATION_COUNT)
         .and_then(|count| count.checked_add(ATTENTION_ALLOCATION_COUNT))
         .and_then(|count| count.checked_add(u64::from(decode_gemm_workspace_bytes != 0)))
+        .and_then(|count| count.checked_add(u64::from(diagnostic_attention_trace_bytes != 0)))
         .ok_or(LlamaDecodeError::ArithmeticOverflow {
             resource: LlamaDecodeResource::GemmWorkspace,
         })?;

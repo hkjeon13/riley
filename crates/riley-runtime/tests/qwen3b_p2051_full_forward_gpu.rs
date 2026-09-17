@@ -112,10 +112,11 @@ const CACHE_ON_STAGE_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-stage-trace";
 const CACHE_ON_STAGE_TRACE_ID: &str = "qwen3b-p2048-cache-on-prefill-m1-layer-stage-v1";
 const CACHE_ON_LAYER_DETAIL_SCHEMA_VERSION: &str =
-    "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v1";
+    "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v2";
 const CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace";
-const CACHE_ON_LAYER_DETAIL_TRACE_ID: &str = "qwen3b-p2048-cache-on-m1-layer3-detail-v1";
+const CACHE_ON_LAYER_DETAIL_TRACE_ID: &str =
+    "qwen3b-p2048-cache-on-m1-layer3-attention-detail-v2";
 const CACHE_ON_LAYER_DETAIL_INDEX: usize = 3;
 const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-comparison.v1";
@@ -128,10 +129,11 @@ const CACHE_ON_M1_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-reference-trace";
 const CACHE_ON_M1_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_M1=";
 const CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION: &str =
-    "riley.qwen3b-p2048-hf-compatible-cache-on-m1-layer-detail-comparison.v1";
+    "riley.qwen3b-p2048-hf-compatible-cache-on-m1-layer-detail-comparison.v2";
 const CACHE_ON_LAYER_DETAIL_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-layer-detail-comparison";
-const CACHE_ON_LAYER_DETAIL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_M1_LAYER_DETAIL=";
+const CACHE_ON_LAYER_DETAIL_MARKER_PREFIX: &str =
+    "RILEY_QWEN3B_P2048_CACHE_ON_M1_LAYER3_ATTENTION_DETAIL=";
 const HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_ATTENTION_BACKEND_ID: &str =
     "riley.cuda.hf-eager-cublaslt-qwen-p2048-cache-on-probe.bf16";
 const HF_EAGER_QWEN_P2048_CACHE_ON_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID: &str =
@@ -870,12 +872,35 @@ fn expected_cache_on_layer_detail_stage_specs() -> Vec<StageSpec> {
             spec
         })
         .collect::<Vec<_>>();
+    let attention_context_index = stages
+        .iter()
+        .position(|spec| spec.name == format!("{detail_prefix}attention_context.last"))
+        .expect("layer-detail stage table includes attention context");
+    let attention_shape = vec![
+        u64::try_from(QWEN3B_QUERY_HEADS).expect("query-head count fits"),
+        u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT + 1).expect("P2049 fits"),
+    ];
+    stages.splice(
+        attention_context_index..attention_context_index,
+        [
+            StageSpec {
+                name: format!("{detail_prefix}attention_scores.last"),
+                shape: attention_shape.clone(),
+                source: StageSource::LastLogits,
+            },
+            StageSpec {
+                name: format!("{detail_prefix}attention_probabilities.last"),
+                shape: attention_shape,
+                source: StageSource::LastLogits,
+            },
+        ],
+    );
     stages.push(StageSpec {
         name: "last_logits".to_owned(),
         shape: vec![u64::try_from(QWEN3B_VOCABULARY_SIZE).expect("vocabulary fits")],
         source: StageSource::LastLogits,
     });
-    assert_eq!(stages.len(), LlamaLastTokenLayerStage::ALL.len() + 1);
+    assert_eq!(stages.len(), LlamaLastTokenLayerStage::ALL.len() + 3);
     stages
 }
 
@@ -1641,7 +1666,7 @@ fn load_hf_cache_on_layer_detail_artifact(
         || manifest["trace_id"].as_str() != Some(CACHE_ON_LAYER_DETAIL_TRACE_ID)
         || manifest["performance_claim_eligible"].as_bool() != Some(false)
         || manifest["producer"]["implementation_id"].as_str()
-            != Some("riley-python-qwen3b-hf-eager-cache-on-layer-detail-v1")
+            != Some("riley-python-qwen3b-hf-eager-cache-on-layer-detail-v2")
     {
         return Err("HF P2048 cache-on layer-detail manifest identity differs".into());
     }
@@ -1831,14 +1856,14 @@ fn load_hf_cache_on_layer_detail_artifact(
     }
 
     let expected_trace_profile = json!({
-        "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-rows",
+        "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-and-attention-rows",
         "id": CACHE_ON_LAYER_DETAIL_TRACE_ID,
         "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
         "prefill_source_logit_row": 0,
         "m1_source_logit_row": 1,
-        "tensor_count": LlamaLastTokenLayerStage::ALL.len() + 1,
+        "tensor_count": LlamaLastTokenLayerStage::ALL.len() + 3,
         "rust_consumer": {
-            "api": "riley_runtime::llama::PreparedLlamaDecode::prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer+decode_hf_eager_qwen_p2048_cache_on_m1_traced",
+            "api": "riley_runtime::llama::PreparedLlamaDecode::prepare_hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace_for_layer+decode_hf_eager_qwen_p2048_cache_on_m1_traced",
             "cache_layout": "contiguous-kv-only",
             "execution": "P2048 prefill then teacher-forced M=1 decode",
             "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
@@ -3008,7 +3033,7 @@ fn collect_cache_on_m1_trace(
 fn collect_cache_on_m1_layer_detail_trace(
     trace: &PreparedLlamaDecodeM1Trace,
 ) -> TestResult<BTreeMap<String, Vec<u8>>> {
-    if !trace.is_complete() {
+    if !trace.attention_detail_is_complete() {
         return Err("P2048 cache-on M1 layer-detail trace did not capture every boundary".into());
     }
     if trace.detailed_layer_index() != CACHE_ON_LAYER_DETAIL_INDEX {
@@ -3027,6 +3052,24 @@ fn collect_cache_on_m1_layer_detail_trace(
         );
     }
     observed.insert(
+        format!("layer{CACHE_ON_LAYER_DETAIL_INDEX}.attention_scores.last"),
+        canonical_bf16_le(
+            trace
+                .attention_scaled_scores()
+                .ok_or("P2048 cache-on M1 attention-score trace is missing")?,
+        )?,
+    );
+    observed.insert(
+        format!(
+            "layer{CACHE_ON_LAYER_DETAIL_INDEX}.attention_probabilities.last"
+        ),
+        canonical_bf16_le(
+            trace
+                .attention_probabilities()
+                .ok_or("P2048 cache-on M1 attention-probability trace is missing")?,
+        )?,
+    );
+    observed.insert(
         "last_logits".to_owned(),
         canonical_bf16_le(
             trace
@@ -3034,6 +3077,9 @@ fn collect_cache_on_m1_layer_detail_trace(
                 .ok_or("P2048 cache-on M1 detailed trace logits are missing")?,
         )?,
     );
+    if observed.len() != expected_cache_on_layer_detail_stage_specs().len() {
+        return Err("P2048 cache-on M1 attention-detail trace stage count differs from the HF artifact".into());
+    }
     Ok(observed)
 }
 
@@ -3223,7 +3269,9 @@ fn run_cache_on_m1_layer_detail_profile(
 
         decode.prefill(input, &mut stream)?;
         let mut trace = decode
-            .prepare_hf_eager_qwen_p2048_cache_on_m1_trace_for_layer(CACHE_ON_LAYER_DETAIL_INDEX)?;
+            .prepare_hf_eager_qwen_p2048_cache_on_m1_attention_detail_trace_for_layer(
+                CACHE_ON_LAYER_DETAIL_INDEX,
+            )?;
         decode.decode_hf_eager_qwen_p2048_cache_on_m1_traced(m1_token, &mut trace, &mut stream)?;
         let observed = collect_cache_on_m1_layer_detail_trace(&trace)?;
 
@@ -3265,7 +3313,7 @@ fn run_cache_on_m1_layer_detail_profile(
             stages.insert(spec.name, stage_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-eager-qwen-p2048-cache-on-m1-layer3-detail-trace-v1",
+            "profile_id": "hf-eager-qwen-p2048-cache-on-m1-layer3-attention-detail-trace-v2",
             "cache_mode": "cache-on-m1-diagnostic",
             "same_scheduler_engine": false,
             "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
@@ -3277,6 +3325,12 @@ fn run_cache_on_m1_layer_detail_profile(
                 "detailed_layer_index": CACHE_ON_LAYER_DETAIL_INDEX,
                 "decode_attention_backend": selection.implementation_id(),
                 "decode_attention_selection_reason": format!("{:?}", selection.reason()),
+                "attention_detail": {
+                    "scaled_score_dtype": "bfloat16",
+                    "score_shape": [QWEN3B_QUERY_HEADS, QWEN3B_PROMPT_TOKEN_COUNT + 1],
+                    "probability_dtype": "bfloat16",
+                    "probability_shape": [QWEN3B_QUERY_HEADS, QWEN3B_PROMPT_TOKEN_COUNT + 1],
+                },
                 "projection_path": "HF-compatible M1 Q/K/V cuBLASLt bias epilogues plus direct-cuBLAS O/MLP/LM-head candidate",
                 "rms_norm_path": HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID,
             },

@@ -1843,6 +1843,72 @@ impl PreparedDecodeAttention {
         }
     }
 
+    /// Executes the materialized reference backend while copying its scaled
+    /// BF16 QK scores before softmax into a separately owned diagnostic span.
+    ///
+    /// This is a synchronized quality-debug path for source-bound offline
+    /// traces. It rejects every backend except the materialized reference and
+    /// never participates in serving selection or graph capture.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a non-reference plan, logical-length, trace-span, context,
+    /// native launch, copy, or synchronization failure.
+    pub fn execute_reference_with_scaled_scores_trace(
+        &self,
+        logical_token_count: u64,
+        params: &mut DecodeAttentionParams<'_>,
+        scaled_scores_trace: CudaBufferSpanMut<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "decode_attention_scaled_scores_trace";
+        if self.backend != DecodeAttentionBackend::MaterializedReference {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "scaled-score tracing requires the materialized reference decode backend",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        require_nonzero(OPERATION, "logical_token_count", logical_token_count)?;
+        if logical_token_count > self.request.maximum_sequence_length {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                "logical_token_count exceeds the prepared cache capacity",
+            ));
+        }
+        validate_execute_params(self, params, stream)?;
+        validate_reference_scaled_scores_trace(
+            self,
+            logical_token_count,
+            &scaled_scores_trace,
+            stream,
+        )?;
+
+        #[cfg(feature = "cuda")]
+        {
+            ffi::decode_attention_reference_execute_scaled_scores_trace(
+                params.query.raw(),
+                params.key_cache.raw(),
+                params.value_cache.raw(),
+                params.workspace.raw(),
+                params.output.raw(),
+                scaled_scores_trace.raw(),
+                self.request.maximum_sequence_length,
+                logical_token_count,
+                self.request.query_head_count,
+                self.request.key_value_head_count,
+                self.request.head_size,
+                self.request.scale,
+                &mut stream.native,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (params, scaled_scores_trace);
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
     /// Executes the fixed37 two-pass backend without an HBM workspace.
     ///
     /// This method fails closed before launch unless this prepared plan's
@@ -3879,6 +3945,36 @@ fn validate_execute_params(
             ],
         )
     }
+}
+
+fn validate_reference_scaled_scores_trace(
+    prepared: &PreparedDecodeAttention,
+    logical_token_count: u64,
+    scaled_scores_trace: &CudaBufferSpanMut<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "decode_attention_scaled_scores_trace";
+    require_dtype(
+        OPERATION,
+        "scaled_scores_trace",
+        scaled_scores_trace.dtype(),
+        CudaDType::BF16,
+    )?;
+    let trace_bytes = checked_bytes(
+        OPERATION,
+        &[
+            prepared.request.query_head_count,
+            logical_token_count,
+            BF16_BYTES,
+        ],
+    )?;
+    require_capacity(
+        OPERATION,
+        "scaled_scores_trace",
+        scaled_scores_trace.byte_len(),
+        trace_bytes,
+    )?;
+    validate_resources(OPERATION, stream, &[scaled_scores_trace.buffer()])
 }
 
 fn validate_no_workspace_execute_params(

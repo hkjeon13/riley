@@ -2549,6 +2549,17 @@ RileyCudaStatus riley_cuda_decode_attention_reference_execute(
     const RileyCudaDecodeAttentionReferenceParams* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Diagnostic-only companion to the materialized reference decode. It runs the
+// identical QK and staged-BF16 scale kernels, copies the scaled BF16
+// [query_head_count, logical_token_count] scores into the separately owned
+// trace span, then runs the same softmax and AV kernels. The trace span must
+// not overlap any execution input, workspace, or output. Normal serving does
+// not call this symbol.
+RileyCudaStatus riley_cuda_decode_attention_reference_execute_scaled_scores_trace(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    const RileyCudaBufferSpan* scaled_scores_trace,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Fixed-contiguous-37 materialized decode reuses the reference descriptor and
 // BF16 [QH,T] workspace. Logical D and T are each limited to 151552 elements.
 // QK, softmax maximum/denominator, and AV use ascending 37-element F32 left
