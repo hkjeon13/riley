@@ -16,10 +16,11 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use riley_cuda::{
-    AvGqaParams, CausalSoftmaxInPlaceParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaPinnedHostBuffer, CudaRuntime, CudaStream, QkGqaParams,
-    ScaleCausalMaskInPlaceParams, av_gqa, causal_softmax_in_place, qk_gqa,
-    scale_causal_mask_in_place,
+    AttentionBackend, AttentionBackendAvailability, AttentionPreference, AvGqaParams,
+    CausalSoftmaxInPlaceParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
+    CudaDeviceBuffer, CudaPinnedHostBuffer, CudaRuntime, CudaStream, PrefillAttentionParams,
+    PrefillAttentionRequest, PreparedPrefillAttention, QkGqaParams, ScaleCausalMaskInPlaceParams,
+    av_gqa, causal_softmax_in_place, qk_gqa, scale_causal_mask_in_place,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -28,11 +29,14 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const ARTIFACT_ROOT_ENV: &str = "RILEY_QWEN3B_P2051_ATTENTION_BOUNDARY_ROOT";
 const OUTPUT_ENV: &str = "RILEY_QWEN3B_P2051_ATTENTION_BOUNDARY_OUTPUT";
+const CUBLASLT_OUTPUT_ENV: &str = "RILEY_QWEN3B_P2051_CUBLASLT_PROBE_OUTPUT";
 const MARKER_PREFIX: &str = "RILEY_QWEN3B_P2051_ATTENTION_BOUNDARY=";
 const ARTIFACT_SCHEMA: &str = "riley.qwen3b-p2051-attention-boundary-probe.v1";
 const ARTIFACT_KIND: &str = "offline-hf-qwen2-eager-attention-boundary-probe";
 const RESULT_SCHEMA: &str = "riley.qwen3b-p2051-native-attention-boundary-comparison.v1";
 const RESULT_KIND: &str = "qwen2.5-3b-riley-p2051-native-attention-boundary-comparison";
+const CUBLASLT_RESULT_SCHEMA: &str = "riley.qwen3b-p2051-cublaslt-attention-probe-comparison.v1";
+const CUBLASLT_RESULT_KIND: &str = "qwen2.5-3b-riley-p2051-cublaslt-attention-probe-comparison";
 const INPUT_SHA256: &str = "850a1cb46f8fa5e98af1445a95d77af6621705afc14cb740ec6cb24a638f9c2c";
 const HF_EAGER_SOURCE_SHA256: &str =
     "cb34ccea28710ae8d5d94a241b704ea3d974048f85372f0b1b3c2a8a2ef1ee20";
@@ -360,10 +364,11 @@ fn av(
     output: &mut CudaDeviceBuffer,
     stream: &mut CudaStream,
 ) -> TestResult {
+    let output_bytes = output.byte_len();
     let mut params = AvGqaParams {
         probabilities: CudaBufferSpan::new(scores, CudaDType::BF16, 0, scores.byte_len())?,
         value: CudaBufferSpan::new(value, CudaDType::BF16, 0, value.byte_len())?,
-        output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, output.byte_len())?,
+        output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, output_bytes)?,
         token_count: S,
         query_head_count: QH,
         key_value_head_count: KVH,
@@ -518,11 +523,129 @@ fn run_native_boundary(artifact: &BoundaryArtifact) -> TestResult<Value> {
     Ok(document)
 }
 
-fn output_path() -> TestResult<PathBuf> {
-    let output = required_path(OUTPUT_ENV)?;
+fn run_hf_eager_qwen_p2051_probe(artifact: &BoundaryArtifact) -> TestResult<Value> {
+    let query_bytes = tensor(artifact, "query_bshd")?;
+    let key_bytes = tensor(artifact, "key_bshd")?;
+    let value_bytes = tensor(artifact, "value_bshd")?;
+    let expected_probabilities = tensor(artifact, "probabilities_last")?;
+    let expected_context = tensor(artifact, "context_bshd")?;
+    let request =
+        PrefillAttentionRequest::new(1, S, QH, KVH, D, SCALE, riley_cuda::AttentionMask::Causal);
+
+    let (context, mut stream) = first_context()?;
+    let prepared = PreparedPrefillAttention::select(
+        &context,
+        request,
+        AttentionPreference::HuggingFaceEagerQwenP2051Probe,
+        AttentionBackendAvailability::linked(),
+    )?;
+    assert_eq!(
+        prepared.backend(),
+        AttentionBackend::HuggingFaceEagerQwenP2051Probe
+    );
+    let trace = prepared.selection_trace();
+    let mut transfer_staging =
+        context.allocate_pinned_host_buffer(u64::try_from(query_bytes.len())?)?;
+    let mut row_staging = context.allocate_pinned_host_buffer(S * 2)?;
+    let query = upload(&context, &mut stream, &mut transfer_staging, query_bytes)?;
+    let key = upload(&context, &mut stream, &mut transfer_staging, key_bytes)?;
+    let value = upload(&context, &mut stream, &mut transfer_staging, value_bytes)?;
+    let mut output = context.allocate_device_buffer(u64::try_from(expected_context.len())?)?;
+    let mut workspace = context.allocate_device_buffer(prepared.workspace_bytes())?;
+    let before = context.allocation_stats()?;
+
+    {
+        let workspace_bytes = workspace.byte_len();
+        let output_bytes = output.byte_len();
+        let mut params = PrefillAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+            value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_bytes)?,
+            workspace: Some(CudaBufferSpanMut::new(
+                &mut workspace,
+                CudaDType::BF16,
+                0,
+                workspace_bytes,
+            )?),
+        };
+        prepared.execute(&mut params, &mut stream)?;
+    }
+    let probabilities_last =
+        download_last_score_rows(&mut stream, &mut workspace, &mut row_staging)?;
+    let context_bshd = download_full(&mut stream, &mut output, &mut transfer_staging)?;
+    if context.allocation_stats()? != before {
+        return Err("Qwen P2051 cuBLASLt probe hot path changed allocations".into());
+    }
+
+    {
+        let workspace_bytes = workspace.byte_len();
+        let output_bytes = output.byte_len();
+        let mut params = PrefillAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+            value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_bytes)?,
+            workspace: Some(CudaBufferSpanMut::new(
+                &mut workspace,
+                CudaDType::BF16,
+                0,
+                workspace_bytes,
+            )?),
+        };
+        prepared.execute(&mut params, &mut stream)?;
+    }
+    let repeated_context_bshd = download_full(&mut stream, &mut output, &mut transfer_staging)?;
+    if context.allocation_stats()? != before {
+        return Err("repeated Qwen P2051 cuBLASLt probe changed allocations".into());
+    }
+
+    let result = (|| -> TestResult<Value> {
+        let probabilities = bf16_metrics(expected_probabilities, &probabilities_last)?;
+        let context_metrics = bf16_metrics(expected_context, &context_bshd)?;
+        let repeat = bf16_metrics(&context_bshd, &repeated_context_bshd)?;
+        Ok(json!({
+            "implementation_id": trace.implementation_id(),
+            "implementation_version": trace.implementation_version(),
+            "selection_reason": format!("{:?}", trace.reason()),
+            "cache_free": true,
+            "hot_execution_allocation_stable": true,
+            "stages": {
+                "probabilities_last": probabilities,
+                "context_bshd": context_metrics,
+            },
+            "repeat_execution": {
+                "context_bshd_bf16_exact": exact(&repeat)?,
+                "context_bshd": repeat,
+            },
+        }))
+    })();
+
+    prepared.close()?;
+    workspace.close()?;
+    output.close()?;
+    value.close()?;
+    key.close()?;
+    query.close()?;
+    row_staging.close()?;
+    transfer_staging.close()?;
+    stream.close()?;
+    context.synchronize()?;
+    let lifecycle_clean = context.allocation_stats()?.is_zero();
+    context.close()?;
+    let mut document = result?;
+    document["lifecycle_clean_after_close"] = json!(lifecycle_clean);
+    if !lifecycle_clean {
+        return Err("Qwen P2051 cuBLASLt probe did not release every allocation".into());
+    }
+    Ok(document)
+}
+
+fn output_path_for(variable: &str) -> TestResult<PathBuf> {
+    let output = required_path(variable)?;
     if !output.is_absolute() || output.extension().and_then(|value| value.to_str()) != Some("json")
     {
-        return Err(format!("{OUTPUT_ENV} must be an absolute .json path").into());
+        return Err(format!("{variable} must be an absolute .json path").into());
     }
     let parent = output
         .parent()
@@ -616,12 +739,84 @@ fn qwen3b_p2051_native_attention_boundary_quality_gate() -> TestResult {
             "serving_selector_eligible": false,
         },
     });
-    let output = output_path()?;
+    let output = output_path_for(OUTPUT_ENV)?;
     write_artifact_exclusive(&output, &receipt)?;
     println!("{MARKER_PREFIX}{}", serde_json::to_string(&receipt)?);
     if !quality_pass {
         return Err(
             "native P2051 attention boundary quality gate failed; candidate design and serving promotion remain blocked"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires a remote Qwen2.5-3B Hugging Face eager boundary artifact and CUDA GPU"]
+fn qwen3b_p2051_cublaslt_attention_probe_quality_gate() -> TestResult {
+    let artifact = load_artifact()?;
+    let candidate = run_hf_eager_qwen_p2051_probe(&artifact)?;
+    let stages = candidate
+        .get("stages")
+        .and_then(Value::as_object)
+        .ok_or("cuBLASLt probe stages are missing")?;
+    let probabilities_exact = exact(
+        stages
+            .get("probabilities_last")
+            .ok_or("cuBLASLt probability metric missing")?,
+    )?;
+    let context_exact = exact(
+        stages
+            .get("context_bshd")
+            .ok_or("cuBLASLt context metric missing")?,
+    )?;
+    let repeat_exact =
+        candidate["repeat_execution"]["context_bshd_bf16_exact"] == Value::Bool(true);
+    let quality_pass = probabilities_exact
+        && context_exact
+        && repeat_exact
+        && candidate["hot_execution_allocation_stable"] == Value::Bool(true)
+        && candidate["lifecycle_clean_after_close"] == Value::Bool(true);
+    let receipt = json!({
+        "schema_version": CUBLASLT_RESULT_SCHEMA,
+        "artifact_kind": CUBLASLT_RESULT_KIND,
+        "created_at_unix_seconds": unix_seconds()?,
+        "performance_claim_eligible": false,
+        "serving_selector_eligible": false,
+        "contract": {
+            "model_id": "Qwen/Qwen2.5-3B-Instruct",
+            "model_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+            "token_count": S,
+            "query_head_count": QH,
+            "key_value_head_count": KVH,
+            "head_size": D,
+            "scale": SCALE,
+            "input_token_ids_le_u32_sha256": INPUT_SHA256,
+            "cache_free": true,
+            "hf_eager_source_sha256": HF_EAGER_SOURCE_SHA256,
+            "candidate_opt_in_only": true,
+        },
+        "hf_boundary_artifact": {
+            "root": artifact.root,
+            "metadata_path": artifact.metadata_path,
+            "metadata_sha256": artifact.metadata_sha256,
+        },
+        "candidate": candidate,
+        "quality_gate": {
+            "probabilities_last_bf16_exact": probabilities_exact,
+            "context_bshd_bf16_exact": context_exact,
+            "repeat_context_bshd_bf16_exact": repeat_exact,
+            "quality_pass": quality_pass,
+            "corrected_cache_on_eligible": false,
+            "serving_selector_eligible": false,
+        },
+    });
+    let output = output_path_for(CUBLASLT_OUTPUT_ENV)?;
+    write_artifact_exclusive(&output, &receipt)?;
+    println!("{MARKER_PREFIX}{}", serde_json::to_string(&receipt)?);
+    if !quality_pass {
+        return Err(
+            "Qwen P2051 cuBLASLt attention probe quality gate failed; cache-on and serving promotion remain blocked"
                 .into(),
         );
     }

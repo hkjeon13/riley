@@ -27,6 +27,14 @@ constexpr uint64_t kReviewedQueryHeads = 9;
 constexpr uint64_t kReviewedKeyValueHeads = 3;
 constexpr uint64_t kReviewedHeadSize = 64;
 constexpr uint64_t kReviewedMaximumSequence = 8192;
+// This is a diagnostic-only geometry. Rust exposes it through a distinct
+// explicit probe preference; normal serving selection remains constrained to
+// the reviewed 9/3/64 plan above. Its numerical acceptance comes from the HF
+// boundary receipt rather than the Llama-specific algorithm allowlist.
+constexpr uint64_t kQwenP2051ProbeQueryHeads = 16;
+constexpr uint64_t kQwenP2051ProbeKeyValueHeads = 2;
+constexpr uint64_t kQwenP2051ProbeHeadSize = 128;
+constexpr uint64_t kQwenP2051ProbeSequence = 2051;
 
 using riley_cuda_internal::CurrentContext;
 using riley_cuda_internal::clear_error;
@@ -83,6 +91,22 @@ struct ResolvedSpan {
   uint64_t byte_offset;
   uint64_t byte_len;
 };
+
+bool is_reviewed_geometry(
+    const RileyCudaHfPrefillAttentionConfig& config) noexcept {
+  return config.query_head_count == kReviewedQueryHeads &&
+         config.key_value_head_count == kReviewedKeyValueHeads &&
+         config.head_size == kReviewedHeadSize &&
+         config.token_count <= kReviewedMaximumSequence;
+}
+
+bool is_qwen_p2051_probe_geometry(
+    const RileyCudaHfPrefillAttentionConfig& config) noexcept {
+  return config.query_head_count == kQwenP2051ProbeQueryHeads &&
+         config.key_value_head_count == kQwenP2051ProbeKeyValueHeads &&
+         config.head_size == kQwenP2051ProbeHeadSize &&
+         config.token_count == kQwenP2051ProbeSequence;
+}
 
 bool checked_add(uint64_t left, uint64_t right, uint64_t* output) noexcept {
   if (output == nullptr || right > std::numeric_limits<uint64_t>::max() - left) {
@@ -219,14 +243,11 @@ RileyCudaStatus validate_config(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "key_value_head_count must divide query_head_count");
   }
-  if (config->query_head_count != kReviewedQueryHeads ||
-      config->key_value_head_count != kReviewedKeyValueHeads ||
-      config->head_size != kReviewedHeadSize ||
-      config->token_count > kReviewedMaximumSequence) {
+  if (!is_reviewed_geometry(*config) && !is_qwen_p2051_probe_geometry(*config)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-        "the reviewed HF backend requires QH=9, KVH=3, D=64, and S<=8192");
+        "the reviewed HF backend requires QH=9, KVH=3, D=64, S<=8192, or the explicit Qwen P2051 diagnostic geometry");
   }
   if (config->query_head_count >
           static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
@@ -715,6 +736,9 @@ RileyCudaStatus prepare_plan(
   plan->info.query_head_count = plan->config.query_head_count;
   plan->info.key_value_head_count = plan->config.key_value_head_count;
   plan->info.head_size = plan->config.head_size;
+  if (is_qwen_p2051_probe_geometry(plan->config)) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
   return validate_reviewed_plan_provenance(plan, error);
 }
 

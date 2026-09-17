@@ -3557,7 +3557,9 @@ impl PreparedLlamaForward {
 const fn attention_probabilities_available(backend: AttentionBackend) -> bool {
     matches!(
         backend,
-        AttentionBackend::MaterializedReference | AttentionBackend::HuggingFaceEager
+        AttentionBackend::MaterializedReference
+            | AttentionBackend::HuggingFaceEager
+            | AttentionBackend::HuggingFaceEagerQwenP2051Probe
     )
 }
 
