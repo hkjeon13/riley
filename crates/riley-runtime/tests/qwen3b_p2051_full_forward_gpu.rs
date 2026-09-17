@@ -26,7 +26,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use riley_model::{LoadLimits, LoadedModel, ModelArchitecture, ModelFamily};
 use riley_runtime::llama::{
-    LlamaProjectionBiasMode, LlamaTracePoint, PreparedLlamaForward, PreparedLlamaForwardConfig,
+    LlamaLastTokenLayerStage, LlamaProjectionBiasMode, LlamaTracePoint, PreparedLlamaForward,
+    PreparedLlamaForwardConfig,
 };
 use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
 use riley_tensor::DType;
@@ -49,11 +50,22 @@ const REFERENCE_ATTENTION_BUDGET_BYTES: u64 = 1_342_177_280;
 const STAGE_SCHEMA_VERSION: &str = "riley.qwen3b-hf-eager-p2051-cache-off-layer-stage-trace.v1";
 const STAGE_ARTIFACT_KIND: &str = "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-layer-stage-trace";
 const STAGE_TRACE_ID: &str = "qwen3b-p2051-cache-off-last-token-layer-stage-v1";
+const FULL_SEQUENCE_STAGE_SCHEMA_VERSION: &str =
+    "riley.qwen3b-hf-eager-p2051-cache-off-full-sequence-layer-stage-trace.v1";
+const FULL_SEQUENCE_STAGE_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-hf-eager-bf16-p2051-cache-off-full-sequence-layer-stage-trace";
+const FULL_SEQUENCE_STAGE_TRACE_ID: &str = "qwen3b-p2051-cache-off-full-sequence-layer1-stage-v1";
+const FULL_SEQUENCE_STAGE_LAYER_INDEX: usize = 1;
 const RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2051-hf-compatible-cache-free-full-forward-comparison.v1";
 const RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2051-hf-compatible-cache-free-full-forward-comparison";
 const MARKER_PREFIX: &str = "RILEY_QWEN3B_P2051_HF_COMPAT_FULL_FORWARD=";
+const FULL_SEQUENCE_RESULT_SCHEMA_VERSION: &str =
+    "riley.qwen3b-p2051-hf-compatible-cache-free-full-sequence-layer-stage-comparison.v1";
+const FULL_SEQUENCE_RESULT_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-riley-p2051-hf-compatible-cache-free-full-sequence-layer-stage-comparison";
+const FULL_SEQUENCE_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2051_HF_COMPAT_FULL_SEQUENCE_LAYER_STAGE=";
 const QWEN3B_MODEL_ID: &str = "Qwen/Qwen2.5-3B-Instruct";
 const QWEN3B_REVISION: &str = "aa8e72537993ba99e69dfaafa59ed015b17504d1";
 const QWEN3B_WORKLOAD_SCHEMA: &str = "riley.n06a-d128-serving-workload.v1";
@@ -108,6 +120,7 @@ enum StageSource {
     LayerOutput,
     FinalNormOutput,
     LastLogits,
+    FullSequence(LlamaLastTokenLayerStage),
 }
 
 #[derive(Clone, Debug)]
@@ -220,6 +233,22 @@ impl MlpProjectionProfile {
 
 #[derive(Debug)]
 struct HfStageArtifact {
+    manifest_path: PathBuf,
+    manifest_sha256: String,
+    sidecar_path: PathBuf,
+    sidecar_sha256: String,
+    input_token_ids_le_sha256: String,
+    teacher_artifact_sha256: String,
+    teacher_sidecar_sha256: String,
+    teacher_full_token_ids_sha256: String,
+    teacher_prefix_token_ids: Vec<u32>,
+    checkpoint_receipt_filename: String,
+    checkpoint_receipt_sha256: String,
+    tensors: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Debug)]
+struct HfFullSequenceStageArtifact {
     manifest_path: PathBuf,
     manifest_sha256: String,
     sidecar_path: PathBuf,
@@ -597,6 +626,47 @@ fn expected_stage_specs() -> Vec<StageSpec> {
     });
     assert_eq!(stages.len(), 52);
     stages
+}
+
+fn expected_full_sequence_stage_specs() -> Vec<StageSpec> {
+    let sequence = u64::try_from(CONTEXT_TOKEN_COUNT).expect("context token count fits");
+    let hidden = u64::try_from(QWEN3B_HIDDEN_SIZE).expect("hidden size fits");
+    let key_value_width = u64::try_from(QWEN3B_KEY_VALUE_HEADS * QWEN3B_HEAD_DIMENSION)
+        .expect("key/value width fits");
+    let hidden_stage = |name: &str, stage| StageSpec {
+        name: name.to_owned(),
+        shape: vec![sequence, hidden],
+        source: StageSource::FullSequence(stage),
+    };
+    vec![
+        hidden_stage(
+            "layer1.input_norm.full",
+            LlamaLastTokenLayerStage::InputNorm,
+        ),
+        hidden_stage(
+            "layer1.q_proj.full",
+            LlamaLastTokenLayerStage::QueryProjection,
+        ),
+        StageSpec {
+            name: "layer1.k_proj.full".to_owned(),
+            shape: vec![sequence, key_value_width],
+            source: StageSource::FullSequence(LlamaLastTokenLayerStage::KeyProjection),
+        },
+        StageSpec {
+            name: "layer1.v_proj.full".to_owned(),
+            shape: vec![sequence, key_value_width],
+            source: StageSource::FullSequence(LlamaLastTokenLayerStage::ValueProjection),
+        },
+        hidden_stage(
+            "layer1.attention_context.full",
+            LlamaLastTokenLayerStage::AttentionContext,
+        ),
+        hidden_stage(
+            "layer1.after_attention_residual.full",
+            LlamaLastTokenLayerStage::AfterAttentionResidual,
+        ),
+        hidden_stage("layer1.output.full", LlamaLastTokenLayerStage::Output),
+    ]
 }
 
 fn shape_byte_len(shape: &[u64]) -> TestResult<usize> {
@@ -986,16 +1056,236 @@ fn load_hf_stage_artifact(
     })
 }
 
+fn load_hf_full_sequence_stage_artifact(
+    teacher: &TeacherPrefix,
+    workload: &Workload,
+) -> TestResult<HfFullSequenceStageArtifact> {
+    let manifest_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_MANIFEST")?,
+        "HF P2051 full-sequence stage manifest",
+    )?;
+    let sidecar_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_SIDECAR")?,
+        "HF P2051 full-sequence stage sidecar",
+    )?;
+    let payload = fs::read(&manifest_path)?;
+    let manifest_sha256 = sha256_hex(&payload);
+    let manifest: Value = serde_json::from_slice(&payload)?;
+    if manifest["schema_version"].as_str() != Some(FULL_SEQUENCE_STAGE_SCHEMA_VERSION)
+        || manifest["artifact_kind"].as_str() != Some(FULL_SEQUENCE_STAGE_ARTIFACT_KIND)
+        || manifest["trace_id"].as_str() != Some(FULL_SEQUENCE_STAGE_TRACE_ID)
+        || manifest["performance_claim_eligible"].as_bool() != Some(false)
+        || manifest["trace_profile"]
+            != json!({
+                "capture_domain": "cache-free-p2051-full-sequence-layer-boundaries",
+                "id": FULL_SEQUENCE_STAGE_TRACE_ID,
+                "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
+                "tensor_count": 7,
+                "rust_consumer": {
+                    "api": "riley_runtime::llama::PreparedLlamaForward::prepare_full_sequence_layer_stage_trace+execute_full_sequence_layer_stage_traced",
+                    "attention_backend": "hf-eager-cublaslt-qwen-p2051-probe",
+                    "cache": false,
+                    "input_context_token_count": CONTEXT_TOKEN_COUNT,
+                    "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
+                    "trace_row_layout": "full-sequence-token-major",
+                },
+            })
+    {
+        return Err("HF P2051 full-sequence stage manifest identity differs".into());
+    }
+    require_exact_fields(
+        &manifest["model"],
+        &[
+            "checkpoint_path",
+            "checkpoint_receipt_filename",
+            "checkpoint_receipt_sha256",
+        ],
+        "HF P2051 full-sequence stage model",
+    )?;
+    let model = manifest["model"]
+        .as_object()
+        .ok_or("HF P2051 full-sequence stage model is missing")?;
+    if model
+        .get("checkpoint_path")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+        || model
+            .get("checkpoint_receipt_filename")
+            .and_then(Value::as_str)
+            != Some(CHECKPOINT_RECEIPT_FILENAME)
+    {
+        return Err("HF P2051 full-sequence stage checkpoint receipt identity differs".into());
+    }
+    let checkpoint_receipt_filename = CHECKPOINT_RECEIPT_FILENAME.to_owned();
+    let checkpoint_receipt_sha256 = json_sha256(
+        model
+            .get("checkpoint_receipt_sha256")
+            .ok_or("HF P2051 full-sequence stage checkpoint receipt SHA-256 is missing")?,
+        "HF P2051 full-sequence stage checkpoint receipt SHA-256",
+    )?;
+    let contract = manifest["contract"]
+        .as_object()
+        .ok_or("HF P2051 full-sequence stage contract is missing")?;
+    if contract.get("model_id").and_then(Value::as_str) != Some(QWEN3B_MODEL_ID)
+        || contract.get("model_revision").and_then(Value::as_str) != Some(QWEN3B_REVISION)
+        || contract.get("execution")
+            != Some(&json!({
+                "attention_implementation": "eager",
+                "cache_free": true,
+                "dtype": "bfloat16",
+                "explicit_attention_mask": true,
+                "explicit_input_ids": true,
+                "explicit_position_ids": true,
+                "inference_mode": true,
+                "logits_to_keep": 1,
+                "return_dict": true,
+                "tf32_enabled": false,
+                "use_cache": false,
+            }))
+    {
+        return Err("HF P2051 full-sequence stage execution contract differs".into());
+    }
+    let workload_contract = contract
+        .get("workload")
+        .and_then(Value::as_object)
+        .ok_or("HF P2051 full-sequence workload contract is missing")?;
+    if workload_contract
+        .get("source_sha256")
+        .and_then(Value::as_str)
+        != Some(QWEN3B_WORKLOAD_SHA256)
+        || workload_contract
+            .get("prompt_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(workload.prompt_token_ids.len())?)
+        || workload_contract
+            .get("prompt_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_PROMPT_TOKEN_SHA256)
+    {
+        return Err("HF P2051 full-sequence workload contract differs".into());
+    }
+    let input = contract
+        .get("input")
+        .and_then(Value::as_object)
+        .ok_or("HF P2051 full-sequence input contract is missing")?;
+    let expected_input = workload
+        .prompt_token_ids
+        .iter()
+        .copied()
+        .chain(teacher.token_ids.iter().copied())
+        .collect::<Vec<_>>();
+    let input_token_ids_le_sha256 = token_ids_sha256(&expected_input);
+    if input.get("construction").and_then(Value::as_str)
+        != Some("workload.prompt_token_ids+verified_hf_cache_off.teacher_token_ids[:3]")
+        || input.get("context_token_count").and_then(Value::as_u64)
+            != Some(u64::try_from(CONTEXT_TOKEN_COUNT)?)
+        || input
+            .get("input_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(input_token_ids_le_sha256.as_str())
+        || json_u32_array(
+            input
+                .get("teacher_prefix_token_ids")
+                .ok_or("HF P2051 full-sequence teacher prefix missing")?,
+            "HF P2051 full-sequence teacher prefix",
+        )? != teacher.token_ids
+    {
+        return Err("HF P2051 full-sequence input binding differs".into());
+    }
+    let teacher_source = input
+        .get("teacher_source")
+        .and_then(Value::as_object)
+        .ok_or("HF P2051 full-sequence teacher source is missing")?;
+    if teacher_source
+        .get("artifact_sha256")
+        .and_then(Value::as_str)
+        != Some(teacher.artifact_sha256.as_str())
+        || teacher_source.get("cache_mode").and_then(Value::as_str) != Some("cache-off")
+        || teacher_source
+            .get("cache_off_sidecar_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.cache_off_sidecar_sha256.as_str())
+        || teacher_source
+            .get("full_teacher_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.full_teacher_token_ids_sha256.as_str())
+        || teacher_source
+            .get("cache_off_sidecar_tensor_key")
+            .and_then(Value::as_str)
+            != Some(TEACHER_CACHE_OFF_SIDECAR_KEY)
+    {
+        return Err("HF P2051 full-sequence teacher source binding differs".into());
+    }
+    let root = repository_root()?;
+    let provenance = manifest["provenance"]["source_repository"]
+        .as_object()
+        .ok_or("HF P2051 full-sequence source provenance is missing")?;
+    if provenance.get("source_dirty").and_then(Value::as_bool) != Some(false) {
+        return Err("HF P2051 full-sequence source provenance is dirty".into());
+    }
+    let sources = provenance
+        .get("sources")
+        .and_then(Value::as_object)
+        .ok_or("HF P2051 full-sequence source records are missing")?;
+    if !sources.contains_key("p2051_full_sequence_layer_stage_trace")
+        || !sources.contains_key("rust_full_sequence_discriminator")
+        || !sources.contains_key("rust_trace_point_api")
+    {
+        return Err("HF P2051 full-sequence source records omit consumer bindings".into());
+    }
+    for (name, record) in sources {
+        validate_source_record(
+            &root,
+            record,
+            &format!("HF P2051 full-sequence source {name}"),
+        )?;
+    }
+    let specs = expected_full_sequence_stage_specs();
+    let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
+    let sidecar_sha256 = sha256_file(&sidecar_path)?;
+    Ok(HfFullSequenceStageArtifact {
+        manifest_path,
+        manifest_sha256,
+        sidecar_path,
+        sidecar_sha256,
+        input_token_ids_le_sha256,
+        teacher_artifact_sha256: teacher.artifact_sha256.clone(),
+        teacher_sidecar_sha256: teacher.cache_off_sidecar_sha256.clone(),
+        teacher_full_token_ids_sha256: teacher.full_teacher_token_ids_sha256.clone(),
+        teacher_prefix_token_ids: teacher.token_ids.clone(),
+        checkpoint_receipt_filename,
+        checkpoint_receipt_sha256,
+        tensors,
+    })
+}
+
 fn load_model(hf: &HfStageArtifact) -> TestResult<LoadedModel> {
+    load_model_from_checkpoint_receipt(
+        &hf.checkpoint_receipt_filename,
+        &hf.checkpoint_receipt_sha256,
+    )
+}
+
+fn load_full_sequence_model(hf: &HfFullSequenceStageArtifact) -> TestResult<LoadedModel> {
+    load_model_from_checkpoint_receipt(
+        &hf.checkpoint_receipt_filename,
+        &hf.checkpoint_receipt_sha256,
+    )
+}
+
+fn load_model_from_checkpoint_receipt(
+    checkpoint_receipt_filename: &str,
+    checkpoint_receipt_sha256: &str,
+) -> TestResult<LoadedModel> {
     let checkpoint = regular_directory(
         &required_path("RILEY_QWEN3B_CHECKPOINT")?,
         "Qwen checkpoint",
     )?;
     let receipt = regular_file(
-        &checkpoint.join(&hf.checkpoint_receipt_filename),
+        &checkpoint.join(checkpoint_receipt_filename),
         "Qwen checkpoint receipt",
     )?;
-    if sha256_file(&receipt)? != hf.checkpoint_receipt_sha256 {
+    if sha256_file(&receipt)? != checkpoint_receipt_sha256 {
         return Err("Qwen checkpoint receipt differs from HF P2051 stage artifact".into());
     }
     let model = LoadedModel::load(
@@ -1448,6 +1738,218 @@ fn run_profile(
     }
 }
 
+fn run_full_sequence_layer_stage_profile(
+    model: &LoadedModel,
+    input: &[u32],
+    hf: &HfFullSequenceStageArtifact,
+) -> TestResult<Value> {
+    let (context, mut stream) = first_context()?;
+    let config = PreparedLlamaForwardConfig::new(
+        FULL_FORWARD_UPLOAD_STAGING_BYTES,
+        FULL_FORWARD_IO_STAGING_BYTES,
+        HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
+        REFERENCE_ATTENTION_BUDGET_BYTES,
+    )
+    .with_hf_compatible_bias_epilogue_projection_probe()
+    .with_hugging_face_eager_qwen_p2051_probe_attention()
+    .with_hf_eager_qwen_p2051_direct_cublas_output_projection_probe()
+    .with_hf_eager_qwen_p2051_direct_cublas_mlp_projection_probe();
+    let mut forward = match PreparedLlamaForward::prepare(
+        model,
+        &context,
+        &mut stream,
+        input.len(),
+        config,
+    ) {
+        Ok(forward) => forward,
+        Err(error) => {
+            let cleanup = close_resources(None, stream, context);
+            return match cleanup {
+                Ok(()) => Err(error.into()),
+                Err(cleanup_error) => Err(format!(
+                    "full-sequence forward preparation failed: {error}; cleanup also failed: {cleanup_error}"
+                )
+                .into()),
+            };
+        }
+    };
+    let result = (|| -> TestResult<Value> {
+        if forward.projection_bias_mode()
+            != LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
+            || forward.attention_selection().implementation_id()
+                != HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID
+            || forward.output_projection_backend_id()
+                != HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID
+            || forward.mlp_projection_backend_id()
+                != HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID
+        {
+            return Err("full-sequence forward selected an unexpected numerical backend".into());
+        }
+        let specs = expected_full_sequence_stage_specs();
+        let selected = specs
+            .iter()
+            .map(|spec| match spec.source {
+                StageSource::FullSequence(stage) => Ok(stage),
+                _ => Err("full-sequence stage source is malformed".into()),
+            })
+            .collect::<TestResult<Vec<_>>>()?;
+        let mut trace = forward
+            .prepare_full_sequence_layer_stage_trace(FULL_SEQUENCE_STAGE_LAYER_INDEX, &selected)?;
+        if trace.layer_index() != FULL_SEQUENCE_STAGE_LAYER_INDEX
+            || trace.requested_stage_count() != u32::try_from(selected.len())?
+        {
+            return Err("full-sequence layer trace preparation contract differs".into());
+        }
+        for spec in &specs {
+            let stage = match spec.source {
+                StageSource::FullSequence(stage) => stage,
+                _ => return Err("full-sequence stage source is malformed".into()),
+            };
+            if trace.tensor_byte_len(stage) != shape_byte_len(&spec.shape)? {
+                return Err(format!("full-sequence {} byte reservation differs", spec.name).into());
+            }
+        }
+        let allocation_report = forward.allocation_report();
+        forward.upload_tokens(input, &mut stream)?;
+        forward.execute_full_sequence_layer_stage_traced(&mut stream, &mut trace)?;
+        if !trace.is_complete() || trace.captured_stage_count() != u32::try_from(selected.len())? {
+            return Err("full-sequence layer trace did not capture every requested stage".into());
+        }
+        let mut observed = BTreeMap::new();
+        for spec in &specs {
+            let stage = match spec.source {
+                StageSource::FullSequence(stage) => stage,
+                _ => return Err("full-sequence stage source is malformed".into()),
+            };
+            let tensor = trace
+                .tensor(stage)
+                .ok_or("full-sequence layer trace tensor is missing")?;
+            let row_major = canonical_bf16_le(tensor)?;
+            if row_major.len() != shape_byte_len(&spec.shape)? {
+                return Err(format!("full-sequence {} byte length differs", spec.name).into());
+            }
+            observed.insert(spec.name.clone(), row_major);
+        }
+
+        // Re-run with the same prepared owner and the same trace storage. This
+        // catches reuse or workspace-lifetime sensitivity without treating a
+        // trace D2H path as a serving measurement.
+        forward.execute_full_sequence_layer_stage_traced(&mut stream, &mut trace)?;
+        if !trace.is_complete() || trace.captured_stage_count() != u32::try_from(selected.len())? {
+            return Err("repeat full-sequence layer trace is incomplete".into());
+        }
+        for spec in &specs {
+            let stage = match spec.source {
+                StageSource::FullSequence(stage) => stage,
+                _ => return Err("full-sequence stage source is malformed".into()),
+            };
+            let repeated = canonical_bf16_le(
+                trace
+                    .tensor(stage)
+                    .ok_or("repeat full-sequence layer trace tensor is missing")?,
+            )?;
+            if observed.get(&spec.name) != Some(&repeated) {
+                return Err(format!("repeat {} BF16 tensor differs", spec.name).into());
+            }
+        }
+
+        let mut stages = Map::new();
+        let mut exact_count = 0_u64;
+        let mut first_non_exact = None;
+        for spec in &specs {
+            let hf_bytes = hf
+                .tensors
+                .get(&spec.name)
+                .ok_or("HF full-sequence stage tensor is missing")?;
+            let riley_bytes = observed
+                .get(&spec.name)
+                .ok_or("Riley full-sequence stage tensor is missing")?;
+            if hf_bytes.len() != shape_byte_len(&spec.shape)? || riley_bytes.len() != hf_bytes.len()
+            {
+                return Err(format!(
+                    "full-sequence {} byte length differs from contract",
+                    spec.name
+                )
+                .into());
+            }
+            let stage_metrics = metrics(hf_bytes, riley_bytes)?;
+            if stage_metrics["bf16_exact"] == true {
+                exact_count += 1;
+            } else if first_non_exact.is_none() {
+                first_non_exact = Some(spec.name.clone());
+            }
+            stages.insert(spec.name.clone(), stage_metrics);
+        }
+        Ok(json!({
+            "profile_id": "hf-compatible-bias-epilogue-probe-v1+hf-eager-qwen-p2051-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1+hf-eager-qwen-p2051-direct-cublas-probe-v1",
+            "projection_bias_backend": forward.projection_bias_mode().id(),
+            "attention_backend": forward.attention_selection().implementation_id(),
+            "output_projection_backend": forward.output_projection_backend_id(),
+            "mlp_projection_backend": forward.mlp_projection_backend_id(),
+            "use_cache": false,
+            "same_scheduler_engine": false,
+            "full_sequence_layer_capture": {
+                "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
+                "token_count": CONTEXT_TOKEN_COUNT,
+                "stage_count": selected.len(),
+                "token_major_bf16": true,
+            },
+            "repeat_execution": {
+                "reused_prepared_owner": true,
+                "all_selected_full_sequence_tensors_bf16_exact": true,
+            },
+            "allocation_report": {
+                "weight_bytes": allocation_report.weight_bytes(),
+                "graph_bytes": allocation_report.graph_bytes(),
+                "gemm_workspace_bytes": allocation_report.gemm_workspace_bytes(),
+                "total_device_bytes": allocation_report.total_device_bytes(),
+                "device_allocation_count": allocation_report.device_allocation_count(),
+                "pinned_host_bytes": allocation_report.pinned_host_bytes(),
+                "pinned_host_allocation_count": allocation_report.pinned_host_allocation_count(),
+            },
+            "summary": {
+                "stage_count": stages.len(),
+                "bf16_exact_stage_count": exact_count,
+                "first_non_exact_stage": first_non_exact,
+            },
+            "stages": stages,
+        }))
+    })();
+    let cleanup = close_resources(Some(forward), stream, context);
+    match (result, cleanup) {
+        (Ok(result), Ok(())) => Ok(result),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "full-sequence stage execution failed: {run_error}; cleanup also failed: {cleanup_error}"
+        )
+        .into()),
+    }
+}
+
+fn full_sequence_quality_gate(profile: &Value) -> TestResult<Value> {
+    let summary = profile
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or("full-sequence stage summary is missing")?;
+    let exact_stage_count = summary
+        .get("bf16_exact_stage_count")
+        .and_then(Value::as_u64)
+        .ok_or("full-sequence exact stage count is missing")?;
+    let required_stage_count = u64::try_from(expected_full_sequence_stage_specs().len())?;
+    let full_sequence_exact = exact_stage_count == required_stage_count
+        && summary
+            .get("first_non_exact_stage")
+            .is_some_and(Value::is_null);
+    Ok(json!({
+        "required_stage_count": required_stage_count,
+        "candidate_exact_stage_count": exact_stage_count,
+        "layer1_full_sequence_bf16_exact": full_sequence_exact,
+        "cache_on_eligible": false,
+        "serving_selector_eligible": false,
+        "performance_claim_eligible": false,
+    }))
+}
+
 fn write_artifact_exclusive(path: &Path, document: &Value) -> TestResult {
     if !path.is_absolute() || path.extension().and_then(|value| value.to_str()) != Some("json") {
         return Err("P2051 stage output must be an absolute .json path".into());
@@ -1600,6 +2102,79 @@ fn qwen3b_p2051_hf_compatible_cache_free_full_forward_quality_gate() -> TestResu
     if !cache_off_full_forward_bf16_exact {
         return Err(
             "HF-compatible cache-off full-forward quality gate failed; receipt was written and cache-on/selector promotion remains blocked"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2051 full-sequence layer-stage discriminator"]
+fn qwen3b_p2051_hf_compatible_full_sequence_layer1_quality_gate() -> TestResult {
+    let workload = load_workload()?;
+    let teacher = load_teacher_prefix()?;
+    let hf = load_hf_full_sequence_stage_artifact(&teacher, &workload)?;
+    let input = workload
+        .prompt_token_ids
+        .iter()
+        .copied()
+        .chain(teacher.token_ids.iter().copied())
+        .collect::<Vec<_>>();
+    if input.len() != CONTEXT_TOKEN_COUNT
+        || token_ids_sha256(&input) != hf.input_token_ids_le_sha256
+    {
+        return Err("P2051 input does not bind the HF full-sequence stage artifact".into());
+    }
+    let model = load_full_sequence_model(&hf)?;
+    let candidate = run_full_sequence_layer_stage_profile(&model, &input, &hf)?;
+    let quality_gate = full_sequence_quality_gate(&candidate)?;
+    let full_sequence_exact = quality_gate
+        .get("layer1_full_sequence_bf16_exact")
+        .and_then(Value::as_bool)
+        .ok_or("full-sequence quality gate is missing")?;
+    let output = required_path("RILEY_QWEN3B_P2051_FULL_SEQUENCE_STAGE_OUTPUT")?;
+    let receipt = json!({
+        "schema_version": FULL_SEQUENCE_RESULT_SCHEMA_VERSION,
+        "artifact_kind": FULL_SEQUENCE_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "contract": {
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "input_token_count": CONTEXT_TOKEN_COUNT,
+            "input_token_ids_le_u32_sha256": hf.input_token_ids_le_sha256,
+            "teacher_prefix_token_count": TEACHER_PREFIX_TOKEN_COUNT,
+            "teacher_prefix_token_ids": hf.teacher_prefix_token_ids,
+            "teacher_forced_artifact_sha256": hf.teacher_artifact_sha256,
+            "teacher_cache_off_sidecar_sha256": hf.teacher_sidecar_sha256,
+            "teacher_full_token_ids_le_u32_sha256": hf.teacher_full_token_ids_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "use_cache": false,
+            "same_scheduler_engine": false,
+            "layer_index": FULL_SEQUENCE_STAGE_LAYER_INDEX,
+            "candidate_attention_backend": HF_EAGER_QWEN_P2051_PROBE_ATTENTION_BACKEND_ID,
+            "candidate_output_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
+            "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2051_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
+            "diagnostic_only": true,
+        },
+        "hf_full_sequence_stage_artifact": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "candidate": candidate,
+        "quality_gate": quality_gate,
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "{FULL_SEQUENCE_MARKER_PREFIX}{}",
+        serde_json::to_string(&receipt)?
+    );
+    if !full_sequence_exact {
+        return Err(
+            "HF-compatible full-sequence layer1 quality gate failed; receipt was written and cache-on/selector promotion remains blocked"
                 .into(),
         );
     }
