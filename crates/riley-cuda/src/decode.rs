@@ -23,6 +23,8 @@ const F32_BYTES: u64 = 4;
 const HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT: u64 = 2_049;
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_EAGER_QWEN_P2048_M1_CUBLAS_AV_WORKSPACE_BYTES: u64 = 33_554_432;
 const ONLINE_HEAD_SIZE: u64 = 64;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE: u64 = 128;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT: u64 = 16;
@@ -2006,6 +2008,100 @@ impl PreparedDecodeAttention {
             repeated_key_workspace.raw(),
             cublas_workspace.raw(),
             scaled_scores_trace.raw(),
+            self.request.maximum_sequence_length,
+            logical_token_count,
+            self.request.query_head_count,
+            self.request.key_value_head_count,
+            self.request.head_size,
+            self.request.scale,
+            &mut stream.native,
+        )
+    }
+
+    /// Replaces the reference AV reduction after the paired direct QK
+    /// diagnostic has produced BF16 softmax probabilities in its workspace.
+    ///
+    /// The source-bound path expands contiguous grouped-query values into the
+    /// reviewed QH-major layout and executes the profiled HF eager
+    /// strided-batched cuBLAS AV contract. It is synchronous and diagnostic
+    /// only; normal serving cannot select it.
+    ///
+    /// # Errors
+    ///
+    /// Returns unless this is the materialized reference backend with the
+    /// reviewed Qwen P2048-to-M1 geometry, the caller supplies the bounded
+    /// repeated-value and AV workspace spans, and native execution completes.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_hf_eager_qwen_p2048_m1_cublas_av(
+        &self,
+        logical_token_count: u64,
+        params: &mut DecodeAttentionParams<'_>,
+        repeated_value_workspace: CudaBufferSpanMut<'_>,
+        cublas_workspace: CudaBufferSpanMut<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "hf_eager_qwen_p2048_m1_cublas_av";
+        if self.backend != DecodeAttentionBackend::MaterializedReference {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "cuBLAS AV qualification requires the materialized reference decode backend",
+            ));
+        }
+        if logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+            || self.request.query_head_count != NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
+            || self.request.key_value_head_count
+                != NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
+            || self.request.head_size != NATIVE_BF16_PAGED_SPLIT_GQA_D128_HEAD_SIZE
+        {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "candidate supports only Qwen P2048-to-M1 T=2049 QH=16 KVH=2 D=128",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_execute_params(self, params, stream)?;
+        for (name, dtype) in [
+            ("repeated_value_workspace", repeated_value_workspace.dtype()),
+            ("cublas_workspace", cublas_workspace.dtype()),
+        ] {
+            require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+        }
+        let repeated_value_bytes = checked_bytes(
+            OPERATION,
+            &[
+                self.request.query_head_count,
+                logical_token_count,
+                self.request.head_size,
+                BF16_BYTES,
+            ],
+        )?;
+        require_capacity(
+            OPERATION,
+            "repeated_value_workspace",
+            repeated_value_workspace.byte_len(),
+            repeated_value_bytes,
+        )?;
+        require_capacity(
+            OPERATION,
+            "cublas_workspace",
+            cublas_workspace.byte_len(),
+            HF_EAGER_QWEN_P2048_M1_CUBLAS_AV_WORKSPACE_BYTES,
+        )?;
+        validate_resources(
+            OPERATION,
+            stream,
+            &[repeated_value_workspace.buffer(), cublas_workspace.buffer()],
+        )?;
+
+        ffi::hf_eager_qwen_p2048_m1_cublas_av_execute(
+            params.query.raw(),
+            params.key_cache.raw(),
+            params.value_cache.raw(),
+            params.workspace.raw(),
+            params.output.raw(),
+            repeated_value_workspace.raw(),
+            cublas_workspace.raw(),
             self.request.maximum_sequence_length,
             logical_token_count,
             self.request.query_head_count,

@@ -2579,6 +2579,21 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
     const RileyCudaBufferSpan* scaled_scores_trace,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Executes the observed HF eager P2048->M1 AV cuBLAS call after the paired
+// QK diagnostic has produced BF16 softmax probabilities in score_workspace.
+// `repeated_value_workspace` is a diagnostic-only [QH,T,D] repeat_kv buffer;
+// its required cuBLAS workspace is separately owned and must be 33,554,432
+// bytes, as captured from the pinned HF dispatch probe. The call is
+// synchronous, rejects command batches and graph capture, and is excluded from
+// normal CUDA archives and serving selection.
+RileyCudaStatus
+riley_cuda_hf_eager_qwen_p2048_m1_cublas_av_execute(
+    const RileyCudaDecodeAttentionReferenceParams* params,
+    const RileyCudaBufferSpan* repeated_value_workspace,
+    const RileyCudaBufferSpan* cublas_workspace,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 #endif
 // Fixed-contiguous-37 materialized decode reuses the reference descriptor and
 // BF16 [QH,T] workspace. Logical D and T are each limited to 151552 elements.
