@@ -26,8 +26,11 @@ use crate::paged_kv::{
 };
 
 use super::forward::{
-    LlamaForwardError, LlamaRopeTableProfile, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, PreparedLlamaGemm, execute_gemm, execute_profile_rms_norm,
+    LlamaForwardError, LlamaLastTokenLayerStage, LlamaRopeTableProfile,
+    PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig,
+    PreparedLlamaGemm, PreparedLlamaLastTokenLayerStageTrace, PreparedLlamaLastTokenLayerTrace,
+    capture_last_token_final_norm_output, capture_last_token_layer_residual,
+    capture_last_token_layer_stage, execute_gemm, execute_profile_rms_norm,
     execute_projection_bias, poison_for_cuda_error, poison_for_forward_error, span, span_mut,
     weight_span,
 };
@@ -41,6 +44,8 @@ const PAGED_CACHE_ALLOCATION_COUNT: u64 = 4;
 const PAGED_CACHE_PINNED_ALLOCATION_COUNT: u64 = 1;
 const ROPE_ALLOCATION_COUNT: u64 = 2;
 const ATTENTION_ALLOCATION_COUNT: u64 = 1;
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH: usize = 2_048;
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH: usize = 2_050;
 const _: () = assert!(KV_BLOCK_SIZE as u64 == PAGED_KV_BLOCK_SIZE);
 const _: () = assert!(BLOCK_TABLE_V1_VERSION as u32 == PAGED_KV_BLOCK_TABLE_VERSION);
 
@@ -472,6 +477,7 @@ pub struct PreparedLlamaDecodeConfig {
     forward: PreparedLlamaForwardConfig,
     decode_attention_preference: DecodeAttentionPreference,
     kv_cache_policy: LlamaKvCachePolicy,
+    hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
 }
 
 impl PreparedLlamaDecodeConfig {
@@ -481,6 +487,7 @@ impl PreparedLlamaDecodeConfig {
             forward,
             decode_attention_preference: DecodeAttentionPreference::Optimized,
             kv_cache_policy: LlamaKvCachePolicy::paged(),
+            hf_eager_qwen_p2048_cache_on_m1_trace_probe: false,
         }
     }
 
@@ -536,6 +543,25 @@ impl PreparedLlamaDecodeConfig {
         self
     }
 
+    /// Selects the source-bound Qwen P2048 cache-on M1 diagnostic owner.
+    ///
+    /// This fixed `P2048 -> M1` configuration is intentionally narrower than
+    /// a serving selector. It reuses the exact P2048 prefill profile, forces a
+    /// contiguous cache, and uses reference decode attention so the paired
+    /// trace can locate the first one-token cache divergence. It has no graph,
+    /// scheduler, or serving route.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_eager_qwen_p2048_cache_on_m1_trace_probe(mut self) -> Self {
+        self.forward = self
+            .forward
+            .with_hf_eager_qwen_p2048_cache_on_prefill_probe();
+        self.decode_attention_preference = DecodeAttentionPreference::Reference;
+        self.kv_cache_policy = LlamaKvCachePolicy::Contiguous;
+        self.hf_eager_qwen_p2048_cache_on_m1_trace_probe = true;
+        self
+    }
+
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
@@ -554,6 +580,12 @@ impl PreparedLlamaDecodeConfig {
     #[must_use]
     pub const fn kv_cache_policy(self) -> LlamaKvCachePolicy {
         self.kv_cache_policy
+    }
+
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub(super) const fn is_hf_eager_qwen_p2048_cache_on_m1_trace_probe(self) -> bool {
+        self.hf_eager_qwen_p2048_cache_on_m1_trace_probe
     }
 }
 
@@ -1441,6 +1473,251 @@ enum LatestOutput {
     Decode,
 }
 
+/// Caller-owned M1 rows for the source-bound Qwen P2048 cache-on diagnostic.
+///
+/// The owner records exactly the same one-token boundaries as the offline HF
+/// artifact: the embedding, every layer-zero boundary, every decoder residual
+/// output, final RMSNorm, and logits. Normal decode neither allocates it nor
+/// performs these synchronized D2H copies.
+pub struct PreparedLlamaDecodeM1Trace {
+    embedding: Box<[u8]>,
+    layer_zero: PreparedLlamaLastTokenLayerStageTrace,
+    layer_outputs: PreparedLlamaLastTokenLayerTrace,
+    logits: Box<[u8]>,
+    embedding_captured: bool,
+    logits_captured: bool,
+}
+
+impl fmt::Debug for PreparedLlamaDecodeM1Trace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedLlamaDecodeM1Trace")
+            .field("embedding_captured", &self.embedding_captured)
+            .field(
+                "layer_zero_captured",
+                &self.layer_zero.captured_stage_count(),
+            )
+            .field(
+                "layer_outputs_captured",
+                &self.layer_outputs.captured_layer_count(),
+            )
+            .field(
+                "final_norm_captured",
+                &self.layer_outputs.final_norm_output().is_some(),
+            )
+            .field("logits_captured", &self.logits_captured)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PreparedLlamaDecodeM1Trace {
+    /// Captured BF16 embedding row for the teacher-forced M1 token.
+    #[must_use]
+    pub fn embedding(&self) -> Option<&[u8]> {
+        self.embedding_captured.then(|| self.embedding.as_ref())
+    }
+
+    /// Captured layer-zero M1 boundary named by the source-bound trace schema.
+    #[must_use]
+    pub fn layer_zero(&self, stage: LlamaLastTokenLayerStage) -> Option<&[u8]> {
+        self.layer_zero.tensor(stage)
+    }
+
+    /// Captured MLP-residual output for one decoder layer at M1.
+    #[must_use]
+    pub fn layer_output(&self, layer_index: usize) -> Option<&[u8]> {
+        self.layer_outputs.layer_residual_output(layer_index)
+    }
+
+    /// Captured final RMSNorm M1 row.
+    #[must_use]
+    pub fn final_norm_output(&self) -> Option<&[u8]> {
+        self.layer_outputs.final_norm_output()
+    }
+
+    /// Captured BF16 M1 logits row.
+    #[must_use]
+    pub fn logits(&self) -> Option<&[u8]> {
+        self.logits_captured.then(|| self.logits.as_ref())
+    }
+
+    /// Whether every source-bound M1 boundary completed during the latest run.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.embedding_captured
+            && self.layer_zero.is_complete()
+            && self.layer_outputs.final_norm_output().is_some()
+            && self.layer_outputs.captured_layer_count()
+                == self.layer_outputs.requested_layer_count()
+            && self.logits_captured
+    }
+
+    fn prepare(forward: &PreparedLlamaForward) -> LlamaDecodeResult<Self> {
+        let dimensions = forward.plan.dimensions();
+        let hidden_bytes = dimensions
+            .hidden_size()
+            .checked_mul(usize::try_from(BF16_BYTES).expect("BF16 byte width fits usize"))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::GemmWorkspace,
+            })?;
+        let logits_bytes = dimensions
+            .vocabulary_size()
+            .checked_mul(usize::try_from(BF16_BYTES).expect("BF16 byte width fits usize"))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::GemmWorkspace,
+            })?;
+        let layer_indices = (0..forward.plan.layers().len()).collect::<Vec<_>>();
+        let layer_zero = forward
+            .prepare_last_token_layer_stage_trace(0)
+            .map_err(LlamaDecodeError::Forward)?;
+        let layer_outputs = forward
+            .prepare_last_token_layer_trace(&layer_indices, true)
+            .map_err(LlamaDecodeError::Forward)?;
+        if layer_zero.layer_index() != 0
+            || layer_outputs.row_byte_len() != hidden_bytes
+            || !layer_outputs.requests_final_norm_output()
+        {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_trace",
+                reason: "prepared source-bound trace geometry differs",
+            });
+        }
+        Ok(Self {
+            embedding: allocate_decode_host_bytes(
+                u64::try_from(hidden_bytes).map_err(|_| LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::GemmWorkspace,
+                })?,
+                LlamaDecodeResource::GemmWorkspace,
+            )?,
+            layer_zero,
+            layer_outputs,
+            logits: allocate_decode_host_bytes(
+                u64::try_from(logits_bytes).map_err(|_| LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::GemmWorkspace,
+                })?,
+                LlamaDecodeResource::GemmWorkspace,
+            )?,
+            embedding_captured: false,
+            logits_captured: false,
+        })
+    }
+
+    fn validate(&self, forward: &PreparedLlamaForward) -> LlamaDecodeResult<()> {
+        self.layer_zero
+            .validate(&forward.plan)
+            .map_err(LlamaDecodeError::Forward)?;
+        self.layer_outputs
+            .validate(&forward.plan)
+            .map_err(LlamaDecodeError::Forward)?;
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        self.embedding_captured = false;
+        self.layer_zero.reset();
+        self.layer_outputs.reset();
+        self.logits_captured = false;
+    }
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_embedding(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    buffer
+        .download_to_slice(0, &mut trace.embedding, io_staging, stream)
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+    trace.embedding_captured = true;
+    Ok(())
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    stage: LlamaLastTokenLayerStage,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    let mut layer_zero = Some(&mut trace.layer_zero);
+    capture_last_token_layer_stage(
+        &mut layer_zero,
+        0,
+        stage,
+        buffer,
+        0,
+        io_staging,
+        stream,
+        site,
+    )
+    .map_err(LlamaDecodeError::Forward)
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_layer_output(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    layer_index: usize,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    let mut layer_outputs = Some(&mut trace.layer_outputs);
+    capture_last_token_layer_residual(
+        &mut layer_outputs,
+        layer_index,
+        buffer,
+        0,
+        io_staging,
+        stream,
+        site,
+    )
+    .map_err(LlamaDecodeError::Forward)
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_final_norm(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    let mut layer_outputs = Some(&mut trace.layer_outputs);
+    capture_last_token_final_norm_output(&mut layer_outputs, buffer, 0, io_staging, stream, site)
+        .map_err(LlamaDecodeError::Forward)
+}
+
+fn capture_hf_eager_qwen_p2048_cache_on_m1_logits(
+    trace: &mut Option<&mut PreparedLlamaDecodeM1Trace>,
+    buffer: &mut CudaDeviceBuffer,
+    io_staging: &mut CudaPinnedHostBuffer,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaDecodeResult<()> {
+    let Some(trace) = trace.as_deref_mut() else {
+        return Ok(());
+    };
+    buffer
+        .download_to_slice(0, &mut trace.logits, io_staging, stream)
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+    trace.logits_captured = true;
+    Ok(())
+}
+
 /// Owning fixed-prompt, fixed-capacity single-request decode executor.
 pub struct PreparedLlamaDecode {
     forward: PreparedLlamaForward,
@@ -1454,6 +1731,7 @@ pub struct PreparedLlamaDecode {
     logical_length: usize,
     phase: LlamaDecodePhase,
     latest_output: Option<LatestOutput>,
+    hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
 }
 
 impl fmt::Debug for PreparedLlamaDecode {
@@ -1467,6 +1745,10 @@ impl fmt::Debug for PreparedLlamaDecode {
             .field("phase", &self.phase)
             .field("reduction_profile", &self.reduction_profile())
             .field("attention_backend", &self.attention.backend())
+            .field(
+                "hf_eager_qwen_p2048_cache_on_m1_trace_probe",
+                &self.hf_eager_qwen_p2048_cache_on_m1_trace_probe,
+            )
             .field("allocation_report", &self.allocation_report)
             .field("poisoned", &self.is_poisoned())
             .finish_non_exhaustive()
@@ -1512,6 +1794,37 @@ impl PreparedLlamaDecode {
                 reason: "exceeds the model sequence limit",
             });
         }
+
+        #[cfg(feature = "cuda-cublas-gemm-probe")]
+        let hf_eager_qwen_p2048_cache_on_m1_trace_probe = {
+            let m1_trace_probe = config.is_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+            let has_p2048_component = config
+                .forward()
+                .has_hf_eager_qwen_p2048_cache_on_component();
+            if m1_trace_probe {
+                if !config
+                    .forward()
+                    .is_hf_eager_qwen_p2048_cache_on_prefill_profile()
+                    || prompt_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH
+                    || maximum_sequence_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH
+                    || config.kv_cache_policy() != LlamaKvCachePolicy::Contiguous
+                    || config.decode_attention_preference() != DecodeAttentionPreference::Reference
+                {
+                    return Err(LlamaDecodeError::InvalidConfiguration {
+                        field: "hf_eager_qwen_p2048_cache_on_m1_trace_probe",
+                        reason: "requires the atomic P2048 prefill profile, contiguous cache, reference M1 attention, and fixed P2048->M1 capacity",
+                    });
+                }
+            } else if has_p2048_component {
+                return Err(LlamaDecodeError::InvalidConfiguration {
+                    field: "hf_eager_qwen_p2048_cache_on_prefill_profile",
+                    reason: "the P2048 cache-on profile may enter decode only through the source-bound M1 trace probe",
+                });
+            }
+            m1_trace_probe
+        };
+        #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
+        let hf_eager_qwen_p2048_cache_on_m1_trace_probe = false;
 
         let mut forward =
             PreparedLlamaForward::prepare(model, context, stream, prompt_length, config.forward())?;
@@ -1715,6 +2028,7 @@ impl PreparedLlamaDecode {
             logical_length: 0,
             phase: LlamaDecodePhase::Empty,
             latest_output: None,
+            hf_eager_qwen_p2048_cache_on_m1_trace_probe,
         })
     }
 
@@ -1792,6 +2106,29 @@ impl PreparedLlamaDecode {
     #[must_use]
     pub fn is_poisoned(&self) -> bool {
         self.forward.poisoned || self.gemms.any_poisoned() || self.buffers.cache.is_poisoned()
+    }
+
+    /// Allocates one source-bound host trace for the Qwen P2048 cache-on M1
+    /// diagnostic without executing CUDA work.
+    ///
+    /// The trace owner is unavailable on ordinary decode configurations, even
+    /// if they happen to share a model geometry. It cannot be used to opt a
+    /// serving selector into the P2048 candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns if this owner was not prepared through the atomic M1 probe or
+    /// if trace storage cannot be allocated.
+    pub fn prepare_hf_eager_qwen_p2048_cache_on_m1_trace(
+        &self,
+    ) -> LlamaDecodeResult<PreparedLlamaDecodeM1Trace> {
+        if !self.hf_eager_qwen_p2048_cache_on_m1_trace_probe {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_trace",
+                reason: "requires the source-bound P2048 cache-on M1 trace probe",
+            });
+        }
+        PreparedLlamaDecodeM1Trace::prepare(&self.forward)
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.
@@ -1878,6 +2215,45 @@ impl PreparedLlamaDecode {
     /// Returns for a poisoned or unprefilled owner, exhausted fixed capacity,
     /// an out-of-range token ID, or any upload/native execution failure.
     pub fn decode(&mut self, token_id: u32, stream: &mut CudaStream) -> LlamaDecodeResult<()> {
+        self.decode_with_optional_m1_trace::<false>(token_id, None, stream)
+    }
+
+    /// Appends the fixed teacher-forced M1 token while capturing every
+    /// source-bound cache-on diagnostic boundary.
+    ///
+    /// This is an explicitly synchronized diagnostic operation. It is not a
+    /// serving decode API and cannot run before the exact P2048 cache-building
+    /// prefill or after M1 has already committed.
+    ///
+    /// # Errors
+    ///
+    /// Returns for an ordinary decode owner, a mismatched trace, an invalid
+    /// lifecycle position, or any normal decode failure.
+    pub fn decode_hf_eager_qwen_p2048_cache_on_m1_traced(
+        &mut self,
+        token_id: u32,
+        trace: &mut PreparedLlamaDecodeM1Trace,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        if !self.hf_eager_qwen_p2048_cache_on_m1_trace_probe
+            || self.logical_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH
+        {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m1_trace",
+                reason: "requires the source-bound P2048 prefill state immediately before M1",
+            });
+        }
+        trace.validate(&self.forward)?;
+        trace.reset();
+        self.decode_with_optional_m1_trace::<true>(token_id, Some(trace), stream)
+    }
+
+    fn decode_with_optional_m1_trace<const M1_TRACE: bool>(
+        &mut self,
+        token_id: u32,
+        trace: Option<&mut PreparedLlamaDecodeM1Trace>,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
         if self.is_poisoned() {
             return Err(LlamaDecodeError::Poisoned);
         }
@@ -1911,7 +2287,9 @@ impl PreparedLlamaDecode {
         self.latest_output = None;
         self.forward.output_ready = false;
         let position = self.logical_length;
-        if let Err(error) = self.execute_decode_inner(position, &reservation, stream) {
+        if let Err(error) =
+            self.execute_decode_inner::<M1_TRACE>(position, &reservation, trace, stream)
+        {
             let error = self.abort_cache_reservation(reservation, error);
             self.forward.poisoned |= self.gemms.any_poisoned();
             return Err(error);
@@ -1947,10 +2325,11 @@ impl PreparedLlamaDecode {
         clippy::cast_precision_loss,
         clippy::similar_names
     )]
-    fn execute_decode_inner(
+    fn execute_decode_inner<const M1_TRACE: bool>(
         &mut self,
         position: usize,
         reservation: &KvCacheReservation,
+        mut trace: Option<&mut PreparedLlamaDecodeM1Trace>,
         stream: &mut CudaStream,
     ) -> LlamaDecodeResult<()> {
         let forward = &mut self.forward;
@@ -1958,6 +2337,7 @@ impl PreparedLlamaDecode {
         let plan = &forward.plan;
         let weights = &forward.weights;
         let buffers = &mut forward.buffers;
+        let io_staging = &mut forward.io_staging;
         let gemms = &mut self.gemms;
         let attention = &self.attention;
         let decode_buffers = &mut self.buffers;
@@ -2048,6 +2428,15 @@ impl PreparedLlamaDecode {
                 source,
             })?;
         }
+        if M1_TRACE {
+            capture_hf_eager_qwen_p2048_cache_on_m1_embedding(
+                &mut trace,
+                &mut buffers.hidden_current,
+                io_staging,
+                stream,
+                embedding_site,
+            )?;
+        }
 
         for layer in plan.layers() {
             let layer_index = layer.index();
@@ -2076,6 +2465,16 @@ impl PreparedLlamaDecode {
                 execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(input_norm_site, source))?;
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::InputNorm,
+                    &mut buffers.hidden_norm,
+                    io_staging,
+                    stream,
+                    input_norm_site,
+                )?;
+            }
 
             let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
             let query_weight = weight_span(weights, layer.query_weight(), query_site)?;
@@ -2097,6 +2496,16 @@ impl PreparedLlamaDecode {
                 stream,
                 query_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::QueryProjection,
+                    &mut buffers.hidden_projection,
+                    io_staging,
+                    stream,
+                    query_site,
+                )?;
+            }
             let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
             let key_weight = weight_span(weights, layer.key_weight(), key_site)?;
             execute_gemm(
@@ -2117,6 +2526,16 @@ impl PreparedLlamaDecode {
                 stream,
                 key_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::KeyProjection,
+                    &mut buffers.key_raw,
+                    io_staging,
+                    stream,
+                    key_site,
+                )?;
+            }
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
             let value_weight = weight_span(weights, layer.value_weight(), value_site)?;
             execute_gemm(
@@ -2137,6 +2556,16 @@ impl PreparedLlamaDecode {
                 stream,
                 value_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::ValueProjection,
+                    &mut buffers.value_raw,
+                    io_staging,
+                    stream,
+                    value_site,
+                )?;
+            }
 
             let query_rope_site = ExecutionSite::layer(layer_index, LlamaOp::QueryRope);
             {
@@ -2178,6 +2607,16 @@ impl PreparedLlamaDecode {
                 rope(&mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(query_rope_site, source))?;
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::QueryRotary,
+                    &mut buffers.hidden_rotary,
+                    io_staging,
+                    stream,
+                    query_rope_site,
+                )?;
+            }
             let key_rope_site = ExecutionSite::layer(layer_index, LlamaOp::KeyRope);
             {
                 let mut params = RopeParams {
@@ -2217,6 +2656,16 @@ impl PreparedLlamaDecode {
                 };
                 rope(&mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(key_rope_site, source))?;
+            }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::KeyRotary,
+                    &mut buffers.key_rotary,
+                    io_staging,
+                    stream,
+                    key_rope_site,
+                )?;
             }
 
             cache.append_layer(
@@ -2305,6 +2754,16 @@ impl PreparedLlamaDecode {
                     }
                 }
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::AttentionContext,
+                    &mut buffers.hidden_context,
+                    io_staging,
+                    stream,
+                    attention_site,
+                )?;
+            }
 
             let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
             let output_weight = weight_span(weights, layer.output_weight(), output_site)?;
@@ -2353,6 +2812,16 @@ impl PreparedLlamaDecode {
                 residual_add(&mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(attention_residual_site, source))?;
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::AfterAttentionResidual,
+                    &mut buffers.hidden_rotary,
+                    io_staging,
+                    stream,
+                    attention_residual_site,
+                )?;
+            }
 
             let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
             let post_norm_weight =
@@ -2379,6 +2848,16 @@ impl PreparedLlamaDecode {
                 execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(post_norm_site, source))?;
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::PostAttentionNorm,
+                    &mut buffers.hidden_norm,
+                    io_staging,
+                    stream,
+                    post_norm_site,
+                )?;
+            }
 
             let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
             let gate_weight = weight_span(weights, layer.gate_weight(), gate_site)?;
@@ -2391,6 +2870,16 @@ impl PreparedLlamaDecode {
                 stream,
                 gate_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::GateProjection,
+                    &mut buffers.gate_raw,
+                    io_staging,
+                    stream,
+                    gate_site,
+                )?;
+            }
             let up_site = ExecutionSite::layer(layer_index, LlamaOp::UpProjection);
             let up_weight = weight_span(weights, layer.up_weight(), up_site)?;
             execute_gemm(
@@ -2402,6 +2891,16 @@ impl PreparedLlamaDecode {
                 stream,
                 up_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::UpProjection,
+                    &mut buffers.up_raw,
+                    io_staging,
+                    stream,
+                    up_site,
+                )?;
+            }
             let silu_site = ExecutionSite::layer(layer_index, LlamaOp::Silu);
             {
                 let mut params = SiluParams {
@@ -2448,6 +2947,16 @@ impl PreparedLlamaDecode {
                 gated_multiply(&mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(gated_site, source))?;
             }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::Gated,
+                    &mut buffers.gated_product,
+                    io_staging,
+                    stream,
+                    gated_site,
+                )?;
+            }
 
             let down_site = ExecutionSite::layer(layer_index, LlamaOp::DownProjection);
             let down_weight = weight_span(weights, layer.down_weight(), down_site)?;
@@ -2460,6 +2969,16 @@ impl PreparedLlamaDecode {
                 stream,
                 down_site,
             )?;
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::DownProjection,
+                    &mut buffers.hidden_current,
+                    io_staging,
+                    stream,
+                    down_site,
+                )?;
+            }
             let mlp_residual_site = ExecutionSite::layer(layer_index, LlamaOp::MlpResidual);
             {
                 let mut params = ResidualAddParams {
@@ -2485,6 +3004,24 @@ impl PreparedLlamaDecode {
                 };
                 residual_add(&mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(mlp_residual_site, source))?;
+            }
+            if M1_TRACE {
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_stage(
+                    &mut trace,
+                    LlamaLastTokenLayerStage::Output,
+                    &mut buffers.hidden_projection,
+                    io_staging,
+                    stream,
+                    mlp_residual_site,
+                )?;
+                capture_hf_eager_qwen_p2048_cache_on_m1_layer_output(
+                    &mut trace,
+                    layer_index,
+                    &mut buffers.hidden_projection,
+                    io_staging,
+                    stream,
+                    mlp_residual_site,
+                )?;
             }
             mem::swap(&mut buffers.hidden_current, &mut buffers.hidden_projection);
         }
@@ -2513,6 +3050,15 @@ impl PreparedLlamaDecode {
             execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                 .map_err(|source| LlamaDecodeError::cuda(final_norm_site, source))?;
         }
+        if M1_TRACE {
+            capture_hf_eager_qwen_p2048_cache_on_m1_final_norm(
+                &mut trace,
+                &mut buffers.hidden_norm,
+                io_staging,
+                stream,
+                final_norm_site,
+            )?;
+        }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
         let lm_head_weight = weight_span(weights, plan.lm_head_weight(), lm_head_site)?;
         execute_gemm(
@@ -2525,6 +3071,15 @@ impl PreparedLlamaDecode {
             lm_head_site,
         )?;
         debug_assert_eq!(gemms.lm_head.config().output_bytes(), logits_bytes);
+        if M1_TRACE {
+            capture_hf_eager_qwen_p2048_cache_on_m1_logits(
+                &mut trace,
+                &mut buffers.logits,
+                io_staging,
+                stream,
+                lm_head_site,
+            )?;
+        }
         Ok(())
     }
 
@@ -2638,6 +3193,7 @@ impl PreparedLlamaDecode {
             logical_length: _,
             phase: _,
             latest_output: _,
+            hf_eager_qwen_p2048_cache_on_m1_trace_probe: _,
         } = self;
         let DecodeGemmPlans {
             hidden,

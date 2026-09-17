@@ -26,6 +26,14 @@ pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT: u64 = 2_051;
 /// Exact cache-building prefill row count certified for the Qwen P2048
 /// cache-on diagnostic.
 pub const HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT: u64 = 2_048;
+/// Exact one-token M1 row count admitted only by the source-bound Qwen P2048
+/// cache-on diagnostic.
+///
+/// This is not a generic decode RMSNorm selector. It lets the paired M1 trace
+/// exercise the same native reduction topology after its P2048 prefill has
+/// populated a contiguous cache; the trace still has to establish BF16
+/// equality before any candidate can be promoted.
+pub const HUGGING_FACE_QWEN_P2048_CACHE_ON_M1_RMS_NORM_ROW_COUNT: u64 = 1;
 /// Exact FP32 epsilon bits required by the Qwen P2051 diagnostic model.
 pub const HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS: u32 = 0x3586_37bd;
 /// Successful deterministic BF16 argmax row.
@@ -580,12 +588,13 @@ pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
 
 /// Executes the source-bound Hugging Face Qwen BF16 `RMSNorm` topology.
 ///
-/// The additive entry point is intentionally closed over one cache-free
-/// diagnostic geometry: `row_count=2051` (cache-free) or `row_count=2048`
-/// (cache-on prefill), `hidden_size=2048`, and `epsilon=1e-6`. It reproduces
-/// the pinned PyTorch F32 `pow(2).mean` reduction order and never falls back
-/// to generic RMSNorm. The ABI symbol remains P2051 while the accepted
-/// descriptor set is deliberately explicit and finite.
+/// The additive entry point is intentionally closed over three source-bound
+/// diagnostic geometries: `row_count=2051` (cache-free), `row_count=2048`
+/// (cache-on prefill), or `row_count=1` (the paired cache-on M1 trace), with
+/// `hidden_size=2048` and `epsilon=1e-6`. It reproduces the pinned PyTorch
+/// F32 `pow(2).mean` reduction order and never falls back to generic RMSNorm.
+/// The ABI symbol remains P2051 while the accepted descriptor set is
+/// deliberately explicit and finite.
 ///
 /// # Errors
 ///
@@ -1890,6 +1899,7 @@ fn validate_hugging_face_qwen_p2051_rms_norm_contract(
             row_count,
             HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT
                 | HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT
+                | HUGGING_FACE_QWEN_P2048_CACHE_ON_M1_RMS_NORM_ROW_COUNT
         )
         && hidden_size == HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE
         && epsilon.to_bits() == HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS
@@ -1902,7 +1912,7 @@ fn validate_hugging_face_qwen_p2051_rms_norm_contract(
         CudaErrorStage::Validation,
         0,
         operation,
-        "the Qwen diagnostic path requires BF16, row_count=2051 or 2048, hidden_size=2048, and epsilon=1e-6 exactly",
+        "the Qwen diagnostic path requires BF16, row_count=2051, 2048, or 1, hidden_size=2048, and epsilon=1e-6 exactly",
     ))
 }
 
@@ -1924,7 +1934,8 @@ mod tests {
 
     use super::{
         BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
-        Bf16ArgmaxResult, CudaDType, HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT,
+        Bf16ArgmaxResult, CudaDType, HUGGING_FACE_QWEN_P2048_CACHE_ON_M1_RMS_NORM_ROW_COUNT,
+        HUGGING_FACE_QWEN_P2048_CACHE_ON_RMS_NORM_ROW_COUNT,
         HUGGING_FACE_QWEN_P2051_RMS_NORM_EPSILON_BITS,
         HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_QWEN_P2051_RMS_NORM_ROW_COUNT,
         checked_product3, required_matrix_bytes, validate_bf16_argmax_descriptor,
@@ -1969,6 +1980,14 @@ mod tests {
             epsilon,
         )
         .expect("exact Qwen P2048 cache-on geometry must be accepted");
+        validate_hugging_face_qwen_p2051_rms_norm_contract(
+            "test qwen P2048 cache-on M1 RMSNorm",
+            CudaDType::BF16,
+            HUGGING_FACE_QWEN_P2048_CACHE_ON_M1_RMS_NORM_ROW_COUNT,
+            HUGGING_FACE_QWEN_P2051_RMS_NORM_HIDDEN_SIZE,
+            epsilon,
+        )
+        .expect("exact Qwen P2048 cache-on M1 geometry must be accepted");
         for (dtype, rows, hidden, candidate_epsilon) in [
             (
                 CudaDType::F32,

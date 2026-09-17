@@ -29,13 +29,15 @@ constexpr size_t kMaximumPrimitiveBuffers = 5;
 constexpr uint64_t kHuggingFaceSmolLm2HiddenSize = 576;
 constexpr uint64_t kHuggingFaceSmolLm2MaximumRows = 8192;
 constexpr uint32_t kHuggingFaceSmolLm2EpsilonBits = 0x3727c5acU;
-// This candidate is deliberately closed over the two source-bound Qwen
-// diagnostics: cache-free P2051 and cache-on P2048 prefill. The kernel
-// mirrors the observed PyTorch CUDA mean launch: 32 lanes per output row,
-// sixteen rows per CTA, float4 reduction loads, and 512 total threads.
+// This candidate is deliberately closed over three source-bound Qwen
+// diagnostics: cache-free P2051, cache-on P2048 prefill, and its paired
+// cache-on M1 trace. The kernel mirrors the observed PyTorch CUDA mean launch:
+// 32 lanes per output row, sixteen rows per CTA, float4 reduction loads, and
+// 512 total threads.
 constexpr uint64_t kHuggingFaceQwenP2051HiddenSize = 2048;
 constexpr uint64_t kHuggingFaceQwenP2051RowCount = 2051;
 constexpr uint64_t kHuggingFaceQwenP2048CacheOnRowCount = 2048;
+constexpr uint64_t kHuggingFaceQwenP2048CacheOnM1RowCount = 1;
 constexpr uint32_t kHuggingFaceQwenP2051EpsilonBits = 0x358637bdU;
 constexpr uint32_t kHuggingFaceQwenP2051Lanes = 32;
 constexpr uint32_t kHuggingFaceQwenP2051RowsPerBlock = 16;
@@ -90,7 +92,8 @@ bool is_hugging_face_qwen_p2051_rms_norm_contract(
   std::memcpy(&epsilon_bits, &epsilon, sizeof(epsilon_bits));
   return dtype == RILEY_CUDA_DTYPE_BF16 &&
          (row_count == kHuggingFaceQwenP2051RowCount ||
-          row_count == kHuggingFaceQwenP2048CacheOnRowCount) &&
+          row_count == kHuggingFaceQwenP2048CacheOnRowCount ||
+          row_count == kHuggingFaceQwenP2048CacheOnM1RowCount) &&
          hidden_size == kHuggingFaceQwenP2051HiddenSize &&
          epsilon_bits == kHuggingFaceQwenP2051EpsilonBits;
 }

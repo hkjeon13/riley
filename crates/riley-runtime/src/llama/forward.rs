@@ -602,14 +602,14 @@ impl PreparedLlamaLastTokenLayerStageTrace {
             .then(|| self.tensors[stage.index()].as_ref())
     }
 
-    fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
+    pub(super) fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
         if self.contract != trace_contract(plan) {
             return Err(LlamaForwardError::TracePlanMismatch);
         }
         Ok(())
     }
 
-    fn reset(&mut self) {
+    pub(super) fn reset(&mut self) {
         self.captured = 0;
     }
 
@@ -881,14 +881,14 @@ impl PreparedLlamaLastTokenLayerTrace {
             .flatten()
     }
 
-    fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
+    pub(super) fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
         if self.contract != trace_contract(plan) {
             return Err(LlamaForwardError::TracePlanMismatch);
         }
         Ok(())
     }
 
-    fn reset(&mut self) {
+    pub(super) fn reset(&mut self) {
         for captured in &mut *self.captured_layers {
             *captured = false;
         }
@@ -1754,7 +1754,7 @@ fn capture_trace(
     Ok(())
 }
 
-fn capture_last_token_layer_residual(
+pub(super) fn capture_last_token_layer_residual(
     trace: &mut Option<&mut PreparedLlamaLastTokenLayerTrace>,
     layer_index: usize,
     buffer: &mut CudaDeviceBuffer,
@@ -1779,7 +1779,7 @@ fn capture_last_token_layer_residual(
     Ok(())
 }
 
-fn capture_last_token_layer_stage(
+pub(super) fn capture_last_token_layer_stage(
     trace: &mut Option<&mut PreparedLlamaLastTokenLayerStageTrace>,
     layer_index: usize,
     stage: LlamaLastTokenLayerStage,
@@ -1830,7 +1830,7 @@ fn capture_full_sequence_layer_stage(
     Ok(())
 }
 
-fn capture_last_token_final_norm_output(
+pub(super) fn capture_last_token_final_norm_output(
     trace: &mut Option<&mut PreparedLlamaLastTokenLayerTrace>,
     buffer: &mut CudaDeviceBuffer,
     source_offset: u64,
@@ -2489,7 +2489,9 @@ impl PreparedLlamaForwardConfig {
     /// The profile is deliberately one atomic opt-in rather than a collection
     /// of serving toggles: Q/K/V bias epilogues, attention, O/MLP/LM direct
     /// cuBLAS, GPU RoPE tables, and RMSNorm must all match the same offline
-    /// HF cache-on stage receipt. It has no decode or serving selector route.
+    /// HF cache-on stage receipt. It has no serving selector route. A separate
+    /// source-bound M1 trace owner may reuse this atomic profile solely to
+    /// diagnose cache-on decode arithmetic.
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     #[must_use]
     pub const fn with_hf_eager_qwen_p2048_cache_on_prefill_probe(mut self) -> Self {
@@ -2549,7 +2551,7 @@ impl PreparedLlamaForwardConfig {
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn has_hf_eager_qwen_p2048_cache_on_component(self) -> bool {
+    pub(super) fn has_hf_eager_qwen_p2048_cache_on_component(self) -> bool {
         self.attention_preference == AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe
             || self
                 .output_projection_mode
@@ -2567,7 +2569,7 @@ impl PreparedLlamaForwardConfig {
     }
 
     #[cfg(feature = "cuda-cublas-gemm-probe")]
-    fn is_hf_eager_qwen_p2048_cache_on_prefill_profile(self) -> bool {
+    pub(super) fn is_hf_eager_qwen_p2048_cache_on_prefill_profile(self) -> bool {
         self.attention_preference == AttentionPreference::HuggingFaceEagerQwenP2048CacheOnProbe
             && self.projection_bias_mode == LlamaProjectionBiasMode::HfCompatibleBiasEpilogueProbeV1
             && self

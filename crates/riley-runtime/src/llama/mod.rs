@@ -163,6 +163,7 @@ pub use decode::{
     LlamaDecodeError, LlamaDecodePhase, LlamaDecodeResource, LlamaDecodeResult, LlamaKvCacheLayout,
     LlamaKvCachePolicy, LlamaKvCacheStorageLayout, PreparedLlamaDecode,
     PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeAttention, PreparedLlamaDecodeConfig,
+    PreparedLlamaDecodeM1Trace,
 };
 
 #[cfg(feature = "cuda")]
