@@ -122,6 +122,8 @@ const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
 const CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-prefill-comparison";
 const CACHE_ON_PREFILL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL=";
+const CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX: &str =
+    "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE=";
 const CACHE_ON_M1_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-m1-reference-trace.v1";
 const CACHE_ON_M1_RESULT_ARTIFACT_KIND: &str =
@@ -4077,16 +4079,14 @@ fn unix_seconds() -> TestResult<u64> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
 }
 
-#[test]
-#[ignore = "remote-only Qwen2.5-3B P2048 cache-on prefill HF/Rust layer-stage discriminator"]
-fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
+fn run_cache_on_prefill_quality_gate(
+    source_compatibility: HfCacheOnPrefillStageSourceCompatibility,
+    output_variable: &str,
+    marker_prefix: &str,
+) -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_cache_on()?;
-    let hf = load_hf_cache_on_prefill_stage_artifact(
-        &teacher,
-        &workload,
-        HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource,
-    )?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(&teacher, &workload, source_compatibility)?;
     if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
         || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
     {
@@ -4099,7 +4099,19 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
         .get("cache_on_prefill_bf16_exact")
         .and_then(Value::as_bool)
         .ok_or("P2048 cache-on prefill quality gate is missing")?;
-    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_STAGE_OUTPUT")?;
+    let output = required_path(output_variable)?;
+    let source_compatibility_receipt = match source_compatibility {
+        HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource => json!({
+            "mode": "exact-trace-source",
+        }),
+        HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1 => {
+            json!({
+                "mode": "direct-cublas-attention-full-forward-candidate-v1",
+                "trace_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256,
+                "candidate_rust_decode_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256,
+            })
+        }
+    };
     let receipt = json!({
         "schema_version": CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION,
         "artifact_kind": CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND,
@@ -4118,7 +4130,12 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
             "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
             "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
             "hf_execution": "P2048 cache-building prefill followed by future M1 decode",
-            "riley_execution": "P2048 prefill arithmetic only; M1 cache-on decode remains separately gated",
+            "riley_execution": match source_compatibility {
+                HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource =>
+                    "P2048 prefill arithmetic only; M1 cache-on decode remains separately gated",
+                HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1 =>
+                    "P2048 direct-cuBLAS attention candidate prefill arithmetic only; M1 cache-on decode remains separately gated",
+            },
             "candidate_attention_backend": HF_EAGER_QWEN_P2048_CACHE_ON_PROBE_ATTENTION_BACKEND_ID,
             "candidate_output_projection_backend": HF_EAGER_QWEN_P2048_CACHE_ON_DIRECT_CUBLAS_OUTPUT_PROJECTION_BACKEND_ID,
             "candidate_mlp_projection_backend": HF_EAGER_QWEN_P2048_CACHE_ON_DIRECT_CUBLAS_MLP_PROJECTION_BACKEND_ID,
@@ -4131,14 +4148,12 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
             "sidecar_path": hf.sidecar_path,
             "sidecar_sha256": hf.sidecar_sha256,
         },
+        "source_compatibility": source_compatibility_receipt,
         "profiles": [candidate],
         "quality_gate": quality_gate,
     });
     write_artifact_exclusive(&output, &receipt)?;
-    println!(
-        "{CACHE_ON_PREFILL_MARKER_PREFIX}{}",
-        serde_json::to_string(&receipt)?
-    );
+    println!("{marker_prefix}{}", serde_json::to_string(&receipt)?);
     if !prefill_exact {
         return Err(
             "P2048 cache-on prefill quality gate failed; M1 decode and serving-selector promotion remain blocked"
@@ -4146,6 +4161,27 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
         );
     }
     Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on prefill HF/Rust layer-stage discriminator"]
+fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
+    run_cache_on_prefill_quality_gate(
+        HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource,
+        "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_STAGE_OUTPUT",
+        CACHE_ON_PREFILL_MARKER_PREFIX,
+    )
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on direct-cuBLAS attention prefill candidate gate"]
+fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_quality_gate()
+-> TestResult {
+    run_cache_on_prefill_quality_gate(
+        HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
+        "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_STAGE_OUTPUT",
+        CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX,
+    )
 }
 
 #[test]
