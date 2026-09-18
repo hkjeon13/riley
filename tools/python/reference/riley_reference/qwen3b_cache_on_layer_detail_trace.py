@@ -2,8 +2,8 @@
 
 This module is an offline Hugging Face diagnostic.  It replays the immutable
 P2048 cache-building prefill and the first teacher-forced M=1 decode, then
-captures all internal last-token boundaries in decoder layer three.  Riley
-serving never imports this module or its Python dependencies.
+captures all internal last-token boundaries in one declared decoder layer.
+Riley serving never imports this module or its Python dependencies.
 
 The prefill and M1 logits are each compared with the immutable cache-on
 teacher before an artifact is written.  The artifact is therefore a narrow
@@ -30,14 +30,6 @@ from . import qwen3b_serving_oracle as oracle
 from . import qwen3b_stage_trace as stage
 from .hf_calibration import SidecarWriter, _default_sidecar_writer, _write_sidecar_exclusive
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v2"
-ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace"
-TRACE_ID = "qwen3b-p2048-cache-on-m1-layer3-attention-detail-v2"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-layer-detail-v2"
-DETAILED_LAYER_INDEX = 3
-BF16_BYTES = cache_free.BF16_BYTES
-TEACHER_DECODE_TOKEN_COUNT = 2
-
 _DETAIL_STAGE_SUFFIXES = (
     "input_norm",
     "q_proj",
@@ -56,11 +48,13 @@ _DETAIL_STAGE_SUFFIXES = (
     "down_proj",
     "output",
 )
-DETAIL_TENSORS = tuple(
-    f"layer{DETAILED_LAYER_INDEX}.{suffix}.last"
-    for suffix in _DETAIL_STAGE_SUFFIXES
-)
-TRACE_TENSORS = (*DETAIL_TENSORS, "last_logits")
+
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-layer-detail-trace.v2"
+ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-layer-detail-v2"
+DEFAULT_DETAILED_LAYER_INDEX = 3
+BF16_BYTES = cache_free.BF16_BYTES
+TEACHER_DECODE_TOKEN_COUNT = 2
 
 SOURCE_PATHS = {
     "qwen_serving_oracle": "tools/python/reference/riley_reference/qwen3b_serving_oracle.py",
@@ -85,6 +79,54 @@ SourceProvenanceFactory = Callable[[Path], dict[str, object]]
 
 class Qwen3BCacheOnLayerDetailTraceError(RuntimeError):
     """Raised when the selected-layer cache-on trace contract is violated."""
+
+
+@dataclass(frozen=True)
+class LayerDetailSpec:
+    """Immutable identity and tensor table for one Qwen decoder layer."""
+
+    layer_index: int
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.layer_index, bool)
+            or not isinstance(self.layer_index, int)
+            or not 0 <= self.layer_index < cache_free.MODEL_LAYER_COUNT
+        ):
+            raise Qwen3BCacheOnLayerDetailTraceError(
+                "selected layer index is outside the Qwen decoder topology"
+            )
+
+    @property
+    def prefix(self) -> str:
+        return f"layer{self.layer_index}"
+
+    @property
+    def trace_id(self) -> str:
+        return f"qwen3b-p2048-cache-on-m1-layer{self.layer_index}-attention-detail-v2"
+
+    @property
+    def detail_tensors(self) -> tuple[str, ...]:
+        return tuple(f"{self.prefix}.{suffix}.last" for suffix in _DETAIL_STAGE_SUFFIXES)
+
+    @property
+    def trace_tensors(self) -> tuple[str, ...]:
+        return (*self.detail_tensors, "last_logits")
+
+
+DEFAULT_LAYER_DETAIL_SPEC = LayerDetailSpec(DEFAULT_DETAILED_LAYER_INDEX)
+# These aliases preserve the immutable layer-three v2 artifact API.  New
+# artifacts must pass an explicit LayerDetailSpec through the producer.
+DETAILED_LAYER_INDEX = DEFAULT_LAYER_DETAIL_SPEC.layer_index
+TRACE_ID = DEFAULT_LAYER_DETAIL_SPEC.trace_id
+DETAIL_TENSORS = DEFAULT_LAYER_DETAIL_SPEC.detail_tensors
+TRACE_TENSORS = DEFAULT_LAYER_DETAIL_SPEC.trace_tensors
+
+
+def _layer_detail_spec(layer_index: int | None = None) -> LayerDetailSpec:
+    if layer_index is None:
+        return DEFAULT_LAYER_DETAIL_SPEC
+    return LayerDetailSpec(layer_index)
 
 
 @dataclass(frozen=True)
@@ -168,7 +210,9 @@ def _sidecar_key(name: str) -> str:
     return f"trace/{name.replace('.', '/')}"
 
 
-def _expected_shapes() -> dict[str, tuple[int, ...]]:
+def _expected_shapes(
+    layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
+) -> dict[str, tuple[int, ...]]:
     base_shapes = cache_free._expected_shapes()
     result: dict[str, tuple[int, ...]] = {}
     attention_shape = (
@@ -176,14 +220,14 @@ def _expected_shapes() -> dict[str, tuple[int, ...]]:
         oracle.PROMPT_TOKEN_COUNT + 1,
     )
     for suffix in _DETAIL_STAGE_SUFFIXES:
-        name = f"layer{DETAILED_LAYER_INDEX}.{suffix}.last"
+        name = f"{layer_detail_spec.prefix}.{suffix}.last"
         result[name] = (
             attention_shape
             if suffix in {"attention_scores", "attention_probabilities"}
             else base_shapes[f"layer0.{suffix}.last"]
         )
     result["last_logits"] = base_shapes["last_logits"]
-    if set(result) != set(TRACE_TENSORS):
+    if set(result) != set(layer_detail_spec.trace_tensors):
         raise AssertionError("selected-layer trace shape table differs")
     return result
 
@@ -204,12 +248,16 @@ def _canonical_bf16_le_bytes(tensor: object, torch: Any) -> bytes:
         raise _rethrow(error) from error
 
 
-def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
-    if set(tensors) != set(TRACE_TENSORS):
+def _validate_tensors(
+    tensors: Mapping[str, object],
+    torch: Any,
+    layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
+) -> None:
+    if set(tensors) != set(layer_detail_spec.trace_tensors):
         raise Qwen3BCacheOnLayerDetailTraceError("trace tensor names differ")
-    expected_shapes = _expected_shapes()
+    expected_shapes = _expected_shapes(layer_detail_spec)
     identities: set[int] = set()
-    for name in TRACE_TENSORS:
+    for name in layer_detail_spec.trace_tensors:
         tensor = tensors[name]
         if _tensor_shape(tensor) != expected_shapes[name]:
             raise Qwen3BCacheOnLayerDetailTraceError(
@@ -228,14 +276,16 @@ def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
         _canonical_bf16_le_bytes(tensor, torch)
 
 
-def _capture_profile_document() -> dict[str, object]:
+def _capture_profile_document(
+    layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
+) -> dict[str, object]:
     return {
         "capture_domain": "cache-on-p2048-m1-decode-selected-layer-last-token-and-attention-rows",
-        "id": TRACE_ID,
-        "detailed_layer_index": DETAILED_LAYER_INDEX,
+        "id": layer_detail_spec.trace_id,
+        "detailed_layer_index": layer_detail_spec.layer_index,
         "prefill_source_logit_row": 0,
         "m1_source_logit_row": 1,
-        "tensor_count": len(TRACE_TENSORS),
+        "tensor_count": len(layer_detail_spec.trace_tensors),
         "rust_consumer": {
             "api": (
                 "riley_runtime::llama::PreparedLlamaDecode::"
@@ -274,7 +324,12 @@ def _source_logit_bindings(source_rows: Mapping[int, bytes]) -> dict[str, object
 class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
     """Lazy CUDA-only HF adapter for one P2048/M=1 selected-layer trace."""
 
-    def __init__(self, loader: oracle.HuggingFaceQwen3BBackend) -> None:
+    def __init__(
+        self,
+        loader: oracle.HuggingFaceQwen3BBackend,
+        *,
+        layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
+    ) -> None:
         self._loader: oracle.HuggingFaceQwen3BBackend | None = loader
         self._torch = loader._torch
         self._model = loader._model
@@ -282,10 +337,11 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         self._base_model, self._layers, self._module = stage._validate_topology(
             self._model
         )
-        if DETAILED_LAYER_INDEX >= len(self._layers):
+        if layer_detail_spec.layer_index >= len(self._layers):
             raise Qwen3BCacheOnLayerDetailTraceError(
                 "selected layer is unavailable in the loaded model"
             )
+        self._layer_detail_spec = layer_detail_spec
         self.producer_metadata = dict(loader.producer_metadata)
         self.producer_metadata["implementation_id"] = IMPLEMENTATION_ID
         self.producer_metadata["transformers_qwen2_source"] = {
@@ -295,13 +351,17 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
 
     @classmethod
     def load(
-        cls, *, checkpoint: oracle.CheckpointManifest, device: str
+        cls,
+        *,
+        checkpoint: oracle.CheckpointManifest,
+        device: str,
+        layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
     ) -> "HuggingFaceQwen3BCacheOnLayerDetailTraceBackend":
         loader = oracle.HuggingFaceQwen3BBackend.load(
             checkpoint=checkpoint, device=device
         )
         try:
-            return cls(loader)
+            return cls(loader, layer_detail_spec=layer_detail_spec)
         except BaseException:
             loader.close()
             raise
@@ -492,7 +552,8 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
             if prefill is not None:
                 del prefill
 
-        layer = self._layers[DETAILED_LAYER_INDEX]
+        layer_detail_spec = self._layer_detail_spec
+        layer = self._layers[layer_detail_spec.layer_index]
         attention = layer.self_attn
         active: dict[str, object] | None = None
         rope_calls = 0
@@ -539,7 +600,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
         ) -> object:
             nonlocal rope_calls
             output = original_rope(query, key, cosine, sine, unsqueeze_dim)
-            if rope_calls == DETAILED_LAYER_INDEX:
+            if rope_calls == layer_detail_spec.layer_index:
                 if active is None or not isinstance(output, tuple) or len(output) != 2:
                     raise Qwen3BCacheOnLayerDetailTraceError(
                         "Qwen rotary hook contract changed"
@@ -552,7 +613,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
                     raise Qwen3BCacheOnLayerDetailTraceError(
                         "Qwen rotary outputs cannot be transposed"
                     ) from error
-                prefix = f"layer{DETAILED_LAYER_INDEX}"
+                prefix = layer_detail_spec.prefix
                 self._capture_last_row(active, f"{prefix}.q_rope.last", query_token_major)
                 self._capture_last_row(active, f"{prefix}.k_rope.last", key_token_major)
             rope_calls += 1
@@ -587,7 +648,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
                 ) * scaling
                 if attention_mask is not None:
                     attention_scores = attention_scores + attention_mask
-                prefix = f"layer{DETAILED_LAYER_INDEX}"
+                prefix = layer_detail_spec.prefix
                 self._capture_attention_row(
                     active, f"{prefix}.attention_scores.last", attention_scores
                 )
@@ -614,7 +675,7 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
                     "Qwen eager attention trace contract changed"
                 ) from error
 
-        prefix = f"layer{DETAILED_LAYER_INDEX}"
+        prefix = layer_detail_spec.prefix
         handles.extend(
             (
                 layer.input_layernorm.register_forward_hook(
@@ -690,8 +751,10 @@ class HuggingFaceQwen3BCacheOnLayerDetailTraceBackend:
                     raise Qwen3BCacheOnLayerDetailTraceError(
                         "Qwen rotary invocation count differs"
                     )
-                ordered = {name: active[name] for name in TRACE_TENSORS}
-                _validate_tensors(ordered, self._torch)
+                ordered = {
+                    name: active[name] for name in layer_detail_spec.trace_tensors
+                }
+                _validate_tensors(ordered, self._torch, layer_detail_spec)
                 return CapturedTrace(tensors=ordered)
             finally:
                 if output is not None:
@@ -889,11 +952,15 @@ def write_source_provenance_exclusive(
     return document
 
 
-def _tensor_manifest(tensors: Mapping[str, object], torch: Any) -> dict[str, object]:
-    _validate_tensors(tensors, torch)
-    expected_shapes = _expected_shapes()
+def _tensor_manifest(
+    tensors: Mapping[str, object],
+    torch: Any,
+    layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
+) -> dict[str, object]:
+    _validate_tensors(tensors, torch, layer_detail_spec)
+    expected_shapes = _expected_shapes(layer_detail_spec)
     document: dict[str, object] = {}
-    for name in TRACE_TENSORS:
+    for name in layer_detail_spec.trace_tensors:
         tensor = tensors[name]
         raw = _canonical_bf16_le_bytes(tensor, torch)
         shape = _tensor_shape(tensor)
@@ -954,7 +1021,21 @@ def _validate_source_logit_bindings(value: object) -> None:
         )
 
 
-def validate_manifest(document: Mapping[str, object]) -> None:
+def _manifest_layer_detail_spec(document: Mapping[str, object]) -> LayerDetailSpec:
+    profile = _require_mapping(document.get("trace_profile"), "trace profile")
+    layer_index = profile.get("detailed_layer_index")
+    try:
+        layer_detail_spec = LayerDetailSpec(layer_index)
+    except Qwen3BCacheOnLayerDetailTraceError as error:
+        raise Qwen3BCacheOnLayerDetailTraceError(
+            "trace profile selected layer differs"
+        ) from error
+    if document.get("trace_id") != layer_detail_spec.trace_id:
+        raise Qwen3BCacheOnLayerDetailTraceError("trace manifest identity differs")
+    return layer_detail_spec
+
+
+def validate_manifest(document: Mapping[str, object]) -> LayerDetailSpec:
     """Validate the immutable selected-layer diagnostic contract without Torch."""
 
     _require_exact_keys(
@@ -978,7 +1059,6 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     if (
         document["schema_version"] != SCHEMA_VERSION
         or document["artifact_kind"] != ARTIFACT_KIND
-        or document["trace_id"] != TRACE_ID
         or document["performance_claim_eligible"] is not False
     ):
         raise Qwen3BCacheOnLayerDetailTraceError("trace manifest identity differs")
@@ -986,8 +1066,11 @@ def validate_manifest(document: Mapping[str, object]) -> None:
         oracle._validate_utc_text(document["created_at"], "trace created_at")
     except oracle.Qwen3BServingOracleError as error:
         raise _rethrow(error) from error
+    layer_detail_spec = _manifest_layer_detail_spec(document)
     _validate_producer(document["producer"])
-    if dict(_require_mapping(document["trace_profile"], "trace profile")) != _capture_profile_document():
+    if dict(_require_mapping(document["trace_profile"], "trace profile")) != _capture_profile_document(
+        layer_detail_spec
+    ):
         raise Qwen3BCacheOnLayerDetailTraceError("trace profile differs")
     contract = _require_mapping(document["contract"], "trace contract")
     _require_exact_keys(
@@ -1031,14 +1114,17 @@ def validate_manifest(document: Mapping[str, object]) -> None:
     name = _require_string(sidecar["path"], "trace sidecar path")
     if Path(name).name != name or not name.endswith(".safetensors"):
         raise Qwen3BCacheOnLayerDetailTraceError("trace sidecar path differs")
-    if sidecar["format"] != "safetensors" or sidecar["tensor_count"] != len(TRACE_TENSORS):
+    if (
+        sidecar["format"] != "safetensors"
+        or sidecar["tensor_count"] != len(layer_detail_spec.trace_tensors)
+    ):
         raise Qwen3BCacheOnLayerDetailTraceError("trace sidecar metadata differs")
     _require_sha256(sidecar["sha256"], "trace sidecar SHA-256")
     tensors = _require_mapping(document["tensors"], "trace tensors")
-    if set(tensors) != set(TRACE_TENSORS):
+    if set(tensors) != set(layer_detail_spec.trace_tensors):
         raise Qwen3BCacheOnLayerDetailTraceError("trace tensor names differ")
-    shapes = _expected_shapes()
-    for name in TRACE_TENSORS:
+    shapes = _expected_shapes(layer_detail_spec)
+    for name in layer_detail_spec.trace_tensors:
         tensor = _require_mapping(tensors[name], f"trace tensor {name}")
         _require_exact_keys(
             tensor,
@@ -1065,6 +1151,7 @@ def validate_manifest(document: Mapping[str, object]) -> None:
                 f"trace tensor {name} metadata differs"
             )
         _require_sha256(tensor["bf16_le_sha256"], f"trace tensor {name} SHA-256")
+    return layer_detail_spec
 
 
 def validate_sidecar_against_manifest(
@@ -1072,7 +1159,7 @@ def validate_sidecar_against_manifest(
 ) -> None:
     """Replay every BF16 tensor hash and contiguous Safetensors range."""
 
-    validate_manifest(manifest)
+    layer_detail_spec = validate_manifest(manifest)
     sidecar = _regular_file(sidecar_path.expanduser(), "trace sidecar")
     metadata = _require_mapping(manifest["sidecar"], "trace sidecar")
     if sidecar.name != metadata["path"] or _sha256_file(sidecar) != metadata["sha256"]:
@@ -1082,14 +1169,16 @@ def validate_sidecar_against_manifest(
     except cache_free.Qwen3BP2051LayerStageTraceError as error:
         raise _rethrow(error) from error
     tensors = _require_mapping(manifest["tensors"], "trace tensors")
-    expected_keys = {_sidecar_key(name) for name in TRACE_TENSORS}
+    expected_keys = {
+        _sidecar_key(name) for name in layer_detail_spec.trace_tensors
+    }
     if set(header) - {"__metadata__"} != expected_keys:
         raise Qwen3BCacheOnLayerDetailTraceError(
             "trace sidecar tensor set differs"
         )
     ranges: list[tuple[int, int, str]] = []
     with sidecar.open("rb") as handle:
-        for name in TRACE_TENSORS:
+        for name in layer_detail_spec.trace_tensors:
             reference = _require_mapping(tensors[name], f"trace tensor {name}")
             entry = _require_mapping(
                 header[reference["key"]], f"sidecar tensor {name}"
@@ -1215,17 +1304,18 @@ def build_manifest(
     sidecar_name: str,
     sidecar_sha256: str,
     created_at: datetime,
+    layer_detail_spec: LayerDetailSpec = DEFAULT_LAYER_DETAIL_SPEC,
 ) -> dict[str, object]:
     if Path(sidecar_name).name != sidecar_name or not sidecar_name.endswith(".safetensors"):
         raise Qwen3BCacheOnLayerDetailTraceError("sidecar name differs")
     document: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "artifact_kind": ARTIFACT_KIND,
-        "trace_id": TRACE_ID,
+        "trace_id": layer_detail_spec.trace_id,
         "performance_claim_eligible": False,
         "created_at": oracle._utc_text(created_at),
         "producer": dict(producer_metadata),
-        "trace_profile": _capture_profile_document(),
+        "trace_profile": _capture_profile_document(layer_detail_spec),
         "contract": {
             "model_id": oracle.MODEL_ID,
             "model_revision": oracle.MODEL_REVISION,
@@ -1244,9 +1334,9 @@ def build_manifest(
             "path": sidecar_name,
             "sha256": sidecar_sha256,
             "format": "safetensors",
-            "tensor_count": len(TRACE_TENSORS),
+            "tensor_count": len(layer_detail_spec.trace_tensors),
         },
-        "tensors": _tensor_manifest(tensors, torch),
+        "tensors": _tensor_manifest(tensors, torch, layer_detail_spec),
     }
     validate_manifest(document)
     return document
@@ -1262,6 +1352,7 @@ def produce_hf_trace(
     sidecar_path: Path,
     repo_root: Path,
     device: str,
+    layer_index: int = DEFAULT_DETAILED_LAYER_INDEX,
     created_at: datetime | None = None,
     backend_factory: BackendFactory = HuggingFaceQwen3BCacheOnLayerDetailTraceBackend.load,
     sidecar_writer: SidecarWriter = _default_sidecar_writer,
@@ -1269,6 +1360,7 @@ def produce_hf_trace(
 ) -> dict[str, object]:
     """Write a create-only selected-layer artifact; Riley is never started."""
 
+    layer_detail_spec = _layer_detail_spec(layer_index)
     try:
         manifest, sidecar = cache_free._output_paths(
             manifest_path, sidecar_path, repo_root
@@ -1295,7 +1387,11 @@ def produce_hf_trace(
         raise Qwen3BCacheOnLayerDetailTraceError(
             "cannot produce a source-bound trace from dirty source"
         )
-    backend = backend_factory(checkpoint=checkpoint, device=device)
+    backend = backend_factory(
+        checkpoint=checkpoint,
+        device=device,
+        layer_detail_spec=layer_detail_spec,
+    )
     sidecar_written = False
     try:
         captured = backend.capture(
@@ -1304,10 +1400,13 @@ def produce_hf_trace(
             expected_source_logits=source_rows,
         )
         tensors = dict(captured.tensors)
-        _validate_tensors(tensors, backend._torch)
+        _validate_tensors(tensors, backend._torch, layer_detail_spec)
         _write_sidecar_exclusive(
             sidecar,
-            {_sidecar_key(name): tensors[name] for name in TRACE_TENSORS},
+            {
+                _sidecar_key(name): tensors[name]
+                for name in layer_detail_spec.trace_tensors
+            },
             sidecar_writer,
         )
         sidecar_written = True
@@ -1327,6 +1426,7 @@ def produce_hf_trace(
             sidecar_name=sidecar.name,
             sidecar_sha256=_sha256_file(sidecar),
             created_at=created_at or datetime.now(timezone.utc),
+            layer_detail_spec=layer_detail_spec,
         )
         validate_sidecar_against_manifest(document, sidecar)
         if (
@@ -1424,7 +1524,7 @@ def validate_bindings(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m riley_reference.qwen3b_cache_on_layer_detail_trace",
-        description="offline Qwen2.5-3B P2048/M1 layer-three cache-on trace",
+        description="offline Qwen2.5-3B P2048/M1 selected-layer cache-on trace",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     produce = commands.add_parser(
@@ -1438,6 +1538,12 @@ def _build_parser() -> argparse.ArgumentParser:
     produce.add_argument("--sidecar", type=Path, required=True)
     produce.add_argument("--repo-root", type=Path, required=True)
     produce.add_argument("--device", default="cuda:0")
+    produce.add_argument(
+        "--layer-index",
+        type=int,
+        default=DEFAULT_DETAILED_LAYER_INDEX,
+        help="decoder layer to capture; defaults to the immutable layer-three contract",
+    )
     provenance = commands.add_parser(
         "provenance",
         help="write clean host-Git provenance for a pinned remote source",
@@ -1479,6 +1585,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sidecar_path=args.sidecar,
                 repo_root=args.repo_root,
                 device=args.device,
+                layer_index=args.layer_index,
             )
         else:
             document = validate_bindings(
