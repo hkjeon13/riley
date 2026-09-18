@@ -892,6 +892,123 @@ impl ContiguousKvCache {
         .map_err(|source| LlamaDecodeError::cuda(site, source))?;
         Ok((key, value))
     }
+
+    /// Downloads one logical layer prefix in the Hugging Face
+    /// DynamicCache-compatible `[kv_head, token, head_dim]` order.
+    ///
+    /// The contiguous allocation reserves `maximum_sequence_length` entries
+    /// per head. Copying each head separately omits its unpublished tail and
+    /// keeps this diagnostic's host tensor logical rather than padded.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    fn download_layer_prefix(
+        &mut self,
+        layer_index: usize,
+        logical_token_count: usize,
+        key_destination: &mut [u8],
+        value_destination: &mut [u8],
+        io_staging: &mut CudaPinnedHostBuffer,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        let site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
+        let layer_offset =
+            *self
+                .layer_offsets
+                .get(layer_index)
+                .ok_or(LlamaDecodeError::InvalidConfiguration {
+                    field: "cache_layer_index",
+                    reason: "is outside the prepared contiguous cache",
+                })?;
+        let logical_tokens = decode_u64(logical_token_count, LlamaDecodeResource::KeyCache)?;
+        let maximum_tokens = decode_u64(
+            self.layout.maximum_sequence_length(),
+            LlamaDecodeResource::KeyCache,
+        )?;
+        if logical_tokens > maximum_tokens {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "cache_logical_token_count",
+                reason: "exceeds the prepared contiguous cache capacity",
+            });
+        }
+        let key_value_heads = decode_u64(
+            self.layout.key_value_head_count(),
+            LlamaDecodeResource::KeyCache,
+        )?;
+        let head_size = decode_u64(self.layout.head_dimension(), LlamaDecodeResource::KeyCache)?;
+        let logical_head_bytes = logical_tokens
+            .checked_mul(head_size)
+            .and_then(|elements| elements.checked_mul(BF16_BYTES))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            })?;
+        let expected_bytes = key_value_heads.checked_mul(logical_head_bytes).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            },
+        )?;
+        let expected_bytes =
+            usize::try_from(expected_bytes).map_err(|_| LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            })?;
+        if key_destination.len() != expected_bytes {
+            return Err(LlamaDecodeError::InvalidDownloadLength {
+                expected_bytes,
+                actual_bytes: key_destination.len(),
+            });
+        }
+        if value_destination.len() != expected_bytes {
+            return Err(LlamaDecodeError::InvalidDownloadLength {
+                expected_bytes,
+                actual_bytes: value_destination.len(),
+            });
+        }
+        let physical_head_bytes = maximum_tokens
+            .checked_mul(head_size)
+            .and_then(|elements| elements.checked_mul(BF16_BYTES))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            })?;
+        let logical_head_bytes = usize::try_from(logical_head_bytes).map_err(|_| {
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            }
+        })?;
+        for head_index in 0..key_value_heads {
+            let source_offset = head_index
+                .checked_mul(physical_head_bytes)
+                .and_then(|offset| layer_offset.checked_add(offset))
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
+            let destination_start = usize::try_from(head_index)
+                .ok()
+                .and_then(|head| head.checked_mul(logical_head_bytes))
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
+            let destination_end = destination_start.checked_add(logical_head_bytes).ok_or(
+                LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                },
+            )?;
+            self.key
+                .download_to_slice(
+                    source_offset,
+                    &mut key_destination[destination_start..destination_end],
+                    io_staging,
+                    stream,
+                )
+                .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+            self.value
+                .download_to_slice(
+                    source_offset,
+                    &mut value_destination[destination_start..destination_end],
+                    io_staging,
+                    stream,
+                )
+                .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        }
+        Ok(())
+    }
 }
 
 struct PagedKvCache {
@@ -2625,6 +2742,59 @@ impl PreparedLlamaDecode {
             });
         }
         PreparedLlamaDecodeM1Trace::prepare(&self.forward, detailed_layer_index, true)
+    }
+
+    /// Copies one source-bound P2048 prefill cache layer to caller-owned
+    /// buffers in the logical HF DynamicCache order.
+    ///
+    /// This is a synchronized diagnostic operation. It is available only to
+    /// the fixed P2048 cache-on trace owner immediately after prefill, and has
+    /// no serving-selector route. Both destinations must be exactly
+    /// `[kv_head, 2048, head_dim]` BF16 bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns if this is not the source-bound owner, prefill has not
+    /// committed, the cache is not contiguous, the layer is unavailable, a
+    /// destination has the wrong length, or the device copy fails.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn download_hf_eager_qwen_p2048_cache_on_prefill_layer_prefix(
+        &mut self,
+        layer_index: usize,
+        key_destination: &mut [u8],
+        value_destination: &mut [u8],
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        if !self.hf_eager_qwen_p2048_cache_on_m1_trace_probe {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_prefill_layer_prefix",
+                reason: "requires the source-bound P2048 cache-on M1 trace probe",
+            });
+        }
+        if self.phase != LlamaDecodePhase::Prefilled
+            || self.logical_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH
+        {
+            return Err(LlamaDecodeError::InvalidState {
+                operation: "download_hf_eager_qwen_p2048_cache_on_prefill_layer_prefix",
+                actual: self.phase,
+            });
+        }
+        let logical_length = self.logical_length;
+        let (cache, io_staging) = (&mut self.buffers.cache, &mut self.forward.io_staging);
+        match cache {
+            KvCacheStorage::Contiguous(cache) => cache.download_layer_prefix(
+                layer_index,
+                logical_length,
+                key_destination,
+                value_destination,
+                io_staging,
+                stream,
+            ),
+            KvCacheStorage::Paged(_) => Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_prefill_layer_prefix",
+                reason: "requires the source-bound contiguous cache",
+            }),
+        }
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.

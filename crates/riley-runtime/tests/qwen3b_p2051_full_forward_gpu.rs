@@ -117,6 +117,12 @@ const CACHE_ON_LAYER_DETAIL_SCHEMA_VERSION: &str =
 const CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace";
 const CACHE_ON_LAYER_DETAIL_INDEX: usize = 3;
+const CACHE_ON_PREFILL_KV_SCHEMA_VERSION: &str =
+    "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v1";
+const CACHE_ON_PREFILL_KV_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-prefill-kv-trace";
+const CACHE_ON_PREFILL_KV_TRACE_ID: &str = "qwen3b-p2048-cache-on-prefill-kv-prefix-v1";
+const CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT: usize = 14;
 const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-comparison.v1";
 const CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND: &str =
@@ -124,6 +130,11 @@ const CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND: &str =
 const CACHE_ON_PREFILL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL=";
 const CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX: &str =
     "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE=";
+const CACHE_ON_PREFILL_KV_RESULT_SCHEMA_VERSION: &str =
+    "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-kv-comparison.v1";
+const CACHE_ON_PREFILL_KV_RESULT_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-prefill-kv-comparison";
+const CACHE_ON_PREFILL_KV_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV=";
 const CACHE_ON_M1_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-m1-reference-trace.v1";
 const CACHE_ON_M1_RESULT_ARTIFACT_KIND: &str =
@@ -439,6 +450,17 @@ struct HfFullSequenceStageArtifact {
 
 #[derive(Debug)]
 struct HfCacheOnPrefillStageArtifact {
+    manifest_path: PathBuf,
+    manifest_sha256: String,
+    sidecar_path: PathBuf,
+    sidecar_sha256: String,
+    checkpoint_receipt_filename: String,
+    checkpoint_receipt_sha256: String,
+    tensors: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Debug)]
+struct HfCacheOnPrefillKvArtifact {
     manifest_path: PathBuf,
     manifest_sha256: String,
     sidecar_path: PathBuf,
@@ -969,6 +991,28 @@ fn expected_cache_on_prefill_stage_specs() -> Vec<StageSpec> {
         .into_iter()
         .filter(|spec| spec.name.starts_with("prefill."))
         .collect()
+}
+
+fn expected_cache_on_prefill_kv_specs() -> Vec<StageSpec> {
+    let shape = vec![
+        u64::try_from(QWEN3B_KEY_VALUE_HEADS).expect("KV head count fits"),
+        u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT).expect("P2048 fits"),
+        u64::try_from(QWEN3B_HEAD_DIMENSION).expect("head dimension fits"),
+    ];
+    let mut specs = Vec::with_capacity(CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT * 2);
+    for layer_index in 0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT {
+        for kind in ["key", "value"] {
+            specs.push(StageSpec {
+                name: format!("prefill.layer{layer_index}.{kind}"),
+                shape: shape.clone(),
+                // The generic Safetensors parser does not consume a source;
+                // this sentinel prevents a second cache-only spec type.
+                source: StageSource::LastLogits,
+            });
+        }
+    }
+    assert_eq!(specs.len(), CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT * 2);
+    specs
 }
 
 fn cache_on_layer_detail_trace_id(layer_index: usize) -> String {
@@ -1991,6 +2035,276 @@ fn load_hf_cache_on_prefill_stage_artifact(
     let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
     let sidecar_sha256 = sha256_file(&sidecar_path)?;
     Ok(HfCacheOnPrefillStageArtifact {
+        manifest_path,
+        manifest_sha256,
+        sidecar_path,
+        sidecar_sha256,
+        checkpoint_receipt_filename,
+        checkpoint_receipt_sha256,
+        tensors,
+    })
+}
+
+fn load_hf_cache_on_prefill_kv_artifact(
+    teacher: &TeacherCacheOn,
+    workload: &Workload,
+) -> TestResult<HfCacheOnPrefillKvArtifact> {
+    let manifest_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV_MANIFEST")?,
+        "HF P2048 cache-on prefill KV manifest",
+    )?;
+    let sidecar_path = regular_file(
+        &required_path("RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV_SIDECAR")?,
+        "HF P2048 cache-on prefill KV sidecar",
+    )?;
+    let payload = fs::read(&manifest_path)?;
+    let manifest_sha256 = sha256_hex(&payload);
+    let manifest: Value = serde_json::from_slice(&payload)?;
+    if manifest["schema_version"].as_str() != Some(CACHE_ON_PREFILL_KV_SCHEMA_VERSION)
+        || manifest["artifact_kind"].as_str() != Some(CACHE_ON_PREFILL_KV_ARTIFACT_KIND)
+        || manifest["trace_id"].as_str() != Some(CACHE_ON_PREFILL_KV_TRACE_ID)
+        || manifest["performance_claim_eligible"].as_bool() != Some(false)
+        || manifest["producer"]["implementation_id"].as_str()
+            != Some("riley-python-qwen3b-hf-eager-cache-on-prefill-kv-v1")
+    {
+        return Err("HF P2048 cache-on prefill KV manifest identity differs".into());
+    }
+    require_exact_fields(
+        &manifest["model"],
+        &[
+            "checkpoint_path",
+            "checkpoint_receipt_filename",
+            "checkpoint_receipt_sha256",
+        ],
+        "HF P2048 cache-on prefill KV model",
+    )?;
+    let model = manifest["model"]
+        .as_object()
+        .ok_or("HF P2048 cache-on prefill KV model is missing")?;
+    if model
+        .get("checkpoint_path")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+        || model
+            .get("checkpoint_receipt_filename")
+            .and_then(Value::as_str)
+            != Some(CHECKPOINT_RECEIPT_FILENAME)
+    {
+        return Err("HF P2048 cache-on prefill KV checkpoint receipt identity differs".into());
+    }
+    let checkpoint_receipt_filename = CHECKPOINT_RECEIPT_FILENAME.to_owned();
+    let checkpoint_receipt_sha256 = json_sha256(
+        model
+            .get("checkpoint_receipt_sha256")
+            .ok_or("HF P2048 cache-on prefill KV checkpoint receipt SHA-256 is missing")?,
+        "HF P2048 cache-on prefill KV checkpoint receipt SHA-256",
+    )?;
+    require_exact_fields(
+        &manifest["contract"],
+        &[
+            "model_id",
+            "model_revision",
+            "workload",
+            "execution",
+            "input",
+            "source_logit_binding",
+        ],
+        "HF P2048 cache-on prefill KV contract",
+    )?;
+    let contract = manifest["contract"]
+        .as_object()
+        .ok_or("HF P2048 cache-on prefill KV contract is missing")?;
+    if contract.get("model_id").and_then(Value::as_str) != Some(QWEN3B_MODEL_ID)
+        || contract.get("model_revision").and_then(Value::as_str) != Some(QWEN3B_REVISION)
+        || contract.get("execution")
+            != Some(&json!({
+                "attention_implementation": "eager",
+                "batch_size": 1,
+                "cache_position_argument": "omitted-transformers-5.15.1",
+                "cublas_workspace_config": ":4096:8",
+                "deterministic_algorithms": true,
+                "dtype": "bfloat16",
+                "explicit_attention_mask": true,
+                "explicit_input_ids": true,
+                "explicit_position_ids": true,
+                "hf_hub_offline": true,
+                "inference_mode": true,
+                "local_files_only": true,
+                "logits_to_keep": 1,
+                "return_dict": true,
+                "sampling_applied": false,
+                "tf32_enabled": false,
+                "transformers_offline": true,
+                "trust_remote_code": false,
+                "use_cache": true,
+            }))
+    {
+        return Err("HF P2048 cache-on prefill KV execution contract differs".into());
+    }
+    let workload_contract = contract
+        .get("workload")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on prefill KV workload contract is missing")?;
+    if workload_contract
+        .get("schema_version")
+        .and_then(Value::as_str)
+        != Some(QWEN3B_WORKLOAD_SCHEMA)
+        || workload_contract.get("case").and_then(Value::as_str) != Some(QWEN3B_WORKLOAD_CASE)
+        || workload_contract
+            .get("source_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_WORKLOAD_SHA256)
+        || workload_contract
+            .get("prompt_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(workload.prompt_token_ids.len())?)
+        || workload_contract
+            .get("prompt_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_PROMPT_TOKEN_SHA256)
+    {
+        return Err("HF P2048 cache-on prefill KV workload contract differs".into());
+    }
+    let input = contract
+        .get("input")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on prefill KV input contract is missing")?;
+    let expected_teacher_decode = teacher.token_ids[..2].to_vec();
+    if input.get("construction").and_then(Value::as_str)
+        != Some("verified_hf_cache_on.P2048_prefill_then_teacher_token_ids[:2]_M1_decodes")
+        || input
+            .get("prefill_prompt_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT)?)
+        || input
+            .get("prefill_prompt_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(QWEN3B_PROMPT_TOKEN_SHA256)
+        || input
+            .get("teacher_decode_token_count")
+            .and_then(Value::as_u64)
+            != Some(2)
+        || json_u32_array(
+            input
+                .get("teacher_decode_token_ids")
+                .ok_or("HF P2048 cache-on prefill KV teacher decode IDs are missing")?,
+            "HF P2048 cache-on prefill KV teacher decode IDs",
+        )? != expected_teacher_decode
+        || input
+            .get("teacher_decode_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(token_ids_sha256(&expected_teacher_decode).as_str())
+    {
+        return Err("HF P2048 cache-on prefill KV input binding differs".into());
+    }
+    let teacher_source = input
+        .get("teacher_source")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on prefill KV teacher source is missing")?;
+    if teacher_source
+        .get("artifact_schema_version")
+        .and_then(Value::as_str)
+        != Some(TEACHER_ARTIFACT_SCHEMA)
+        || teacher_source.get("artifact_kind").and_then(Value::as_str)
+            != Some(TEACHER_ARTIFACT_KIND)
+        || teacher_source
+            .get("artifact_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.artifact_sha256.as_str())
+        || teacher_source.get("cache_mode").and_then(Value::as_str) != Some("cache-on")
+        || teacher_source
+            .get("cache_on_sidecar_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.cache_on_sidecar_sha256.as_str())
+        || teacher_source
+            .get("full_teacher_token_ids_le_u32_sha256")
+            .and_then(Value::as_str)
+            != Some(teacher.full_teacher_token_ids_sha256.as_str())
+        || teacher_source
+            .get("cache_on_sidecar_tensor_key")
+            .and_then(Value::as_str)
+            != Some(TEACHER_CACHE_OFF_SIDECAR_KEY)
+    {
+        return Err("HF P2048 cache-on prefill KV teacher source binding differs".into());
+    }
+    require_exact_fields(
+        contract
+            .get("source_logit_binding")
+            .ok_or("HF P2048 cache-on prefill KV source logit binding is missing")?,
+        &["source_logit_row", "bf16_le_sha256"],
+        "HF P2048 cache-on prefill KV source logit binding",
+    )?;
+    if contract["source_logit_binding"]["source_logit_row"].as_u64() != Some(0) {
+        return Err("HF P2048 cache-on prefill KV source logit row differs".into());
+    }
+    let _source_logit_sha256 = json_sha256(
+        &contract["source_logit_binding"]["bf16_le_sha256"],
+        "HF P2048 cache-on prefill KV source logit SHA-256",
+    )?;
+    let trace_profile = manifest["trace_profile"]
+        .as_object()
+        .ok_or("HF P2048 cache-on prefill KV trace profile is missing")?;
+    let expected_layers = (0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT)
+        .map(|index| Value::from(u64::try_from(index).expect("layer index fits")))
+        .collect::<Vec<_>>();
+    if trace_profile.get("capture_domain").and_then(Value::as_str)
+        != Some("cache-on-p2048-prefill-dynamic-cache-kv-prefix")
+        || trace_profile.get("id").and_then(Value::as_str) != Some(CACHE_ON_PREFILL_KV_TRACE_ID)
+        || trace_profile
+            .get("prefill_source_logit_row")
+            .and_then(Value::as_u64)
+            != Some(0)
+        || trace_profile
+            .get("prefill_token_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT)?)
+        || trace_profile.get("selected_layer_indices") != Some(&Value::Array(expected_layers))
+        || trace_profile
+            .get("key_value_head_count")
+            .and_then(Value::as_u64)
+            != Some(u64::try_from(QWEN3B_KEY_VALUE_HEADS)?)
+        || trace_profile.get("head_dimension").and_then(Value::as_u64)
+            != Some(u64::try_from(QWEN3B_HEAD_DIMENSION)?)
+        || trace_profile.get("tensor_count").and_then(Value::as_u64)
+            != Some(u64::try_from(expected_cache_on_prefill_kv_specs().len())?)
+        || trace_profile
+            .get("hf_dynamic_cache_layout")
+            .and_then(Value::as_str)
+            != Some("[batch,kv_head,token,head_dim]")
+    {
+        return Err("HF P2048 cache-on prefill KV trace profile differs".into());
+    }
+    let root = repository_root()?;
+    let provenance = manifest["provenance"]["source_repository"]
+        .as_object()
+        .ok_or("HF P2048 cache-on prefill KV source provenance is missing")?;
+    if provenance.get("source_dirty").and_then(Value::as_bool) != Some(false) {
+        return Err("HF P2048 cache-on prefill KV source provenance is dirty".into());
+    }
+    let sources = provenance
+        .get("sources")
+        .and_then(Value::as_object)
+        .ok_or("HF P2048 cache-on prefill KV source records are missing")?;
+    for required in [
+        "cache_on_prefill_kv_trace",
+        "rust_decode",
+        "rust_p2051_quality_gate",
+    ] {
+        if !sources.contains_key(required) {
+            return Err(format!("HF P2048 cache-on prefill KV sources omit {required}").into());
+        }
+    }
+    for (name, record) in sources {
+        validate_source_record(
+            &root,
+            record,
+            &format!("HF P2048 cache-on prefill KV source {name}"),
+        )?;
+    }
+    let specs = expected_cache_on_prefill_kv_specs();
+    let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
+    let sidecar_sha256 = sha256_file(&sidecar_path)?;
+    Ok(HfCacheOnPrefillKvArtifact {
         manifest_path,
         manifest_sha256,
         sidecar_path,
@@ -3346,6 +3660,157 @@ fn run_cache_on_prefill_profile(
     }
 }
 
+fn collect_cache_on_prefill_kv_prefix(
+    decode: &mut PreparedLlamaDecode,
+    stream: &mut CudaStream,
+) -> TestResult<BTreeMap<String, Vec<u8>>> {
+    let specs = expected_cache_on_prefill_kv_specs();
+    let bytes_per_tensor = shape_byte_len(&[
+        u64::try_from(QWEN3B_KEY_VALUE_HEADS)?,
+        u64::try_from(QWEN3B_PROMPT_TOKEN_COUNT)?,
+        u64::try_from(QWEN3B_HEAD_DIMENSION)?,
+    ])?;
+    let mut observed = BTreeMap::new();
+    for layer_index in 0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT {
+        let mut key = vec![0_u8; bytes_per_tensor];
+        let mut value = vec![0_u8; bytes_per_tensor];
+        decode.download_hf_eager_qwen_p2048_cache_on_prefill_layer_prefix(
+            layer_index,
+            &mut key,
+            &mut value,
+            stream,
+        )?;
+        observed.insert(
+            format!("prefill.layer{layer_index}.key"),
+            canonical_bf16_le(&key)?,
+        );
+        observed.insert(
+            format!("prefill.layer{layer_index}.value"),
+            canonical_bf16_le(&value)?,
+        );
+    }
+    if observed.len() != specs.len()
+        || specs.iter().any(|spec| {
+            observed
+                .get(&spec.name)
+                .is_none_or(|bytes| bytes.len() != bytes_per_tensor)
+        })
+    {
+        return Err("P2048 cache-on prefill KV download tensor contract differs".into());
+    }
+    Ok(observed)
+}
+
+fn run_cache_on_prefill_kv_profile(
+    model: &LoadedModel,
+    input: &[u32],
+    hf: &HfCacheOnPrefillKvArtifact,
+) -> TestResult<Value> {
+    let (context, mut stream) = first_context()?;
+    let base_config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+        FULL_FORWARD_UPLOAD_STAGING_BYTES,
+        FULL_FORWARD_IO_STAGING_BYTES,
+        HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
+        REFERENCE_ATTENTION_BUDGET_BYTES,
+    ));
+    let config = base_config.with_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+    let mut decode = match PreparedLlamaDecode::prepare(
+        model,
+        &context,
+        &mut stream,
+        QWEN3B_PROMPT_TOKEN_COUNT,
+        QWEN3B_PROMPT_TOKEN_COUNT + 2,
+        config,
+    ) {
+        Ok(decode) => decode,
+        Err(error) => {
+            let cleanup = close_decode_resources(None, stream, context);
+            return match cleanup {
+                Ok(()) => Err(error.into()),
+                Err(cleanup_error) => Err(format!(
+                    "P2048 cache-on prefill KV preparation failed: {error}; cleanup also failed: {cleanup_error}"
+                )
+                .into()),
+            };
+        }
+    };
+    let result = (|| -> TestResult<Value> {
+        if !matches!(
+            decode.cache_layout(),
+            riley_runtime::llama::LlamaKvCacheStorageLayout::Contiguous(_)
+        ) {
+            return Err("P2048 cache-on prefill KV trace did not select contiguous storage".into());
+        }
+        decode.prefill(input, &mut stream)?;
+        let observed = collect_cache_on_prefill_kv_prefix(&mut decode, &mut stream)?;
+
+        // Reuse the same allocation and reset path before comparing with HF.
+        // This distinguishes a stale-cache lifecycle problem from arithmetic.
+        decode.reset()?;
+        decode.prefill(input, &mut stream)?;
+        let repeated = collect_cache_on_prefill_kv_prefix(&mut decode, &mut stream)?;
+        if observed != repeated {
+            return Err("P2048 cache-on prefill KV trace differs on same-owner reuse".into());
+        }
+
+        let mut tensors = Map::new();
+        let mut exact_count = 0_u64;
+        let mut first_non_exact = None;
+        for spec in expected_cache_on_prefill_kv_specs() {
+            let hf_bytes = hf
+                .tensors
+                .get(&spec.name)
+                .ok_or("HF P2048 cache-on prefill KV tensor is missing")?;
+            let riley_bytes = observed
+                .get(&spec.name)
+                .ok_or("Riley P2048 cache-on prefill KV tensor is missing")?;
+            if hf_bytes.len() != shape_byte_len(&spec.shape)? || riley_bytes.len() != hf_bytes.len()
+            {
+                return Err(format!(
+                    "P2048 cache-on prefill KV {} byte length differs",
+                    spec.name
+                )
+                .into());
+            }
+            let tensor_metrics = metrics(hf_bytes, riley_bytes)?;
+            if tensor_metrics["bf16_exact"] == true {
+                exact_count += 1;
+            } else if first_non_exact.is_none() {
+                first_non_exact = Some(spec.name.clone());
+            }
+            tensors.insert(spec.name, tensor_metrics);
+        }
+        Ok(json!({
+            "profile_id": "hf-eager-qwen-p2048-cache-on-prefill-kv-prefix-v1",
+            "cache_mode": "cache-on-prefill-kv-diagnostic",
+            "same_scheduler_engine": false,
+            "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
+            "cache_layout": "contiguous-head-major-logical-[kv_head,token,head_dim]",
+            "hf_dynamic_cache_layout": "[batch,kv_head,token,head_dim]",
+            "selected_layer_indices": (0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT).collect::<Vec<_>>(),
+            "repeat_execution": {
+                "reused_prepared_owner": true,
+                "all_prefill_kv_tensors_bf16_identical": true,
+            },
+            "summary": {
+                "tensor_count": tensors.len(),
+                "bf16_exact_tensor_count": exact_count,
+                "first_non_exact_tensor": first_non_exact,
+            },
+            "tensors": tensors,
+        }))
+    })();
+    let cleanup = close_decode_resources(Some(decode), stream, context);
+    match (result, cleanup) {
+        (Ok(result), Ok(())) => Ok(result),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(run_error), Err(cleanup_error)) => Err(format!(
+            "P2048 cache-on prefill KV execution failed: {run_error}; cleanup also failed: {cleanup_error}"
+        )
+        .into()),
+    }
+}
+
 fn collect_cache_on_m1_trace(
     trace: &PreparedLlamaDecodeM1Trace,
 ) -> TestResult<BTreeMap<String, Vec<u8>>> {
@@ -4182,6 +4647,91 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_qualit
         "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_STAGE_OUTPUT",
         CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX,
     )
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on HF DynamicCache/Rust KV-prefix discriminator"]
+fn qwen3b_p2048_hf_compatible_cache_on_prefill_kv_quality_gate() -> TestResult {
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_prefill_kv_artifact(&teacher, &workload)?;
+    if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
+        || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
+    {
+        return Err("P2048 cache-on prefill KV input does not bind the HF artifact".into());
+    }
+    let model = load_model_from_checkpoint_receipt(
+        &hf.checkpoint_receipt_filename,
+        &hf.checkpoint_receipt_sha256,
+    )?;
+    let candidate = run_cache_on_prefill_kv_profile(&model, &workload.prompt_token_ids, &hf)?;
+    let summary = candidate
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or("P2048 cache-on prefill KV summary is missing")?;
+    let exact_count = summary
+        .get("bf16_exact_tensor_count")
+        .and_then(Value::as_u64)
+        .ok_or("P2048 cache-on prefill KV exact tensor count is missing")?;
+    let tensor_count = u64::try_from(expected_cache_on_prefill_kv_specs().len())?;
+    let cache_prefix_exact = exact_count == tensor_count
+        && summary
+            .get("first_non_exact_tensor")
+            .is_some_and(Value::is_null);
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV_STAGE_OUTPUT")?;
+    let receipt = json!({
+        "schema_version": CACHE_ON_PREFILL_KV_RESULT_SCHEMA_VERSION,
+        "artifact_kind": CACHE_ON_PREFILL_KV_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "contract": {
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "prefill_input_token_count": QWEN3B_PROMPT_TOKEN_COUNT,
+            "prefill_input_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_SHA256,
+            "selected_layer_indices": (0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT).collect::<Vec<_>>(),
+            "key_value_head_count": QWEN3B_KEY_VALUE_HEADS,
+            "head_dimension": QWEN3B_HEAD_DIMENSION,
+            "teacher_forced_artifact_sha256": teacher.artifact_sha256,
+            "teacher_cache_on_sidecar_sha256": teacher.cache_on_sidecar_sha256,
+            "teacher_full_token_ids_le_u32_sha256": teacher.full_teacher_token_ids_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "hf_execution": "verified eager P2048 prefill then DynamicCache layer-prefix capture",
+            "riley_execution": "source-bound P2048 prefill then contiguous logical K/V download",
+            "same_scheduler_engine": false,
+        },
+        "hf_stage_artifact": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "candidate": candidate,
+        "quality_gate": {
+            "required_cache_tensor_count": tensor_count,
+            "candidate_exact_cache_tensor_count": exact_count,
+            "prefill_last_token_bf16_exact": true,
+            "cache_on_prefill_kv_bf16_exact": cache_prefix_exact,
+            "cache_on_m1_decode_bf16_exact": false,
+            "cache_on_full_forward_bf16_exact": false,
+            "corrected_cache_on_eligible": false,
+            "serving_selector_eligible": false,
+            "performance_claim_eligible": false,
+        },
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "{CACHE_ON_PREFILL_KV_MARKER_PREFIX}{}",
+        serde_json::to_string(&receipt)?
+    );
+    if !cache_prefix_exact {
+        return Err(
+            "P2048 cache-on prefill KV quality gate failed; corrected cache-on promotion remains blocked"
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 #[test]
