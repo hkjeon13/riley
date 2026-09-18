@@ -1,0 +1,32 @@
+[package]
+name = "riley-checkpoint"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+license = "MIT"
+description = "Explicit, verified checkpoint preparation outside Riley serving"
+
+[workspace]
+resolver = "3"
+
+[features]
+default = []
+hub = ["dep:hf-hub", "dep:yoke-derive"]
+
+[dependencies]
+riley-model = { path = "../../crates/riley-model", default-features = false }
+sha2 = { version = "=0.11.0", default-features = false }
+hf-hub = { version = "=0.4.3", default-features = false, features = ["ureq"], optional = true }
+
+# yoke-derive 0.8.3 uses str::from_utf8 unavailable on the pinned Rust 1.85.
+yoke-derive = { version = "=0.8.2", default-features = false, optional = true }
+
+[dev-dependencies]
+serde_json = "=1.0.145"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
