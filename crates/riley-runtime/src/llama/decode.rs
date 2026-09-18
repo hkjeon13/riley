@@ -615,8 +615,8 @@ impl PreparedLlamaDecodeConfig {
     }
 
     /// Selects the source-bound candidate that reproduces the observed HF
-    /// eager M=1 QK cuBLAS call for one attention-detail trace. This remains
-    /// a diagnostic control and has no serving selector route.
+    /// eager M=1 QK cuBLAS call for every compatible layer of one M1 trace.
+    /// This remains a diagnostic control and has no serving selector route.
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     #[must_use]
     pub const fn with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate(self) -> Self {
@@ -3299,7 +3299,15 @@ impl PreparedLlamaDecode {
                             )
                             .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?,
                         };
-                        if capture_attention_detail {
+                        // The source-bound cuBLAS candidate uses the retained
+                        // scaled-score trace allocation as device-only
+                        // scratch for every M1 layer. Only the selected
+                        // attention-detail layer downloads that allocation;
+                        // the remaining layers still need the same QK/AV
+                        // reduction contract to qualify the full M1 forward.
+                        if capture_attention_detail
+                            || hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate
+                        {
                             let scaled_scores = decode_buffers
                                 .attention_scaled_scores_trace
                                 .as_mut()

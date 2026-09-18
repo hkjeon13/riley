@@ -128,6 +128,12 @@ const CACHE_ON_M1_RESULT_SCHEMA_VERSION: &str =
 const CACHE_ON_M1_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-reference-trace";
 const CACHE_ON_M1_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_M1=";
+const CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_RESULT_SCHEMA_VERSION: &str =
+    "riley.qwen3b-p2048-hf-compatible-cache-on-m1-cublas-qk-av-full-forward-comparison.v1";
+const CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_RESULT_ARTIFACT_KIND: &str =
+    "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-m1-cublas-qk-av-full-forward-comparison";
+const CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_MARKER_PREFIX: &str =
+    "RILEY_QWEN3B_P2048_CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD=";
 const CACHE_ON_LAYER_DETAIL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-m1-layer-detail-comparison.v2";
 const CACHE_ON_LAYER_DETAIL_RESULT_ARTIFACT_KIND: &str =
@@ -153,8 +159,12 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_RUST_DECODE_SHA256: &str =
     "2c4f8e6d057723993e6358cad80b696885e10d463eef9956a94fe0428ee58767";
 const HF_EAGER_QWEN_P2048_CACHE_ON_LAYER_DETAIL_TRACE_QUALITY_GATE_SHA256: &str =
     "96aa58db40245e074714d0ef746413559c9e040782b42e61f4898168148884fd";
+const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256: &str =
+    "d58ddc3826c7740e0b69d2f77a7fd5d57699ace756054da3feabf77392560e1f";
+const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_QUALITY_GATE_SHA256: &str =
+    "8f502d0f0fde7a06a993527b2ba5bbc7480b97e184eff141c6e9e0e095a6859c";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256: &str =
-    "a9eca3930cd0b5a5b44afbba9002a761b6ad918cc15c1677ea146733ec05715a";
+    "dd6b4b0dcbd347199c6224f42804b2cb62706fcb807541bc085a4845048a10cb";
 
 #[derive(Debug)]
 struct Workload {
@@ -444,6 +454,14 @@ struct HfCacheOnLayerDetailArtifact {
 enum HfCacheOnLayerDetailSourceCompatibility {
     ExactTraceSource,
     DirectCublasAttentionCandidateV1,
+}
+
+/// Compatibility rule for an immutable cache-on stage trace whose original
+/// Rust consumer predates the direct-cuBLAS M1 attention candidate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HfCacheOnPrefillStageSourceCompatibility {
+    ExactTraceSource,
+    DirectCublasAttentionFullForwardCandidateV1,
 }
 
 fn required_path(variable: &str) -> TestResult<PathBuf> {
@@ -1119,6 +1137,71 @@ fn validate_direct_cublas_attention_candidate_quality_gate_source(
     Ok(())
 }
 
+fn validate_direct_cublas_attention_full_forward_candidate_rust_decode_source(
+    root: &Path,
+    value: &Value,
+) -> TestResult {
+    let label =
+        "HF P2048 cache-on full-forward direct-cuBLAS attention candidate rust_decode source";
+    let record = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object"))?;
+    let relative = record
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} path is missing"))?;
+    if relative != "crates/riley-runtime/src/llama/decode.rs" {
+        return Err(format!("{label} path differs").into());
+    }
+    let trace_hash = json_sha256(
+        record
+            .get("sha256")
+            .ok_or_else(|| format!("{label} trace SHA-256 is missing"))?,
+        label,
+    )?;
+    if trace_hash != HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256 {
+        return Err(format!("{label} trace SHA-256 differs").into());
+    }
+    let source = regular_file(&root.join(relative), label)?;
+    if sha256_file(&source)?
+        != HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256
+    {
+        return Err(
+            format!("{label} candidate SHA-256 differs from the reviewed candidate").into(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_direct_cublas_attention_full_forward_candidate_quality_gate_source(
+    root: &Path,
+    value: &Value,
+) -> TestResult {
+    let label =
+        "HF P2048 cache-on full-forward direct-cuBLAS attention candidate quality-gate source";
+    let record = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object"))?;
+    let relative = record
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} path is missing"))?;
+    if relative != "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs" {
+        return Err(format!("{label} path differs").into());
+    }
+    let trace_hash = json_sha256(
+        record
+            .get("sha256")
+            .ok_or_else(|| format!("{label} trace SHA-256 is missing"))?,
+        label,
+    )?;
+    if trace_hash != HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_QUALITY_GATE_SHA256 {
+        return Err(format!("{label} trace SHA-256 differs").into());
+    }
+    let _current_source = regular_file(&root.join(relative), label)?;
+    Ok(())
+}
+
 fn clean_git_revision_for_source(root: &Path, source: &str, label: &str) -> TestResult<String> {
     let status = Command::new("git")
         .arg("-C")
@@ -1488,6 +1571,7 @@ fn load_hf_stage_artifact(
 fn load_hf_cache_on_prefill_stage_artifact(
     teacher: &TeacherCacheOn,
     workload: &Workload,
+    source_compatibility: HfCacheOnPrefillStageSourceCompatibility,
 ) -> TestResult<HfCacheOnPrefillStageArtifact> {
     let manifest_path = regular_file(
         &required_path("RILEY_QWEN3B_P2048_CACHE_ON_STAGE_MANIFEST")?,
@@ -1742,7 +1826,31 @@ fn load_hf_cache_on_prefill_stage_artifact(
         }
     }
     for (name, record) in sources {
-        validate_source_record(&root, record, &format!("HF P2048 cache-on source {name}"))?;
+        if source_compatibility
+            == HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1
+        {
+            match name.as_str() {
+                "rust_decode" => {
+                    validate_direct_cublas_attention_full_forward_candidate_rust_decode_source(
+                        &root, record,
+                    )?;
+                }
+                "rust_p2051_quality_gate" => {
+                    validate_direct_cublas_attention_full_forward_candidate_quality_gate_source(
+                        &root, record,
+                    )?;
+                }
+                _ => {
+                    validate_source_record(
+                        &root,
+                        record,
+                        &format!("HF P2048 cache-on source {name}"),
+                    )?;
+                }
+            }
+        } else {
+            validate_source_record(&root, record, &format!("HF P2048 cache-on source {name}"))?;
+        }
     }
     let specs = expected_cache_on_stage_specs();
     let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
@@ -3222,15 +3330,16 @@ fn run_cache_on_m1_reference_trace_profile(
     input: &[u32],
     m1_token: u32,
     hf: &HfCacheOnPrefillStageArtifact,
+    attention_profile: CacheOnM1AttentionProfile,
 ) -> TestResult<Value> {
     let (context, mut stream) = first_context()?;
-    let config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+    let base_config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
         FULL_FORWARD_UPLOAD_STAGING_BYTES,
         FULL_FORWARD_IO_STAGING_BYTES,
         HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
         REFERENCE_ATTENTION_BUDGET_BYTES,
-    ))
-    .with_hf_eager_qwen_p2048_cache_on_m1_trace_probe();
+    ));
+    let config = attention_profile.configure(base_config);
     let mut decode = match PreparedLlamaDecode::prepare(
         model,
         &context,
@@ -3311,7 +3420,7 @@ fn run_cache_on_m1_reference_trace_profile(
             stages.insert(spec.name, stage_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-eager-qwen-p2048-cache-on-m1-reference-trace-v1",
+            "profile_id": attention_profile.full_trace_profile_id(),
             "cache_mode": "cache-on-m1-diagnostic",
             "same_scheduler_engine": false,
             "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
@@ -3322,6 +3431,8 @@ fn run_cache_on_m1_reference_trace_profile(
                 "kv_layout": "contiguous-head-major",
                 "decode_attention_backend": selection.implementation_id(),
                 "decode_attention_selection_reason": format!("{:?}", selection.reason()),
+                "qk_path": attention_profile.qk_path(),
+                "av_path": attention_profile.av_path(),
                 "projection_path": "HF-compatible M1 Q/K/V cuBLASLt bias epilogues plus direct-cuBLAS O/MLP/LM-head candidate",
                 "rms_norm_path": HF_EAGER_QWEN_P2048_CACHE_ON_RMS_NORM_BACKEND_ID,
             },
@@ -3373,6 +3484,16 @@ impl CacheOnM1AttentionProfile {
             }
             Self::CublasQkAv => {
                 "hf-eager-qwen-p2048-cache-on-m1-layer3-cublas-qk-av-attention-detail-trace-v1"
+            }
+        }
+    }
+
+    const fn full_trace_profile_id(self) -> &'static str {
+        match self {
+            Self::Reference => "hf-eager-qwen-p2048-cache-on-m1-reference-trace-v1",
+            Self::CublasQk => "hf-eager-qwen-p2048-cache-on-m1-cublas-qk-full-forward-candidate-v1",
+            Self::CublasQkAv => {
+                "hf-eager-qwen-p2048-cache-on-m1-cublas-qk-av-full-forward-candidate-v1"
             }
         }
     }
@@ -3818,7 +3939,11 @@ fn unix_seconds() -> TestResult<u64> {
 fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_cache_on()?;
-    let hf = load_hf_cache_on_prefill_stage_artifact(&teacher, &workload)?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource,
+    )?;
     if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
         || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
     {
@@ -3885,7 +4010,11 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
 fn qwen3b_p2048_hf_compatible_cache_on_m1_reference_trace() -> TestResult {
     let workload = load_workload()?;
     let teacher = load_teacher_cache_on()?;
-    let hf = load_hf_cache_on_prefill_stage_artifact(&teacher, &workload)?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnPrefillStageSourceCompatibility::ExactTraceSource,
+    )?;
     let m1_token = *teacher
         .token_ids
         .first()
@@ -3896,8 +4025,13 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_reference_trace() -> TestResult {
         return Err("P2048 cache-on M1 input does not bind the HF stage artifact".into());
     }
     let model = load_cache_on_prefill_model(&hf)?;
-    let candidate =
-        run_cache_on_m1_reference_trace_profile(&model, &workload.prompt_token_ids, m1_token, &hf)?;
+    let candidate = run_cache_on_m1_reference_trace_profile(
+        &model,
+        &workload.prompt_token_ids,
+        m1_token,
+        &hf,
+        CacheOnM1AttentionProfile::Reference,
+    )?;
     let summary = candidate
         .get("summary")
         .and_then(Value::as_object)
@@ -4334,6 +4468,131 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_layer3_cublas_qk_av_candidate_trace() 
         "{CACHE_ON_LAYER_DETAIL_MARKER_PREFIX}{}",
         serde_json::to_string(&receipt)?
     );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only Qwen2.5-3B P2048 cache-on M1 direct-cuBLAS QK/AV full-forward qualifier"]
+fn qwen3b_p2048_hf_compatible_cache_on_m1_cublas_qk_av_full_forward_candidate_trace() -> TestResult
+{
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
+    )?;
+    let m1_token = *teacher
+        .token_ids
+        .first()
+        .ok_or("P2048 cache-on teacher artifact has no M1 token")?;
+    if workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
+        || token_ids_sha256(&workload.prompt_token_ids) != QWEN3B_PROMPT_TOKEN_SHA256
+    {
+        return Err("P2048 cache-on M1 full-forward input does not bind the HF artifact".into());
+    }
+    let model = load_cache_on_prefill_model(&hf)?;
+    let candidate = run_cache_on_m1_reference_trace_profile(
+        &model,
+        &workload.prompt_token_ids,
+        m1_token,
+        &hf,
+        CacheOnM1AttentionProfile::CublasQkAv,
+    )?;
+    let summary = candidate
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or("P2048 cache-on M1 cuBLAS QK/AV full-forward summary is missing")?;
+    let exact_count = summary
+        .get("bf16_exact_stage_count")
+        .and_then(Value::as_u64)
+        .ok_or("P2048 cache-on M1 cuBLAS QK/AV full-forward exact stage count is missing")?;
+    let stage_count = u64::try_from(expected_stage_specs().len())?;
+    let m1_exact = exact_count == stage_count
+        && summary
+            .get("first_non_exact_stage")
+            .is_some_and(Value::is_null);
+    let repository_root = repository_root()?;
+    let candidate_quality_gate_source =
+        "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs";
+    let candidate_quality_gate_source_sha256 = sha256_file(&regular_file(
+        &repository_root.join(candidate_quality_gate_source),
+        "direct-cuBLAS QK/AV full-forward candidate quality-gate source",
+    )?)?;
+    let candidate_quality_gate_git_revision = clean_git_revision_for_source(
+        &repository_root,
+        candidate_quality_gate_source,
+        "direct-cuBLAS QK/AV full-forward candidate quality-gate source",
+    )?;
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_M1_CUBLAS_QK_AV_STAGE_OUTPUT")?;
+    let receipt = json!({
+        "schema_version": CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_RESULT_SCHEMA_VERSION,
+        "artifact_kind": CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_RESULT_ARTIFACT_KIND,
+        "performance_claim_eligible": false,
+        "created_at_unix_seconds": unix_seconds()?,
+        "contract": {
+            "model_id": QWEN3B_MODEL_ID,
+            "model_revision": QWEN3B_REVISION,
+            "prefill_input_token_count": QWEN3B_PROMPT_TOKEN_COUNT,
+            "prefill_input_token_ids_le_u32_sha256": QWEN3B_PROMPT_TOKEN_SHA256,
+            "teacher_m1_token_id": m1_token,
+            "teacher_decode_token_ids": teacher.token_ids,
+            "teacher_forced_artifact_sha256": teacher.artifact_sha256,
+            "teacher_cache_on_sidecar_sha256": teacher.cache_on_sidecar_sha256,
+            "teacher_full_token_ids_le_u32_sha256": teacher.full_teacher_token_ids_sha256,
+            "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
+            "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
+            "hf_execution": "P2048 cache-building prefill followed by teacher-forced M1",
+            "riley_execution": "P2048 exact-prefill candidate plus source-bound M1 direct-cuBLAS QK/AV all-layer trace",
+            "qk_dispatch_contract": "cublasGemmStridedBatchedEx TN BF16 input/output FP32 compute DEFAULT_TENSOR_OP with repeated KV heads and 8,519,680-byte workspace",
+            "av_dispatch_contract": "cublasGemmStridedBatchedEx NN BF16 input/output FP32 compute DEFAULT_TENSOR_OP with repeated KV heads and 33,554,432-byte workspace",
+            "trace_stage_count": stage_count,
+        },
+        "hf_stage_artifact": {
+            "manifest_path": hf.manifest_path,
+            "manifest_sha256": hf.manifest_sha256,
+            "sidecar_path": hf.sidecar_path,
+            "sidecar_sha256": hf.sidecar_sha256,
+        },
+        "source_compatibility": {
+            "mode": "direct-cublas-qk-av-full-forward-candidate-v1",
+            "current_source_differences": [
+                {
+                    "path": "crates/riley-runtime/src/llama/decode.rs",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256,
+                    "candidate_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256,
+                },
+                {
+                    "path": "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_QUALITY_GATE_SHA256,
+                    "candidate_sha256": candidate_quality_gate_source_sha256,
+                    "candidate_git_revision": candidate_quality_gate_git_revision,
+                    "candidate_git_worktree_clean": true,
+                },
+            ],
+        },
+        "candidate": candidate,
+        "quality_gate": {
+            "required_m1_stage_count": stage_count,
+            "candidate_exact_m1_stage_count": exact_count,
+            "cache_on_m1_decode_bf16_exact": m1_exact,
+            "cache_on_full_forward_bf16_exact": m1_exact,
+            "corrected_cache_on_eligible": m1_exact,
+            "serving_selector_eligible": false,
+            "performance_claim_eligible": false,
+        },
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "{CACHE_ON_M1_CUBLAS_QK_AV_FULL_FORWARD_MARKER_PREFIX}{}",
+        serde_json::to_string(&receipt)?
+    );
+    if !m1_exact {
+        return Err(
+            "HF-compatible cache-on M1 direct-cuBLAS QK/AV full-forward quality gate failed; selector promotion remains blocked"
+                .into(),
+        );
+    }
     Ok(())
 }
 
