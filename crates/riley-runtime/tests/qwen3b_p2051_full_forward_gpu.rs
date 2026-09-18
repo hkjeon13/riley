@@ -163,8 +163,16 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256: &str =
     "d58ddc3826c7740e0b69d2f77a7fd5d57699ace756054da3feabf77392560e1f";
 const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_QUALITY_GATE_SHA256: &str =
     "8f502d0f0fde7a06a993527b2ba5bbc7480b97e184eff141c6e9e0e095a6859c";
+const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_CUDA_FFI_SHA256: &str =
+    "408f7d383f1ab5ef3d6a2bb5641c724395f6ac8d1810216a082316a8721260ec";
+const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_NATIVE_CUDA_HEADER_SHA256: &str =
+    "d7a43924dfc99ea0eb54c5c1b33e6150379da2bdc5fb7fa7fa063b42a9d2436c";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256: &str =
     "dd6b4b0dcbd347199c6224f42804b2cb62706fcb807541bc085a4845048a10cb";
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_CUDA_FFI_SHA256: &str =
+    "4a70eb45707cd8c4caeed87906fdf39da63afbc1cc6ee32db6564003de2e3c7e";
+const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_NATIVE_CUDA_HEADER_SHA256: &str =
+    "74664773e5a5ecb41154493e50f568f7724a9d3158758e6e1bd59d035b423011";
 
 #[derive(Debug)]
 struct Workload {
@@ -1202,6 +1210,42 @@ fn validate_direct_cublas_attention_full_forward_candidate_quality_gate_source(
     Ok(())
 }
 
+fn validate_direct_cublas_attention_full_forward_candidate_auxiliary_source(
+    root: &Path,
+    value: &Value,
+    expected_path: &str,
+    trace_sha256: &str,
+    candidate_sha256: &str,
+    label: &str,
+) -> TestResult {
+    let record = value
+        .as_object()
+        .ok_or_else(|| format!("{label} must be an object"))?;
+    let relative = record
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} path is missing"))?;
+    if relative != expected_path {
+        return Err(format!("{label} path differs").into());
+    }
+    let trace_hash = json_sha256(
+        record
+            .get("sha256")
+            .ok_or_else(|| format!("{label} trace SHA-256 is missing"))?,
+        label,
+    )?;
+    if trace_hash != trace_sha256 {
+        return Err(format!("{label} trace SHA-256 differs").into());
+    }
+    let source = regular_file(&root.join(relative), label)?;
+    if sha256_file(&source)? != candidate_sha256 {
+        return Err(
+            format!("{label} candidate SHA-256 differs from the reviewed candidate").into(),
+        );
+    }
+    Ok(())
+}
+
 fn clean_git_revision_for_source(root: &Path, source: &str, label: &str) -> TestResult<String> {
     let status = Command::new("git")
         .arg("-C")
@@ -1838,6 +1882,26 @@ fn load_hf_cache_on_prefill_stage_artifact(
                 "rust_p2051_quality_gate" => {
                     validate_direct_cublas_attention_full_forward_candidate_quality_gate_source(
                         &root, record,
+                    )?;
+                }
+                "rust_cuda_ffi" => {
+                    validate_direct_cublas_attention_full_forward_candidate_auxiliary_source(
+                        &root,
+                        record,
+                        "crates/riley-cuda/src/ffi.rs",
+                        HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_CUDA_FFI_SHA256,
+                        HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_CUDA_FFI_SHA256,
+                        "HF P2048 cache-on full-forward direct-cuBLAS attention candidate rust_cuda_ffi source",
+                    )?;
+                }
+                "native_cuda_header" => {
+                    validate_direct_cublas_attention_full_forward_candidate_auxiliary_source(
+                        &root,
+                        record,
+                        "kernels/include/riley_cuda.h",
+                        HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_NATIVE_CUDA_HEADER_SHA256,
+                        HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_NATIVE_CUDA_HEADER_SHA256,
+                        "HF P2048 cache-on full-forward direct-cuBLAS attention candidate native_cuda_header source",
                     )?;
                 }
                 _ => {
@@ -4561,6 +4625,16 @@ fn qwen3b_p2048_hf_compatible_cache_on_m1_cublas_qk_av_full_forward_candidate_tr
                     "path": "crates/riley-runtime/src/llama/decode.rs",
                     "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_DECODE_SHA256,
                     "candidate_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256,
+                },
+                {
+                    "path": "crates/riley-cuda/src/ffi.rs",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_CUDA_FFI_SHA256,
+                    "candidate_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_CUDA_FFI_SHA256,
+                },
+                {
+                    "path": "kernels/include/riley_cuda.h",
+                    "hf_trace_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_NATIVE_CUDA_HEADER_SHA256,
+                    "candidate_sha256": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_NATIVE_CUDA_HEADER_SHA256,
                 },
                 {
                     "path": "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs",
