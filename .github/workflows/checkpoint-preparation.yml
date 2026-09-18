@@ -21,24 +21,38 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install pinned toolchain
         run: rustup toolchain install 1.85.0 --profile minimal --component rustfmt,clippy
-      - name: Bootstrap independent lock for initial review only
+      - name: Check committed format
+        run: cargo fmt --manifest-path tools/riley-checkpoint/Cargo.toml -- --check
+      - name: Offline build lint and tests
         run: |
-          if [ ! -f tools/riley-checkpoint/Cargo.lock ]; then
-            cargo generate-lockfile --manifest-path tools/riley-checkpoint/Cargo.toml
-            cargo fmt --manifest-path tools/riley-checkpoint/Cargo.toml
-          fi
-      - name: Format, lint and test offline and Hub builds
+          cargo clippy --locked --manifest-path tools/riley-checkpoint/Cargo.toml --all-targets --no-default-features -- -D warnings
+          cargo test --locked --manifest-path tools/riley-checkpoint/Cargo.toml --all-targets --no-default-features
+      - name: Explicit Hub build lint and tests
+        run: |
+          cargo clippy --locked --manifest-path tools/riley-checkpoint/Cargo.toml --all-targets --features hub -- -D warnings
+          cargo test --locked --manifest-path tools/riley-checkpoint/Cargo.toml --all-targets --features hub
+      - name: Offline preparation without external executable lookup
         run: |
           set -euo pipefail
           manifest=tools/riley-checkpoint/Cargo.toml
-          cargo fmt --manifest-path "$manifest" -- --check
-          cargo clippy --locked --manifest-path "$manifest" --all-targets --no-default-features -- -D warnings
-          cargo test --locked --manifest-path "$manifest" --all-targets --no-default-features
-          cargo clippy --locked --manifest-path "$manifest" --all-targets --features hub -- -D warnings
-          cargo test --locked --manifest-path "$manifest" --all-targets --features hub
+          cargo test --locked --manifest-path "$manifest" --no-default-features --lib --no-run --message-format=json > "$RUNNER_TEMP/checkpoint-tests.jsonl"
+          testbin="$(python3 - "$RUNNER_TEMP/checkpoint-tests.jsonl" <<'PY'
+          import json, sys
+          records = [json.loads(line) for line in open(sys.argv[1])]
+          bins = [r["executable"] for r in records if r.get("reason") == "compiler-artifact" and r.get("executable") and r.get("profile", {}).get("test") and "lib" in r.get("target", {}).get("kind", []) and r.get("target", {}).get("name") == "riley_checkpoint"]
+          assert len(bins) == 1, bins
+          print(bins[0])
+          PY
+          )"
+          env PATH=/nonexistent "$testbin"
           cargo build --locked --manifest-path "$manifest" --no-default-features
           env PATH=/nonexistent tools/riley-checkpoint/target/debug/riley-checkpoint --help
-      - name: Preserve exact lock and formatted review sources
+          cargo tree --locked --manifest-path "$manifest" --no-default-features --prefix none > "$RUNNER_TEMP/checkpoint-dependencies.txt"
+          if grep -E '^hf-hub ' "$RUNNER_TEMP/checkpoint-dependencies.txt"; then
+            echo 'Hub leaked into the feature-off dependency graph' >&2
+            exit 1
+          fi
+      - name: Preserve exact lock and review sources
         if: always()
         uses: actions/upload-artifact@v4
         with:

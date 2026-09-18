@@ -6,12 +6,20 @@ static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 pub(crate) struct Temp(pub(crate) PathBuf);
 impl Temp {
     pub(crate) fn new() -> Self {
-        let root = std::env::temp_dir().join(format!("riley-checkpoint-test-{}-{}", std::process::id(), SEQUENCE.fetch_add(1, Ordering::Relaxed)));
+        let root = std::env::temp_dir().join(format!(
+            "riley-checkpoint-test-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
         create_directory(&root).unwrap();
         Self(root)
     }
 }
-impl Drop for Temp { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
+impl Drop for Temp {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
 
 fn fixture(root: &Path) -> Vec<u8> {
     let config = json!({
@@ -36,16 +44,16 @@ fn fixture(root: &Path) -> Vec<u8> {
             "vocab":{"<|endoftext|>":0,"h":1,"e":2,"l":3,"o":4,"Ġ":5,"1":6,"2":7},"merges":[]}
     });
     let tensors: &[(&str, &[usize])] = &[
-        ("model.embed_tokens.weight", &[8,4]),
+        ("model.embed_tokens.weight", &[8, 4]),
         ("model.layers.0.input_layernorm.weight", &[4]),
-        ("model.layers.0.self_attn.q_proj.weight", &[4,4]),
-        ("model.layers.0.self_attn.k_proj.weight", &[2,4]),
-        ("model.layers.0.self_attn.v_proj.weight", &[2,4]),
-        ("model.layers.0.self_attn.o_proj.weight", &[4,4]),
+        ("model.layers.0.self_attn.q_proj.weight", &[4, 4]),
+        ("model.layers.0.self_attn.k_proj.weight", &[2, 4]),
+        ("model.layers.0.self_attn.v_proj.weight", &[2, 4]),
+        ("model.layers.0.self_attn.o_proj.weight", &[4, 4]),
         ("model.layers.0.post_attention_layernorm.weight", &[4]),
-        ("model.layers.0.mlp.gate_proj.weight", &[8,4]),
-        ("model.layers.0.mlp.up_proj.weight", &[8,4]),
-        ("model.layers.0.mlp.down_proj.weight", &[4,8]),
+        ("model.layers.0.mlp.gate_proj.weight", &[8, 4]),
+        ("model.layers.0.mlp.up_proj.weight", &[8, 4]),
+        ("model.layers.0.mlp.down_proj.weight", &[4, 8]),
         ("model.norm.weight", &[4]),
     ];
     let mut header = serde_json::Map::new();
@@ -53,7 +61,10 @@ fn fixture(root: &Path) -> Vec<u8> {
     for (name, shape) in tensors {
         let start = data.len();
         data.resize(start + shape.iter().product::<usize>() * 2, 0);
-        header.insert((*name).to_owned(), json!({"dtype":"BF16","shape":shape,"data_offsets":[start,data.len()]}));
+        header.insert(
+            (*name).to_owned(),
+            json!({"dtype":"BF16","shape":shape,"data_offsets":[start,data.len()]}),
+        );
     }
     let header = serde_json::to_vec(&header).unwrap();
     let mut weights = (header.len() as u64).to_le_bytes().to_vec();
@@ -67,11 +78,14 @@ fn fixture(root: &Path) -> Vec<u8> {
     let mut assertions = Vec::new();
     for (name, bytes) in payloads {
         fs::write(root.join(name), &bytes).unwrap();
-        assertions.push(json!({"path":name,"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(&bytes))}));
+        assertions.push(json!({"path":name,"bytes":bytes.len(),"sha256":hex_digest(Sha256::digest(&bytes).as_ref())}));
     }
-    serde_json::to_vec(&json!({"format":"riley-checkpoint-v1","source_model":"fixture/tiny-llama",
+    serde_json::to_vec(
+        &json!({"format":"riley-checkpoint-v1","source_model":"fixture/tiny-llama",
         "source_revision":"1111111111111111111111111111111111111111",
-        "converter_revision":null,"dtype":"bf16","transforms":[],"files":assertions})).unwrap()
+        "converter_revision":null,"dtype":"bf16","transforms":[],"files":assertions}),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -111,11 +125,17 @@ fn short_file_and_interrupted_source_leave_no_commit_marker() {
     let plan = Plan::from_bytes(fixture(&source.0)).unwrap();
     let target = parent.0.join("ready");
     let mut calls = 0;
-    assert!(publish_with(&plan, &target, |_, entry| {
-        calls += 1;
-        if calls == 2 { Err(invalid("injected transport interruption")) }
-        else { Ok(source.0.join(entry.path())) }
-    }).is_err());
+    assert!(
+        publish_with(&plan, &target, |_, entry| {
+            calls += 1;
+            if calls == 2 {
+                Err(invalid("injected transport interruption"))
+            } else {
+                Ok(source.0.join(entry.path()))
+            }
+        })
+        .is_err()
+    );
     assert_eq!(calls, 2);
     assert!(!target.exists());
     fs::write(source.0.join("config.json"), b"{}").unwrap();
@@ -130,9 +150,14 @@ fn loader_rejects_hash_correct_but_semantically_invalid_model() {
     let mut manifest: Value = serde_json::from_slice(&fixture(&source.0)).unwrap();
     let broken = b"{\"model_type\":\"not-supported\"}";
     fs::write(source.0.join("config.json"), broken).unwrap();
-    let entry = manifest["files"].as_array_mut().unwrap().iter_mut().find(|v| v["path"] == "config.json").unwrap();
+    let entry = manifest["files"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|v| v["path"] == "config.json")
+        .unwrap();
     entry["bytes"] = json!(broken.len());
-    entry["sha256"] = json!(format!("{:x}", Sha256::digest(broken)));
+    entry["sha256"] = json!(hex_digest(Sha256::digest(broken).as_ref()));
     let plan = Plan::from_bytes(serde_json::to_vec(&manifest).unwrap()).unwrap();
     let target = parent.0.join("ready");
     assert!(prepare(&plan, &source.0, &target).is_err());
@@ -175,12 +200,23 @@ fn manifest_validation_is_strict_and_revision_is_immutable() {
     let source = Temp::new();
     let bytes = fixture(&source.0);
     let original: Value = serde_json::from_slice(&bytes).unwrap();
-    for revision in ["main", "v1.0", "abc123", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"] {
+    for revision in [
+        "main",
+        "v1.0",
+        "abc123",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    ] {
         let mut value = original.clone();
         value["source_revision"] = json!(revision);
         assert!(Plan::from_bytes(serde_json::to_vec(&value).unwrap()).is_err());
     }
-    for path in ["../config.json", "/config.json", "https://evil/file", "riley-checkpoint.json", "config\\evil.json"] {
+    for path in [
+        "../config.json",
+        "/config.json",
+        "https://evil/file",
+        "riley-checkpoint.json",
+        "config\\evil.json",
+    ] {
         let mut value = original.clone();
         value["files"][0]["path"] = json!(path);
         assert!(Plan::from_bytes(serde_json::to_vec(&value).unwrap()).is_err());
@@ -188,7 +224,10 @@ fn manifest_validation_is_strict_and_revision_is_immutable() {
     let mut unknown = original;
     unknown["extra"] = json!(true);
     assert!(Plan::from_bytes(serde_json::to_vec(&unknown).unwrap()).is_err());
-    let duplicate = String::from_utf8(bytes).unwrap().replacen('{', "{\"format\":\"riley-checkpoint-v1\",", 1);
+    let duplicate =
+        String::from_utf8(bytes)
+            .unwrap()
+            .replacen('{', "{\"format\":\"riley-checkpoint-v1\",", 1);
     assert!(Plan::from_bytes(duplicate.into_bytes()).is_err());
 }
 
@@ -209,5 +248,18 @@ fn symlink_files_source_ancestors_and_destinations_are_rejected() {
     assert!(!parent.0.join("ready").exists());
     symlink(&source.0, parent.0.join("ready")).unwrap();
     assert!(prepare(&plan, &source.0, &parent.0.join("ready")).is_err());
-    assert!(fs::symlink_metadata(parent.0.join("ready")).unwrap().file_type().is_symlink());
+    assert!(
+        fs::symlink_metadata(parent.0.join("ready"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[test]
+fn sha256_encoding_matches_standard_known_vector() {
+    assert_eq!(
+        hex_digest(Sha256::digest(b"abc").as_ref()),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
 }

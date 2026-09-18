@@ -20,27 +20,42 @@ fn parse(args: &[String]) -> Result<(&str, BTreeMap<String, String>)> {
     let allowed: &[&str] = match command {
         "prepare" => &["--manifest", "--source", "--destination"],
         "verify" => &["--checkpoint"],
-        "download" => &["--manifest", "--destination", "--allow-network", "--token-env"],
+        "download" => &[
+            "--manifest",
+            "--destination",
+            "--allow-network",
+            "--token-env",
+        ],
         _ => return Err(fail("unknown command; use --help")),
     };
     let mut values = BTreeMap::new();
     let mut index = 1;
     while index < args.len() {
         let flag = &args[index];
-        if !allowed.contains(&flag.as_str()) { return Err(fail(format!("unknown flag: {flag}"))); }
+        if !allowed.contains(&flag.as_str()) {
+            return Err(fail(format!("unknown flag: {flag}")));
+        }
         let value = if flag == "--allow-network" {
             "true".to_owned()
         } else {
             index += 1;
-            let value = args.get(index).ok_or_else(|| fail(format!("missing value: {flag}")))?;
-            if value.is_empty() || value.starts_with("--") { return Err(fail(format!("missing value: {flag}"))); }
+            let value = args
+                .get(index)
+                .ok_or_else(|| fail(format!("missing value: {flag}")))?;
+            if value.is_empty() || value.starts_with("--") {
+                return Err(fail(format!("missing value: {flag}")));
+            }
             value.clone()
         };
-        if values.insert(flag.clone(), value).is_some() { return Err(fail(format!("duplicate flag: {flag}"))); }
+        if values.insert(flag.clone(), value).is_some() {
+            return Err(fail(format!("duplicate flag: {flag}")));
+        }
         index += 1;
     }
     for flag in allowed.iter().filter(|flag| **flag != "--token-env") {
-        if !values.contains_key(*flag) { return Err(fail(format!("required flag: {flag}"))); }
+        if !values.contains_key(*flag) {
+            return Err(fail(format!("required flag: {flag}")));
+        }
     }
     Ok((command, values))
 }
@@ -55,7 +70,11 @@ fn run(args: &[String]) -> Result<()> {
         "verify" => verify(Path::new(&values["--checkpoint"]))?,
         "prepare" => {
             let plan = Plan::read(Path::new(&values["--manifest"]))?;
-            prepare(&plan, Path::new(&values["--source"]), Path::new(&values["--destination"]))?;
+            prepare(
+                &plan,
+                Path::new(&values["--source"]),
+                Path::new(&values["--destination"]),
+            )?;
         }
         "download" => {
             #[cfg(not(feature = "hub"))]
@@ -64,10 +83,20 @@ fn run(args: &[String]) -> Result<()> {
             {
                 riley_checkpoint::hub::check_network_permission(true)?;
                 let plan = Plan::read(Path::new(&values["--manifest"]))?;
-                let token = values.get("--token-env").map(|name| {
-                    std::env::var(name).map_err(|_| fail("requested token environment variable is unset/non-UTF-8"))
-                }).transpose()?;
-                riley_checkpoint::hub::download(&plan, Path::new(&values["--destination"]), true, token)?;
+                let token = values
+                    .get("--token-env")
+                    .map(|name| {
+                        std::env::var(name).map_err(|_| {
+                            fail("requested token environment variable is unset/non-UTF-8")
+                        })
+                    })
+                    .transpose()?;
+                riley_checkpoint::hub::download(
+                    &plan,
+                    Path::new(&values["--destination"]),
+                    true,
+                    token,
+                )?;
             }
         }
         _ => unreachable!("parser restricts commands"),
@@ -77,11 +106,20 @@ fn run(args: &[String]) -> Result<()> {
 }
 
 fn main() -> std::process::ExitCode {
-    let args: Result<Vec<String>> = std::env::args_os().skip(1)
-        .map(|value| value.into_string().map_err(|_| fail("arguments must be UTF-8"))).collect();
+    let args: Result<Vec<String>> = std::env::args_os()
+        .skip(1)
+        .map(|value| {
+            value
+                .into_string()
+                .map_err(|_| fail("arguments must be UTF-8"))
+        })
+        .collect();
     match args.and_then(|args| run(&args)) {
         Ok(()) => std::process::ExitCode::SUCCESS,
-        Err(error) => { eprintln!("riley-checkpoint: {error}"); std::process::ExitCode::FAILURE }
+        Err(error) => {
+            eprintln!("riley-checkpoint: {error}");
+            std::process::ExitCode::FAILURE
+        }
     }
 }
 
