@@ -1,0 +1,50 @@
+name: Rust checkpoint preparation
+on:
+  pull_request:
+    paths: ["tools/riley-checkpoint/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/checkpoint-preparation.yml"]
+  push:
+    branches: [main, work/rust-checkpoint-preparation]
+    paths: ["tools/riley-checkpoint/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/checkpoint-preparation.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: checkpoint-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  checkpoint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: 1.85.0
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup toolchain install 1.85.0 --profile minimal --component rustfmt,clippy
+      - name: Bootstrap independent lock for initial review only
+        run: |
+          if [ ! -f tools/riley-checkpoint/Cargo.lock ]; then
+            cargo generate-lockfile --manifest-path tools/riley-checkpoint/Cargo.toml
+            cargo fmt --manifest-path tools/riley-checkpoint/Cargo.toml
+          fi
+      - name: Format, lint and test offline and Hub builds
+        run: |
+          set -euo pipefail
+          manifest=tools/riley-checkpoint/Cargo.toml
+          cargo fmt --manifest-path "$manifest" -- --check
+          cargo clippy --locked --manifest-path "$manifest" --all-targets --no-default-features -- -D warnings
+          cargo test --locked --manifest-path "$manifest" --all-targets --no-default-features
+          cargo clippy --locked --manifest-path "$manifest" --all-targets --features hub -- -D warnings
+          cargo test --locked --manifest-path "$manifest" --all-targets --features hub
+          cargo build --locked --manifest-path "$manifest" --no-default-features
+          env PATH=/nonexistent tools/riley-checkpoint/target/debug/riley-checkpoint --help
+      - name: Preserve exact lock and formatted review sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-review-${{ github.sha }}
+          path: |
+            tools/riley-checkpoint/Cargo.lock
+            tools/riley-checkpoint/src
+          if-no-files-found: error
+          retention-days: 7
