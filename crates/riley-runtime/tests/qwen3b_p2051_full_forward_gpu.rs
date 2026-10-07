@@ -182,7 +182,7 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_NATIVE_CUDA_HEADER_SHA256: &str =
 // Reviewed diagnostic-only M2 delta preserves the M1 recurrence and provides
 // bounded T2050 scratch plus an explicit second-step trace; no selector change.
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256: &str =
-    "ce112dcff5e6778092f80d1529ee724e9d30b31f458a409c0f6e91b3677477df";
+    "b23dd13f6ffdf34e033efcdce6a6ebd4ccd8d2c991603d332947b8649ae119cb";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_CUDA_FFI_SHA256: &str =
     "4a70eb45707cd8c4caeed87906fdf39da63afbc1cc6ee32db6564003de2e3c7e";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_NATIVE_CUDA_HEADER_SHA256: &str =
@@ -5565,7 +5565,7 @@ fn qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate() -> TestResult
         &repository.join(native_path),
         "M1/M2 native source",
     )?)?;
-    if native_hash != "4bc0a9a19b2b056c4cb159d7c460ab149aec852f684652e3dc667450c776af74" {
+    if native_hash != "0db2265d98f302103a93d271f27e778cff1264376746ccb7f85dd904165cab96" {
         return Err("bounded M1/M2 native source differs from reviewed source".into());
     }
     let workload = load_workload()?;
@@ -5744,6 +5744,161 @@ fn qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate() -> TestResult
     );
     if !exact {
         return Err("M1/M2 exact104 gate failed; no selector eligibility".into());
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only full128 Qwen cache-on byte-exact logits diagnostic"]
+fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
+    let repository = repository_root()?;
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
+    )?;
+    let oracle: Value = serde_json::from_slice(&fs::read(required_path(
+        "RILEY_QWEN_HF_TEACHER_FORCED_ORACLE",
+    )?)?)?;
+    let tokens = json_u32_array(
+        &oracle["generation"]["teacher_token_ids"],
+        "full128 teacher IDs",
+    )?;
+    if tokens.len() != 128 || token_ids_sha256(&tokens) != teacher.full_teacher_token_ids_sha256 {
+        return Err("full128 teacher IDs differ from verified oracle".into());
+    }
+    let teacher_raw = fs::read(required_path("RILEY_QWEN_HF_CACHE_ON_SIDECAR")?)?;
+    let header_len = usize::try_from(u64::from_le_bytes(teacher_raw[..8].try_into()?))?;
+    let expected = &teacher_raw[8 + header_len..];
+    let row_bytes = QWEN3B_VOCABULARY_SIZE * BF16_BYTES;
+    if expected.len() != 128 * row_bytes {
+        return Err("full128 oracle extent differs".into());
+    }
+    let model = load_cache_on_prefill_model(&hf)?;
+    let (context, mut stream) = first_context()?;
+    let config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+        FULL_FORWARD_UPLOAD_STAGING_BYTES,
+        FULL_FORWARD_IO_STAGING_BYTES,
+        HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
+        REFERENCE_ATTENTION_BUDGET_BYTES,
+    ))
+    .with_hf_eager_qwen_p2048_cache_on_full128_trace_probe();
+    let mut decode = match PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        QWEN3B_PROMPT_TOKEN_COUNT,
+        2175,
+        config,
+    ) {
+        Ok(owner) => owner,
+        Err(error) => {
+            let cleanup = close_decode_resources(None, stream, context);
+            return Err(format!("full128 prepare failed: {error}; cleanup: {cleanup:?}").into());
+        }
+    };
+    let execution = (|| -> TestResult<Vec<u8>> {
+        let mut trace = decode.prepare_hf_eager_qwen_p2048_cache_on_m1_trace()?;
+        if decode
+            .decode_hf_eager_qwen_p2048_cache_on_full128_traced(tokens[0], &mut trace, &mut stream)
+            .is_ok()
+            || decode.logical_length() != 0
+        {
+            return Err("full128 before-prefill guard mutated KV".into());
+        }
+        let mut first = Vec::new();
+        for repetition in 0..2 {
+            if repetition != 0 {
+                decode.reset()?;
+            }
+            decode.prefill(&workload.prompt_token_ids, &mut stream)?;
+            let mut actual = vec![0; 128 * row_bytes];
+            decode.download_last_logits(&mut actual[..row_bytes], &mut stream)?;
+            for step in 1..128 {
+                decode.decode_hf_eager_qwen_p2048_cache_on_full128_traced(
+                    tokens[step - 1],
+                    &mut trace,
+                    &mut stream,
+                )?;
+                if decode.logical_length() != QWEN3B_PROMPT_TOKEN_COUNT + step {
+                    return Err(format!("full128 committed length differs at step {step}").into());
+                }
+                decode.download_last_logits(
+                    &mut actual[step * row_bytes..(step + 1) * row_bytes],
+                    &mut stream,
+                )?;
+            }
+            let last_trace = collect_cache_on_m1_trace(&trace)?;
+            if decode
+                .decode_hf_eager_qwen_p2048_cache_on_full128_traced(
+                    tokens[127],
+                    &mut trace,
+                    &mut stream,
+                )
+                .is_ok()
+                || decode.logical_length() != 2175
+                || collect_cache_on_m1_trace(&trace)? != last_trace
+            {
+                return Err("full128 past-end guard mutated KV or trace".into());
+            }
+            if repetition == 0 {
+                first = actual;
+            } else if first != actual {
+                return Err("full128 same-owner reset/re-prefill differs".into());
+            }
+        }
+        Ok(first)
+    })();
+    let cleanup = close_decode_resources(Some(decode), stream, context);
+    let actual = match (execution, cleanup) {
+        (Ok(value), Ok(())) => value,
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => return Err(error),
+        (Err(error), Err(other)) => {
+            return Err(format!("full128 failed: {error}; cleanup: {other}").into());
+        }
+    };
+    let mut rows = Vec::new();
+    for row in 0..128 {
+        let a = &actual[row * row_bytes..(row + 1) * row_bytes];
+        let e = &expected[row * row_bytes..(row + 1) * row_bytes];
+        rows.push(json!({"row":row,"bf16_exact":a==e,"actual_sha256":sha256_hex(a),"expected_sha256":sha256_hex(e)}));
+    }
+    let exact = actual == expected;
+    let first_non_exact = (0..128).find(|&row| {
+        actual[row * row_bytes..(row + 1) * row_bytes]
+            != expected[row * row_bytes..(row + 1) * row_bytes]
+    });
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_FULL128_OUTPUT")?;
+    let raw_path = output.with_extension("bf16");
+    let mut raw = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&raw_path)?;
+    raw.write_all(&actual)?;
+    raw.sync_all()?;
+    let test_path = "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs";
+    let receipt = json!({
+        "schema_version":"riley.qwen3b-cache-on-full128-logits.v1",
+        "source_commit":clean_git_revision_for_source(&repository,test_path,"full128 diagnostic")?,
+        "source_sha256":{"rust_decode":sha256_file(&repository.join("crates/riley-runtime/src/llama/decode.rs"))?,"native_decode_attention":sha256_file(&repository.join("kernels/src/decode_attention.cu"))?,"test":sha256_file(&repository.join(test_path))?},
+        "contract":{"model_revision":QWEN3B_REVISION,"prompt_tokens":2048,"prompt_ids_sha256":QWEN3B_PROMPT_TOKEN_SHA256,"teacher_ids_sha256":teacher.full_teacher_token_ids_sha256,"teacher_sidecar_sha256":teacher.cache_on_sidecar_sha256,"output_logit_rows":128,"decode_steps":127,"maximum_logical_length":2175,"dtype":"BF16","comparison":"byte-exact; no tolerance"},
+        "candidate_raw_sidecar":{"path":raw_path,"bytes":actual.len(),"sha256":sha256_hex(&actual)},
+        "rows":rows,"first_non_exact_row":first_non_exact,
+        "repeat_execution":{"same_owner":true,"all128_rows_identical":true},
+        "invalid_position_guards":{"before_prefill":true,"after_decode_step127":true},
+        "cleanup":"owner closed; CUDA allocation accounting zero; stream/context closed",
+        "quality_gate":{"full128_teacher_forced_logits_exact":exact,"serving_selector_eligible":false,"free_running_generation_verified":false},
+        "serving_performance":"미실행","performance_claim_eligible":false,"goal_achieved":false,
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "RILEY_QWEN_FULL128_RESULT={}",
+        serde_json::to_string(&receipt)?
+    );
+    if !exact {
+        return Err("full128 exact logits gate failed; raw evidence preserved".into());
     }
     Ok(())
 }

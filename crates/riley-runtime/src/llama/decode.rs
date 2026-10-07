@@ -52,6 +52,7 @@ const ROPE_ALLOCATION_COUNT: u64 = 2;
 const ATTENTION_ALLOCATION_COUNT: u64 = 1;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH: usize = 2_048;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH: usize = 2_050;
+const HF_EAGER_QWEN_P2048_CACHE_ON_FULL128_MAXIMUM_LENGTH: usize = 2_175;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_AV_WORKSPACE_BYTES: u64 = 33_554_432;
 const _: () = assert!(KV_BLOCK_SIZE as u64 == PAGED_KV_BLOCK_SIZE);
@@ -526,6 +527,7 @@ pub struct PreparedLlamaDecodeConfig {
     decode_attention_preference: DecodeAttentionPreference,
     kv_cache_policy: LlamaKvCachePolicy,
     hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
+    hf_eager_qwen_p2048_cache_on_full128_trace_probe: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: bool,
 }
@@ -538,6 +540,7 @@ impl PreparedLlamaDecodeConfig {
             decode_attention_preference: DecodeAttentionPreference::Optimized,
             kv_cache_policy: LlamaKvCachePolicy::paged(),
             hf_eager_qwen_p2048_cache_on_m1_trace_probe: false,
+            hf_eager_qwen_p2048_cache_on_full128_trace_probe: false,
             hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: false,
             hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: false,
         }
@@ -633,6 +636,17 @@ impl PreparedLlamaDecodeConfig {
     pub const fn with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_av_candidate(self) -> Self {
         let mut configured = self.with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate();
         configured.hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate = true;
+        configured
+    }
+
+    /// Prepares a diagnostic-only P2048 plus 127 decode-step owner for the
+    /// immutable 128-row HF logits oracle. Ordinary and bounded M1/M2 owners
+    /// retain their original capacities. This does not enable a serving route.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    #[must_use]
+    pub const fn with_hf_eager_qwen_p2048_cache_on_full128_trace_probe(self) -> Self {
+        let mut configured = self.with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_av_candidate();
+        configured.hf_eager_qwen_p2048_cache_on_full128_trace_probe = true;
         configured
     }
 
@@ -2155,6 +2169,7 @@ pub struct PreparedLlamaDecode {
     phase: LlamaDecodePhase,
     latest_output: Option<LatestOutput>,
     hf_eager_qwen_p2048_cache_on_m1_trace_probe: bool,
+    hf_eager_qwen_p2048_cache_on_full128_trace_probe: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: bool,
     hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: bool,
 }
@@ -2243,7 +2258,12 @@ impl PreparedLlamaDecode {
                     .forward()
                     .is_hf_eager_qwen_p2048_cache_on_prefill_profile()
                     || prompt_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH
-                    || maximum_sequence_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH
+                    || maximum_sequence_length
+                        != if config.hf_eager_qwen_p2048_cache_on_full128_trace_probe {
+                            HF_EAGER_QWEN_P2048_CACHE_ON_FULL128_MAXIMUM_LENGTH
+                        } else {
+                            HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH
+                        }
                     || config.kv_cache_policy() != LlamaKvCachePolicy::Contiguous
                     || config.decode_attention_preference() != DecodeAttentionPreference::Reference
                 {
@@ -2284,6 +2304,9 @@ impl PreparedLlamaDecode {
         let hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate = false;
         #[cfg(not(feature = "cuda-cublas-gemm-probe"))]
         let hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate = false;
+
+        let hf_eager_qwen_p2048_cache_on_full128_trace_probe =
+            config.hf_eager_qwen_p2048_cache_on_full128_trace_probe;
 
         let mut forward =
             PreparedLlamaForward::prepare(model, context, stream, prompt_length, config.forward())?;
@@ -2409,7 +2432,7 @@ impl PreparedLlamaDecode {
             })?;
         let attention_scaled_scores_trace = if hf_eager_qwen_p2048_cache_on_m1_trace_probe {
             let trace_tokens = decode_u64(
-                HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH,
+                maximum_sequence_length,
                 LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
             )?;
             let trace_bytes = query_heads
@@ -2438,7 +2461,7 @@ impl PreparedLlamaDecode {
         let attention_cublas_qk_repeated_key_workspace =
             if hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate {
                 let trace_tokens = decode_u64(
-                    HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH,
+                    maximum_sequence_length,
                     LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
                 )?;
                 let repeated_key_bytes = query_heads
@@ -2596,6 +2619,7 @@ impl PreparedLlamaDecode {
             phase: LlamaDecodePhase::Empty,
             latest_output: None,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe,
+            hf_eager_qwen_p2048_cache_on_full128_trace_probe,
             hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate,
             hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate,
         })
@@ -2942,6 +2966,38 @@ impl PreparedLlamaDecode {
             return Err(LlamaDecodeError::InvalidConfiguration {
                 field: "hf_eager_qwen_p2048_cache_on_m2_trace",
                 reason: "requires the bounded QK/AV owner after M1 and a full-forward trace",
+            });
+        }
+        trace.validate(&self.forward)?;
+        trace.reset();
+        self.decode_with_optional_m1_trace::<true>(token_id, Some(trace), stream)
+    }
+
+    /// Executes one of the 127 teacher-forced decode steps in the dedicated
+    /// full128 diagnostic owner. Rejects invalid positions before KV or trace
+    /// mutation; normal reservation rollback and poisoning remain unchanged.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn decode_hf_eager_qwen_p2048_cache_on_full128_traced(
+        &mut self,
+        token_id: u32,
+        trace: &mut PreparedLlamaDecodeM1Trace,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        if !self.hf_eager_qwen_p2048_cache_on_full128_trace_probe
+            || !self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate
+            || !self.hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate
+            || !matches!(
+                self.phase,
+                LlamaDecodePhase::Prefilled | LlamaDecodePhase::Decoding
+            )
+            || !(HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH
+                ..HF_EAGER_QWEN_P2048_CACHE_ON_FULL128_MAXIMUM_LENGTH)
+                .contains(&self.logical_length)
+            || trace.attention_detail.is_some()
+        {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_full128_trace",
+                reason: "requires the dedicated full128 owner at P2048 through decode step126",
             });
         }
         trace.validate(&self.forward)?;
@@ -4286,6 +4342,7 @@ impl PreparedLlamaDecode {
             phase: _,
             latest_output: _,
             hf_eager_qwen_p2048_cache_on_m1_trace_probe: _,
+            hf_eager_qwen_p2048_cache_on_full128_trace_probe: _,
             hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate: _,
             hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate: _,
         } = self;
