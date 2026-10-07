@@ -35,7 +35,7 @@ use riley_runtime::llama::{
 };
 use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
 use riley_tensor::DType;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -131,7 +131,7 @@ const CACHE_ON_PREFILL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFIL
 const CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX: &str =
     "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE=";
 const CACHE_ON_PREFILL_KV_RESULT_SCHEMA_VERSION: &str =
-    "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-kv-comparison.v2";
+    "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-kv-comparison.v3";
 const CACHE_ON_PREFILL_KV_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-prefill-kv-comparison";
 const CACHE_ON_PREFILL_KV_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV=";
@@ -201,6 +201,7 @@ struct TeacherPrefix {
 
 #[derive(Debug)]
 struct TeacherCacheOn {
+    prefill_logits_sha256: String,
     artifact_sha256: String,
     cache_on_sidecar_sha256: String,
     full_teacher_token_ids_sha256: String,
@@ -461,6 +462,7 @@ struct HfCacheOnPrefillStageArtifact {
 
 #[derive(Debug)]
 struct HfCacheOnPrefillKvArtifact {
+    prefill_logits_sha256: String,
     manifest_path: PathBuf,
     manifest_sha256: String,
     sidecar_path: PathBuf,
@@ -822,7 +824,7 @@ fn load_teacher_prefix() -> TestResult<TeacherPrefix> {
     })
 }
 
-fn parse_teacher_cache_on_sidecar(path: &Path) -> TestResult {
+fn parse_teacher_cache_on_sidecar(path: &Path) -> TestResult<String> {
     let source = regular_file(path, "HF cache-on sidecar")?;
     let bytes = fs::read(source)?;
     if bytes.len() < 8 {
@@ -843,7 +845,21 @@ fn parse_teacher_cache_on_sidecar(path: &Path) -> TestResult {
     {
         return Err("HF cache-on sidecar tensor contract differs".into());
     }
-    Ok(())
+    let offsets = tensor
+        .get("data_offsets")
+        .and_then(Value::as_array)
+        .ok_or("HF cache-on sidecar offsets are missing")?;
+    if offsets.len() != 2 {
+        return Err("HF cache-on sidecar offset count differs".into());
+    }
+    let start = usize::try_from(offsets[0].as_u64().ok_or("invalid start offset")?)?;
+    let end = usize::try_from(offsets[1].as_u64().ok_or("invalid end offset")?)?;
+    let data = &bytes[8 + header_len..];
+    let row_bytes = QWEN3B_VOCABULARY_SIZE * BF16_BYTES;
+    if start != 0 || end != data.len() || end != 128 * row_bytes {
+        return Err("HF cache-on sidecar extent differs".into());
+    }
+    Ok(sha256_hex(&data[..row_bytes]))
 }
 
 fn load_teacher_cache_on() -> TestResult<TeacherCacheOn> {
@@ -852,13 +868,14 @@ fn load_teacher_cache_on() -> TestResult<TeacherCacheOn> {
         &required_path("RILEY_QWEN_HF_CACHE_ON_SIDECAR")?,
         "HF cache-on sidecar",
     )?;
-    parse_teacher_cache_on_sidecar(&cache_on_sidecar_path)?;
+    let prefill_logits_sha256 = parse_teacher_cache_on_sidecar(&cache_on_sidecar_path)?;
     let token_ids = prefix
         .token_ids
         .get(..2)
         .ok_or("HF teacher cache-on token prefix is too short")?
         .to_vec();
     Ok(TeacherCacheOn {
+        prefill_logits_sha256,
         artifact_sha256: prefix.artifact_sha256,
         cache_on_sidecar_sha256: sha256_file(&cache_on_sidecar_path)?,
         full_teacher_token_ids_sha256: prefix.full_teacher_token_ids_sha256,
@@ -2237,10 +2254,13 @@ fn load_hf_cache_on_prefill_kv_artifact(
     if contract["source_logit_binding"]["source_logit_row"].as_u64() != Some(0) {
         return Err("HF P2048 cache-on prefill KV source logit row differs".into());
     }
-    let _source_logit_sha256 = json_sha256(
+    let prefill_logits_sha256 = json_sha256(
         &contract["source_logit_binding"]["bf16_le_sha256"],
         "HF P2048 cache-on prefill KV source logit SHA-256",
     )?;
+    if prefill_logits_sha256 != teacher.prefill_logits_sha256 {
+        return Err("HF prefill KV source logits do not bind teacher row zero".into());
+    }
     let trace_profile = manifest["trace_profile"]
         .as_object()
         .ok_or("HF P2048 cache-on prefill KV trace profile is missing")?;
@@ -2305,6 +2325,7 @@ fn load_hf_cache_on_prefill_kv_artifact(
     let tensors = parse_stage_sidecar(&manifest, &sidecar_path, &specs)?;
     let sidecar_sha256 = sha256_file(&sidecar_path)?;
     Ok(HfCacheOnPrefillKvArtifact {
+        prefill_logits_sha256,
         manifest_path,
         manifest_sha256,
         sidecar_path,
@@ -3743,12 +3764,21 @@ fn run_cache_on_prefill_kv_profile(
         }
         decode.prefill(input, &mut stream)?;
         let observed = collect_cache_on_prefill_kv_prefix(&mut decode, &mut stream)?;
+        let mut logits = vec![0_u8; QWEN3B_VOCABULARY_SIZE * BF16_BYTES];
+        decode.download_last_logits(&mut logits, &mut stream)?;
+        let logits = canonical_bf16_le(&logits)?;
+        let logits_sha256 = sha256_hex(&logits);
 
         // Reuse the same allocation and reset path before comparing with HF.
         // This distinguishes a stale-cache lifecycle problem from arithmetic.
         decode.reset()?;
         decode.prefill(input, &mut stream)?;
         let repeated = collect_cache_on_prefill_kv_prefix(&mut decode, &mut stream)?;
+        let mut repeated_logits = vec![0_u8; QWEN3B_VOCABULARY_SIZE * BF16_BYTES];
+        decode.download_last_logits(&mut repeated_logits, &mut stream)?;
+        if logits != canonical_bf16_le(&repeated_logits)? {
+            return Err("P2048 prefill logits differ on same-owner reuse".into());
+        }
         if observed != repeated {
             return Err("P2048 cache-on prefill KV trace differs on same-owner reuse".into());
         }
@@ -3788,9 +3818,16 @@ fn run_cache_on_prefill_kv_profile(
             "cache_layout": "contiguous-head-major-logical-[kv_head,token,head_dim]",
             "hf_dynamic_cache_layout": "[batch,kv_head,token,head_dim]",
             "selected_layer_indices": (0..CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT).collect::<Vec<_>>(),
+            "prefill_last_logits": {
+                "hf_bf16_le_sha256": hf.prefill_logits_sha256,
+                "riley_bf16_le_sha256": logits_sha256,
+                "bf16_exact": logits_sha256 == hf.prefill_logits_sha256,
+                "element_count": QWEN3B_VOCABULARY_SIZE,
+            },
             "repeat_execution": {
                 "reused_prepared_owner": true,
                 "all_prefill_kv_tensors_bf16_identical": true,
+                "prefill_last_logits_bf16_identical": true,
             },
             "summary": {
                 "tensor_count": tensors.len(),
@@ -4640,8 +4677,8 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
 
 #[test]
 #[ignore = "remote-only Qwen2.5-3B P2048 cache-on direct-cuBLAS attention prefill candidate gate"]
-fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_quality_gate()
--> TestResult {
+fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_quality_gate(
+) -> TestResult {
     run_cache_on_prefill_quality_gate(
         HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
         "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_STAGE_OUTPUT",
@@ -4678,6 +4715,9 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_kv_quality_gate() -> TestResult {
         && summary
             .get("first_non_exact_tensor")
             .is_some_and(Value::is_null);
+    let prefill_logits_exact = candidate["prefill_last_logits"]["bf16_exact"]
+        .as_bool()
+        .ok_or("native prefill logit comparison is missing")?;
     let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV_STAGE_OUTPUT")?;
     let receipt = json!({
         "schema_version": CACHE_ON_PREFILL_KV_RESULT_SCHEMA_VERSION,
@@ -4711,7 +4751,7 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_kv_quality_gate() -> TestResult {
         "quality_gate": {
             "required_cache_tensor_count": tensor_count,
             "candidate_exact_cache_tensor_count": exact_count,
-            "prefill_last_token_bf16_exact": true,
+            "prefill_last_token_bf16_exact": prefill_logits_exact,
             "cache_on_prefill_kv_bf16_exact": cache_prefix_exact,
             "cache_on_m1_decode_bf16_exact": false,
             "cache_on_full_forward_bf16_exact": false,
@@ -4725,7 +4765,7 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_kv_quality_gate() -> TestResult {
         "{CACHE_ON_PREFILL_KV_MARKER_PREFIX}{}",
         serde_json::to_string(&receipt)?
     );
-    if !cache_prefix_exact {
+    if !cache_prefix_exact || !prefill_logits_exact {
         return Err(
             "P2048 cache-on prefill KV quality gate failed; corrected cache-on promotion remains blocked"
                 .into(),
