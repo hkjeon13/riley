@@ -5799,6 +5799,7 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
             return Err(format!("full128 prepare failed: {error}; cleanup: {cleanup:?}").into());
         }
     };
+    let mut selected_stages = BTreeMap::new();
     let execution = (|| -> TestResult<Vec<u8>> {
         let mut trace = decode.prepare_hf_eager_qwen_p2048_cache_on_m1_trace()?;
         if decode
@@ -5829,6 +5830,11 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
                     &mut actual[step * row_bytes..(step + 1) * row_bytes],
                     &mut stream,
                 )?;
+                if repetition == 0 && matches!(step, 108 | 109) {
+                    for (name, bytes) in collect_cache_on_m1_trace(&trace)? {
+                        selected_stages.insert(format!("decode_step_{step}.{name}"), bytes);
+                    }
+                }
             }
             let last_trace = collect_cache_on_m1_trace(&trace)?;
             if decode
@@ -5878,6 +5884,20 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
         .open(&raw_path)?;
     raw.write_all(&actual)?;
     raw.sync_all()?;
+    let selected_path = output.with_extension("stages.bf16");
+    let mut selected_raw = Vec::new();
+    let mut selected_metadata = BTreeMap::new();
+    for (name, bytes) in selected_stages {
+        let start = selected_raw.len();
+        selected_raw.extend_from_slice(&bytes);
+        selected_metadata.insert(name, json!({"raw_data_offsets":[start,selected_raw.len()],"bytes":bytes.len(),"sha256":sha256_hex(&bytes)}));
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&selected_path)?;
+    file.write_all(&selected_raw)?;
+    file.sync_all()?;
     let test_path = "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs";
     let receipt = json!({
         "schema_version":"riley.qwen3b-cache-on-full128-logits.v1",
@@ -5886,6 +5906,7 @@ fn qwen3b_p2048_cache_on_full128_logits_quality_gate() -> TestResult {
         "contract":{"model_revision":QWEN3B_REVISION,"prompt_tokens":2048,"prompt_ids_sha256":QWEN3B_PROMPT_TOKEN_SHA256,"teacher_ids_sha256":teacher.full_teacher_token_ids_sha256,"teacher_sidecar_sha256":teacher.cache_on_sidecar_sha256,"output_logit_rows":128,"decode_steps":127,"maximum_logical_length":2175,"dtype":"BF16","comparison":"byte-exact; no tolerance"},
         "candidate_raw_sidecar":{"path":raw_path,"bytes":actual.len(),"sha256":sha256_hex(&actual)},
         "rows":rows,"first_non_exact_row":first_non_exact,
+        "selected_stage_raw_sidecar":{"path":selected_path,"bytes":selected_raw.len(),"sha256":sha256_hex(&selected_raw)},"selected_stages":selected_metadata,
         "repeat_execution":{"same_owner":true,"all128_rows_identical":true},
         "invalid_position_guards":{"before_prefill":true,"after_decode_step127":true},
         "cleanup":"owner closed; CUDA allocation accounting zero; stream/context closed",
