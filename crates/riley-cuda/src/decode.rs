@@ -22,6 +22,8 @@ const F32_BYTES: u64 = 4;
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT: u64 = 2_049;
 #[cfg(feature = "cuda-cublas-gemm-probe")]
+const HF_EAGER_QWEN_P2048_M2_LOGICAL_TOKEN_COUNT: u64 = 2_050;
+#[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_M1_CUBLAS_WORKSPACE_BYTES: u64 = 8_519_680;
 #[cfg(feature = "cuda-cublas-gemm-probe")]
 const HF_EAGER_QWEN_P2048_M1_CUBLAS_AV_WORKSPACE_BYTES: u64 = 33_554_432;
@@ -1926,7 +1928,7 @@ impl PreparedDecodeAttention {
     /// # Errors
     ///
     /// Returns unless this is the materialized reference backend with exactly
-    /// the reviewed Qwen P2048-to-M1 geometry, every diagnostic span has its
+    /// the bounded reviewed Qwen P2048-to-M1/M2 geometry, every diagnostic span has its
     /// required dtype/capacity/context, and the native synchronous call
     /// completes successfully.
     #[cfg(feature = "cuda-cublas-gemm-probe")]
@@ -1947,7 +1949,8 @@ impl PreparedDecodeAttention {
                 "cuBLAS QK qualification requires the materialized reference decode backend",
             ));
         }
-        if logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+        if (logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+            && logical_token_count != HF_EAGER_QWEN_P2048_M2_LOGICAL_TOKEN_COUNT)
             || self.request.query_head_count != NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
             || self.request.key_value_head_count
                 != NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
@@ -1955,7 +1958,7 @@ impl PreparedDecodeAttention {
         {
             return Err(CudaError::invalid_argument(
                 OPERATION,
-                "candidate supports only Qwen P2048-to-M1 T=2049 QH=16 KVH=2 D=128",
+                "candidate supports only Qwen P2048-to-M1/M2 T=2049/2050 QH=16 KVH=2 D=128",
             ));
         }
         ensure_same_context(&self.context, &stream.context, OPERATION)?;
@@ -2029,7 +2032,7 @@ impl PreparedDecodeAttention {
     /// # Errors
     ///
     /// Returns unless this is the materialized reference backend with the
-    /// reviewed Qwen P2048-to-M1 geometry, the caller supplies the bounded
+    /// reviewed Qwen P2048-to-M1/M2 geometry, the caller supplies the bounded
     /// repeated-value and AV workspace spans, and native execution completes.
     #[cfg(feature = "cuda-cublas-gemm-probe")]
     #[allow(clippy::too_many_arguments)]
@@ -2048,7 +2051,8 @@ impl PreparedDecodeAttention {
                 "cuBLAS AV qualification requires the materialized reference decode backend",
             ));
         }
-        if logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+        if (logical_token_count != HF_EAGER_QWEN_P2048_M1_LOGICAL_TOKEN_COUNT
+            && logical_token_count != HF_EAGER_QWEN_P2048_M2_LOGICAL_TOKEN_COUNT)
             || self.request.query_head_count != NATIVE_BF16_PAGED_SPLIT_GQA_D128_QUERY_HEAD_COUNT
             || self.request.key_value_head_count
                 != NATIVE_BF16_PAGED_SPLIT_GQA_D128_KEY_VALUE_HEAD_COUNT
@@ -2056,7 +2060,7 @@ impl PreparedDecodeAttention {
         {
             return Err(CudaError::invalid_argument(
                 OPERATION,
-                "candidate supports only Qwen P2048-to-M1 T=2049 QH=16 KVH=2 D=128",
+                "candidate supports only Qwen P2048-to-M1/M2 T=2049/2050 QH=16 KVH=2 D=128",
             ));
         }
         ensure_same_context(&self.context, &stream.context, OPERATION)?;
