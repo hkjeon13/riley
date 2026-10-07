@@ -35,7 +35,7 @@ use riley_runtime::llama::{
 };
 use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
 use riley_tensor::DType;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -179,10 +179,10 @@ const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_RUST_CUDA_FFI_SHA256: &str =
     "408f7d383f1ab5ef3d6a2bb5641c724395f6ac8d1810216a082316a8721260ec";
 const HF_EAGER_QWEN_P2048_CACHE_ON_STAGE_TRACE_NATIVE_CUDA_HEADER_SHA256: &str =
     "d7a43924dfc99ea0eb54c5c1b33e6150379da2bdc5fb7fa7fa063b42a9d2436c";
-// Reviewed delta from410923c7 adds only feature-gated synchronized KV-prefix
-// diagnostic downloads; existing decode arithmetic and cache writes are unchanged.
+// Reviewed diagnostic-only M2 delta preserves the M1 recurrence and provides
+// bounded T2050 scratch plus an explicit second-step trace; no selector change.
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256: &str =
-    "7fd5764896d964bd478e7df4c08a29cef14fbd9f8ee6587bdc79912459d0a609";
+    "ce112dcff5e6778092f80d1529ee724e9d30b31f458a409c0f6e91b3677477df";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_CUDA_FFI_SHA256: &str =
     "4a70eb45707cd8c4caeed87906fdf39da63afbc1cc6ee32db6564003de2e3c7e";
 const HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_NATIVE_CUDA_HEADER_SHA256: &str =
@@ -4679,8 +4679,8 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_quality_gate() -> TestResult {
 
 #[test]
 #[ignore = "remote-only Qwen2.5-3B P2048 cache-on direct-cuBLAS attention prefill candidate gate"]
-fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_quality_gate(
-) -> TestResult {
+fn qwen3b_p2048_hf_compatible_cache_on_prefill_cublas_attention_candidate_quality_gate()
+-> TestResult {
     run_cache_on_prefill_quality_gate(
         HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
         "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_STAGE_OUTPUT",
@@ -5552,6 +5552,198 @@ fn qwen3b_p2051_hf_compatible_full_sequence_layer2_quality_gate() -> TestResult 
             "HF-compatible full-sequence layer2 quality gate failed; receipt was written and cache-on/selector promotion remains blocked"
                 .into(),
         );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only bounded Qwen P2048 cache-on M1+M2 exact104 stage qualifier"]
+fn qwen3b_p2048_cache_on_m1_m2_bounded_full_forward_quality_gate() -> TestResult {
+    let repository = repository_root()?;
+    let native_path = "kernels/src/decode_attention.cu";
+    let native_hash = sha256_file(&regular_file(
+        &repository.join(native_path),
+        "M1/M2 native source",
+    )?)?;
+    if native_hash != "4bc0a9a19b2b056c4cb159d7c460ab149aec852f684652e3dc667450c776af74" {
+        return Err("bounded M1/M2 native source differs from reviewed source".into());
+    }
+    let workload = load_workload()?;
+    let teacher = load_teacher_cache_on()?;
+    let hf = load_hf_cache_on_prefill_stage_artifact(
+        &teacher,
+        &workload,
+        HfCacheOnPrefillStageSourceCompatibility::DirectCublasAttentionFullForwardCandidateV1,
+    )?;
+    if teacher.token_ids != [304, 279]
+        || workload.prompt_token_ids.len() != QWEN3B_PROMPT_TOKEN_COUNT
+    {
+        return Err("bounded M1/M2 input contract differs".into());
+    }
+    let model = load_cache_on_prefill_model(&hf)?;
+    let (context, mut stream) = first_context()?;
+    let config = PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::new(
+        FULL_FORWARD_UPLOAD_STAGING_BYTES,
+        FULL_FORWARD_IO_STAGING_BYTES,
+        HF_COMPAT_GEMM_WORKSPACE_CAP_BYTES,
+        REFERENCE_ATTENTION_BUDGET_BYTES,
+    ))
+    .with_hf_eager_qwen_p2048_cache_on_m1_cublas_qk_av_candidate();
+    let mut decode = match PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        QWEN3B_PROMPT_TOKEN_COUNT,
+        QWEN3B_PROMPT_TOKEN_COUNT + 2,
+        config,
+    ) {
+        Ok(owner) => owner,
+        Err(error) => {
+            let cleanup = close_decode_resources(None, stream, context);
+            return match cleanup {
+                Ok(()) => Err(error.into()),
+                Err(other) => {
+                    Err(format!("M1/M2 prepare failed: {error}; cleanup: {other}").into())
+                }
+            };
+        }
+    };
+    let execution = (|| -> TestResult<Vec<BTreeMap<String, Vec<u8>>>> {
+        let mut trace = decode.prepare_hf_eager_qwen_p2048_cache_on_m1_trace()?;
+        if decode
+            .decode_hf_eager_qwen_p2048_cache_on_m2_traced(279, &mut trace, &mut stream)
+            .is_ok()
+            || decode.logical_length() != 0
+        {
+            return Err("M2 before prefill must reject without committing KV".into());
+        }
+        let mut observed = Vec::new();
+        for repetition in 0..2 {
+            if repetition != 0 {
+                decode.reset()?;
+            }
+            decode.prefill(&workload.prompt_token_ids, &mut stream)?;
+            if decode
+                .decode_hf_eager_qwen_p2048_cache_on_m2_traced(279, &mut trace, &mut stream)
+                .is_ok()
+                || decode.logical_length() != QWEN3B_PROMPT_TOKEN_COUNT
+            {
+                return Err("M2 before M1 must reject without committing KV".into());
+            }
+            let mut pair = Vec::new();
+            decode.decode_hf_eager_qwen_p2048_cache_on_m1_traced(304, &mut trace, &mut stream)?;
+            if decode.logical_length() != 2049 {
+                return Err("M1 length differs".into());
+            }
+            pair.push(collect_cache_on_m1_trace(&trace)?);
+            decode.decode_hf_eager_qwen_p2048_cache_on_m2_traced(279, &mut trace, &mut stream)?;
+            if decode.logical_length() != 2050 {
+                return Err("M2 length differs".into());
+            }
+            pair.push(collect_cache_on_m1_trace(&trace)?);
+            if decode
+                .decode_hf_eager_qwen_p2048_cache_on_m2_traced(279, &mut trace, &mut stream)
+                .is_ok()
+                || decode.logical_length() != 2050
+                || collect_cache_on_m1_trace(&trace)? != pair[1]
+            {
+                return Err("M3 must reject without modifying committed KV or trace".into());
+            }
+            if repetition == 0 {
+                observed = pair;
+            } else if observed != pair {
+                return Err("same-owner M1/M2 reset/re-prefill repeat differs".into());
+            }
+        }
+        Ok(observed)
+    })();
+    let cleanup = close_decode_resources(Some(decode), stream, context);
+    let observed = match (execution, cleanup) {
+        (Ok(value), Ok(())) => value,
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => return Err(error),
+        (Err(error), Err(other)) => {
+            return Err(format!("M1/M2 failed: {error}; cleanup: {other}").into());
+        }
+    };
+    // Bind both last-logit rows directly to the immutable 128-row teacher sidecar.
+    let teacher_raw = fs::read(required_path("RILEY_QWEN_HF_CACHE_ON_SIDECAR")?)?;
+    let header_len = usize::try_from(u64::from_le_bytes(teacher_raw[..8].try_into()?))?;
+    let teacher_data = &teacher_raw[8 + header_len..];
+    let row_bytes = QWEN3B_VOCABULARY_SIZE * BF16_BYTES;
+    let output = required_path("RILEY_QWEN3B_P2048_CACHE_ON_M1_M2_STAGE_OUTPUT")?;
+    let raw_path = output.with_extension("bf16");
+    let mut raw = Vec::new();
+    let mut stages = Map::new();
+    let mut exact_count = 0;
+    let mut teacher_rows_exact = Vec::new();
+    let mut first_non_exact: Option<String> = None;
+    for (index, tensors) in observed.iter().enumerate() {
+        let step = index + 1;
+        teacher_rows_exact.push(
+            tensors
+                .get("last_logits")
+                .ok_or("candidate logits missing")?
+                == &teacher_data[step * row_bytes..(step + 1) * row_bytes],
+        );
+        for spec in expected_stage_specs() {
+            let name = format!("decode_step_{step}.{}", spec.name);
+            let expected = hf.tensors.get(&name).ok_or("HF M1/M2 stage missing")?;
+            let actual = tensors
+                .get(&spec.name)
+                .ok_or("native M1/M2 stage missing")?;
+            if expected.len() != shape_byte_len(&spec.shape)? || actual.len() != expected.len() {
+                return Err(format!("M1/M2 stage extent differs: {name}").into());
+            }
+            let mut metric = metrics(expected, actual)?;
+            if actual == expected {
+                exact_count += 1;
+            } else if first_non_exact.is_none() {
+                first_non_exact = Some(name.clone());
+            }
+            let start = raw.len();
+            raw.extend_from_slice(actual);
+            metric["shape"] = json!(spec.shape);
+            metric["raw_data_offsets"] = json!([start, raw.len()]);
+            stages.insert(name, metric);
+        }
+    }
+    let mut raw_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&raw_path)?;
+    raw_file.write_all(&raw)?;
+    raw_file.sync_all()?;
+    let test_path = "crates/riley-runtime/tests/qwen3b_p2051_full_forward_gpu.rs";
+    let revision = clean_git_revision_for_source(&repository, test_path, "M1/M2 qualifier")?;
+    let exact = exact_count == 104
+        && first_non_exact.is_none()
+        && teacher_rows_exact.iter().all(|value| *value);
+    let receipt = json!({
+        "schema_version": "riley.qwen3b-cache-on-m1-m2-bounded-exact104.v1",
+        "created_at_unix_seconds": unix_seconds()?,
+        "source_commit": revision,
+        "source_sha256": {"rust_decode": HF_EAGER_QWEN_P2048_CACHE_ON_M1_CUBLAS_ATTENTION_CANDIDATE_RUST_DECODE_SHA256,
+            "native_decode_attention": native_hash, "test": sha256_file(&repository.join(test_path))?},
+        "contract": {"model_revision": QWEN3B_REVISION, "prompt_tokens": 2048,
+            "prompt_ids_sha256": QWEN3B_PROMPT_TOKEN_SHA256, "teacher_token_ids": [304,279],
+            "logical_lengths": [2049,2050], "dtype": "BF16", "comparison": "byte-exact; no tolerance",
+            "teacher_sidecar_sha256": teacher.cache_on_sidecar_sha256},
+        "hf_stage_artifact": {"manifest_sha256": hf.manifest_sha256, "sidecar_sha256": hf.sidecar_sha256},
+        "candidate_raw_sidecar": {"path": raw_path, "bytes": raw.len(), "sha256": sha256_hex(&raw)},
+        "stages": stages, "summary": {"stage_count":104, "bf16_exact_stage_count":exact_count, "first_non_exact_stage":first_non_exact},
+        "repeat_execution": {"same_owner_and_trace_storage":true,"all104_tensors_identical":true},
+        "invalid_position_guards": {"before_prefill":true,"before_M1":true,"after_M2":true},
+        "cleanup": "owner closed; CUDA allocation accounting zero; stream/context closed",
+        "quality_gate": {"M1_M2_bf16_exact":exact,"teacher_rows1_2_exact":teacher_rows_exact,"full128_generation_eligible":false,"serving_selector_eligible":false},
+        "serving_performance": "미실행", "performance_claim_eligible":false
+    });
+    write_artifact_exclusive(&output, &receipt)?;
+    println!(
+        "RILEY_QWEN_M1_M2_BOUNDED_RESULT={}",
+        serde_json::to_string(&receipt)?
+    );
+    if !exact {
+        return Err("M1/M2 exact104 gate failed; no selector eligibility".into());
     }
     Ok(())
 }

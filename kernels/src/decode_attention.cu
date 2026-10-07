@@ -56,6 +56,7 @@ constexpr uint64_t kMaximumGridX = 2147483647;
 constexpr uint64_t kMaximumGridYOrZ = 65535;
 #if defined(RILEY_CUDA_ENABLE_CUBLAS_GEMM_PROBE)
 constexpr uint64_t kHfEagerQwenP2048M1LogicalTokenCount = 2049;
+constexpr uint64_t kHfEagerQwenP2048M2LogicalTokenCount = 2050;
 constexpr uint64_t kHfEagerQwenP2048M1CublasWorkspaceBytes = 8519680;
 constexpr uint64_t kHfEagerQwenP2048M1CublasAvWorkspaceBytes = 33554432;
 #endif
@@ -3214,7 +3215,8 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
       params->query_head_count, params->key_value_head_count,
       params->head_size, params->scale, error, kOperation);
   if (status == RILEY_CUDA_STATUS_SUCCESS &&
-      (params->logical_token_count != kHfEagerQwenP2048M1LogicalTokenCount ||
+      ((params->logical_token_count != kHfEagerQwenP2048M1LogicalTokenCount &&
+        params->logical_token_count != kHfEagerQwenP2048M2LogicalTokenCount) ||
        params->query_head_count != kNativeBf16PagedSplitGqaD128QueryHeadCount ||
        params->key_value_head_count !=
            kNativeBf16PagedSplitGqaD128KeyValueHeadCount ||
@@ -3222,7 +3224,7 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
     return validation_error(
         error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-        "candidate supports only Qwen P2048->M1 T=2049 QH=16 KVH=2 D=128");
+        "candidate supports only Qwen P2048->M1/M2 T=2049/2050 QH=16 KVH=2 D=128");
   }
   DecodeByteCounts bytes{};
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
@@ -3408,8 +3410,8 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
         error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    // The immutable HF M1 oracle uses the regular FP32 reduction at T=2049.
-    // This API already rejects every other shape; reference routes stay separate.
+    // Preserve the M1 regular FP32 reduction for bounded T=2049/2050.
+    // Only the diagnostic two-step API admits these shapes; no serving route.
     decode_hf_regular_softmax_kernel<3>
         <<<static_cast<uint32_t>(params->query_head_count), 1024, 0,
            stream->stream>>>(
@@ -3465,7 +3467,8 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_av_execute(
       params->query_head_count, params->key_value_head_count,
       params->head_size, params->scale, error, kOperation);
   if (status == RILEY_CUDA_STATUS_SUCCESS &&
-      (params->logical_token_count != kHfEagerQwenP2048M1LogicalTokenCount ||
+      ((params->logical_token_count != kHfEagerQwenP2048M1LogicalTokenCount &&
+        params->logical_token_count != kHfEagerQwenP2048M2LogicalTokenCount) ||
        params->query_head_count != kNativeBf16PagedSplitGqaD128QueryHeadCount ||
        params->key_value_head_count !=
            kNativeBf16PagedSplitGqaD128KeyValueHeadCount ||
@@ -3473,7 +3476,7 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_av_execute(
     return validation_error(
         error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
-        "candidate supports only Qwen P2048->M1 T=2049 QH=16 KVH=2 D=128");
+        "candidate supports only Qwen P2048->M1/M2 T=2049/2050 QH=16 KVH=2 D=128");
   }
   DecodeByteCounts bytes{};
   if (status == RILEY_CUDA_STATUS_SUCCESS) {

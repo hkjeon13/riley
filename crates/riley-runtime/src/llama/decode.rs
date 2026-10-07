@@ -2409,7 +2409,7 @@ impl PreparedLlamaDecode {
             })?;
         let attention_scaled_scores_trace = if hf_eager_qwen_p2048_cache_on_m1_trace_probe {
             let trace_tokens = decode_u64(
-                HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1,
+                HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH,
                 LlamaDecodeResource::HfEagerQwenP2048CacheOnM1AttentionScaledScoresTrace,
             )?;
             let trace_bytes = query_heads
@@ -2438,7 +2438,7 @@ impl PreparedLlamaDecode {
         let attention_cublas_qk_repeated_key_workspace =
             if hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate {
                 let trace_tokens = decode_u64(
-                    HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1,
+                    HF_EAGER_QWEN_P2048_CACHE_ON_M1_MAXIMUM_LENGTH,
                     LlamaDecodeResource::HfEagerQwenP2048CacheOnM1CublasQkRepeatedKeyWorkspace,
                 )?;
                 let repeated_key_bytes = query_heads
@@ -2907,6 +2907,41 @@ impl PreparedLlamaDecode {
             return Err(LlamaDecodeError::InvalidConfiguration {
                 field: "hf_eager_qwen_p2048_cache_on_m1_trace",
                 reason: "requires the source-bound P2048 prefill state immediately before M1",
+            });
+        }
+        trace.validate(&self.forward)?;
+        trace.reset();
+        self.decode_with_optional_m1_trace::<true>(token_id, Some(trace), stream)
+    }
+
+    /// Captures the second teacher-forced token of the bounded Qwen probe.
+    ///
+    /// Requires the same contiguous diagnostic owner immediately after M1
+    /// committed. This synchronized API has no serving selector route and
+    /// cannot execute M3. Attention-detail storage remains M1-only; the M2
+    /// trace captures the same 52 full-forward boundaries with exact bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns before mutation for an ordinary owner, an invalid lifecycle
+    /// position, or an M1 attention-detail trace. Normal decode failures keep
+    /// the existing reservation rollback and poisoning rules.
+    #[cfg(feature = "cuda-cublas-gemm-probe")]
+    pub fn decode_hf_eager_qwen_p2048_cache_on_m2_traced(
+        &mut self,
+        token_id: u32,
+        trace: &mut PreparedLlamaDecodeM1Trace,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        if !self.hf_eager_qwen_p2048_cache_on_m1_cublas_qk_candidate
+            || !self.hf_eager_qwen_p2048_cache_on_m1_cublas_av_candidate
+            || self.phase != LlamaDecodePhase::Decoding
+            || self.logical_length != HF_EAGER_QWEN_P2048_CACHE_ON_M1_PROMPT_LENGTH + 1
+            || trace.attention_detail.is_some()
+        {
+            return Err(LlamaDecodeError::InvalidConfiguration {
+                field: "hf_eager_qwen_p2048_cache_on_m2_trace",
+                reason: "requires the bounded QK/AV owner after M1 and a full-forward trace",
             });
         }
         trace.validate(&self.forward)?;
