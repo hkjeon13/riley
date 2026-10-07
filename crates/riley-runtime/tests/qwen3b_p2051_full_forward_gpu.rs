@@ -118,11 +118,11 @@ const CACHE_ON_LAYER_DETAIL_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-layer-detail-trace";
 const CACHE_ON_LAYER_DETAIL_INDEX: usize = 3;
 const CACHE_ON_PREFILL_KV_SCHEMA_VERSION: &str =
-    "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v1";
+    "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v2";
 const CACHE_ON_PREFILL_KV_ARTIFACT_KIND: &str =
     "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-prefill-kv-trace";
-const CACHE_ON_PREFILL_KV_TRACE_ID: &str = "qwen3b-p2048-cache-on-prefill-kv-prefix-v1";
-const CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT: usize = 14;
+const CACHE_ON_PREFILL_KV_TRACE_ID: &str = "qwen3b-p2048-cache-on-prefill-kv-all-layers-v2";
+const CACHE_ON_PREFILL_KV_PREFIX_LAYER_COUNT: usize = QWEN3B_LAYER_COUNT;
 const CACHE_ON_PREFILL_RESULT_SCHEMA_VERSION: &str =
     "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-comparison.v1";
 const CACHE_ON_PREFILL_RESULT_ARTIFACT_KIND: &str =
@@ -131,7 +131,7 @@ const CACHE_ON_PREFILL_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFIL
 const CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE_MARKER_PREFIX: &str =
     "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_CUBLAS_ATTENTION_CANDIDATE=";
 const CACHE_ON_PREFILL_KV_RESULT_SCHEMA_VERSION: &str =
-    "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-kv-comparison.v1";
+    "riley.qwen3b-p2048-hf-compatible-cache-on-prefill-kv-comparison.v2";
 const CACHE_ON_PREFILL_KV_RESULT_ARTIFACT_KIND: &str =
     "qwen2.5-3b-riley-p2048-hf-compatible-cache-on-prefill-kv-comparison";
 const CACHE_ON_PREFILL_KV_MARKER_PREFIX: &str = "RILEY_QWEN3B_P2048_CACHE_ON_PREFILL_KV=";
@@ -2065,7 +2065,7 @@ fn load_hf_cache_on_prefill_kv_artifact(
         || manifest["trace_id"].as_str() != Some(CACHE_ON_PREFILL_KV_TRACE_ID)
         || manifest["performance_claim_eligible"].as_bool() != Some(false)
         || manifest["producer"]["implementation_id"].as_str()
-            != Some("riley-python-qwen3b-hf-eager-cache-on-prefill-kv-v1")
+            != Some("riley-python-qwen3b-hf-eager-cache-on-prefill-kv-v2")
     {
         return Err("HF P2048 cache-on prefill KV manifest identity differs".into());
     }
@@ -2248,7 +2248,7 @@ fn load_hf_cache_on_prefill_kv_artifact(
         .map(|index| Value::from(u64::try_from(index).expect("layer index fits")))
         .collect::<Vec<_>>();
     if trace_profile.get("capture_domain").and_then(Value::as_str)
-        != Some("cache-on-p2048-prefill-dynamic-cache-kv-prefix")
+        != Some("cache-on-p2048-prefill-dynamic-cache-kv-all-layers")
         || trace_profile.get("id").and_then(Value::as_str) != Some(CACHE_ON_PREFILL_KV_TRACE_ID)
         || trace_profile
             .get("prefill_source_logit_row")
@@ -3781,7 +3781,7 @@ fn run_cache_on_prefill_kv_profile(
             tensors.insert(spec.name, tensor_metrics);
         }
         Ok(json!({
-            "profile_id": "hf-eager-qwen-p2048-cache-on-prefill-kv-prefix-v1",
+            "profile_id": "hf-eager-qwen-p2048-cache-on-prefill-kv-all-layers-v2",
             "cache_mode": "cache-on-prefill-kv-diagnostic",
             "same_scheduler_engine": false,
             "prefill_profile": "hf-eager-qwen-p2048-cache-on-prefill-probe-v1",
@@ -4697,7 +4697,7 @@ fn qwen3b_p2048_hf_compatible_cache_on_prefill_kv_quality_gate() -> TestResult {
             "teacher_full_token_ids_le_u32_sha256": teacher.full_teacher_token_ids_sha256,
             "checkpoint_receipt_filename": hf.checkpoint_receipt_filename,
             "checkpoint_receipt_sha256": hf.checkpoint_receipt_sha256,
-            "hf_execution": "verified eager P2048 prefill then DynamicCache layer-prefix capture",
+            "hf_execution": "verified eager P2048 prefill then DynamicCache all-layer capture",
             "riley_execution": "source-bound P2048 prefill then contiguous logical K/V download",
             "same_scheduler_engine": false,
         },

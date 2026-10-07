@@ -6,10 +6,11 @@ teacher row.  The sidecar contains a bounded prefix of the cache, not a serving
 fallback or a timing result.  Riley serving never imports this module or its
 Python dependencies.
 
-The selected layer prefix ends at layer 13 because an M1 discrepancy visible
-at layer 14 input must originate in an earlier prefill cache value.  The Rust
-consumer compares the logical ``[kv_head, token, head_dim]`` tensors directly
-and repeats the prefill with the same owner before reporting a quality result.
+Version 2 captures all 36 layers, including the layer-14 cache needed to
+diagnose the first remaining M1 full-forward discrepancy. The original v1
+14-layer evidence remains a separate artifact. The Rust consumer compares
+logical ``[kv_head, token, head_dim]`` tensors directly and repeats the prefill
+with the same owner before reporting a quality result.
 """
 
 from __future__ import annotations
@@ -32,11 +33,11 @@ from . import qwen3b_serving_oracle as oracle
 from . import qwen3b_stage_trace as stage
 from .hf_calibration import SidecarWriter, _default_sidecar_writer, _write_sidecar_exclusive
 
-SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v1"
+SCHEMA_VERSION = "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v2"
 ARTIFACT_KIND = "qwen2.5-3b-hf-eager-bf16-p2048-cache-on-prefill-kv-trace"
-TRACE_ID = "qwen3b-p2048-cache-on-prefill-kv-prefix-v1"
-IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-prefill-kv-v1"
-PREFIX_LAYER_COUNT = 14
+TRACE_ID = "qwen3b-p2048-cache-on-prefill-kv-all-layers-v2"
+IMPLEMENTATION_ID = "riley-python-qwen3b-hf-eager-cache-on-prefill-kv-v2"
+PREFIX_LAYER_COUNT = cache_free.MODEL_LAYER_COUNT
 BF16_BYTES = cache_free.BF16_BYTES
 
 SOURCE_PATHS = {
@@ -214,7 +215,7 @@ def _validate_tensors(tensors: Mapping[str, object], torch: Any) -> None:
 
 def _capture_profile_document() -> dict[str, object]:
     return {
-        "capture_domain": "cache-on-p2048-prefill-dynamic-cache-kv-prefix",
+        "capture_domain": "cache-on-p2048-prefill-dynamic-cache-kv-all-layers",
         "id": TRACE_ID,
         "prefill_source_logit_row": 0,
         "prefill_token_count": oracle.PROMPT_TOKEN_COUNT,
@@ -229,7 +230,7 @@ def _capture_profile_document() -> dict[str, object]:
                 "download_hf_eager_qwen_p2048_cache_on_prefill_layer_prefix"
             ),
             "cache_layout": "contiguous-head-major-logical-[kv_head,token,head_dim]",
-            "execution": "P2048 prefill then layer-prefix K/V download",
+            "execution": "P2048 prefill then all-layer K/V download",
             "sidecar_key_rule": "trace/{tensor_name.replace('.', '/')}",
             "serving_eligibility": "none-until-cache-on-full-forward-is-bf16-exact",
         },

@@ -142,11 +142,11 @@ class Qwen3BCacheOnPrefillKvTraceTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_contract_captures_a_bounded_layer_prefix(self) -> None:
-        self.assertEqual(trace.PREFIX_LAYER_COUNT, 14)
-        self.assertEqual(len(trace.TRACE_TENSORS), 28)
+    def test_contract_captures_every_model_layer(self) -> None:
+        self.assertEqual(trace.PREFIX_LAYER_COUNT, 36)
+        self.assertEqual(len(trace.TRACE_TENSORS), 72)
         self.assertEqual(trace.TRACE_TENSORS[0], "prefill.layer0.key")
-        self.assertEqual(trace.TRACE_TENSORS[-1], "prefill.layer13.value")
+        self.assertEqual(trace.TRACE_TENSORS[-1], "prefill.layer35.value")
         self.assertEqual(
             trace._expected_shapes()["prefill.layer0.key"],
             (
@@ -155,6 +155,24 @@ class Qwen3BCacheOnPrefillKvTraceTests(unittest.TestCase):
                 cache_free.MODEL_HEAD_DIMENSION,
             ),
         )
+
+    def test_v1_prefix_cannot_be_relabelled_as_complete_cache(self) -> None:
+        document = _manifest()
+        document["schema_version"] = "riley.qwen3b-hf-eager-p2048-cache-on-prefill-kv-trace.v1"
+        with self.assertRaises(trace.Qwen3BCacheOnPrefillKvTraceError):
+            trace.validate_manifest(document)
+
+        document = _manifest()
+        for layer in range(14, 36):
+            for kind in ("key", "value"):
+                del document["tensors"][f"prefill.layer{layer}.{kind}"]
+        with self.assertRaises(trace.Qwen3BCacheOnPrefillKvTraceError):
+            trace.validate_manifest(document)
+
+        document = _manifest()
+        document["trace_profile"]["selected_layer_indices"] = list(range(14))
+        with self.assertRaises(trace.Qwen3BCacheOnPrefillKvTraceError):
+            trace.validate_manifest(document)
 
     def test_manifest_requires_the_fixed_dynamic_cache_contract(self) -> None:
         document = _manifest()
