@@ -1314,10 +1314,11 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
             let actual = download(&context, &mut stream, &mut output)?;
             assert_eq!(context.allocation_stats()?, before);
             assert_eq!(actual.len(), input_bytes.len());
+            let expected = if rows == 1 { &hf_expected } else { &native_expected };
             for row in actual.chunks_exact(4096) {
                 assert_eq!(
-                    row, native_expected,
-                    "isolated native replay differs from full128 stage: step={step} rows={rows}"
+                    row, expected,
+                    "isolated RMSNorm differs from shape-matched captured oracle: step={step} rows={rows}"
                 );
             }
             let last = &actual[actual.len() - 4096..];
@@ -1330,7 +1331,7 @@ fn qwen_layer3_isolated_rms_norm_captured_input_replay() -> TestResult {
                 .zip(hf_expected.chunks_exact(2))
                 .filter(|(a, b)| a != b)
                 .count();
-            println!("QWEN_ISOLATED_NORM step={step} rows={rows} captured_native_exact=true HF_unequal_elements={unequal}");
+            println!("QWEN_ISOLATED_NORM step={step} rows={rows} shape_matched_oracle_exact=true HF_unequal_elements={unequal}");
             input.close()?;
             output.close()?;
         }
