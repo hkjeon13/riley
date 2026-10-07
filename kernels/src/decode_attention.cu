@@ -1,5 +1,6 @@
 #include "ffi_internal.hpp"
 #include "fixed37_reduction.cuh"
+#include "decode_hf_regular_softmax.cuh"
 
 #include <cuda_bf16.h>
 #include <math_constants.h>
@@ -3407,11 +3408,13 @@ riley_cuda_hf_eager_qwen_p2048_m1_cublas_qk_execute_scaled_scores_trace(
         error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    decode_softmax_reference_kernel
-        <<<block_count(params->query_head_count), kThreads, 0,
+    // The immutable HF M1 oracle uses the regular FP32 reduction at T=2049.
+    // This API already rejects every other shape; reference routes stay separate.
+    decode_hf_regular_softmax_kernel<3>
+        <<<static_cast<uint32_t>(params->query_head_count), 1024, 0,
            stream->stream>>>(
             reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
-            params->logical_token_count, params->query_head_count);
+            params->logical_token_count);
     status = launch_status(error, kOperation);
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
