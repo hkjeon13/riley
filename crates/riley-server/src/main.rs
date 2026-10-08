@@ -19,7 +19,7 @@ const MAX_BATCH_SHAPE_BUCKETS: usize = 10;
 // Must stay aligned with the native runtime owner's qualified eager workspace
 // envelope. Keeping this parser-side fact prevents the default 512-token
 // batch budget from reaching CUDA preparation only to fail there.
-const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 32;
+const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_MAX_BATCH_TOKENS: usize = 256;
 const NATIVE_BF16_PAGED_SPLIT_GQA_D128_TWO_STAGE_DEFAULT_MAX_WEIGHT_BYTES: u64 =
     8 * 1_024 * 1_024 * 1_024;
 #[cfg(any(feature = "cuda", test))]
@@ -69,6 +69,7 @@ serve options:
   --decode-attention-backend MODE existing or native-bf16-paged-split-gqa-d128-two-stage (default: existing)
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
+  --gemm-reduction-policy ID     canonical or first-heuristic-split-k-v1 (default: canonical)
   --numerics-profile ID          existing or hf-eager-qwen-p2048-o128-probe-v1 (default: existing);
                                  the HF-exact profile needs an hf-exact-probe build and
                                  --max-active-sequences 1, and serves only P2048/O<=128 greedy
@@ -114,6 +115,7 @@ struct ServeOptions {
     reduction_profile: ReductionProfileMode,
     numerics_profile: NumericsProfileMode,
     logit_observation_dir: Option<PathBuf>,
+    first_heuristic_gemm_reductions: bool,
     vllm_smol_p128_graph: bool,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -332,6 +334,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut decode_attention_backend = None;
     let mut reduction_profile = None;
     let mut numerics_profile = None;
+    let mut gemm_reduction_policy = None;
     let mut logit_observation_dir = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -505,6 +508,25 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 &mut reduction_profile,
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
                 "--reduction-profile",
+            )?,
+            "--gemm-reduction-policy" => set_once(
+                &mut gemm_reduction_policy,
+                match parse_utf8(
+                    next_value(&mut arguments, "--gemm-reduction-policy")?,
+                    "--gemm-reduction-policy",
+                )?
+                .as_str()
+                {
+                    "canonical" => false,
+                    "first-heuristic-split-k-v1" => true,
+                    _ => {
+                        return Err(
+                            "--gemm-reduction-policy requires canonical or first-heuristic-split-k-v1"
+                                .to_owned(),
+                        );
+                    }
+                },
+                "--gemm-reduction-policy",
             )?,
             "--numerics-profile" => set_once(
                 &mut numerics_profile,
@@ -753,6 +775,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         reduction_profile,
         numerics_profile,
         logit_observation_dir,
+        first_heuristic_gemm_reductions: gemm_reduction_policy.unwrap_or(false),
         vllm_smol_p128_graph,
         max_weight_bytes,
         shutdown_on_stdin,
@@ -1402,6 +1425,11 @@ fn run_serve(
         ProjectionBiasBackendMode::CublasLtBiasEpilogueExperimentalV1 => {
             PreparedLlamaForwardConfig::default().with_cublaslt_bias_epilogue_projection_bias()
         }
+    };
+    let forward = if options.first_heuristic_gemm_reductions {
+        forward.with_first_heuristic_gemm_reductions()
+    } else {
+        forward
     };
     let executor = PreparedLlamaBatchExecutorConfig::new(batch_metadata, forward);
     let executor = match options.residual_rmsnorm {
@@ -4440,6 +4468,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
+                first_heuristic_gemm_reductions: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -4831,6 +4860,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
+                first_heuristic_gemm_reductions: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -4989,6 +5019,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
+                first_heuristic_gemm_reductions: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -5228,7 +5259,7 @@ mod tests {
                 "--decode-attention-backend",
                 "native-bf16-paged-split-gqa-d128-two-stage",
                 "--batch-token-budget",
-                "33",
+                "257",
             ]))
             .is_err()
         );
@@ -5388,6 +5419,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 numerics_profile: NumericsProfileMode::Existing,
                 logit_observation_dir: None,
+                first_heuristic_gemm_reductions: false,
                 vllm_smol_p128_graph: false,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,

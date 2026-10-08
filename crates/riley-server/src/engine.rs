@@ -2767,9 +2767,10 @@ mod cuda_backend {
                         )
                         .map_err(|source| internal(format!("sampling failed: {source}")))?;
                     let sample = if let Some(sample) = greedy {
-                        request.state.pre_step().map_err(|source| {
-                            internal(format!("sampling RNG failed: {source}"))
-                        })?;
+                        request
+                            .state
+                            .pre_step()
+                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
                         sample
                     } else {
                         let distribution = self

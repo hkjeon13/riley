@@ -2304,6 +2304,7 @@ pub struct PreparedLlamaForwardConfig {
     lm_head_mode: LlamaLmHeadMode,
     rope_table_selection: LlamaRopeTableSelection,
     rms_norm_selection: LlamaRmsNormSelection,
+    first_heuristic_gemm_reductions: bool,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -2327,6 +2328,7 @@ impl PreparedLlamaForwardConfig {
             lm_head_mode: LlamaLmHeadMode::StrictFullSequenceGemmV1,
             rope_table_selection: LlamaRopeTableSelection::Automatic,
             rms_norm_selection: LlamaRmsNormSelection::Automatic,
+            first_heuristic_gemm_reductions: false,
         }
     }
 
@@ -2377,6 +2379,16 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_canonical_reductions(mut self) -> Self {
         self.reduction_profile = LlamaReductionProfile::CanonicalV1;
+        self
+    }
+
+    /// Lets every canonical-profile projection keep cuBLASLt's first heuristic
+    /// reduction instead of the model's default policy. Deterministic for a
+    /// fixed device, library and shape, but a different arithmetic from the
+    /// default, so it is opt-in.
+    #[must_use]
+    pub const fn with_first_heuristic_gemm_reductions(mut self) -> Self {
+        self.first_heuristic_gemm_reductions = true;
         self
     }
 
@@ -3092,8 +3104,11 @@ impl PreparedLlamaForward {
             ));
         }
 
-        let gemm_reduction_policies =
-            resolve_gemm_reduction_policies(model, config.reduction_profile);
+        let gemm_reduction_policies = resolve_gemm_reduction_policies(
+            model,
+            config.reduction_profile,
+            config.first_heuristic_gemm_reductions,
+        );
         let rms_norm_profile =
             resolve_rms_norm_profile(model, config.reduction_profile, config.rms_norm_selection);
         let rope_table_profile = resolve_rope_table_profile(
@@ -5803,8 +5818,12 @@ pub(super) fn prepare_gemms(
 fn resolve_gemm_reduction_policies(
     model: &LoadedModel,
     profile: LlamaReductionProfile,
+    first_heuristic: bool,
 ) -> LlamaGemmReductionPolicies {
     match profile {
+        LlamaReductionProfile::CanonicalV1 if first_heuristic => {
+            LlamaGemmReductionPolicies::first_heuristic()
+        }
         LlamaReductionProfile::CanonicalV1 => {
             canonical_gemm_reduction_policies(model.config(), model.spec())
         }

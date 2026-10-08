@@ -43,9 +43,26 @@ impl LlamaGemmReductionPolicies {
         lm_head: CudaGemmReductionPolicy::StrictNoSplitV1,
     };
 
+    const FIRST_HEURISTIC: Self = Self {
+        hidden: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+        key_value: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+        intermediate: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+        down: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+        lm_head: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    };
+
     #[must_use]
     pub(super) const fn strict() -> Self {
         Self::STRICT
+    }
+
+    /// Keeps cuBLASLt's first heuristic reduction on every projection. Forcing
+    /// no-split onto a split-K candidate can leave a multi-pass kernel: the
+    /// 32-row 11008-to-2048 projection measured 156 us against a 50 us
+    /// memory-bandwidth floor.
+    #[must_use]
+    pub(super) const fn first_heuristic() -> Self {
+        Self::FIRST_HEURISTIC
     }
 
     #[must_use]

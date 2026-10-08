@@ -34,7 +34,7 @@ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 
 const F32_BYTES: u64 = 4;
 pub(in crate::llama) const SUPPORTED_HEAD_DIMENSION: usize = 64;
-const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 32;
+const NATIVE_D128_TWO_STAGE_MAX_DENSE_ROWS: usize = 256;
 const NATIVE_D128_TWO_STAGE_MAX_SEQUENCE_TOKENS: usize = 32_768;
 
 /// Cold-owned workspace for the explicit eager native D128 two-stage ragged
