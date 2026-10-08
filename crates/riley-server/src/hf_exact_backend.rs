@@ -232,7 +232,7 @@ impl HfExactBackend {
             max_waiting_requests,
             observation,
         } = resources;
-        let vocabulary_size = model.spec().vocabulary_size();
+        let vocabulary_size = model.spec().lm_head().vocabulary_size();
         let addressable_tokens = model.tokenizer().addressable_token_count();
         if addressable_tokens == 0 || addressable_tokens > vocabulary_size {
             return Err(internal(format!(
@@ -573,7 +573,7 @@ impl EngineBackend for HfExactBackend {
                 RuntimeFinishReason::Eos
                 | RuntimeFinishReason::StopToken
                 | RuntimeFinishReason::StopString => FinishReason::Stop,
-                RuntimeFinishReason::Cancelled | RuntimeFinishReason::Error => {
+                _ => {
                     return Err(internal("accepted token produced a non-generation finish"));
                 }
             };
